@@ -2740,28 +2740,9 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     }
   }
 
-  // Auto-detect the folder containing the current Premiere project
-  async function getProjectFolder() {
-    try {
-      var ppro = window.require && window.require('premierepro');
-      if (!ppro || !ppro.app || !ppro.app.project) return '';
-      var project = ppro.app.project;
-      var projectPath = project.path;
-      if (projectPath && typeof projectPath.then === 'function') projectPath = await projectPath;
-      if (!projectPath || typeof projectPath !== 'string') return '';
-      var lastSlash = Math.max(projectPath.lastIndexOf('/'), projectPath.lastIndexOf('\\'));
-      return lastSlash >= 0 ? projectPath.substring(0, lastSlash) : '';
-    } catch(e) {
-      console.warn('[VoiceGen] getProjectFolder:', e.message);
-      return '';
-    }
-  }
-
-  // "Reset" means go back to the project folder (not empty)
-  async function resetOutputFolder() {
-    var projFolder = await getProjectFolder();
-    customOutputFolder = projFolder;
-    els.outputFolder.value = projFolder;
+  function resetOutputFolder() {
+    customOutputFolder = '';
+    els.outputFolder.value = '';
   }
 
   // Wire events
@@ -3148,12 +3129,4 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   } else {
     setStatus('Set ElevenLabs API key in Settings ⚙', false);
   }
-  // Auto-fill output folder with project folder on init
-  getProjectFolder().then(function(projFolder) {
-    if (projFolder && !customOutputFolder) {
-      customOutputFolder = projFolder;
-      if (els.outputFolder) els.outputFolder.value = projFolder;
-      console.log('[VoiceGen] output folder auto-set to project:', projFolder);
-    }
-  }).catch(function() {});
 })();
