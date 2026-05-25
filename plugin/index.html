@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Claude AI + Autocut</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ── TAB BAR ── -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="claude">&#10022; CLAUDE</button>
+  <button class="tab-btn" data-tab="voicegen">&#127908; VOICE GEN</button>
+  <button class="tab-btn" data-tab="autocut">&#9986; AUTOCUT</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: CLAUDE                                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-claude">
+
+  <!-- Header -->
+  <div id="header">
+    <h1>&#10022; Claude AI <span id="plugin-version" style="font-size:10px;font-weight:400;opacity:0.5;margin-left:4px;"></span></h1>
+    <div id="header-actions">
+      <button class="text-btn" id="refresh-btn">&#8635; Refresh</button>
+      <button class="text-btn" id="clear-btn">&#10005; Clear</button>
+      <button class="icon-btn" id="settings-btn">&#9881;</button>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="status-bar">
+    <div id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+    <span id="timeline-info"></span>
+  </div>
+
+  <!-- Timeline context -->
+  <div id="context-panel">
+    <div id="context-content"></div>
+  </div>
+
+  <!-- Chat area -->
+  <div id="chat-area">
+    <div id="empty-state">
+      <div class="logo">&#10022;</div>
+      <p>Ask Claude to help with your<br>Premiere Pro project.</p>
+      <p class="sub">Edit timeline &middot; Add subtitles &middot; Apply effects</p>
+    </div>
+  </div>
+
+  <!-- Input area -->
+  <div id="input-area">
+
+    <!-- Chips row — only visible when an image is attached -->
+    <div id="chips-row" hidden>
+      <div id="dropzone-chips" class="dropzone-chips"></div>
+    </div>
+
+    <!-- Main row: textarea + attach + send -->
+    <div id="input-row">
+      <textarea
+        id="message-input"
+        placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
+        rows="3"
+      ></textarea>
+      <div id="input-side">
+        <button id="attach-btn" class="icon-btn">&#128206;</button>
+        <button id="send-btn">Send</button>
+      </div>
+    </div>
+
+    <div id="quick-actions">
+      <button class="quick-btn" data-prompt="Parse this cutsheet image into a cutlist action.">Parse cutsheet</button>
+      <!-- custom shortcuts rendered here by JS -->
+      <button class="quick-add-btn" id="add-shortcut-btn">+</button>
+    </div>
+
+    <!-- Hidden dropzone: DOM anchor for drag-drop + paste events (no visible UI) -->
+    <div id="dropzone" tabindex="-1" aria-hidden="true" style="display:none;"></div>
+  </div>
+
+  <!-- Settings popup — portaled to body by JS, anchored below ⚙ button -->
+  <div id="settings-modal">
+    <div id="settings-box">
+      <div class="settings-header">
+        <h2>Settings</h2>
+      </div>
+
+      <div class="setting-row">
+        <label>Bridge Server URL</label>
+        <input id="bridge-url-input" type="text" value="http://localhost:3030" />
+      </div>
+
+      <div class="setting-row">
+        <label>Anthropic API Key
+          <span class="setting-pill" id="apikey-status">CLI mode</span>
+        </label>
+        <input id="api-key-input" type="password" placeholder="sk-ant-api03-... (paste để enable API mode)" autocomplete="off" />
+        <div class="setting-hint-inline">
+          Khi paste key → bridge tự switch sang API mode (nhanh hơn, không rate-limit).
+          Để trống = dùng Claude Code CLI (subscription).
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <label>Claude Model</label>
+        <select id="model-select">
+          <option value="claude-opus-4-7">Opus 4.7 — best quality (slow + expensive)</option>
+          <option value="claude-sonnet-4-6" selected>Sonnet 4.6 — recommended (fast + smart)</option>
+          <option value="claude-haiku-4-5">Haiku 4.5 — fastest + cheapest</option>
+        </select>
+        <div class="setting-hint-inline">
+          Vision support: all Claude 4.x models. Only used in API key mode.
+        </div>
+      </div>
+
+      <div id="bridge-info" class="bridge-info">
+        <div class="bridge-info-row"><span>Status:</span> <span id="bridge-info-status">—</span></div>
+        <div class="bridge-info-row"><span>Mode:</span>   <span id="bridge-info-mode">—</span></div>
+        <div class="bridge-info-row"><span>Whisper:</span> <span id="bridge-info-whisper">—</span></div>
+      </div>
+
+      <p class="settings-hint">
+        <strong>API mode:</strong> set <code>ANTHROPIC_API_KEY</code> in <code>bridge/.env</code> for vision + better quality.<br>
+        <strong>CLI mode:</strong> uses <code>claude</code> CLI (Claude Code OAuth) — model is fixed by your subscription.
+      </p>
+
+      <div class="settings-actions">
+        <button class="btn-secondary" id="close-settings">Cancel</button>
+        <button class="btn-primary" id="save-settings">Save</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-claude -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: VOICE GEN (ElevenLabs)                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-voicegen">
+  <div class="vg-app">
+
+    <!-- Status bar -->
+    <div class="vg-statusBar" id="vgStatusBar">
+      <span class="vg-statusDot" id="vgStatusDot"></span>
+      <span id="vgStatusText">Connecting...</span>
+      <button id="vgRefreshVoices" class="ac-iconBtn">&#8635;</button>
+    </div>
+
+    <!-- Mode selector -->
+    <div class="vg-modeBar">
+      <button class="vg-modeBtn is-active" data-mode="tts">&#127908; Voice</button>
+      <button class="vg-modeBtn" data-mode="sfx">&#128165; SFX</button>
+      <button class="vg-modeBtn" data-mode="music">&#127925; Music</button>
+    </div>
+
+    <!-- Body: left editor + right settings -->
+    <div class="vg-body">
+
+      <!-- ── LEFT: Script editor ── -->
+      <div class="vg-left">
+
+        <!-- TTS editor -->
+        <div class="vg-modeContent" data-mode="tts">
+          <div class="vg-speakerBar" id="vgSpeakerBar">
+            <button id="vgAddSpeaker" class="vg-addSpeakerBtn">+ Add speaker</button>
+          </div>
+          <div class="vg-editorWrap">
+            <textarea id="vgScript" class="vg-script" spellcheck="false"
+              placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
+            <div class="vg-editorFoot">
+              <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SFX editor -->
+        <div class="vg-modeContent" data-mode="sfx" hidden>
+          <div class="vg-editorWrap">
+            <textarea id="vgSfxText" class="vg-script" spellcheck="false"
+              placeholder="Describe the sound effect...&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
+            <div class="vg-editorFoot">
+              <span class="vg-charCount" id="vgSfxCharCount">0 / 500</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Music editor -->
+        <div class="vg-modeContent" data-mode="music" hidden>
+          <div class="vg-editorWrap">
+            <textarea id="vgMusicPrompt" class="vg-script" spellcheck="false"
+              placeholder="Describe the music...&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
+            <div class="vg-editorFoot">
+              <span class="vg-charCount" id="vgMusicCharCount">0 / 1000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Generate bar -->
+        <div class="vg-genBar">
+          <label class="vg-varToggle">
+            <input type="checkbox" id="vg2Variations" />
+            <span>2 variations</span>
+          </label>
+          <button id="vgGenerate" class="vg-genButton">&#9889; GENERATE VOICE</button>
+        </div>
+
+        <!-- Results -->
+        <div class="vg-results" id="vgResultSection" hidden>
+
+          <!-- Variation 1 -->
+          <div class="vg-variation" id="vgVar1">
+            <div class="vg-varHeader">
+              <span class="vg-varLabel">Variation 1</span>
+              <span class="vg-varSize" id="vgVar1Size"></span>
+            </div>
+            <div class="vg-player">
+              <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
+              <div class="vg-progressWrap" id="vgVar1ProgWrap">
+                <div class="vg-progressFill" id="vgVar1Fill"></div>
+              </div>
+              <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
+            </div>
+            <div class="vg-resultActions">
+              <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
+              <button id="vgVar1Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
+              <button id="vgVar1Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
+            </div>
+          </div>
+
+          <!-- Variation 2 -->
+          <div class="vg-variation" id="vgVar2" style="display:none;">
+            <div class="vg-varHeader">
+              <span class="vg-varLabel">Variation 2</span>
+              <span class="vg-varSize" id="vgVar2Size"></span>
+            </div>
+            <div class="vg-player">
+              <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
+              <div class="vg-progressWrap" id="vgVar2ProgWrap">
+                <div class="vg-progressFill" id="vgVar2Fill"></div>
+              </div>
+              <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
+            </div>
+            <div class="vg-resultActions">
+              <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
+              <button id="vgVar2Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
+              <button id="vgVar2Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
+            </div>
+          </div>
+
+          <div id="vgImportStatus" class="ac-manualStatus"></div>
+        </div>
+
+      </div><!-- /vg-left -->
+
+      <!-- ── RIGHT: Settings panel ── -->
+      <div class="vg-right">
+        <div class="vg-rightHeader">
+          <span class="vg-rightTab is-active">Settings</span>
+        </div>
+        <div class="vg-rightScroll">
+
+        <!-- ElevenLabs API Key Profiles — always visible, top of settings -->
+        <div class="vg-sg vg-apiKeySection">
+          <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
+          <!-- Profile selector row -->
+          <div class="vg-profileRow">
+            <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
+            <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
+          </div>
+          <!-- Profile name input -->
+          <div class="vg-profileNameRow">
+            <input type="text" id="vgProfileName" class="vg-settingInput"
+              placeholder="Profile name..." autocomplete="off" />
+          </div>
+          <!-- Key input -->
+          <div class="vg-apiKeyRow">
+            <input type="password" id="vgElKeyInput" class="vg-settingInput vg-apiKeyInput"
+              placeholder="sk_..." autocomplete="off" />
+          </div>
+          <!-- Actions -->
+          <div class="vg-profileActions">
+            <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
+            <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
+          </div>
+          <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
+        </div>
+
+        <!-- TTS settings -->
+        <div class="vg-modeContent" data-mode="tts">
+
+          <div class="vg-sg">
+            <div class="vg-sl">Voice <span class="vg-sm" id="vgVoiceSource">defaults</span></div>
+            <!-- Hidden backing select — JS reads/writes .value here -->
+            <select id="vgVoiceSelect" style="display:none">
+              <option value="9BWtsMINqrJLrRacOk9x">Aria · female · American</option>
+              <option value="pNInz6obpgDQGcFmaJgB">Adam · male · American</option>
+              <option value="ErXwobaYiN019PkySvjV">Antoni · male · American</option>
+              <option value="VR6AewLTigWG4xSOukaG">Arnold · male · crisp</option>
+              <option value="EXAVITQu4vr4xnSDxMaL">Bella · female · soft</option>
+              <option value="pqHfZKP75CvOlQylNhV4">Bill · male · American</option>
+              <option value="nPczCjzI2devNBz1zQrb">Brian · male · narrator</option>
+              <option value="N2lVS1w4EtoT3dr4eOWO">Callum · male · transatlantic</option>
+              <option value="IKne3meq5aSn9XLyUdCD">Charlie · male · Australian</option>
+              <option value="XB0fDUnXU5powFXDhCwa">Charlotte · female · British</option>
+              <option value="iP95p4xoKVk53GoZ742B">Chris · male · American</option>
+              <option value="onwK4e9ZLuTAKqWW03F9">Daniel · male · British</option>
+              <option value="AZnzlk1XvdvUeBnXmlld">Domi · female · strong</option>
+              <option value="MF3mGyEYCl7XYWbV9V6O">Elli · female · emotional</option>
+              <option value="cjVigY5qzO86Huf0OWal">Eric · male · American</option>
+              <option value="jsCqWAovK2LkecY7zXl4">Freya · female · American</option>
+              <option value="jBpfuIE2acCO8z3wKNLl">Gigi · young female</option>
+              <option value="cgSgspJ2msm6clMCkdW9">Jessica · female · American</option>
+              <option value="TxGEqnHWrfWFTfGW9XjX">Josh · male · deep</option>
+              <option value="FGY2WhTYpPnrIDTdsKH5">Laura · female · American</option>
+              <option value="TX3LPaxmHKxFdv7VOQHJ">Liam · male · American</option>
+              <option value="XrExE9yKIg1WjnnlVkGX">Matilda · female · American</option>
+              <option value="21m00Tcm4TlvDq8ikWAM" selected>Rachel · female · narrator</option>
+              <option value="yoZ06aMxZJJ28mfd3POQ">Sam · male · raspy</option>
+              <option value="bIHbv24MWmeRgasZH58o">Will · male · friendly</option>
+              <option value="__custom__">— Custom voice ID —</option>
+            </select>
+            <!-- Custom dropdown with per-row preview buttons -->
+            <div class="vg-voiceDrop" id="vgVoiceDrop">
+              <div class="vg-voiceDropTrigger" id="vgVoiceDropTrigger">
+                <span id="vgVoiceDropLabel">Rachel · female · narrator</span>
+                <span class="vg-dropArrow">&#9660;</span>
+              </div>
+              <div class="vg-voiceDropPanel" id="vgVoiceDropPanel" hidden></div>
+            </div>
+            <input id="vgCustomVoiceId" type="text" class="vg-settingInput" placeholder="Paste voice_id" hidden style="margin-top:4px;" />
+          </div>
+
+          <div class="vg-sg">
+            <div class="vg-sl">Model</div>
+            <select id="vgModelSelect" class="vg-select">
+              <option value="eleven_v3" selected>&#9655; v3 · most expressive</option>
+            </select>
+          </div>
+
+          <div class="vg-sg">
+            <div class="vg-toggleRow">
+              <span class="vg-sl">Language Override</span>
+              <label class="vg-switch">
+                <input type="checkbox" id="vgLangOverride" />
+                <span class="vg-switchTrack"></span>
+              </label>
+            </div>
+            <select id="vgLangSelect" class="vg-select" hidden style="margin-top:4px;">
+              <option value="en">English</option>
+              <option value="vi">Ti&#7871;ng Vi&#7879;t</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="zh">Chinese</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="es">Spanish</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="nl">Dutch</option>
+              <option value="pl">Polish</option>
+              <option value="ru">Russian</option>
+              <option value="ar">Arabic</option>
+              <option value="hi">Hindi</option>
+            </select>
+          </div>
+
+          <div class="vg-sg">
+            <div class="vg-sl">Output Format</div>
+            <select id="vgOutputFormat" class="vg-select">
+              <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
+              <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+              <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
+              <option value="pcm_16000">PCM 16kHz</option>
+              <option value="pcm_24000">PCM 24kHz</option>
+            </select>
+          </div>
+
+        </div><!-- /tts settings -->
+
+        <!-- SFX settings -->
+        <div class="vg-modeContent" data-mode="sfx" hidden>
+          <div class="vg-sg">
+            <div class="vg-sl">Duration (0.5–22s)</div>
+            <div class="vg-numRow">
+              <input type="number" id="vgSfxDuration" min="0.5" max="22" step="0.5" value="3" />
+              <span class="vg-nu" id="vgSfxDurationValue">3.0s</span>
+            </div>
+          </div>
+          <div class="vg-sg">
+            <div class="vg-sl">Prompt Influence (0–1)</div>
+            <div class="vg-numRow">
+              <input type="number" id="vgSfxInfluence" min="0" max="1" step="0.05" value="0.3" />
+              <span class="vg-nu" id="vgSfxInfluenceValue">0.30</span>
+            </div>
+          </div>
+          <div class="vg-sg">
+            <div class="vg-sl">Output Format</div>
+            <select id="vgSfxOutputFormat" class="vg-select">
+              <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
+              <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+            </select>
+          </div>
+        </div><!-- /sfx settings -->
+
+        <!-- Music settings -->
+        <div class="vg-modeContent" data-mode="music" hidden>
+          <div class="vg-sg">
+            <div class="vg-sl">Length (5–300s)</div>
+            <div class="vg-numRow">
+              <input type="number" id="vgMusicLength" min="5" max="300" step="1" value="10" />
+              <span class="vg-nu" id="vgMusicLengthValue">10s</span>
+            </div>
+          </div>
+        </div><!-- /music settings -->
+
+        <!-- Shared: output folder + filename -->
+        <div class="vg-sg vg-sgDivider">
+          <div class="vg-sl">Output Folder</div>
+          <div class="vg-folderRow">
+            <input id="vgOutputFolder" type="text" readonly class="vg-folderInput" placeholder="11Lab temp (default)" />
+            <button id="vgBrowseFolder" class="vg-folderBtn">&#128193;</button>
+            <button id="vgResetFolder"  class="vg-folderBtn">&#8635;</button>
+          </div>
+        </div>
+        <div class="vg-sg">
+          <div class="vg-sl">Filename <span class="vg-sm">.mp3 appended</span></div>
+          <input id="vgFilename" type="text" class="vg-settingInput" placeholder="auto" />
+        </div>
+
+        </div><!-- /vg-rightScroll -->
+      </div><!-- /vg-right -->
+
+    </div><!-- /vg-body -->
+  </div><!-- /vg-app -->
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: AUTOCUT                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-autocut">
+  <div class="ac-app">
+
+    <!-- ── CONFIG BAR (STT + AUTO MODE) ── -->
+    <div class="ac-configBar">
+      <div class="ac-cfgField">
+        <div class="ac-subLabel">STT ENGINE</div>
+        <select id="sttBackend" class="ac-nativeSelect">
+          <option value="whisper">Whisper (Local)</option>
+          <option value="premiere">Premiere Transcript</option>
+        </select>
+      </div>
+      <div class="ac-cfgField">
+        <div class="ac-subLabel">LANGUAGE</div>
+        <select id="sttLang" class="ac-nativeSelect">
+          <option value="en">English</option>
+          <option value="vi">Vietnamese</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+        </select>
+      </div>
+      <div class="ac-cfgField">
+        <div class="ac-subLabel">MODE</div>
+        <select id="runMode" class="ac-nativeSelect">
+          <option value="parse_and_run">Auto text + autocut</option>
+          <option value="run_only">Autocut only</option>
+          <option value="parse_only">Auto text only</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Voiceover source picker -->
+    <div class="ac-sttConfigRow" id="voiceoverPickerRow" hidden>
+      <div class="ac-sttHint">
+        <b>Voiceover source:</b>
+        <select id="voiceoverPicker" class="ac-nativeSelect" style="margin-top:6px;">
+          <option value="auto">Auto (longest audio clip)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── STT-specific config row ── -->
+    <div class="ac-sttConfigRow" id="whisperConfigRow">
+      <div class="ac-sttHint">Whisper chạy local. Audio voiceover được lấy tự động từ sequence đang mở.</div>
+    </div>
+    <div class="ac-sttConfigRow" id="premiereConfigRow" hidden>
+      <div class="ac-sttHint">
+        <b>1.</b> Premiere → <i>Window → Text → Transcript → Transcribe Sequence</i><br>
+        <b>2.</b> Export transcript (.json hoặc .transcript)<br>
+        <b>3.</b> Paste path file ở dưới:
+      </div>
+      <input id="premiereTranscriptPath" type="text" class="ac-input ac-inputFull"
+             placeholder="/Users/.../sequence.transcript" />
+    </div>
+
+    <!-- ── ACTION BAR ── -->
+    <div class="ac-actionBar">
+      <button id="btnPushCurrent" class="ac-primaryButton">▶ PUSH TO CURRENT SEQUENCE</button>
+      <button id="btnPushNew" class="ac-secondaryButton">+ NEW SEQUENCE</button>
+    </div>
+
+    <!-- ── SCROLL AREA: cutlist preview + status ── -->
+    <div class="ac-scrollArea">
+
+      <!-- Manual paste cutsheet (no image / chat needed) -->
+      <div class="ac-section" id="manualInputSection">
+        <div class="ac-sectionHeader ac-headerClickable" id="manualInputHeader">
+          <button class="ac-chevron" id="manualChevron">&#9656;</button>
+          <span class="ac-sectionTitle">Manual Paste</span>
+          <span class="ac-sectionMeta">no image · no rate limit</span>
+        </div>
+        <div id="manualInputBody" class="ac-manualBody" style="display:none;">
+          <div class="ac-manualHint">
+            Paste từng cột riêng biệt từ Excel/Google Sheets.
+            <b>Cell rỗng = inherit từ row trên</b> (xử lý merged cells).
+          </div>
+          <div class="ac-manualGrid">
+            <div class="ac-manualCol">
+              <div class="ac-manualColLabel">TEXT (script)</div>
+              <textarea id="manualColText" class="ac-manualColInput" spellcheck="false"
+                placeholder="Oh my gosh, you look amazing&#10;Honestly? It feels like...&#10;Easy front closure"></textarea>
+            </div>
+            <div class="ac-manualCol">
+              <div class="ac-manualColLabel">TIME (in-out)</div>
+              <textarea id="manualColTime" class="ac-manualColInput" spellcheck="false"
+                placeholder="0:02-0:08&#10;0:01-0:07&#10;0:01"></textarea>
+            </div>
+            <div class="ac-manualCol">
+              <div class="ac-manualColLabel">SOURCE (clip)</div>
+              <textarea id="manualColSource" class="ac-manualColInput" spellcheck="false"
+                placeholder="k11 o1&#10;k11.1 o2&#10;Senyue 46"></textarea>
+            </div>
+          </div>
+          <label class="ac-manualToggle">
+            <input type="checkbox" id="manualFillDown" checked />
+            <span>Fill-down empty cells (recommended for merged columns)</span>
+          </label>
+          <div class="ac-manualActions">
+            <button id="btnManualParse" class="ac-primaryButton" style="flex:1;height:34px;">PARSE → CUT LIST</button>
+            <button id="btnManualClear" class="ac-secondaryButton" style="height:34px;">Clear</button>
+          </div>
+          <div id="manualParseStatus" class="ac-manualStatus"></div>
+        </div>
+      </div>
+
+      <div class="ac-section ac-collapsible" id="cutlistSection">
+        <div class="ac-sectionHeader ac-headerClickable" id="cutlistHeader">
+          <button class="ac-chevron" id="cutlistChevron">&#9656;</button>
+          <span class="ac-sectionTitle">Cut List</span>
+          <span class="ac-sectionMeta" id="cutlistMeta">— no rows yet —</span>
+          <button id="btnClearCutlist" class="ac-iconBtn">&#10005;</button>
+        </div>
+        <div id="cutlistPreview" class="ac-cutlistPreview">
+          <div class="ac-emptyHint">
+            Mở tab <b>CLAUDE</b> → paste cutsheet (ảnh hoặc text) →
+            Claude sẽ parse thành các dòng cut và hiển thị ở đây.
+          </div>
+        </div>
+      </div>
+
+      <div class="ac-section" id="runStatusSection" hidden>
+        <div class="ac-sectionHeader">
+          <span class="ac-sectionTitle">Run Status</span>
+          <span class="ac-sectionMeta" id="runStatusMeta"></span>
+          <button id="btnRetryRun" class="ac-iconBtn ac-iconBtnPrimary">&#8635;</button>
+        </div>
+        <div id="runStatus" class="ac-runStatus"></div>
+      </div>
+
+      <div class="ac-section" id="missingSourcesSection" hidden>
+        <div class="ac-sectionHeader">
+          <span class="ac-sectionTitle">⚠ Missing Sources</span>
+        </div>
+        <div id="missingSources" class="ac-missingSources"></div>
+      </div>
+
+      <div class="ac-section" id="seqDiagnosticSection" hidden>
+        <div class="ac-sectionHeader">
+          <span class="ac-sectionTitle">📊 Sequence Audio</span>
+          <button id="btnRefreshSeqInfo" class="ac-iconBtn">&#8635;</button>
+        </div>
+        <div id="seqDiagnostic" class="ac-seqDiagnostic"></div>
+      </div>
+
+      <div id="log" class="ac-log" aria-live="polite" hidden></div>
+
+    </div>
+
+  </div><!-- /ac-app -->
+</div><!-- /tab-autocut -->
+
+<!-- Settings panel (floating, draggable) -->
+<!-- Single non-module script -->
+<script src="main.js"></script>
+</body>
+</html>

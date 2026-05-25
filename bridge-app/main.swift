@@ -1,0 +1,519 @@
+import Cocoa
+import Foundation
+
+// ── Entry point ────────────────────────────────────────────────────────────
+let app = NSApplication.shared
+NSApp.setActivationPolicy(.accessory)
+let appDelegate = AppDelegate()
+app.delegate = appDelegate
+app.run()
+
+// ── App Delegate ───────────────────────────────────────────────────────────
+class AppDelegate: NSObject, NSApplicationDelegate {
+
+    // MARK: State
+    var statusItem: NSStatusItem!
+    var bridgeTask: Process?
+    var intentionalStop = false
+    var restartCount    = 0
+    var logLines        = [String]()
+    var logWindow:    NSWindow?
+    var logTextView:  NSTextView?
+    var statusMenuItem: NSMenuItem!
+    var autoStartItem:  NSMenuItem!
+
+    let version     = "4.1.1"
+    let bridgePort  = 3030
+
+    // MARK: Lifecycle
+    func applicationDidFinishLaunching(_ n: Notification) {
+        setupMenuBar()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
+    }
+
+    func applicationWillTerminate(_ n: Notification) {
+        intentionalStop = true
+        bridgeTask?.terminate()
+    }
+
+    // MARK: ─── Menu Bar ────────────────────────────────────────────────────
+    func setupMenuBar() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.title = "🔴"
+        rebuildMenu()
+    }
+
+    func rebuildMenu() {
+        let menu = NSMenu()
+
+        let titleItem = NSMenuItem(title: "Claude Bridge  v\(version)", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
+        menu.addItem(.separator())
+
+        statusMenuItem = NSMenuItem(title: "⏳ Đang khởi động...", action: nil, keyEquivalent: "")
+        statusMenuItem.isEnabled = false
+        menu.addItem(statusMenuItem)
+        menu.addItem(.separator())
+
+        menu.addItem(item("↺  Khởi động lại Bridge",     #selector(restartBridge), key: "r"))
+        menu.addItem(item("📋  Xem Log",                  #selector(showLog),       key: "l"))
+        menu.addItem(.separator())
+
+        autoStartItem = item("🔄  Tự khởi động cùng máy", #selector(toggleAutoStart), key: "")
+        autoStartItem.state = launchAgentExists() ? .on : .off
+        menu.addItem(autoStartItem)
+
+        menu.addItem(.separator())
+        menu.addItem(item("🐍  Cài Whisper (Autocut STT)", #selector(installWhisper), key: ""))
+        menu.addItem(.separator())
+        menu.addItem(item("Thoát",                         #selector(quit),           key: "q"))
+
+        statusItem.menu = menu
+    }
+
+    func item(_ title: String, _ sel: Selector, key: String) -> NSMenuItem {
+        let m = NSMenuItem(title: title, action: sel, keyEquivalent: key)
+        m.target = self
+        return m
+    }
+
+    func setStatus(_ msg: String, running: Bool) {
+        DispatchQueue.main.async {
+            self.statusItem.button?.title = running ? "⚡" : "🔴"
+            self.statusMenuItem?.title    = msg
+        }
+    }
+
+    // MARK: ─── First-run Setup ─────────────────────────────────────────────
+    func firstRunSetup() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let claudePath = self.findClaude()
+            guard !claudePath.isEmpty else {
+                DispatchQueue.main.async { self.promptInstallCLI() }
+                return
+            }
+            guard self.checkAuth(claudePath: claudePath) else {
+                DispatchQueue.main.async { self.promptLogin(claudePath: claudePath) }
+                return
+            }
+            DispatchQueue.main.async { self.startBridge() }
+        }
+    }
+
+    func promptInstallCLI() {
+        let a = NSAlert()
+        a.messageText     = "Cần cài Claude CLI"
+        a.informativeText = "Claude Bridge cần Claude CLI để kết nối AI.\n\nSẽ mở Terminal và tự cài đặt — cần mật khẩu máy tính, mất khoảng 2 phút."
+        a.alertStyle      = .informational
+        a.addButton(withTitle: "Cài ngay")
+        a.addButton(withTitle: "Để sau")
+        guard a.runModal() == .alertFirstButtonReturn else {
+            setStatus("⚠️  Chưa cài Claude CLI — click ↺ để thử lại", running: false)
+            return
+        }
+        setStatus("⏳ Đang cài Claude CLI...", running: false)
+        openTerminal("npm install -g @anthropic-ai/claude-code 2>&1 && echo '✅ Claude CLI đã cài xong! Bạn có thể đóng cửa sổ này.'")
+        pollUntil(check: { !self.findClaude().isEmpty }, interval: 4, timeout: 300) {
+            self.firstRunSetup()
+        }
+    }
+
+    func promptLogin(claudePath: String) {
+        let a = NSAlert()
+        a.messageText     = "Cần đăng nhập Claude.ai"
+        a.informativeText = "Nhấn \"Đăng nhập\" — Terminal và trình duyệt sẽ tự mở.\n\nĐăng nhập tài khoản Claude.ai, Bridge sẽ tự khởi động sau khi xong."
+        a.alertStyle      = .informational
+        a.addButton(withTitle: "Đăng nhập")
+        a.addButton(withTitle: "Để sau")
+
+        guard a.runModal() == .alertFirstButtonReturn else {
+            setStatus("⚠️  Chưa đăng nhập — click ↺ để thử lại", running: false)
+            return
+        }
+
+        // Auto-run "claude auth login" in Terminal → browser opens → user logs in
+        openTerminal("'\(claudePath)' auth login 2>&1; echo ''; echo '✅ Đăng nhập xong! Cửa sổ này có thể đóng.'")
+        setStatus("⏳ Đang chờ đăng nhập Claude.ai...", running: false)
+
+        // Poll every 3s up to 5 min — auto-start bridge when auth confirmed, no more popups
+        pollUntil(
+            check:     { self.checkAuth(claudePath: claudePath) },
+            interval:  3,
+            timeout:   300,
+            then:      { self.log("Auth confirmed"); self.startBridge() },
+            onTimeout: { self.setStatus("⚠️  Hết thời gian chờ — click ↺ để thử lại", running: false) }
+        )
+    }
+
+    // MARK: ─── Bridge ──────────────────────────────────────────────────────
+    func startBridge() {
+        setStatus("⏳ Đang khởi động Bridge...", running: false)
+
+        // ── If bridge is already healthy on port 3030, adopt it ───────────
+        let health = sh("curl -s --max-time 2 http://127.0.0.1:\(bridgePort)/health 2>/dev/null")
+        if health.out.contains("\"status\"") {
+            log("Port \(bridgePort) already serving — adopting existing bridge")
+            restartCount = 0
+            intentionalStop = false
+            setStatus("✅ Bridge đang chạy  —  :\(bridgePort)", running: true)
+            return
+        }
+
+        // ── Kill any zombie holding port 3030 ─────────────────────────────
+        let kill = sh("lsof -ti :\(bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null; echo ok")
+        log("Cleared port \(bridgePort): \(kill.out.trimmingCharacters(in: .whitespacesAndNewlines))")
+        Thread.sleep(forTimeInterval: 0.4)
+
+        guard let (nodePath, serverDir) = findNodeAndServer() else {
+            setStatus("❌ Node.js chưa cài — tải tại nodejs.org", running: false)
+            log("ERROR: Node.js not found. Install from https://nodejs.org")
+            return
+        }
+
+        let task    = Process()
+        let pipe    = Pipe()
+
+        task.executableURL       = URL(fileURLWithPath: nodePath)
+        task.arguments           = ["server.js"]
+        task.currentDirectoryURL = URL(fileURLWithPath: serverDir)
+        task.environment         = buildEnv()
+        task.standardOutput      = pipe
+        task.standardError       = pipe
+
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+            let data = h.availableData
+            guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
+            self?.log(line.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        task.terminationHandler = { [weak self] p in
+            guard let self else { return }
+            self.log("Bridge stopped (exit \(p.terminationStatus))")
+            DispatchQueue.main.async {
+                self.bridgeTask = nil
+                self.setStatus("❌ Bridge dừng", running: false)
+                guard !self.intentionalStop else { return }
+                self.restartCount += 1
+                let delay = min(Double(self.restartCount) * 2.0, 30.0)
+                self.log("Auto-restart sau \(Int(delay))s (lần \(self.restartCount))...")
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.startBridge()
+                }
+            }
+        }
+
+        do {
+            try task.run()
+            bridgeTask    = task
+            intentionalStop = false
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                guard task.isRunning else { return }
+                self.restartCount = 0
+                self.setStatus("✅ Bridge đang chạy  —  :\(self.bridgePort)", running: true)
+                self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
+            }
+        } catch {
+            setStatus("❌ Lỗi khởi động: \(error.localizedDescription)", running: false)
+            log("ERROR starting bridge: \(error)")
+        }
+    }
+
+    func stopBridge(intentional: Bool = true) {
+        intentionalStop = intentional
+        bridgeTask?.interrupt()
+        bridgeTask?.terminate()
+        bridgeTask = nil
+    }
+
+    @objc func restartBridge() {
+        log("Restart requested by user")
+        stopBridge(intentional: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            self.intentionalStop = false
+            self.firstRunSetup()   // re-check auth before starting
+        }
+    }
+
+    // MARK: ─── Log Window ──────────────────────────────────────────────────
+    func log(_ line: String) {
+        guard !line.isEmpty else { return }
+        let ts    = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let entry = "[\(ts)]  \(line)"
+        DispatchQueue.main.async {
+            self.logLines.append(entry)
+            if self.logLines.count > 1000 { self.logLines.removeFirst(200) }
+            if let tv = self.logTextView {
+                tv.string = self.logLines.joined(separator: "\n")
+                tv.scrollToEndOfDocument(nil)
+            }
+        }
+        print(entry)
+    }
+
+    @objc func showLog() {
+        if logWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 680, height: 440),
+                styleMask:   [.titled, .closable, .resizable, .miniaturizable],
+                backing: .buffered, defer: false)
+            win.title = "Claude Bridge — Log"
+            win.center()
+
+            let sv = NSScrollView(frame: win.contentView!.bounds)
+            sv.autoresizingMask     = [.width, .height]
+            sv.hasVerticalScroller  = true
+
+            let tv = NSTextView(frame: sv.bounds)
+            tv.isEditable       = false
+            tv.font             = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            tv.backgroundColor  = NSColor(white: 0.09, alpha: 1)
+            tv.textColor        = NSColor(white: 0.88, alpha: 1)
+            tv.string           = logLines.joined(separator: "\n")
+            tv.scrollToEndOfDocument(nil)
+
+            sv.documentView = tv
+            win.contentView?.addSubview(sv)
+            logWindow   = win
+            logTextView = tv
+
+            // Close callback
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(logWindowClosed),
+                name: NSWindow.willCloseNotification, object: win)
+        }
+        logWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func logWindowClosed() {
+        logWindow   = nil
+        logTextView = nil
+    }
+
+    // MARK: ─── Auto-start (LaunchAgent) ────────────────────────────────────
+    @objc func toggleAutoStart() {
+        if launchAgentExists() {
+            removeLaunchAgent()
+            autoStartItem?.state = .off
+            log("Auto-start disabled")
+        } else {
+            installLaunchAgent()
+            autoStartItem?.state = .on
+            log("Auto-start enabled")
+        }
+    }
+
+    var launchAgentPath: String {
+        NSHomeDirectory() + "/Library/LaunchAgents/com.claudeai.bridge.plist"
+    }
+    func launchAgentExists() -> Bool {
+        FileManager.default.fileExists(atPath: launchAgentPath)
+    }
+
+    func installLaunchAgent() {
+        let appExe = Bundle.main.bundlePath + "/Contents/MacOS/Claude Bridge"
+        let plist: NSDictionary = [
+            "Label":              "com.claudeai.bridge",
+            "ProgramArguments":   [appExe],
+            "RunAtLoad":          true,
+            "KeepAlive":          false,
+            "StandardOutPath":    NSHomeDirectory() + "/Library/Logs/claude-bridge.log",
+            "StandardErrorPath":  NSHomeDirectory() + "/Library/Logs/claude-bridge.log",
+        ]
+        let dir = (launchAgentPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        plist.write(toFile: launchAgentPath, atomically: true)
+
+        let t = Process()
+        t.launchPath = "/bin/launchctl"
+        t.arguments  = ["load", launchAgentPath]
+        try? t.run(); t.waitUntilExit()
+    }
+
+    func removeLaunchAgent() {
+        let t = Process()
+        t.launchPath = "/bin/launchctl"
+        t.arguments  = ["unload", launchAgentPath]
+        try? t.run(); t.waitUntilExit()
+        try? FileManager.default.removeItem(atPath: launchAgentPath)
+    }
+
+    // MARK: ─── Whisper ─────────────────────────────────────────────────────
+    @objc func installWhisper() {
+        let a = NSAlert()
+        a.messageText     = "Cài Whisper cho Autocut"
+        a.informativeText = "Whisper là model AI nhận diện giọng nói, dùng cho tính năng Autocut.\n\nSẽ mở Terminal cài tự động (~500MB, cần vài phút)."
+        a.addButton(withTitle: "Cài ngay")
+        a.addButton(withTitle: "Huỷ")
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        openTerminal("pip3 install -U openai-whisper 2>&1 || pip3 install -U openai-whisper --break-system-packages 2>&1 && echo '' && echo '✅ Whisper đã cài xong!' && which whisper")
+    }
+
+    // MARK: ─── Quit ────────────────────────────────────────────────────────
+    @objc func quit() {
+        stopBridge(intentional: true)
+        NSApp.terminate(nil)
+    }
+
+    // MARK: ─── Helpers ─────────────────────────────────────────────────────
+    func findClaude() -> String {
+        let candidates = [
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+            NSHomeDirectory() + "/.npm-global/bin/claude",
+            NSHomeDirectory() + "/.nvm/versions/node/current/bin/claude",
+            NSHomeDirectory() + "/Library/pnpm/claude",
+        ]
+        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) { return found }
+        let r = sh("/usr/bin/which claude")
+        return r.status == 0 ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    }
+
+    func findNodeAndServer() -> (nodePath: String, serverDir: String)? {
+        // Find node binary
+        let nodeCandidates = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            NSHomeDirectory() + "/.nvm/versions/node/current/bin/node",
+            "/usr/bin/node",
+        ]
+        var nodePath = nodeCandidates.first(where: { FileManager.default.fileExists(atPath: $0) }) ?? ""
+        if nodePath.isEmpty {
+            let r = sh("/usr/bin/which node")
+            if r.status == 0 { nodePath = r.out.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        guard !nodePath.isEmpty, FileManager.default.fileExists(atPath: nodePath) else { return nil }
+
+        // Find server.js inside app bundle
+        guard let rp = Bundle.main.resourcePath else { return nil }
+        let serverDir = rp + "/server"
+        guard FileManager.default.fileExists(atPath: serverDir + "/server.js") else { return nil }
+        return (nodePath, serverDir)
+    }
+
+    func checkAuth(claudePath: String) -> Bool {
+        // Claude Code v2.x: 'claude auth status' returns JSON {"loggedIn": true/false, ...}
+        let r   = shTimeout("'\(claudePath)' auth status 2>&1", env: buildEnv(), timeout: 10)
+        let out = r.out
+        let low = out.lowercased()
+
+        log("checkAuth: exit=\(r.status) → \(out.prefix(160).trimmingCharacters(in: .whitespacesAndNewlines))")
+
+        // ── Positive signals ───────────────────────────────────────────────
+        // JSON (case-insensitive key, e.g. "loggedIn": true / "loggedin":true)
+        if low.contains("\"loggedin\": true") || low.contains("\"loggedin\":true") { return true }
+        // Text format ("Logged in as ...")
+        if low.contains("logged in") && !low.contains("not logged in") { return true }
+
+        // ── Definitive NOT-logged-in signals ───────────────────────────────
+        // NOTE: Do NOT blacklist "oauth" / "sign in" — they appear in VALID auth output
+        //       e.g. {"authMethod":"claude.ai","oauthSessionExpiry":"..."}
+        let notAuth = ["not logged in", "not authenticated",
+                       "\"loggedin\": false", "\"loggedin\":false",
+                       "login required", "please log in", "please authenticate"]
+        if notAuth.contains(where: { low.contains($0) }) { return false }
+
+        // Command exited 0 with no known error → treat as logged in
+        return r.status == 0
+    }
+
+    func detectMode() -> String {
+        let envFile = Bundle.main.resourcePath.map { $0 + "/server/.env" } ?? ""
+        if let contents = try? String(contentsOfFile: envFile), contents.contains("ANTHROPIC_API_KEY=sk-") {
+            return "api-key"
+        }
+        // Check sibling .env
+        let siblingEnv = (Bundle.main.bundlePath as NSString).deletingLastPathComponent + "/.env"
+        if let contents = try? String(contentsOfFile: siblingEnv), contents.contains("ANTHROPIC_API_KEY=sk-") {
+            return "api-key"
+        }
+        return "claude-cli"
+    }
+
+    func buildEnv() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let paths = [
+            "/opt/homebrew/bin", "/opt/homebrew/sbin",
+            "/usr/local/bin",    "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+            NSHomeDirectory() + "/.npm-global/bin",
+            NSHomeDirectory() + "/.nvm/versions/node/current/bin",
+        ].joined(separator: ":")
+        env["PATH"] = paths + ":" + (env["PATH"] ?? "")
+        env["HOME"] = NSHomeDirectory()
+        env["USER"] = NSUserName()
+
+        // Load .env files: bundle first, then sibling (overrides)
+        for envFilePath in [
+            Bundle.main.resourcePath.map { $0 + "/server/.env" } ?? "",
+            (Bundle.main.bundlePath as NSString).deletingLastPathComponent + "/.env",
+            NSHomeDirectory() + "/Library/Application Support/ClaudeBridge/.env",
+        ] {
+            guard let lines = try? String(contentsOfFile: envFilePath, encoding: .utf8) else { continue }
+            for line in lines.components(separatedBy: "\n") {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                guard !t.hasPrefix("#"), !t.isEmpty else { continue }
+                let parts = t.split(separator: "=", maxSplits: 1).map(String.init)
+                if parts.count == 2 { env[parts[0]] = parts[1] }
+            }
+        }
+        return env
+    }
+
+    func openTerminal(_ cmd: String) {
+        let escaped = cmd
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let src = "tell application \"Terminal\" to activate\ntell application \"Terminal\" to do script \"\(escaped)\""
+        if let s = NSAppleScript(source: src) { s.executeAndReturnError(nil) }
+    }
+
+    func pollUntil(check: @escaping () -> Bool, interval: TimeInterval, timeout: TimeInterval,
+                   then: @escaping () -> Void, onTimeout: (() -> Void)? = nil) {
+        var spent = 0.0
+        func step() {
+            DispatchQueue.global().async {
+                if check() { DispatchQueue.main.async { then() }; return }
+                spent += interval
+                guard spent < timeout else {
+                    if let cb = onTimeout { DispatchQueue.main.async { cb() } }
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + interval) { step() }
+            }
+        }
+        step()
+    }
+
+    @discardableResult
+    func sh(_ cmd: String) -> (out: String, status: Int32) {
+        let p = Process()
+        p.launchPath = "/bin/bash"
+        p.arguments  = ["-c", cmd]
+        p.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
+        let pipe = Pipe()
+        p.standardOutput = pipe; p.standardError = pipe
+        try? p.run(); p.waitUntilExit()
+        return (String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "", p.terminationStatus)
+    }
+
+    func shTimeout(_ cmd: String, env: [String: String], timeout: TimeInterval) -> (out: String, status: Int32) {
+        let p = Process()
+        p.launchPath  = "/bin/bash"
+        p.arguments   = ["-c", cmd]
+        p.environment = env
+        let pipe = Pipe()
+        p.standardOutput = pipe; p.standardError = pipe
+        var out = ""; var status = Int32(-1)
+        let sem = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            try? p.run(); p.waitUntilExit()
+            out    = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            status = p.terminationStatus
+            sem.signal()
+        }
+        if sem.wait(timeout: .now() + timeout) == .timedOut { p.terminate() }
+        return (out, status)
+    }
+}

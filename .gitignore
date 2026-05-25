@@ -1,0 +1,32 @@
+# Dependencies (bundled inside .app — không commit)
+bridge/node_modules/
+
+# Secrets
+bridge/.env
+.env
+
+# Build output
+Claude\ Bridge.app/
+*.zip
+
+# Generated / binary output
+bridge/.tts-output/
+bridge/.attachments/
+
+# Backup / old versions
+plugin_v3.0.10_backup/
+
+# Claude Code internal
+.claude/
+
+# macOS
+.DS_Store
+__MACOSX/
+
+# Logs
+*.log
+bridge/bridge.log
+
+# Editor
+.vscode/
+*.swp

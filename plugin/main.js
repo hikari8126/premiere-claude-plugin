@@ -1,0 +1,4209 @@
+/* =========================================================
+   Claude AI — Premiere Pro UXP Plugin  v1.3.1
+   Single non-module script (no import/export).
+   API confirmed from Adobe DVA internal plugins (text/copilot).
+   Key pattern: trackGroup + ClipTrack.queryCast + getTrackItems(1,false)
+   ========================================================= */
+
+// ── Premiere API wrapper (async) ───────────────────────────────────────────
+
+var ppro = null;
+try { ppro = require('premierepro'); } catch(e) { console.warn('premierepro not available:', e.message); }
+
+// Convert any TickTime/time object to seconds
+// Premiere Pro 25.x TickTime has non-enumerable getters — try everything
+function getTimeSec(t) {
+  if (!t && t !== 0) return 0;
+  if (typeof t === 'number') return t;
+  if (typeof t.seconds === 'number') return t.seconds;
+  if (typeof t.ticks   === 'number') return t.ticks / 254016000000;
+  try { var s = t.seconds; if (typeof s === 'number') return s; } catch(e) {}
+  try { var tk = t.ticks;  if (typeof tk === 'number') return tk / 254016000000; } catch(e) {}
+  if (typeof t.getSeconds === 'function') { try { return t.getSeconds(); } catch(e) {} }
+  if (typeof t.getValue   === 'function') { try { return t.getValue();   } catch(e) {} }
+  if (t.time != null) return getTimeSec(t.time);
+  return 0;
+}
+function secToTicks(s) { return Math.round((s || 0) * 254016000000); }
+
+// Collection helper: works for both array and {numX, [i]} style collections
+function collectionToArray(col) {
+  if (!col) return [];
+  if (Array.isArray(col)) return col;
+  var count = col.numTracks || col.numItems || col.numSequences || col.length || 0;
+  var arr = [];
+  for (var i = 0; i < count; i++) arr.push(col[i]);
+  return arr;
+}
+
+async function getActiveProject() {
+  if (!ppro) throw new Error('Premiere API not available');
+  // Modern UXP API: ppro.Project.getActiveProject() (async)
+  if (ppro.Project && typeof ppro.Project.getActiveProject === 'function') {
+    var p = await ppro.Project.getActiveProject();
+    if (p) return p;
+  }
+  // Fallback: sync property paths
+  var p2 = (ppro.app && ppro.app.project) || ppro.project || null;
+  if (p2) return p2;
+  throw new Error('No project open in Premiere');
+}
+
+async function getActiveSequence() {
+  var proj = await getActiveProject();
+
+  // 1. Async method (Premiere Pro 23+)
+  if (typeof proj.getActiveSequence === 'function') {
+    var s = await proj.getActiveSequence();
+    if (s) return s;
+  }
+  // 2. Sync property
+  if (proj.activeSequence) return proj.activeSequence;
+
+  // DO NOT fall back to seqs[0] — that always returns the first sequence
+  // regardless of which one is actually open in the timeline panel.
+  throw new Error('No active sequence. Double-click a sequence in Premiere to open it.');
+}
+
+// ── Track/clip access ─────────────────────────────────────────────────────
+// Confirmed API from Adobe DVA internal UXP plugins (com.adobe.dva.text):
+//   seq.trackGroup(ppro.Backend.MEDIATYPE_VIDEO)  → TrackGroup (sync)
+//   trackGroup.numTracks                           → count (property)
+//   trackGroup.getTrack(i)                         → Track (sync)
+//   ppro.ClipTrack.queryCast(track)                → ClipTrack or null
+//   clipTrack.getTrackItems(1, false)              → TrackItem[] (1=CLIP type)
+//   item.getStart()                                → TickTime {seconds, ticks}
+//   item.getDuration()                             → TickTime {seconds, ticks}
+// TrackItemType: EMPTY=0, CLIP=1, TRANSITION=2, PREVIEW=3
+
+var TRACK_ITEM_TYPE_CLIP = 1; // from enum: e[e.CLIP=1]="CLIP"
+
+// getTimeSec (above) handles all TickTime cases — getTickTimeSec is an alias
+// kept here for internal calls within track/clip section:
+
+// Get all clip items from a track.
+// Method A (preferred): ClipTrack.queryCast(track).getTrackItems(CLIP=1, false)
+// Method B (fallback):  track.getTrackItems(CLIP=1, false)  ← same signature, direct call
+// The signature is (TrackItemType, includeDisabled) — NOT (startTicks, endTicks)!
+// TrackItemType: EMPTY=0, CLIP=1, TRANSITION=2 (confirmed from DVA text plugin enum)
+async function getClipItems(track) {
+  if (!track) return [];
+  try {
+    // Method A: queryCast (cleaner, handles caption-only tracks gracefully)
+    if (ppro.ClipTrack) {
+      var ct = ppro.ClipTrack.queryCast(track);
+      if (ct) {
+        var items = ct.getTrackItems(TRACK_ITEM_TYPE_CLIP, false);
+        if (items && typeof items.then === 'function') items = await items;
+        if (!items) return [];
+        return Array.isArray(items) ? items : Array.from({length: items.length||0}, function(_,i){return items[i];});
+      }
+    }
+    // Method B: call directly on the track object
+    var items2 = track.getTrackItems(TRACK_ITEM_TYPE_CLIP, false);
+    if (items2 && typeof items2.then === 'function') items2 = await items2;
+    if (!items2) return [];
+    return Array.isArray(items2) ? items2 : Array.from({length: items2.length||0}, function(_,i){return items2[i];});
+  } catch(e) {
+    console.warn('[Plugin] getClipItems error on track:', e.message);
+    return [];
+  }
+}
+
+// Probe a clip on first call to log available properties
+var _clipProbed = false;
+function probeClipIfNeeded(clip) {
+  if (_clipProbed || !clip) return;
+  _clipProbed = true;
+  var props = {};
+  var KEYS = ['name','mediaType','type','inPoint','outPoint','start','end','duration',
+               'getStart','getEnd','getInPoint','getOutPoint','getDuration','getGuid'];
+  for (var i = 0; i < KEYS.length; i++) {
+    try { var v = clip[KEYS[i]]; if (v !== undefined) props[KEYS[i]] = (typeof v === 'function') ? 'fn()' : String(v).slice(0,50); }
+    catch(e) {}
+  }
+  // Try calling getStart
+  try { var gs = clip.getStart(); props['getStart()'] = JSON.stringify({s: gs.seconds, t: gs.ticks}); } catch(e) {}
+  try { var gd = clip.getDuration(); props['getDuration()'] = JSON.stringify({s: gd.seconds}); } catch(e) {}
+  console.log('[Probe] ClipItem:', JSON.stringify(props));
+}
+
+// Helper: extract clip timing and push to array (async-aware)
+async function pushClip(arr, item, trackIndex, trackType, clipIndex) {
+  if (!item) return;
+  probeClipIfNeeded(item);
+  var startSec = 0, endSec = 0;
+  // Modern Premiere UXP returns Promises from getters — await them
+  try {
+    var gs = item.getStart && item.getStart();
+    if (gs && typeof gs.then === 'function') gs = await gs;
+    startSec = (gs && typeof gs.seconds === 'number') ? gs.seconds
+             : (gs && gs.ticks != null) ? Number(gs.ticks) / 254016000000 : 0;
+  } catch(e) {}
+  try {
+    var ge = item.getEnd && item.getEnd();
+    if (ge && typeof ge.then === 'function') ge = await ge;
+    endSec = (ge && typeof ge.seconds === 'number') ? ge.seconds
+           : (ge && ge.ticks != null) ? Number(ge.ticks) / 254016000000 : 0;
+  } catch(e) {}
+  // Fallback
+  if (!startSec && !endSec) {
+    startSec = getTimeSec(item.start || item.inPoint);
+    endSec   = getTimeSec(item.end   || item.outPoint);
+  }
+  var name = item.name || '';
+  if (!name && typeof item.getName === 'function') {
+    try { var nm = item.getName(); if (nm && typeof nm.then === 'function') nm = await nm; if (nm) name = String(nm); } catch(e) {}
+  }
+  arr.push({ trackIndex: trackIndex, trackType: trackType, clipIndex: clipIndex,
+    name: name || ('Clip ' + clipIndex), startSec: startSec, endSec: endSec });
+}
+
+async function ppGetTimelineInfo() {
+  try {
+    var seq = await getActiveSequence();
+
+    // ── Get tracks and clips ───────────────────────────────────────────────
+    var clips = [], vCount = 0, aCount = 0, durationSec = 0;
+
+    // Log available ppro API surface for debugging
+    console.log('[Plugin] ppro.Backend:', typeof ppro.Backend,
+                '| ppro.ClipTrack:', typeof ppro.ClipTrack,
+                '| seq.trackGroup:', typeof seq.trackGroup);
+
+    // ── Path A: trackGroup API (Adobe DVA internal plugins pattern) ──────
+    // seq.trackGroup(mediaType) → sync TrackGroup {numTracks, getTrack(i)}
+    var usedTrackGroup = false;
+    if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_VIDEO !== undefined) {
+      try {
+        var vGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_VIDEO);
+        var aGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_AUDIO);
+        if (vGroup && typeof vGroup.numTracks === 'number') {
+          usedTrackGroup = true;
+          vCount = vGroup.numTracks;
+          aCount = (aGroup && typeof aGroup.numTracks === 'number') ? aGroup.numTracks : 0;
+          console.log('[Plugin Path A] trackGroup vCount:', vCount, '| aCount:', aCount);
+          for (var vi = 0; vi < vCount; vi++) {
+            var vitems = await getClipItems(vGroup.getTrack(vi));
+            console.log('[Plugin] Video track', vi, '→', vitems.length, 'clips');
+            for (var ci = 0; ci < vitems.length; ci++) await pushClip(clips, vitems[ci], vi, 'video', ci);
+          }
+          for (var ai = 0; ai < aCount; ai++) {
+            var aitems = await getClipItems(aGroup.getTrack(ai));
+            console.log('[Plugin] Audio track', ai, '→', aitems.length, 'clips');
+            for (var aci = 0; aci < aitems.length; aci++) await pushClip(clips, aitems[aci], ai, 'audio', aci);
+          }
+        }
+      } catch(eA) { console.warn('[Plugin Path A] failed:', eA.message); }
+    }
+
+    // ── Path B: async getVideoTrack(i) + getClipItems (CLIP=1, false) ────
+    // Works when trackGroup is unavailable. Uses same confirmed signature.
+    if (!usedTrackGroup) {
+      console.log('[Plugin Path B] using async getVideoTrack + getClipItems(1,false)');
+      vCount = await seq.getVideoTrackCount();
+      aCount = await seq.getAudioTrackCount();
+      console.log('[Plugin Path B] vCount:', vCount, '| aCount:', aCount);
+      for (var bvi = 0; bvi < vCount; bvi++) {
+        var bvt = await seq.getVideoTrack(bvi);
+        var bvitems = await getClipItems(bvt);
+        console.log('[Plugin] Video track', bvi, '→', bvitems.length, 'clips');
+        for (var bci = 0; bci < bvitems.length; bci++) await pushClip(clips, bvitems[bci], bvi, 'video', bci);
+      }
+      for (var bai = 0; bai < aCount; bai++) {
+        var bat = await seq.getAudioTrack(bai);
+        var baitems = await getClipItems(bat);
+        console.log('[Plugin] Audio track', bai, '→', baitems.length, 'clips');
+        for (var baci = 0; baci < baitems.length; baci++) await pushClip(clips, baitems[baci], bai, 'audio', baci);
+      }
+    }
+
+    // Sequence duration
+    try { var et = await seq.getEndTime(); durationSec = et.seconds || getTimeSec(et); } catch(e) {}
+    console.log('[Plugin] Total clips:', clips.length, '| durationSec:', durationSec.toFixed(2));
+
+    return { ok: true, data: {
+      sequenceName:    seq.name,
+      durationSec:     durationSec,
+      videoTrackCount: vCount,
+      audioTrackCount: aCount,
+      clips:           clips
+    }};
+  } catch(e) {
+    console.error('[Plugin] ppGetTimelineInfo error:', e.message, e.stack);
+    return { ok: false, error: e.message };
+  }
+}
+
+async function ppExecuteAction(actionObj) {
+  var action = actionObj.action;
+  try {
+    if (action === 'get_timeline_info') return await ppGetTimelineInfo();
+
+    // Cutlist is data, not a Premiere action — forward to Autocut tab.
+    if (action === 'cutlist') {
+      if (typeof window.AutocutSetRows === 'function') {
+        window.AutocutSetRows(actionObj.rows || []);
+      }
+      var n = (actionObj.rows || []).length;
+      return { ok: true, data: { message: 'Parsed ' + n + ' rows → Autocut tab' } };
+    }
+
+    // Push script/sfx text to Voice Gen tab (cross-tab communication)
+    if (action === 'voicegen_script') {
+      if (typeof window.VoiceGenPushScript === 'function') {
+        window.VoiceGenPushScript(
+          actionObj.text || '',
+          actionObj.voiceId || null,
+          !!actionObj.autoGenerate
+        );
+      }
+      return { ok: true, data: { message: 'Script pushed to Voice Gen tab' } };
+    }
+    if (action === 'voicegen_sfx') {
+      if (typeof window.VoiceGenPushSFX === 'function') {
+        window.VoiceGenPushSFX(
+          actionObj.text || '',
+          !!actionObj.autoGenerate
+        );
+      }
+      return { ok: true, data: { message: 'SFX prompt pushed to Voice Gen tab' } };
+    }
+
+    var seq = await getActiveSequence();
+
+    if (action === 'cut_clip') {
+      // trackType: 'audio' or 'video' (default video). audioIndex/videoIndex maps to track.
+      var trackType  = (actionObj.trackType || 'video').toLowerCase();
+      var trackIdx   = actionObj.trackIndex || 0;
+      var atSec      = Number(actionObj.time || 0);
+      var trackObj   = trackType === 'audio'
+        ? await seq.getAudioTrack(trackIdx)
+        : await seq.getVideoTrack(trackIdx);
+      if (!trackObj) throw new Error(trackType + ' track ' + trackIdx + ' not found');
+
+      // Find the trackItem that contains atSec on its timeline range (inline async probe)
+      async function clipStart(item) {
+        try { var gs = await item.getStart(); return (gs && gs.seconds) || 0; } catch(e) { return 0; }
+      }
+      async function clipDur(item) {
+        try {
+          var gs = await item.getStart();
+          var ge = await item.getEnd();
+          return ((ge && ge.seconds) || 0) - ((gs && gs.seconds) || 0);
+        } catch(e) { return 0; }
+      }
+      var items = await getClipItems(trackObj);
+      var target = null;
+      console.log('[cut_clip] scanning', items.length, 'items on', trackType, 'track', trackIdx, 'for time', atSec);
+      for (var i = 0; i < items.length; i++) {
+        var s = await clipStart(items[i]);
+        var d = await clipDur(items[i]);
+        console.log('[cut_clip]   [' + i + '] "' + (items[i].name || '?') + '" start=' + s + ' dur=' + d);
+        if (atSec > s + 0.001 && atSec < s + d - 0.001) {
+          target = { item: items[i], startSec: s, durSec: d };
+          break;
+        }
+      }
+      if (!target) throw new Error('No ' + trackType + ' clip on track ' + trackIdx + ' contains time ' + atSec + 's');
+
+      // Try multiple razor approaches — UXP API varies
+      var atTick = ppro.TickTime.createWithSeconds(atSec);
+      var project = await getActiveProject();
+      var razorDone = false;
+
+      // Approach 1: sequence-level razor methods
+      try {
+        if (typeof seq.razor === 'function') {
+          var r = seq.razor(atTick);
+          if (r && typeof r.then === 'function') await r;
+          razorDone = true;
+        } else if (typeof seq.razorAll === 'function') {
+          var ra = seq.razorAll(atTick);
+          if (ra && typeof ra.then === 'function') await ra;
+          razorDone = true;
+        }
+      } catch(e) { console.warn('[cut_clip] razor() failed:', e.message); }
+
+      // Approach 2: SequenceEditor createRazorAction (if exists)
+      if (!razorDone && ppro.SequenceEditor) {
+        try {
+          var editor = ppro.SequenceEditor.getEditor(seq);
+          if (editor && typeof editor.createRazorAction === 'function') {
+            await project.lockedAccess(function() {
+              project.executeTransaction(function(action) {
+                action.addAction(editor.createRazorAction(atTick));
+              }, 'Razor at ' + atSec + 's');
+            });
+            razorDone = true;
+          } else if (editor && typeof editor.createRazorAtTimeAction === 'function') {
+            await project.lockedAccess(function() {
+              project.executeTransaction(function(action) {
+                action.addAction(editor.createRazorAtTimeAction(atTick));
+              }, 'Razor at ' + atSec + 's');
+            });
+            razorDone = true;
+          }
+        } catch(e) { console.warn('[cut_clip] editor.createRazorAction failed:', e.message); }
+      }
+
+      // Approach 3: trackItem split (if available)
+      if (!razorDone) {
+        try {
+          if (typeof target.item.createSplitAction === 'function') {
+            await project.lockedAccess(function() {
+              project.executeTransaction(function(action) {
+                action.addAction(target.item.createSplitAction(atTick));
+              }, 'Split at ' + atSec + 's');
+            });
+            razorDone = true;
+          }
+        } catch(e) { console.warn('[cut_clip] split failed:', e.message); }
+      }
+
+      if (!razorDone) {
+        // No razor API available — dump what we know
+        var seqMethods = [];
+        for (var k in seq) if (typeof seq[k] === 'function' && /razor|split|cut/i.test(k)) seqMethods.push(k);
+        var edMethods = [];
+        if (ppro.SequenceEditor) {
+          try {
+            var ed = ppro.SequenceEditor.getEditor(seq);
+            for (var k2 in ed) if (typeof ed[k2] === 'function' && /razor|split|cut/i.test(k2)) edMethods.push(k2);
+          } catch(e) {}
+        }
+        throw new Error('No razor API in this Premiere version. Tried: seq.razor, editor.createRazorAction, item.createSplitAction. seq methods found: [' + seqMethods.join(',') + '], editor methods: [' + edMethods.join(',') + ']');
+      }
+      return { ok: true, data: { message: 'Razor cut ' + trackType + ' track ' + trackIdx + ' at ' + atSec + 's' } };
+    }
+    if (action === 'add_marker') {
+      var m = await seq.markers.createMarker(secToTicks(actionObj.time));
+      if (actionObj.name) m.name = actionObj.name;
+      return { ok: true, data: { message: 'Marker "' + actionObj.name + '" added at ' + actionObj.time + 's' } };
+    }
+    if (action === 'add_subtitle') {
+      var ct     = collectionToArray(seq.captionTracks);
+      var ctrack = ct[actionObj.captionTrackIndex || 0];
+      if (!ctrack) throw new Error('No caption track found. Create one in Premiere first.');
+      var clipEl = await ctrack.createCaption(
+        { ticks: secToTicks(actionObj.startTime) },
+        { ticks: secToTicks(actionObj.endTime) });
+      if (clipEl) clipEl.text = actionObj.text;
+      return { ok: true, data: { message: 'Subtitle added: "' + actionObj.text + '"' } };
+    }
+    if (action === 'set_volume') {
+      var atrack = collectionToArray(seq.audioTracks)[actionObj.trackIndex];
+      var aclip  = atrack && collectionToArray(atrack.clips)[actionObj.clipIndex];
+      if (!aclip) throw new Error('Audio clip not found');
+      var comps = collectionToArray(aclip.audioComponents);
+      for (var i = 0; i < comps.length; i++) {
+        if (comps[i].displayName === 'Volume') {
+          comps[i].properties.getPropertyByDisplayName('Level').setValue(actionObj.volumeDb, true);
+          break;
+        }
+      }
+      return { ok: true, data: { message: 'Volume set to ' + actionObj.volumeDb + 'dB' } };
+    }
+    if (action === 'move_clip') {
+      var mvtrack = collectionToArray(seq.videoTracks)[actionObj.trackIndex];
+      var mvclip  = mvtrack && collectionToArray(mvtrack.clips)[actionObj.clipIndex];
+      if (!mvclip) throw new Error('Clip not found');
+      mvclip.start = { ticks: secToTicks(actionObj.newStart) };
+      return { ok: true, data: { message: 'Clip moved to ' + actionObj.newStart + 's' } };
+    }
+    if (action === 'trim_clip') {
+      var tmtrack = collectionToArray(seq.videoTracks)[actionObj.trackIndex];
+      var tmclip  = tmtrack && collectionToArray(tmtrack.clips)[actionObj.clipIndex];
+      if (!tmclip) throw new Error('Clip not found');
+      if (actionObj.newIn  != null) tmclip.inPoint  = { ticks: secToTicks(actionObj.newIn) };
+      if (actionObj.newOut != null) tmclip.outPoint = { ticks: secToTicks(actionObj.newOut) };
+      return { ok: true, data: { message: 'Clip trimmed' } };
+    }
+    return { ok: false, error: 'Unknown action: ' + action };
+  } catch(e) { return { ok: false, error: e.message }; }
+}
+
+// ── Premiere event listeners (real-time sequence tracking) ─────────────────
+
+async function registerTimelineEvents() {
+  if (!ppro) return;
+
+  var handler = function() {
+    console.log('[Plugin] Sequence change detected');
+    refreshTimeline();
+  };
+
+  // Candidate event names across different Premiere Pro versions
+  var EVENT_NAMES = [
+    'onActiveSequenceChanged',
+    'activeSequenceChanged',
+    'onSequenceActivated',
+    'sequenceActivated',
+    'onActiveItemChanged',
+  ];
+
+  // Candidate objects to attach listeners to
+  var targets = [ppro, ppro.app, ppro.Project].filter(Boolean);
+
+  // Also try the project instance
+  try {
+    var proj = await getActiveProject();
+    if (proj) targets.push(proj);
+  } catch(e) {}
+
+  var registered = 0;
+  targets.forEach(function(target) {
+    if (typeof target.addEventListener !== 'function') return;
+    EVENT_NAMES.forEach(function(name) {
+      try {
+        target.addEventListener(name, handler);
+        registered++;
+        console.log('[Plugin] Listening:', name, 'on', target);
+      } catch(e) { /* not supported */ }
+    });
+  });
+
+  // Also listen to VideoTrack/AudioTrack class-level events (track content changes)
+  var TRACK_EVENTS = [
+    ppro.VideoTrack && ppro.VideoTrack.EVENT_TRACK_CHANGED,
+    ppro.VideoTrack && ppro.VideoTrack.EVENT_TRACK_INFO_CHANGED,
+    ppro.AudioTrack && ppro.AudioTrack.EVENT_TRACK_CHANGED,
+  ].filter(Boolean);
+
+  TRACK_EVENTS.forEach(function(evtName) {
+    try {
+      ppro.app && ppro.app.addEventListener(evtName, handler);
+    } catch(e) {}
+  });
+
+  console.log('[Plugin] Event registrations attempted:', registered);
+}
+
+// ── Version ────────────────────────────────────────────────────────────────
+var PLUGIN_VERSION = 'v4.1.1';
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+var BRIDGE_URL      = 'http://localhost:3030';
+var CLAUDE_MODEL    = 'claude-sonnet-4-6';
+var ANTHROPIC_KEY   = ''; // user-provided API key (optional)
+var ELEVENLABS_KEY  = '03dcac8c36d58c119bbc3f070afb142de39d019444ac20311682eb2b42e6c900'; // default key — overridden by user Settings
+var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
+var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
+var RATE_LIMIT_UNTIL = 0; // epoch ms — until when we shouldn't retry CLI
+var messages        = [];
+var timelineContext = null;
+var isStreaming     = false;
+var attachedImages  = []; // [{name, mediaType, base64, dataUrl}]
+
+// ── DOM ────────────────────────────────────────────────────────────────────
+
+var chatArea       = document.getElementById('chat-area');
+var emptyState     = document.getElementById('empty-state');
+var msgInput       = document.getElementById('message-input');
+var sendBtn        = document.getElementById('send-btn');
+var statusDot      = document.getElementById('status-dot');
+var statusText     = document.getElementById('status-text');
+var timelineInfo   = document.getElementById('timeline-info');
+var contextPanel   = document.getElementById('context-panel');
+var contextContent = document.getElementById('context-content');
+var settingsModal  = document.getElementById('settings-modal');
+var bridgeUrlInput = document.getElementById('bridge-url-input');
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+document.getElementById('plugin-version').textContent = PLUGIN_VERSION;
+console.log('[Claude AI Plugin] Loaded', PLUGIN_VERSION);
+
+loadSettings();
+checkBridge();
+refreshTimeline();
+registerTimelineEvents();        // primary: event-driven
+setInterval(checkBridge, 15000); // health check every 15s
+setInterval(pollTimeline, 5000); // fallback poll every 5s (skips if unchanged)
+
+// ── Bridge health ──────────────────────────────────────────────────────────
+
+var REQUIRED_BRIDGE = '1.2.0'; // Plugin v1.4.5+ requires bridge ≥1.2.0
+var bridgeHealth = null;
+
+function checkBridge() {
+  setStatus('connecting', 'Connecting to bridge...');
+  var xhr = new XMLHttpRequest();
+  xhr.timeout = 4000;
+  xhr.open('GET', BRIDGE_URL + '/health', true);
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try {
+        bridgeHealth = JSON.parse(xhr.responseText);
+        // Check version — warn if too old (multimodal capability missing)
+        var caps = bridgeHealth.capabilities || {};
+        if (!caps.multimodal) {
+          setStatus('warn', 'Bridge v' + (bridgeHealth.version || '?') +
+            ' too old — restart server.js (need ≥' + REQUIRED_BRIDGE + ')');
+          return;
+        }
+        setStatus('connected', 'Bridge v' + bridgeHealth.version +
+          ' · ' + (bridgeHealth.mode === 'api-key' ? 'API' : 'CLI'));
+      } catch(e) {
+        setStatus('connected', 'Bridge connected');
+      }
+    } else {
+      setStatus('offline', 'Bridge error: ' + xhr.status);
+    }
+  };
+  xhr.onerror   = function() { setStatus('offline', 'Bridge offline — run start.command'); };
+  xhr.ontimeout = function() { setStatus('offline', 'Bridge timeout — is it running?'); };
+  xhr.send();
+}
+
+function setStatus(state, text) {
+  statusDot.className = state === 'connected' ? 'connected'
+                      : state === 'connecting' ? 'connecting'
+                      : state === 'warn' ? 'warn'
+                      : '';
+  statusText.textContent = text;
+}
+
+// ── Timeline context ───────────────────────────────────────────────────────
+
+var _lastSeqFingerprint = null;
+
+// A cheap fingerprint of the sequence: name + track counts + clip count.
+// Changes here trigger a full refresh (so editor adding a clip is detected).
+async function getSeqFingerprint() {
+  try {
+    var seq = await getActiveSequence();
+    if (!seq) return null;
+    var vc = await seq.getVideoTrackCount();
+    var ac = await seq.getAudioTrackCount();
+    var clipCount = 0;
+    for (var i = 0; i < vc; i++) {
+      var t = await seq.getVideoTrack(i);
+      var items = await getClipItems(t);
+      clipCount += items.length;
+    }
+    for (var j = 0; j < ac; j++) {
+      var ta = await seq.getAudioTrack(j);
+      var itemsa = await getClipItems(ta);
+      clipCount += itemsa.length;
+    }
+    return seq.name + '|v' + vc + '|a' + ac + '|c' + clipCount;
+  } catch(e) {
+    return null;
+  }
+}
+
+async function pollTimeline() {
+  var fp = await getSeqFingerprint();
+  if (fp !== _lastSeqFingerprint) {
+    _lastSeqFingerprint = fp;
+    if (fp === null) {
+      timelineContext = null;
+      timelineInfo.textContent = 'No active sequence';
+      contextPanel.classList.remove('visible');
+    } else {
+      await refreshTimeline();
+    }
+  }
+}
+
+async function refreshTimeline() {
+  var result = await ppGetTimelineInfo();
+  if (result.ok) {
+    timelineContext = result.data;
+    var d = result.data;
+    timelineInfo.textContent = d.sequenceName + ' · ' + d.clips.length + ' clips';
+    contextPanel.classList.add('visible');
+    var shapeInfo = d._apiShape
+      ? ' <span style="color:#555;font-size:10px;">[track:' + (d._apiShape.trackCountProp||'?') +
+        ' clip:' + (d._apiShape.clipCountProp||'?') + ']</span>'
+      : '';
+    contextContent.innerHTML =
+      '<div class="ctx-row">' +
+        '<span><span class="ctx-label">Sequence:</span> ' + esc(d.sequenceName) + '</span>' +
+        '<span><span class="ctx-label">Duration:</span> ' + d.durationSec.toFixed(1) + 's</span>' +
+        '<span><span class="ctx-label">Video:</span> ' + d.videoTrackCount + ' tracks</span>' +
+        '<span><span class="ctx-label">Audio:</span> ' + d.audioTrackCount + ' tracks</span>' +
+        '<span><span class="ctx-label">Clips:</span> ' + d.clips.length + '</span>' +
+        shapeInfo +
+      '</div>';
+  } else {
+    timelineContext = null;
+    timelineInfo.textContent = 'No active sequence';
+    contextPanel.classList.remove('visible');
+  }
+}
+
+// ── Send message ───────────────────────────────────────────────────────────
+
+function sendMessage() {
+  var content = (msgInput.value == null ? '' : String(msgInput.value)).trim();
+  // Allow send if EITHER text OR images present
+  if ((!content && attachedImages.length === 0) || isStreaming) return;
+
+  msgInput.value = '';
+  autoResize();
+  isStreaming = true;
+  sendBtn.disabled = true;
+  emptyState.style.display = 'none';
+
+  // Build content array (multimodal). If only text, send plain string for backward compat.
+  var userMessage;
+  if (attachedImages.length > 0) {
+    var parts = attachedImages.map(function(img) {
+      return { type: 'image', mediaType: img.mediaType, data: img.base64, name: img.name };
+    });
+    if (content) parts.push({ type: 'text', text: content });
+    else         parts.push({ type: 'text', text: 'Parse this cutsheet into a cutlist action.' });
+    userMessage = { role: 'user', content: parts };
+  } else {
+    userMessage = { role: 'user', content: content };
+  }
+
+  messages.push(userMessage);
+  appendMessageWithAttachments('user', content, attachedImages);
+
+  // Clear attachments after sending (dropzone will hide because messages>0)
+  attachedImages = [];
+  if (typeof window.refreshDropzoneState === 'function') window.refreshDropzoneState();
+
+  // Detect voice-related messages — inject available voices for auto-pick
+  var voiceContext = null;
+  if (content && /voice|narrat|speak|script.*gen|gen.*voice|audio.*gen|pick.*voice|choose.*voice/i.test(content)) {
+    if (typeof window.VoiceGenGetVoices === 'function') {
+      var vList = window.VoiceGenGetVoices().filter(function(v){ return !v.isSep; });
+      if (vList.length > 0) {
+        voiceContext = vList.map(function(v){ return v.voice_id + ': ' + v.label; }).join('\n');
+      }
+    }
+  }
+
+  var typingEl        = appendTyping();
+  var xhr             = new XMLHttpRequest();
+  var lastLen         = 0;
+  var assistantEl     = null;
+  var bubbleEl        = null;
+  var fullText        = '';
+  var typingRemoved   = false;
+  var finished        = false;
+  var pendingRateLimit = null; // deferred — only shown if no text follows
+
+  // Lazy helpers so we don't depend on readyState 2 firing
+  function removeTyping() {
+    if (!typingRemoved) {
+      typingRemoved = true;
+      if (typingEl.parentNode) typingEl.remove();
+    }
+  }
+
+  function ensureBubble() {
+    if (!assistantEl) {
+      assistantEl = appendMessage('assistant', '');
+      bubbleEl    = assistantEl.querySelector('.bubble');
+    }
+  }
+
+  function parseSSE() {
+    var text  = xhr.responseText || '';
+    var chunk = text.slice(lastLen);
+    lastLen   = text.length;
+    if (!chunk) return;
+
+    chunk.split('\n').forEach(function(line) {
+      if (!line.startsWith('data: ')) return;
+      var raw = line.slice(6);
+      if (raw === '[DONE]') return;
+      try {
+        var ev = JSON.parse(raw);
+        if (ev.type === 'text') {
+          removeTyping();
+          ensureBubble();
+          fullText += ev.content;
+          bubbleEl.innerHTML = renderMd(fullText);
+          chatArea.scrollTop = chatArea.scrollHeight;
+        } else if (ev.type === 'tool_use') {
+          // Show "calling tool: Read" so user knows CLI is working
+          ensureBubble();
+          var toolNote = '<div style="color:#888;font-style:italic;font-size:11px;">⚙ ' +
+                         esc('Claude calling tool: ' + (ev.name || 'unknown')) + '</div>';
+          if (!fullText) bubbleEl.innerHTML = toolNote;
+        } else if (ev.type === 'heartbeat') {
+          // heartbeat — typing indicator still visible; no tooltip in UXP
+        } else if (ev.type === 'rate_limit') {
+          // Defer rendering — Claude Code CLI often auto-retries and succeeds.
+          // Only render the bubble in finishStreaming if no text came after this.
+          var resetAt = ev.resetAt || null;
+          if (resetAt) RATE_LIMIT_UNTIL = resetAt;
+          pendingRateLimit = { resetAt: resetAt, source: ev.source, raw: ev.raw };
+        } else if (ev.type === 'error') {
+          removeTyping();
+          ensureBubble();
+          bubbleEl.innerHTML = '<span style="color:var(--error)">' + esc(ev.content) + '</span>';
+        } else if (ev.type === 'done') {
+          removeTyping();
+        }
+      } catch(e) { /* skip */ }
+    });
+  }
+
+  xhr.open('POST', BRIDGE_URL + '/chat', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.responseType = 'text';
+
+  xhr.onreadystatechange = function() {
+    // Parse any new SSE data on every progress event
+    if (xhr.readyState === 3 || xhr.readyState === 4) {
+      parseSSE();
+    }
+
+    if (xhr.readyState === 4 && !finished) {
+      finished = true;
+      removeTyping();
+
+      if (assistantEl) {
+        finishStreaming(fullText, assistantEl, pendingRateLimit); // async, fire-and-forget ok
+      } else if (pendingRateLimit) {
+        // Rate-limit fired but no text was streamed at all
+        var rlMsg = appendMessage('assistant', '');
+        var rlBubble = rlMsg ? (rlMsg.querySelector('.bubble') || rlMsg) : null;
+        if (rlBubble) renderRateLimitBubble(rlBubble, pendingRateLimit.resetAt, pendingRateLimit.source, pendingRateLimit.raw);
+        resetInput();
+      } else {
+        // Got a response but no text events — check status
+        var statusMsg = xhr.status === 0
+          ? '❌ Không kết nối được bridge.\n\nMở Terminal và chạy:\n  cd /Users/crossian/premiere-claude-plugin/bridge\n  node server.js'
+          : '❌ Bridge trả về lỗi HTTP ' + xhr.status;
+        appendMessage('assistant', statusMsg);
+        resetInput();
+      }
+    }
+  };
+
+  xhr.onerror = function() {
+    if (finished) return;
+    finished = true;
+    removeTyping();
+    appendMessage('assistant', '❌ Không kết nối được bridge.\n\nMở Terminal và chạy:\n  cd /Users/crossian/premiere-claude-plugin/bridge\n  node server.js');
+    resetInput();
+  };
+
+  xhr.ontimeout = function() {
+    if (finished) return;
+    finished = true;
+    removeTyping();
+    appendMessage('assistant', '❌ Request timeout — bridge quá chậm hoặc không phản hồi.');
+    resetInput();
+  };
+
+  xhr.timeout = 300000; // 5 min — CLI image parsing can be slow
+  xhr.send(JSON.stringify({
+    messages:        messages,
+    timelineContext: timelineContext,
+    model:           CLAUDE_MODEL,
+    apiKey:          ANTHROPIC_KEY || undefined,
+    voiceContext:    voiceContext || undefined,
+  }));
+}
+
+async function finishStreaming(fullText, assistantEl, pendingRateLimit) {
+  messages.push({ role: 'assistant', content: fullText });
+
+  // Only show rate-limit bubble if no text was received (CLI didn't auto-recover)
+  if (pendingRateLimit && !fullText) {
+    var bEl = assistantEl ? (assistantEl.querySelector('.bubble') || assistantEl) : null;
+    if (bEl) renderRateLimitBubble(bEl, pendingRateLimit.resetAt, pendingRateLimit.source, pendingRateLimit.raw);
+  }
+
+  var actions = parseActions(fullText);
+  if (actions.length > 0) {
+    await executeActions(actions, assistantEl);
+    refreshTimeline(); // async, fire-and-forget
+  }
+  resetInput();
+}
+
+function resetInput() {
+  isStreaming      = false;
+  sendBtn.disabled = false;
+  msgInput.focus();
+}
+
+// ── Parse ```actions blocks ────────────────────────────────────────────────
+
+function parseActions(text) {
+  var results = [];
+  var re = /```actions\s*([\s\S]*?)```/g;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    try {
+      var parsed = JSON.parse(m[1].trim());
+      results = results.concat(Array.isArray(parsed) ? parsed : [parsed]);
+    } catch(e) { /* skip */ }
+  }
+  return results;
+}
+
+async function executeActions(actions, parentEl) {
+  var bubbleEl = parentEl.querySelector('.bubble') || parentEl;
+
+  var divider = document.createElement('div');
+  divider.style.cssText = 'border-top:1px solid #2d4a2d;margin-top:8px;padding-top:8px;';
+  bubbleEl.appendChild(divider);
+
+  for (var i = 0; i < actions.length; i++) {
+    var action = actions[i];
+    var chip   = document.createElement('div');
+    chip.className   = 'action-result';
+    chip.textContent = '⚙ ' + action.action + '…';
+    bubbleEl.appendChild(chip);
+
+    var result = await ppExecuteAction(action);   // ← await async API
+    if (result.ok) {
+      chip.textContent = '✓ ' + (result.data.message || action.action);
+    } else {
+      chip.className   = 'action-result error';
+      chip.textContent = '✗ ' + action.action + ': ' + result.error;
+    }
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+}
+
+// ── DOM helpers ────────────────────────────────────────────────────────────
+
+function appendMessage(role, content) {
+  return appendMessageWithAttachments(role, content, []);
+}
+
+function appendMessageWithAttachments(role, content, attachments) {
+  var wrapper  = document.createElement('div');
+  wrapper.className = 'message ' + role;
+
+  var roleEl = document.createElement('span');
+  roleEl.className = 'role';
+  roleEl.textContent = role === 'user' ? 'You' : 'Claude';
+
+  var bubbleEl = document.createElement('div');
+  bubbleEl.className = 'bubble';
+
+  // Render attached images first
+  if (attachments && attachments.length > 0) {
+    var attachWrap = document.createElement('div');
+    attachWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;';
+    attachments.forEach(function(att) {
+      var thumb = document.createElement('img');
+      thumb.src = att.dataUrl;
+      thumb.alt = att.name || 'image';
+
+      thumb.style.cssText = 'max-width:200px;max-height:200px;border-radius:6px;border:1px solid var(--border);cursor:pointer;';
+      thumb.onclick = function() {
+        // Toggle full-size view
+        if (thumb.style.maxWidth === '100%') {
+          thumb.style.maxWidth = '200px';
+          thumb.style.maxHeight = '200px';
+        } else {
+          thumb.style.maxWidth = '100%';
+          thumb.style.maxHeight = 'none';
+        }
+      };
+      attachWrap.appendChild(thumb);
+    });
+    bubbleEl.appendChild(attachWrap);
+  }
+
+  var textEl = document.createElement('div');
+  textEl.innerHTML = renderMd(content || '');
+  bubbleEl.appendChild(textEl);
+
+  wrapper.appendChild(roleEl);
+  wrapper.appendChild(bubbleEl);
+  chatArea.appendChild(wrapper);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return wrapper;
+}
+
+function appendTyping() {
+  var wrapper  = document.createElement('div');
+  wrapper.className = 'message assistant';
+
+  var roleEl = document.createElement('span');
+  roleEl.className = 'role';
+  roleEl.textContent = 'Claude';
+
+  var indic = document.createElement('div');
+  indic.className = 'typing-indicator';
+  for (var i = 0; i < 3; i++) {
+    var dot = document.createElement('span');
+    indic.appendChild(dot);
+  }
+
+  wrapper.appendChild(roleEl);
+  wrapper.appendChild(indic);
+  chatArea.appendChild(wrapper);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return wrapper;
+}
+
+// Minimal markdown: code blocks, inline code, bold, newlines
+// Hides ```actions blocks from the chat display
+function renderMd(text) {
+  return esc(text)
+    .replace(/```actions[\s\S]*?```/g, '')
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
+function esc(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── UXP keyboard focus helper ──────────────────────────────────────────────
+// While a textarea has focus, Premiere Pro's keyboard shortcuts (e.g. B→Brush, V→Move)
+// would fire if we don't claim keyboard focus. setKeyboardFocus(true) prevents that.
+(function() {
+  var _uxpHost = null;
+  try { var _u = window.require && window.require('uxp'); if (_u && _u.host) _uxpHost = _u.host; } catch(e) {}
+
+  window.claimKeyboard = function() {
+    if (_uxpHost && typeof _uxpHost.setKeyboardFocus === 'function') {
+      try { _uxpHost.setKeyboardFocus(true); } catch(e) {}
+    }
+  };
+  window.releaseKeyboard = function() {
+    if (_uxpHost && typeof _uxpHost.setKeyboardFocus === 'function') {
+      try { _uxpHost.setKeyboardFocus(false); } catch(e) {}
+    }
+  };
+})();
+
+
+// Wire keyboard focus for every text input/textarea in the Claude tab
+// Wire all text inputs in the settings panel and Claude tab
+(function() {
+  var inputs = document.querySelectorAll(
+    '#bridge-url-input, #api-key-input, #model-select'
+  );
+  inputs.forEach(function(el) {
+    el.addEventListener('focus', window.claimKeyboard);
+    el.addEventListener('blur',  window.releaseKeyboard);
+  });
+})();
+
+// ── Auto-resize textarea ───────────────────────────────────────────────────
+
+function autoResize() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px'; // match CSS max-height
+}
+
+msgInput.addEventListener('input', autoResize);
+msgInput.addEventListener('focus', window.claimKeyboard);
+msgInput.addEventListener('blur',  window.releaseKeyboard);
+msgInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+sendBtn.addEventListener('click', sendMessage);
+
+// ── Quick action buttons + Custom shortcuts ────────────────────────────────
+
+// Built-in "Parse cutsheet" button
+document.querySelectorAll('.quick-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    msgInput.value = btn.dataset.prompt;
+    autoResize();
+    msgInput.focus();
+  });
+});
+
+// Custom shortcuts — stored in localStorage as [{name, prompt}]
+function loadShortcuts() {
+  try { return JSON.parse(localStorage.getItem('claude-shortcuts') || '[]'); } catch(e) { return []; }
+}
+function saveShortcuts(arr) {
+  try { localStorage.setItem('claude-shortcuts', JSON.stringify(arr)); } catch(e) {}
+}
+
+function renderShortcuts() {
+  var container = document.getElementById('quick-actions');
+  var addBtn    = document.getElementById('add-shortcut-btn');
+  if (!container || !addBtn) return;
+  // Remove any previously rendered custom buttons (class = custom-shortcut-btn)
+  container.querySelectorAll('.custom-shortcut-btn').forEach(function(el) { el.remove(); });
+  var shortcuts = loadShortcuts();
+  shortcuts.forEach(function(sc, idx) {
+    var btn = document.createElement('button');
+    btn.className = 'quick-btn custom-shortcut-btn';
+    btn.textContent = sc.name || ('Shortcut ' + (idx + 1));
+    btn.dataset.promptFull = sc.prompt; // stored for reference, no title (UXP tooltip renders wrong)
+    btn.dataset.prompt = sc.prompt;
+    btn.addEventListener('click', function() {
+      msgInput.value = sc.prompt;
+      autoResize();
+      msgInput.focus();
+    });
+    // Long-press / right-click to delete
+    btn.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      if (confirm('Delete shortcut "' + sc.name + '"?')) {
+        var arr = loadShortcuts();
+        arr.splice(idx, 1);
+        saveShortcuts(arr);
+        renderShortcuts();
+      }
+    });
+    container.insertBefore(btn, addBtn);
+  });
+}
+
+var _scPopup = null;
+function closeShortcutPopup() {
+  if (_scPopup && _scPopup.parentNode) _scPopup.parentNode.removeChild(_scPopup);
+  _scPopup = null;
+  document.removeEventListener('click', _scOutsideHandler, true);
+}
+function _scOutsideHandler(e) {
+  if (_scPopup && !_scPopup.contains(e.target) && e.target.id !== 'add-shortcut-btn') {
+    closeShortcutPopup();
+  }
+}
+function showAddShortcutPopup() {
+  if (_scPopup) { closeShortcutPopup(); return; }
+  var triggerBtn = document.getElementById('add-shortcut-btn');
+  var popup = document.createElement('div');
+  popup.className = 'shortcut-popup';
+  _scPopup = popup;
+
+  popup.innerHTML =
+    '<div class="sp-title">New shortcut</div>' +
+    '<input class="sp-name" placeholder="Button label…" maxlength="24">' +
+    '<textarea class="sp-prompt" placeholder="Prompt text…" rows="3"></textarea>' +
+    '<div class="sp-actions">' +
+      '<button class="sp-cancel">Cancel</button>' +
+      '<button class="sp-save">Save</button>' +
+    '</div>';
+
+  // Append inside #input-area so position:absolute works in UXP
+  // (UXP doesn't support position:fixed)
+  var container = document.getElementById('input-area') || document.body;
+  container.appendChild(popup);
+
+  // Position: above the quick-actions row, right-aligned
+  // #input-area has position:relative so offsetTop is relative to it
+  if (triggerBtn) {
+    var contRect = container.getBoundingClientRect();
+    var r = triggerBtn.getBoundingClientRect();
+    // Convert to container-relative coordinates
+    var relRight  = r.right  - contRect.left;
+    var relTop    = r.top    - contRect.top;
+    var pw = Math.min(220, (contRect.width || 240) - 8);
+    popup.style.width = pw + 'px';
+    var left = relRight - pw;
+    if (left < 4) left = 4;
+    // Place above the trigger button (popup height ≈ 175px)
+    var popH = 175;
+    var top  = relTop - popH - 6;
+    if (top < 4) top = relTop + r.height + 4;
+    popup.style.left = left + 'px';
+    popup.style.top  = top  + 'px';
+  }
+
+  popup.querySelector('.sp-cancel').addEventListener('click', function(e) {
+    e.stopPropagation(); closeShortcutPopup();
+  });
+  popup.querySelector('.sp-save').addEventListener('click', function(e) {
+    e.stopPropagation();
+    var name   = popup.querySelector('.sp-name').value.trim();
+    var prompt = popup.querySelector('.sp-prompt').value.trim();
+    if (!name || !prompt) { alert('Name and prompt are required.'); return; }
+    var arr = loadShortcuts();
+    arr.push({ name: name, prompt: prompt });
+    saveShortcuts(arr);
+    renderShortcuts();
+    closeShortcutPopup();
+  });
+
+  setTimeout(function() {
+    document.addEventListener('click', _scOutsideHandler, true);
+    try { popup.querySelector('.sp-name').focus(); } catch(e) {}
+  }, 20);
+}
+
+document.getElementById('add-shortcut-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  showAddShortcutPopup();
+});
+
+// Initial render
+renderShortcuts();
+
+// ── Clear chat ─────────────────────────────────────────────────────────────
+
+document.getElementById('clear-btn').addEventListener('click', function() {
+  messages = [];
+  attachedImages = [];
+  chatArea.innerHTML = '';
+  emptyState.style.display = '';
+  chatArea.appendChild(emptyState);
+  if (typeof window.refreshDropzoneState === 'function') window.refreshDropzoneState();
+});
+
+// ── Refresh button ─────────────────────────────────────────────────────────
+
+document.getElementById('refresh-btn').addEventListener('click', function() {
+  console.log('[Plugin] Manual refresh triggered');
+  _lastSeqFingerprint = null; // invalidate cache, force full re-scan
+  refreshTimeline();
+  checkBridge();
+});
+
+// ── Settings ───────────────────────────────────────────────────────────────
+
+var modelSelect = document.getElementById('model-select');
+var apiKeyInput = document.getElementById('api-key-input');
+var apiKeyStatus = document.getElementById('apikey-status');
+// ElevenLabs key is now managed in the Voice Gen tab settings panel, not here.
+var elKeyInput = null; // removed from Claude Settings panel
+var elStatus   = null;
+
+// UXP localStorage CAN persist across plugin reloads but is sometimes wiped
+// when the plugin is reloaded via UXP Developer Tool (vs. just panel close).
+// We also persist to UXP's local data folder as a backup.
+async function persistSettingsToFile(obj) {
+  try {
+    var uxp = window.require && window.require('uxp');
+    if (!uxp || !uxp.storage) return;
+    var lfs = uxp.storage.localFileSystem;
+    var dataFolder = await lfs.getDataFolder();
+    var file = await dataFolder.createFile('settings.json', { overwrite: true });
+    await file.write(JSON.stringify(obj));
+    console.log('[Settings] persisted to UXP data folder:', dataFolder.nativePath);
+  } catch(e) { console.warn('[Settings] file persist failed:', e.message); }
+}
+
+async function loadSettingsFromFile() {
+  try {
+    var uxp = window.require && window.require('uxp');
+    if (!uxp || !uxp.storage) return null;
+    var lfs = uxp.storage.localFileSystem;
+    var dataFolder = await lfs.getDataFolder();
+    var entries = await dataFolder.getEntries();
+    var file = entries.find(function(e) { return e.name === 'settings.json'; });
+    if (!file) return null;
+    var text = await file.read();
+    return JSON.parse(text);
+  } catch(e) { console.warn('[Settings] file load failed:', e.message); return null; }
+}
+
+function applySettings(s) {
+  if (!s) return;
+  if (s.bridgeUrl)     BRIDGE_URL    = s.bridgeUrl;
+  if (s.claudeModel)   CLAUDE_MODEL  = s.claudeModel;
+  if (s.anthropicKey)  ANTHROPIC_KEY = s.anthropicKey;
+  if (s.elevenlabsKey) ELEVENLABS_KEY = s.elevenlabsKey;
+  // Load profiles; migrate legacy single-key to a Default profile
+  if (Array.isArray(s.elevenlabsProfiles) && s.elevenlabsProfiles.length) {
+    EL_PROFILES = s.elevenlabsProfiles;
+    EL_ACTIVE_PROFILE_ID = s.elevenlabsActiveProfileId || EL_PROFILES[0].id;
+    var active = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+    if (active) ELEVENLABS_KEY = active.key;
+  } else if (s.elevenlabsKey && !EL_PROFILES.length) {
+    var defId = 'p_default';
+    EL_PROFILES = [{ id: defId, name: 'Default', key: s.elevenlabsKey }];
+    EL_ACTIVE_PROFILE_ID = defId;
+  }
+  if (bridgeUrlInput) bridgeUrlInput.value = BRIDGE_URL;
+  if (modelSelect)    modelSelect.value = CLAUDE_MODEL;
+  if (apiKeyInput)    apiKeyInput.value = ANTHROPIC_KEY;
+  if (elKeyInput)     elKeyInput.value  = ELEVENLABS_KEY;
+  updateApiKeyStatus();
+  updateElStatus();
+}
+
+function loadSettings() {
+  // First try localStorage (sync, fast)
+  try {
+    var s = JSON.parse(localStorage.getItem('claude-plugin-settings') || '{}');
+    applySettings(s);
+    console.log('[Settings] loaded from localStorage — el-key len:', (ELEVENLABS_KEY||'').length);
+  } catch(e) { console.warn('[Settings] localStorage load failed:', e.message); }
+
+  // Then try UXP data folder (async, fallback for fresh localStorage)
+  loadSettingsFromFile().then(function(fileSettings) {
+    if (fileSettings) {
+      // Only apply file settings if they have more data than what we already have
+      var hasNew = false;
+      if (fileSettings.elevenlabsKey && !ELEVENLABS_KEY) { ELEVENLABS_KEY = fileSettings.elevenlabsKey; hasNew = true; }
+      if (fileSettings.anthropicKey  && !ANTHROPIC_KEY)  { ANTHROPIC_KEY  = fileSettings.anthropicKey;  hasNew = true; }
+      if (Array.isArray(fileSettings.elevenlabsProfiles) && fileSettings.elevenlabsProfiles.length && !EL_PROFILES.length) {
+        EL_PROFILES = fileSettings.elevenlabsProfiles;
+        EL_ACTIVE_PROFILE_ID = fileSettings.elevenlabsActiveProfileId || EL_PROFILES[0].id;
+        var fp = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+        if (fp) ELEVENLABS_KEY = fp.key;
+        hasNew = true;
+      }
+      if (hasNew) {
+        if (elKeyInput)  elKeyInput.value  = ELEVENLABS_KEY;
+        if (apiKeyInput) apiKeyInput.value = ANTHROPIC_KEY;
+        updateApiKeyStatus();
+        updateElStatus();
+        console.log('[Settings] hydrated from file backup');
+        if (typeof window.VoiceGenOnKeyChange === 'function') window.VoiceGenOnKeyChange();
+      }
+    }
+  });
+}
+
+function updateElStatus() {
+  if (!elStatus) return;
+  if (ELEVENLABS_KEY) {
+    // Show preview: first 4 + last 4 chars (e.g. "sk_5...574f")
+    var k = ELEVENLABS_KEY;
+    var preview = k.length > 12 ? (k.slice(0, 5) + '…' + k.slice(-4)) : 'ready';
+    elStatus.textContent = preview;
+    elStatus.classList.add('is-api');
+  } else {
+    elStatus.textContent = 'not set';
+    elStatus.classList.remove('is-api');
+  }
+}
+function updateApiKeyStatus() {
+  if (!apiKeyStatus) return;
+  if (ANTHROPIC_KEY) {
+    var k = ANTHROPIC_KEY;
+    var preview = k.length > 12 ? (k.slice(0, 7) + '…' + k.slice(-4)) : 'ready';
+    apiKeyStatus.textContent = 'API · ' + preview;
+    apiKeyStatus.classList.add('is-api');
+  } else {
+    apiKeyStatus.textContent = 'CLI mode';
+    apiKeyStatus.classList.remove('is-api');
+  }
+}
+
+function populateBridgeInfo() {
+  var statusEl  = document.getElementById('bridge-info-status');
+  var modeEl    = document.getElementById('bridge-info-mode');
+  var whisperEl = document.getElementById('bridge-info-whisper');
+  if (!statusEl) return;
+
+  statusEl.textContent  = 'Checking…';
+  modeEl.textContent    = '—';
+  whisperEl.textContent = '—';
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', BRIDGE_URL + '/health', true);
+  xhr.timeout = 4000;
+  xhr.onload = function() {
+    try {
+      var d = JSON.parse(xhr.responseText);
+      statusEl.innerHTML = '<span class="ok">connected</span> v' + (d.version || '?');
+      modeEl.textContent = d.mode === 'api-key'
+        ? 'API key (Anthropic SDK)'
+        : 'CLI OAuth (Claude Code)';
+      if (d.whisper) {
+        whisperEl.innerHTML = (d.whisper.ok
+          ? '<span class="ok">found</span>'
+          : '<span class="fail">missing</span>') +
+          ' · model=' + d.whisper.model + ' · lang=' + d.whisper.lang;
+      }
+    } catch(e) {
+      statusEl.innerHTML = '<span class="fail">parse error</span>';
+    }
+  };
+  xhr.onerror   = function() { statusEl.innerHTML = '<span class="fail">offline</span>'; };
+  xhr.ontimeout = function() { statusEl.innerHTML = '<span class="fail">timeout</span>'; };
+  xhr.send();
+}
+
+// Settings panel is position:absolute inside #tab-claude.
+// Measure the actual header height at open time so we don't overlap it.
+function openSettingsPanel() {
+  var header     = document.getElementById('header');
+  var statusBar  = document.getElementById('status-bar');
+  var headerH    = header    ? (header.offsetTop    + header.offsetHeight)    : 40;
+  var statusH    = statusBar ? (statusBar.offsetTop + statusBar.offsetHeight) : 0;
+  var topPx      = Math.max(headerH, statusH) + 2; // 2px gap below header
+  settingsModal.style.top = topPx + 'px';
+  settingsModal.style.display = 'block';
+  populateBridgeInfo();
+}
+function closeSettingsPanel() {
+  settingsModal.style.display = 'none';
+}
+
+document.getElementById('settings-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (settingsModal.style.display === 'block') closeSettingsPanel();
+  else openSettingsPanel();
+});
+document.getElementById('close-settings').addEventListener('click', closeSettingsPanel);
+
+// Click outside to close (check via DOM containment)
+document.addEventListener('click', function(e) {
+  if (settingsModal.style.display !== 'block') return;
+  if (settingsModal.contains(e.target)) return;
+  var btn = document.getElementById('settings-btn');
+  if (btn && btn.contains(e.target)) return;
+  closeSettingsPanel();
+});
+document.getElementById('save-settings').addEventListener('click', function() {
+  // Defensive: in UXP webview, input.value can be null for empty password fields
+  function readInput(el) {
+    if (!el) return '';
+    var v = el.value;
+    if (v == null) return '';
+    return String(v).trim();
+  }
+  console.log('[Settings] Save clicked. el-key-input element:', !!elKeyInput,
+              '| value type:', elKeyInput ? typeof elKeyInput.value : 'N/A');
+  BRIDGE_URL     = readInput(bridgeUrlInput) || 'http://localhost:3030';
+  CLAUDE_MODEL   = (modelSelect && modelSelect.value) || CLAUDE_MODEL;
+  ANTHROPIC_KEY  = readInput(apiKeyInput);
+  // ElevenLabs key is managed in Voice Gen tab — don't overwrite it here
+  console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | elevenlabs managed in VoiceGen tab');
+  var settingsObj = {
+    bridgeUrl:                  BRIDGE_URL,
+    claudeModel:                CLAUDE_MODEL,
+    anthropicKey:               ANTHROPIC_KEY,
+    elevenlabsKey:              ELEVENLABS_KEY,
+    elevenlabsProfiles:         EL_PROFILES,
+    elevenlabsActiveProfileId:  EL_ACTIVE_PROFILE_ID,
+  };
+  localStorage.setItem('claude-plugin-settings', JSON.stringify(settingsObj));
+  // Also persist to UXP data folder as backup (survives some localStorage clears)
+  persistSettingsToFile(settingsObj);
+  updateApiKeyStatus();
+  updateElStatus();
+  if (ANTHROPIC_KEY) RATE_LIMIT_UNTIL = 0;
+  closeSettingsPanel();
+  checkBridge();
+  // Notify Voice Gen module to refresh
+  if (typeof window.VoiceGenOnKeyChange === 'function') window.VoiceGenOnKeyChange();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RATE-LIMIT COUNTDOWN BUBBLE
+// ═══════════════════════════════════════════════════════════════════════════
+function renderRateLimitBubble(bubbleEl, resetAtMs, source, rawEvent) {
+  function fmt(s) {
+    if (s <= 0) return '0:00';
+    var m = Math.floor(s / 60), sec = s % 60;
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+  var countdownBlock;
+  if (resetAtMs) {
+    // Real countdown from CLI event
+    countdownBlock = '<div class="rl-countdown" id="rl-cd">--:--</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);">' +
+        '✓ Reset time từ field <code>' + esc(source || 'unknown') + '</code>' +
+      '</div>';
+  } else {
+    // Unknown — be honest, don't fake a countdown
+    countdownBlock = '<div class="rl-countdown" style="color:#888;">unknown</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);">' +
+        'CLI không expose reset time. ' +
+        '<a href="#" id="rl-show-raw" style="color:#a855f7;">Show raw event</a>' +
+      '</div>';
+  }
+  bubbleEl.innerHTML =
+    '<div class="rate-limit-bubble">' +
+      '<div class="rl-title">⚠ Claude subscription bị rate-limited</div>' +
+      '<div>Subscription quota tạm hết. ' +
+        (resetAtMs ? 'Đợi đến khi reset:' : 'Reset thời gian không xác định.') + '</div>' +
+      countdownBlock +
+      '<div class="rl-hint">' +
+        '<b>Cách khác (không cần đợi):</b><br>' +
+        '• Settings <code>⚙</code> → paste <code>ANTHROPIC_API_KEY</code> để dùng API mode<br>' +
+        '• Mở tab <b>AUTOCUT</b> → <b>Manual Paste</b> → paste text trực tiếp (3 cột)' +
+      '</div>' +
+    '</div>';
+
+  if (resetAtMs) {
+    function tick() {
+      var remain = Math.max(0, Math.ceil((resetAtMs - Date.now()) / 1000));
+      var cd = document.getElementById('rl-cd');
+      if (cd) cd.textContent = fmt(remain) + (remain > 0 ? '' : ' — ready');
+      if (remain <= 0) clearInterval(timerId);
+    }
+    tick();
+    var timerId = setInterval(tick, 1000);
+  } else {
+    // Show raw event on click — helps user paste exact JSON to me for further fix
+    var link = document.getElementById('rl-show-raw');
+    if (link && rawEvent) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var pre = document.createElement('pre');
+        pre.style.cssText = 'background:#111;padding:8px;border-radius:4px;font-size:10px;margin-top:6px;max-height:200px;overflow:auto;color:#888;';
+        pre.textContent = JSON.stringify(rawEvent, null, 2);
+        link.parentNode.appendChild(pre);
+        link.style.display = 'none';
+      });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IMAGE ATTACH — attach button + drag-drop + clipboard paste
+// (New layout: big dropzone replaced by small attach button; chips in #chips-row)
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  var dropzone   = document.getElementById('dropzone');   // hidden, events-only
+  var inputArea  = document.getElementById('input-area'); // drag target
+  var dzChips    = document.getElementById('dropzone-chips');
+  var chipsRow   = document.getElementById('chips-row');
+  var attachBtn  = document.getElementById('attach-btn');
+
+  var SUPPORTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+  var MAX_SIZE_MB = 8;
+
+  // Convert ArrayBuffer to base64 (chunked to avoid call-stack overflow)
+  function bufToBase64(buf) {
+    var bytes = new Uint8Array(buf);
+    var bin = '';
+    var CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+  }
+
+  function inferMediaType(name, fallback) {
+    var lower = (name || '').toLowerCase();
+    if (lower.endsWith('.png'))  return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif'))  return 'image/gif';
+    return fallback || 'image/png';
+  }
+
+  function fmtSize(n) {
+    if (n < 1024) return n + 'B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(0) + 'KB';
+    return (n / (1024 * 1024)).toFixed(1) + 'MB';
+  }
+
+  // Single-image policy: always replace the existing attachment.
+  function addAttachment(att) { addAttachmentSingle(att); }
+
+  // Single attachment policy: replace existing if user picks a new one
+  function addAttachmentSingle(att) {
+    attachedImages = [att]; // overwrite any previous
+    renderAttachBar();
+  }
+
+  window.renderAttachBar = function() {
+    if (dzChips) dzChips.innerHTML = '';
+    var hasChip = attachedImages.length > 0;
+
+    if (hasChip) {
+      if (chipsRow) chipsRow.removeAttribute('hidden');
+      if (attachBtn) attachBtn.classList.add('has-file');
+
+      var att = attachedImages[0];
+      var chip = document.createElement('div');
+      chip.className = 'attach-chip';
+      chip.innerHTML =
+        '<img src="' + att.dataUrl + '" alt="">' +
+        '<div class="attach-meta">' +
+          '<span class="attach-name" title="' + esc(att.name) + '">' + esc(att.name) + '</span>' +
+          '<span class="attach-size">' + fmtSize(att.size || 0) + '</span>' +
+        '</div>' +
+        '<button class="attach-remove" title="Remove">&times;</button>';
+      chip.querySelector('.attach-remove').addEventListener('click', function(e) {
+        e.stopPropagation();
+        attachedImages = [];
+        window.renderAttachBar();
+      });
+      chip.querySelector('img').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var img = e.target;
+        if (img.style.width === '160px') { img.style.width = '40px'; img.style.height = '40px'; }
+        else                              { img.style.width = '160px'; img.style.height = 'auto'; }
+      });
+      if (dzChips) dzChips.appendChild(chip);
+    } else {
+      if (chipsRow) chipsRow.setAttribute('hidden', '');
+      if (attachBtn) attachBtn.classList.remove('has-file');
+    }
+  };
+
+  // Expose so other parts of main.js can trigger re-render after messages change
+  window.refreshDropzoneState = function() { window.renderAttachBar(); };
+
+  // ── File picker (UXP storage API) ───────────────────────────────────────
+  async function pickAndAttachFile() {
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (!uxp || !uxp.storage) {
+        alert('UXP storage API not available');
+        return;
+      }
+      var lfs = uxp.storage.localFileSystem;
+      var formats = uxp.storage.formats;
+      var file = await lfs.getFileForOpening({
+        types: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        allowMultiple: false,
+      });
+      if (!file) return; // user cancelled
+
+      var buf = await file.read({ format: formats.binary });
+      var size = buf.byteLength || buf.length;
+      var sizeMB = size / (1024 * 1024);
+      if (sizeMB > MAX_SIZE_MB) {
+        alert('Image too large (' + sizeMB.toFixed(1) + 'MB). Max ' + MAX_SIZE_MB + 'MB.');
+        return;
+      }
+      var b64 = bufToBase64(buf);
+      var mediaType = inferMediaType(file.name);
+      addAttachment({
+        name: file.name,
+        mediaType: mediaType,
+        size: size,
+        base64: b64,
+        dataUrl: 'data:' + mediaType + ';base64,' + b64,
+      });
+    } catch(e) {
+      console.error('[attach] file error:', e);
+      alert('Failed to read file: ' + e.message);
+    }
+  }
+
+  // ── Read File/Blob (from clipboard or drop) ─────────────────────────────
+  function attachFromBlob(blob, fallbackName) {
+    if (!blob) return;
+    var sizeMB = blob.size / (1024 * 1024);
+    if (sizeMB > MAX_SIZE_MB) {
+      alert('Image too large (' + sizeMB.toFixed(1) + 'MB). Max ' + MAX_SIZE_MB + 'MB.');
+      return;
+    }
+    if (SUPPORTED_TYPES.indexOf(blob.type) < 0) {
+      alert('Unsupported image type: ' + blob.type);
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var dataUrl = e.target.result; // "data:image/png;base64,..."
+      var commaIdx = dataUrl.indexOf(',');
+      var b64 = dataUrl.slice(commaIdx + 1);
+      addAttachment({
+        name: blob.name || fallbackName || ('clipboard-' + Date.now() + '.png'),
+        mediaType: blob.type,
+        size: blob.size,
+        base64: b64,
+        dataUrl: dataUrl,
+      });
+    };
+    reader.onerror = function() { alert('Failed to read image'); };
+    reader.readAsDataURL(blob);
+  }
+
+  // ── Attach button → file picker ──────────────────────────────────────────
+  if (attachBtn) {
+    attachBtn.addEventListener('click', function() { pickAndAttachFile(); });
+  }
+
+  // ── Drag & drop on #input-area ────────────────────────────────────────────
+  var dragTarget = inputArea || dropzone;
+  ['dragenter', 'dragover'].forEach(function(evt) {
+    dragTarget.addEventListener(evt, function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragTarget.classList.add('is-drag-over');
+    });
+  });
+  dragTarget.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragTarget.contains(e.relatedTarget)) return;
+    dragTarget.classList.remove('is-drag-over');
+  });
+
+  // Helper: try to read a file path via UXP storage API
+  async function tryLoadByPath(filePath) {
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (!uxp || !uxp.storage) return false;
+      var lfs = uxp.storage.localFileSystem;
+      var formats = uxp.storage.formats;
+      // file:// URL requires exactly three slashes for an absolute path:  file:///path
+      var fileUrl = 'file://' + (filePath.startsWith('/') ? '' : '/') + filePath;
+      var file = await lfs.getEntryWithUrl
+        ? await lfs.getEntryWithUrl(fileUrl)
+        : (lfs.getFileForPath ? await lfs.getFileForPath(filePath) : null);
+      if (!file || file.isFolder) return false;
+      var buf = await file.read({ format: formats.binary });
+      var size = buf.byteLength || buf.length;
+      var b64 = bufToBase64(buf);
+      var mediaType = inferMediaType(file.name);
+      addAttachment({
+        name: file.name, mediaType: mediaType, size: size,
+        base64: b64, dataUrl: 'data:' + mediaType + ';base64,' + b64,
+      });
+      return true;
+    } catch(e) {
+      console.warn('[drop] tryLoadByPath failed:', filePath, e.message);
+      return false;
+    }
+  }
+
+  // Helper: fallback — ask bridge to read the file and return base64
+  async function tryLoadViaBridge(filePath) {
+    try {
+      var res = await fetch(BRIDGE_URL + '/api/read-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: filePath }),
+      });
+      if (!res.ok) return false;
+      var data = await res.json();
+      if (!data.base64) return false;
+      var mediaType = data.mediaType || inferMediaType(filePath);
+      var fileName  = filePath.split('/').pop() || 'image.png';
+      addAttachment({
+        name: fileName, mediaType: mediaType, size: data.size || 0,
+        base64: data.base64, dataUrl: 'data:' + mediaType + ';base64,' + data.base64,
+      });
+      return true;
+    } catch(e) {
+      console.warn('[drop] tryLoadViaBridge failed:', filePath, e.message);
+      return false;
+    }
+  }
+
+  dragTarget.addEventListener('drop', async function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragTarget.classList.remove('is-drag-over');
+
+    var dt = e.dataTransfer;
+    if (!dt) {
+      console.warn('[drop] no dataTransfer');
+      return;
+    }
+
+    // Diagnostic logging — helps see what UXP exposes
+    var info = {
+      types: dt.types ? Array.prototype.slice.call(dt.types) : [],
+      filesLength: (dt.files && dt.files.length) || 0,
+      itemsLength: (dt.items && dt.items.length) || 0,
+    };
+    console.log('[drop] dataTransfer:', JSON.stringify(info));
+
+    var attached = 0;
+
+    // ── Method 1: dataTransfer.files (standard HTML5) ─────────────────────
+    if (dt.files && dt.files.length > 0) {
+      for (var i = 0; i < dt.files.length; i++) {
+        var f = dt.files[i];
+        console.log('[drop] file[' + i + ']:', f.name, f.type, f.size);
+        if (f.type && f.type.startsWith('image/')) { attachFromBlob(f); attached++; }
+        else if (f.name && /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name)) { attachFromBlob(f); attached++; }
+      }
+    }
+
+    // ── Method 2: dataTransfer.items[].getAsFile() ────────────────────────
+    if (attached === 0 && dt.items && dt.items.length > 0) {
+      for (var k = 0; k < dt.items.length; k++) {
+        var item = dt.items[k];
+        console.log('[drop] item[' + k + ']:', item.kind, item.type);
+        if (item.kind === 'file') {
+          try {
+            var blob = item.getAsFile();
+            if (blob) {
+              console.log('[drop]   getAsFile →', blob.name, blob.type, blob.size);
+              if (blob.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|gif)$/i.test(blob.name || '')) {
+                attachFromBlob(blob);
+                attached++;
+              }
+            }
+          } catch(err) { console.warn('[drop]   getAsFile error:', err.message); }
+        }
+      }
+    }
+
+    // ── Method 3: text/uri-list or text/plain → file path via UXP storage ──
+    var uriPaths = [];
+    if (attached === 0) {
+      var pathStr = '';
+      try { pathStr = dt.getData('text/uri-list') || dt.getData('text/plain') || ''; } catch(e) {}
+      console.log('[drop] text data:', pathStr.slice(0, 200));
+      var paths = pathStr.split(/[\r\n]+/).map(function(s){return s.trim();}).filter(Boolean);
+      for (var p = 0; p < paths.length; p++) {
+        var raw = paths[p];
+        // Strip the file:// prefix to get an absolute POSIX path for UXP
+        var pth = raw.replace(/^file:\/\//, '');
+        if (/\.(png|jpg|jpeg|webp|gif)$/i.test(pth)) {
+          uriPaths.push(pth);
+          var ok = await tryLoadByPath(pth);
+          if (ok) attached++;
+        }
+      }
+    }
+
+    // ── Method 4: bridge fallback — bridge reads the file server-side ───────
+    if (attached === 0 && uriPaths.length > 0) {
+      console.log('[drop] UXP storage failed, trying bridge fallback…');
+      for (var bp = 0; bp < uriPaths.length; bp++) {
+        var bok = await tryLoadViaBridge(uriPaths[bp]);
+        if (bok) attached++;
+      }
+    }
+
+    if (attached === 0) {
+      console.warn('[drop] no images attached — UXP may not support Finder drag-drop and bridge fallback failed.');
+      dragTarget.classList.add('drop-failed');
+      setTimeout(function() { dragTarget.classList.remove('drop-failed'); }, 600);
+    } else {
+      console.log('[drop] attached', attached, 'image(s)');
+    }
+  });
+
+  // ── Clipboard paste (works inside textarea OR dropzone) ─────────────────
+  function handlePaste(e) {
+    if (!e.clipboardData || !e.clipboardData.items) return;
+    var items = e.clipboardData.items;
+    var attached = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        var blob = items[i].getAsFile();
+        attachFromBlob(blob, 'pasted-' + Date.now() + '.png');
+        attached++;
+      }
+    }
+  }
+  msgInput.addEventListener('paste', handlePaste);
+  // Also listen on the whole input area so paste works anywhere in that zone
+  if (inputArea) inputArea.addEventListener('paste', handlePaste);
+
+  // Init
+  window.renderAttachBar();
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) {
+      p.classList.toggle('active', p.id === 'tab-' + tab);
+    });
+    closeSettingsPanel();
+    // Close voice dropdown (panel is portaled to body, close directly)
+    var _vdp = document.getElementById('vgVoiceDropPanel');
+    if (_vdp) _vdp.style.display = 'none';
+    var _vdt = document.getElementById('vgVoiceDropTrigger');
+    if (_vdt) _vdt.classList.remove('is-open');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTOCUT MODULE
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  // ── State ──────────────────────────────────────────────────────────────
+  // runMode:
+  //   'parse_and_run' — Auto text + autocut: parse cutsheet + auto execute (default)
+  //   'run_only'      — Autocut only: skip parsing, use existing rows
+  //   'parse_only'    — Auto text only: parse but don't execute (manual review)
+  var state = {
+    rows:           [],
+    sttBackend:     'whisper',
+    sttLang:        'en',
+    runMode:        'parse_and_run',
+    transcriptPath: '',
+    voiceoverPick:  'auto',  // 'auto' or 'a<idx>:<itemIdx>' (e.g. 'a2:0')
+  };
+
+  // ── DOM ────────────────────────────────────────────────────────────────
+  var $ = function(id) { return document.getElementById(id); };
+  var els = {
+    sttBackend:        $('sttBackend'),
+    sttLang:           $('sttLang'),
+    runMode:           $('runMode'),
+    whisperConfigRow:  $('whisperConfigRow'),
+    premiereConfigRow: $('premiereConfigRow'),
+    transcriptPath:    $('premiereTranscriptPath'),
+    voiceoverPickerRow:$('voiceoverPickerRow'),
+    voiceoverPicker:   $('voiceoverPicker'),
+    btnPushCurrent:    $('btnPushCurrent'),
+    btnPushNew:        $('btnPushNew'),
+    btnClearCutlist:   $('btnClearCutlist'),
+    cutlistMeta:       $('cutlistMeta'),
+    cutlistPreview:    $('cutlistPreview'),
+    cutlistHeader:     $('cutlistHeader'),
+    cutlistChevron:    $('cutlistChevron'),
+    runStatusSection:  $('runStatusSection'),
+    runStatus:         $('runStatus'),
+    runStatusMeta:     $('runStatusMeta'),
+    btnRetryRun:       $('btnRetryRun'),
+    missingSection:    $('missingSourcesSection'),
+    missingSources:    $('missingSources'),
+    seqDiagnosticSection: $('seqDiagnosticSection'),
+    seqDiagnostic:     $('seqDiagnostic'),
+    btnRefreshSeqInfo: $('btnRefreshSeqInfo'),
+    log:               $('log'),
+  };
+
+  var lastTarget = 'current'; // remember last run target for retry
+
+  // ── Settings persistence ────────────────────────────────────────────────
+  function loadSettings() {
+    try {
+      var s = JSON.parse(localStorage.getItem('autocut-settings') || '{}');
+      Object.assign(state, s);
+      // Migrate legacy autoMode → runMode
+      if (typeof s.autoMode === 'boolean' && !s.runMode) {
+        state.runMode = s.autoMode ? 'parse_and_run' : 'parse_only';
+      }
+      els.sttBackend.value = state.sttBackend;
+      els.sttLang.value    = state.sttLang;
+      els.runMode.value    = state.runMode;
+      els.transcriptPath.value = state.transcriptPath || '';
+      updateSttConfigVisibility();
+    } catch(e) {}
+  }
+  function saveSettings() {
+    localStorage.setItem('autocut-settings', JSON.stringify({
+      sttBackend:     state.sttBackend,
+      sttLang:        state.sttLang,
+      runMode:        state.runMode,
+      transcriptPath: state.transcriptPath,
+    }));
+  }
+  function updateSttConfigVisibility() {
+    els.whisperConfigRow.hidden  = state.sttBackend !== 'whisper';
+    els.premiereConfigRow.hidden = state.sttBackend !== 'premiere';
+  }
+
+  // ── Cutlist rendering ───────────────────────────────────────────────────
+  function setRows(rows) {
+    state.rows = Array.isArray(rows) ? rows : [];
+    renderCutlist();
+    if (state.rows.length > 0) setCutlistExpanded(true);
+    // Auto-switch to Autocut tab so user sees the parsed rows
+    var autocutBtn = document.querySelector('.tab-btn[data-tab="autocut"]');
+    if (autocutBtn && state.rows.length > 0) autocutBtn.click();
+    // Only auto-run in parse_and_run mode. parse_only stops here for manual review.
+    if (state.runMode === 'parse_and_run' && state.rows.length > 0) {
+      setTimeout(function() { runAutocut('current'); }, 600);
+    }
+  }
+  window.AutocutSetRows = setRows;
+
+  function fmtTime(s) {
+    if (s == null) return '—';
+    var m = Math.floor(s / 60), sec = s % 60;
+    return m + ':' + sec.toFixed(1).padStart(4, '0');
+  }
+
+  // Use direct inline style — class-based collapsing was unreliable in UXP webview
+  function setCutlistExpanded(expanded) {
+    if (!els.cutlistPreview) return;
+    els.cutlistPreview.style.display = expanded ? 'flex' : 'none';
+    els.cutlistPreview.classList.toggle('ac-collapsed', !expanded);
+    if (els.cutlistChevron) els.cutlistChevron.classList.toggle('is-expanded', expanded);
+    console.log('[Autocut] setCutlistExpanded:', expanded,
+      '| computed display:', getComputedStyle(els.cutlistPreview).display,
+      '| children:', els.cutlistPreview.children.length);
+  }
+
+  function renderCutlist() {
+    var rows = state.rows;
+    els.cutlistPreview.innerHTML = '';
+
+    // Always ensure preview is visible (with content) — collapse is user-driven only
+    if (rows.length === 0) {
+      els.cutlistMeta.textContent = '— no rows yet —';
+      var hint = document.createElement('div');
+      hint.className = 'ac-emptyHint';
+      hint.innerHTML = 'Mở tab <b>CLAUDE</b> → paste cutsheet (ảnh hoặc text) →<br>Claude sẽ parse thành các dòng cut và hiển thị ở đây.';
+      els.cutlistPreview.appendChild(hint);
+      // Don't force collapse — let user decide via chevron
+      return;
+    }
+    var isCollapsed = els.cutlistPreview.style.display === 'none';
+    els.cutlistMeta.textContent = rows.length + ' rows · click to ' + (isCollapsed ? 'expand' : 'collapse');
+    console.log('[Autocut] renderCutlist:', rows.length, 'rows, collapsed:', isCollapsed);
+    rows.forEach(function(r, i) {
+      var row = document.createElement('div');
+      row.className = 'ac-cutRow';
+      if (r._missing) row.classList.add('isMissing');
+      else if (r._matched) row.classList.add('isMatched');
+      if (r._nested) row.classList.add('isNested');
+      var inSec  = Number(r.sourceIn  || 0);
+      var outSec = Number(r.sourceOut != null ? r.sourceOut : (inSec + 1));
+      // Note: NO `title` attribute — UXP webview renders native tooltips at
+      // wrong positions, causing visible overlap with other UI elements.
+      row.innerHTML =
+        '<div class="ac-cutIdx">' + (i + 1) + '</div>' +
+        '<div class="ac-cutSource">' + esc(r.source || '?') + '</div>' +
+        '<div class="ac-cutTC">' + fmtTime(inSec) + '→' + fmtTime(outSec) + '</div>' +
+        '<div class="ac-cutScript">' + esc(r.script || '') + '</div>';
+      els.cutlistPreview.appendChild(row);
+    });
+  }
+
+  // ── Run status UI ──────────────────────────────────────────────────────
+  var steps = []; // [{key, label, status}]
+  function setSteps(stepList) {
+    steps = stepList.map(function(s) { return { key: s.key, label: s.label, status: 'pending' }; });
+    els.runStatusSection.hidden = false;
+    renderSteps();
+  }
+  function stepStatus(key, status, extra) {
+    var s = steps.find(function(x) { return x.key === key; });
+    if (!s) return;
+    s.status = status;
+    if (extra) s.label = (s.label.split(' — ')[0]) + ' — ' + extra;
+    renderSteps();
+  }
+  function renderSteps() {
+    els.runStatus.innerHTML = '';
+    steps.forEach(function(s) {
+      var div = document.createElement('div');
+      div.className = 'ac-runStep is' + (s.status[0].toUpperCase() + s.status.slice(1));
+      var icon = s.status === 'done'    ? '✓'
+               : s.status === 'error'   ? '✗'
+               : s.status === 'active'  ? '◐'
+               :                          '○';
+      div.innerHTML = '<div class="ac-runStepIcon">' + icon + '</div>' +
+                      '<div class="ac-runStepText">' + esc(s.label) + '</div>';
+      els.runStatus.appendChild(div);
+    });
+  }
+
+  // ── Bridge HTTP helper ─────────────────────────────────────────────────
+  function postJson(endpoint, body) {
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', BRIDGE_URL + endpoint, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = 300000; // 5 min for whisper
+      xhr.onload = function() {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else reject(new Error(data.error || ('HTTP ' + xhr.status)));
+        } catch(e) { reject(new Error('Invalid response: ' + xhr.responseText.slice(0,200))); }
+      };
+      xhr.onerror   = function() { reject(new Error('Bridge offline')); };
+      xhr.ontimeout = function() { reject(new Error('Bridge timeout (5 min)')); };
+      xhr.send(JSON.stringify(body));
+    });
+  }
+
+  // ── Premiere helpers ───────────────────────────────────────────────────
+
+  // Scan all audio tracks once → returns full info for diagnostic + picker
+  async function scanAudioTracks(seq) {
+    var aCount = await seq.getAudioTrackCount();
+    var tracks = [];
+    for (var ai = 0; ai < aCount; ai++) {
+      var at = await seq.getAudioTrack(ai);
+      var items = await getClipItems(at);
+      var clipInfos = [];
+      for (var j = 0; j < items.length; j++) {
+        var it = items[j];
+        // ASYNC: must await name + duration
+        var name = await clipName(it);
+        var dur  = await clipDurationSec(it);
+        clipInfos.push({
+          item:  it,
+          name:  name || '(unnamed)',
+          dur:   dur,
+          index: j,
+        });
+      }
+      tracks.push({ trackIndex: ai, items: clipInfos });
+    }
+    return tracks;
+  }
+
+  // Find voiceover: respect manual pick, fallback to longest clip.
+  async function findVoiceoverClip(seq) {
+    var tracks = await scanAudioTracks(seq);
+    console.log('[Autocut] findVoiceoverClip: scanning', tracks.length, 'audio tracks');
+    tracks.forEach(function(t) {
+      console.log('[Autocut]   A' + t.trackIndex + ': ' + t.items.length + ' items');
+      t.items.forEach(function(c) {
+        console.log('[Autocut]     [' + c.index + '] "' + c.name + '" dur=' + c.dur.toFixed(2));
+      });
+    });
+
+    // Update diagnostic UI + populate voiceover picker so user can manually choose
+    renderSeqDiagnostic(tracks);
+    populateVoiceoverPicker(tracks);
+
+    // Manual pick takes precedence
+    if (state.voiceoverPick !== 'auto') {
+      var match = state.voiceoverPick.match(/^a(\d+):(\d+)$/);
+      if (match) {
+        var ti = +match[1], ci = +match[2];
+        var t = tracks.find(function(x){ return x.trackIndex === ti; });
+        if (t && t.items[ci]) {
+          var c = t.items[ci];
+          var voStart = await clipStartSec(c.item);
+          console.log('[Autocut] → MANUAL voiceover: "' + c.name + '" on A' + ti + ' start=' + voStart.toFixed(2) + 's');
+          return { clip: c.item, trackIndex: ti, duration: c.dur, timelineStart: voStart };
+        }
+      }
+    }
+
+    // Auto: pick longest
+    var bestClip = null, bestDur = 0, bestTrackIdx = -1;
+    tracks.forEach(function(t) {
+      t.items.forEach(function(c) {
+        if (c.dur > bestDur) { bestDur = c.dur; bestClip = c.item; bestTrackIdx = t.trackIndex; }
+      });
+    });
+    if (bestClip) {
+      var bestStart = await clipStartSec(bestClip);
+      console.log('[Autocut] → AUTO voiceover: "' + (bestClip.name||'?') +
+                  '" on A' + bestTrackIdx + ' (' + bestDur.toFixed(2) + 's) start=' + bestStart.toFixed(2) + 's');
+      return { clip: bestClip, trackIndex: bestTrackIdx, duration: bestDur, timelineStart: bestStart };
+    }
+    console.warn('[Autocut] → no voiceover found');
+    return null;
+  }
+
+  // Render sequence audio diagnostic panel
+  function renderSeqDiagnostic(tracks) {
+    if (!els.seqDiagnostic) return;
+    els.seqDiagnostic.innerHTML = '';
+    var hasAny = false;
+    tracks.forEach(function(t) {
+      hasAny = hasAny || t.items.length > 0;
+      var div = document.createElement('div');
+      div.className = 'ac-seqTrack' + (t.items.length === 0 ? ' is-empty' : '');
+      var content;
+      if (t.items.length === 0) {
+        content = '<span class="ac-seqTrackName">A' + (t.trackIndex+1) + '</span>' +
+                  '<span class="ac-seqTrackClips">empty</span>';
+      } else {
+        content = '<span class="ac-seqTrackName">A' + (t.trackIndex+1) + '</span>' +
+                  '<span class="ac-seqTrackClips">' +
+                  t.items.map(function(c) {
+                    return esc(c.name) + ' (' + c.dur.toFixed(1) + 's)';
+                  }).join(' · ') + '</span>';
+      }
+      div.innerHTML = content;
+      els.seqDiagnostic.appendChild(div);
+    });
+    els.seqDiagnosticSection.hidden = !hasAny && tracks.length === 0;
+  }
+
+  // Populate voiceover picker dropdown with all detected audio clips
+  function populateVoiceoverPicker(tracks) {
+    if (!els.voiceoverPicker) return;
+    var current = state.voiceoverPick;
+    els.voiceoverPicker.innerHTML = '<option value="auto">Auto (longest audio clip)</option>';
+    var hasOptions = false;
+    tracks.forEach(function(t) {
+      t.items.forEach(function(c) {
+        hasOptions = true;
+        var key = 'a' + t.trackIndex + ':' + c.index;
+        var label = 'A' + (t.trackIndex+1) + ' · ' + c.name + ' (' + c.dur.toFixed(1) + 's)';
+        var opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = label;
+        if (key === current) opt.selected = true;
+        els.voiceoverPicker.appendChild(opt);
+      });
+    });
+    els.voiceoverPickerRow.hidden = !hasOptions;
+  }
+
+  // Read a TickTime-ish value as seconds, trying many fallbacks
+  function tickSeconds(t) {
+    if (!t) return 0;
+    if (typeof t === 'number') return t;
+    try {
+      if (typeof t.seconds === 'number') return t.seconds;
+    } catch(e) {}
+    try {
+      if (t.ticks != null) {
+        var n = typeof t.ticks === 'bigint' ? Number(t.ticks) : t.ticks;
+        if (typeof n === 'number') return n / 254016000000;
+      }
+    } catch(e) {}
+    try {
+      if (typeof t.getSeconds === 'function') return t.getSeconds();
+    } catch(e) {}
+    return 0;
+  }
+
+  // Auto-await: if value is a Promise, await it; otherwise return as-is.
+  function maybeAwait(v) {
+    if (v && typeof v.then === 'function') return v;
+    return Promise.resolve(v);
+  }
+
+  // ASYNC clip duration accessor — handles both sync and async Premiere UXP APIs.
+  // In Premiere 25.x, getStart/getEnd/getDuration RETURN PROMISES.
+  async function clipDurationSec(item) {
+    if (!item) return 0;
+    try {
+      // 1. Timeline duration via getEnd() - getStart()
+      if (item.getStart && item.getEnd) {
+        var gs = await maybeAwait(item.getStart());
+        var ge = await maybeAwait(item.getEnd());
+        var d = tickSeconds(ge) - tickSeconds(gs);
+        if (d > 0.001) return d;
+      }
+    } catch(e) {}
+    try {
+      // 2. Source duration via getOutPoint - getInPoint
+      if (item.getInPoint && item.getOutPoint) {
+        var gi = await maybeAwait(item.getInPoint());
+        var go = await maybeAwait(item.getOutPoint());
+        var d2 = tickSeconds(go) - tickSeconds(gi);
+        if (d2 > 0.001) return d2;
+      }
+    } catch(e) {}
+    try {
+      // 3. getDuration() directly
+      if (item.getDuration) {
+        var gd = await maybeAwait(item.getDuration());
+        var s = tickSeconds(gd);
+        if (s > 0.001) return s;
+      }
+    } catch(e) {}
+    return 0;
+  }
+
+  // ASYNC: read trackItem's start position on timeline (seconds)
+  async function clipStartSec(item) {
+    if (!item || !item.getStart) return 0;
+    try { var gs = await maybeAwait(item.getStart()); return tickSeconds(gs); }
+    catch(e) { return 0; }
+  }
+
+  // ASYNC: read trackItem's source in/out points (seconds)
+  async function clipInOutSec(item) {
+    if (!item) return { inSec: 0, outSec: 0 };
+    var inSec = 0, outSec = 0;
+    try { var gi = await maybeAwait(item.getInPoint()); inSec = tickSeconds(gi); } catch(e) {}
+    try { var go = await maybeAwait(item.getOutPoint()); outSec = tickSeconds(go); } catch(e) {}
+    return { inSec: inSec, outSec: outSec };
+  }
+
+  // ASYNC: read clip name (may be async in some versions)
+  async function clipName(item) {
+    if (!item) return '';
+    try {
+      if (typeof item.getName === 'function') {
+        var n = await maybeAwait(item.getName());
+        if (n) return String(n);
+      }
+    } catch(e) {}
+    return item.name || '';
+  }
+
+  // Get media file path from a track item
+  async function getMediaPath(trackItem) {
+    try {
+      // Modern UXP API: trackItem.getProjectItem() returns ProjectItem
+      var projItem;
+      if (typeof trackItem.getProjectItem === 'function') {
+        projItem = await trackItem.getProjectItem();
+      } else if (trackItem.projectItem) {
+        projItem = trackItem.projectItem;
+      }
+      if (!projItem) return null;
+
+      // Try ClipProjectItem.cast for getMediaFilePath()
+      var clipItem = ppro.ClipProjectItem && ppro.ClipProjectItem.queryCast
+        ? ppro.ClipProjectItem.queryCast(projItem)
+        : projItem;
+      if (!clipItem) clipItem = projItem;
+
+      if (typeof clipItem.getMediaFilePath === 'function') {
+        var p = await clipItem.getMediaFilePath();
+        return typeof p === 'string' ? p : (p && p.path);
+      }
+      if (clipItem.mediaPath)     return clipItem.mediaPath;
+      if (clipItem.getMediaPath)  return await clipItem.getMediaPath();
+    } catch(e) { console.warn('[Autocut] getMediaPath:', e.message); }
+    return null;
+  }
+
+  // Recursively collect all project items (clips) in the project
+  async function collectAllProjectItems(project) {
+    var root = await project.getRootItem();
+    var result = [];
+    async function walk(folder) {
+      var items;
+      try { items = await folder.getItems(); } catch(e) { items = []; }
+      if (!items) return;
+      var count = items.length || items.numItems || 0;
+      for (var i = 0; i < count; i++) {
+        var item = items[i];
+        var folderCast = ppro.FolderItem && ppro.FolderItem.queryCast
+          ? ppro.FolderItem.queryCast(item) : null;
+        if (folderCast) await walk(folderCast);
+        else result.push(item);
+      }
+    }
+    await walk(root);
+    return result;
+  }
+
+  // Collect all sequences from project — for nested sequence matching
+  async function collectAllSequences(project) {
+    try {
+      if (typeof project.getSequences === 'function') {
+        var seqs = await project.getSequences();
+        return Array.isArray(seqs) ? seqs : Array.from({length: seqs.length||0}, function(_,i){return seqs[i];});
+      }
+    } catch(e) {}
+    return [];
+  }
+
+  // Fuzzy matching: normalize a name
+  function normName(s) {
+    return String(s || '').toLowerCase()
+      .replace(/\.(mp4|mov|avi|mxf|wav|mp3|aac|m4a|prproj)$/i, '')
+      .replace(/[\s\-_\.\/\\]+/g, ' ')
+      .trim();
+  }
+  function tokens(s) { return normName(s).split(' ').filter(Boolean); }
+
+  // Score similarity between query and item name
+  function scoreMatch(query, name) {
+    var q = normName(query), n = normName(name);
+    if (!q || !n) return 0;
+    if (q === n) return 1000;
+    if (n.indexOf(q) >= 0) return 900 - Math.abs(n.length - q.length);
+    if (q.indexOf(n) >= 0) return 850 - Math.abs(n.length - q.length);
+
+    var qt = tokens(query), nt = tokens(name);
+    var matched = 0;
+    for (var i = 0; i < qt.length; i++) {
+      for (var j = 0; j < nt.length; j++) {
+        if (qt[i] === nt[j]) { matched++; break; }
+        if (nt[j].indexOf(qt[i]) >= 0 || qt[i].indexOf(nt[j]) >= 0) { matched += 0.6; break; }
+      }
+    }
+    var ratio = qt.length ? matched / qt.length : 0;
+    return Math.round(ratio * 800);
+  }
+
+  // Find best match for sourceName among items and sequences
+  async function findSource(sourceName, items, sequences) {
+    var best = { score: 0, item: null, isSequence: false };
+    for (var i = 0; i < items.length; i++) {
+      var name = items[i].name || '';
+      var sc = scoreMatch(sourceName, name);
+      if (sc > best.score) best = { score: sc, item: items[i], isSequence: false };
+    }
+    for (var j = 0; j < sequences.length; j++) {
+      var sname = sequences[j].name || '';
+      var ssc = scoreMatch(sourceName, sname);
+      // Boost score if source name looks sequence-like ("output v22.0", "v22.0")
+      if (/^(output\s+)?v\d/i.test(sourceName.trim())) ssc += 100;
+      if (ssc > best.score) best = { score: ssc, item: sequences[j], isSequence: true };
+    }
+    return best.score >= 300 ? best : null;
+  }
+
+  // Get a project item for a sequence (for nested-sequence insertion)
+  async function getSequenceProjectItem(sequence) {
+    if (sequence.projectItem) return sequence.projectItem;
+    if (typeof sequence.getProjectItem === 'function') return await sequence.getProjectItem();
+    return null;
+  }
+
+  // ── Main runner ────────────────────────────────────────────────────────
+  async function runAutocut(target /* 'current' | 'new' */) {
+    if (state.rows.length === 0) {
+      alert('No cutlist rows. Paste a cutsheet in the Claude tab first.');
+      return;
+    }
+
+    lastTarget = target;
+    els.btnPushCurrent.disabled = true;
+    els.btnPushNew.disabled     = true;
+    els.btnRetryRun.disabled    = true;
+    els.missingSection.hidden   = true;
+    els.missingSources.innerHTML = '';
+    if (els.runStatusMeta) els.runStatusMeta.textContent = '';
+
+    setSteps([
+      { key: 'seq',       label: 'Locating sequence + voiceover' },
+      { key: 'stt',       label: 'Speech-to-text on voiceover' },
+      { key: 'align',     label: 'Aligning script lines to transcript' },
+      { key: 'sources',   label: 'Matching sources in project' },
+      { key: 'compute',   label: 'Computing pair boundaries' },
+      { key: 'execute',   label: 'Inserting clips into timeline' },
+    ]);
+
+    try {
+      // Step 1: sequence + voiceover
+      stepStatus('seq', 'active');
+      var project = await getActiveProject();
+      var seq;
+      if (target === 'new') {
+        seq = await getActiveSequence();
+        stepStatus('seq', 'active', 'NEW seq mode TBD — using active for now');
+      } else {
+        seq = await getActiveSequence();
+      }
+      var vo = await findVoiceoverClip(seq);
+      if (!vo) {
+        // Show diagnostic so user can manually pick a track via the picker
+        els.seqDiagnosticSection.hidden = false;
+        throw new Error('No voiceover audio clip found — check 📊 Sequence Audio below + pick manually');
+      }
+      var voPath = await getMediaPath(vo.clip);
+      if (!voPath) throw new Error('Could not get voiceover media file path');
+      console.log('[Autocut] Voiceover:', voPath, 'duration', vo.duration);
+      stepStatus('seq', 'done', vo.clip.name || 'voiceover');
+
+      // Step 2: STT
+      stepStatus('stt', 'active', state.sttBackend);
+      var sttResult;
+      if (state.sttBackend === 'whisper') {
+        sttResult = await postJson('/transcribe', {
+          backend:   'whisper',
+          audioPath: voPath,
+          language:  state.sttLang,
+        });
+      } else {
+        if (!state.transcriptPath) throw new Error('Premiere transcript path is empty. Enter path or run Transcribe Sequence first.');
+        sttResult = await postJson('/transcribe', {
+          backend:        'premiere',
+          transcriptPath: state.transcriptPath,
+        });
+      }
+      stepStatus('stt', 'done', sttResult.words.length + ' words');
+
+      // Step 3: align script lines to transcript words
+      stepStatus('align', 'active');
+      // Build unique script line list (preserve order, dedupe consecutive same)
+      var scriptLines = [];
+      var lineIndexByRow = []; // for each row, index into scriptLines[]
+      var lastScript = null;
+      for (var i = 0; i < state.rows.length; i++) {
+        var sc = (state.rows[i].script || '').trim();
+        if (sc && sc !== lastScript) {
+          scriptLines.push(sc);
+          lastScript = sc;
+        }
+        lineIndexByRow.push(scriptLines.length - 1);
+      }
+      var alignResult = await postJson('/align', {
+        words:       sttResult.words,
+        scriptLines: scriptLines,
+      });
+      stepStatus('align', 'done', alignResult.alignments.length + ' lines');
+
+      // Step 4: match sources
+      stepStatus('sources', 'active');
+      var allItems = await collectAllProjectItems(project);
+      var allSeqs  = await collectAllSequences(project);
+      var matches = []; // parallel to state.rows
+      var missing = {}; // name → count
+      for (var ri = 0; ri < state.rows.length; ri++) {
+        var r = state.rows[ri];
+        var m = await findSource(r.source || '', allItems, allSeqs);
+        if (m) {
+          r._matched = true;
+          r._missing = false;
+          r._nested = m.isSequence;
+        } else {
+          r._matched = false;
+          r._missing = true;
+          missing[r.source || '(empty)'] = (missing[r.source || '(empty)'] || 0) + 1;
+        }
+        matches.push(m);
+      }
+      renderCutlist();
+      var missingNames = Object.keys(missing);
+      if (missingNames.length > 0) {
+        els.missingSection.hidden = false;
+        els.missingSources.innerHTML = missingNames.map(function(n) {
+          return '<div class="ac-missingItem"><div class="ac-missingName">' + esc(n) +
+                 '</div><div class="ac-missingCount">×' + missing[n] + '</div></div>';
+        }).join('');
+        stepStatus('sources', 'error', missingNames.length + ' missing');
+        throw new Error('Cannot run: ' + missingNames.length + ' source(s) not found. See list below.');
+      }
+      stepStatus('sources', 'done', state.rows.length + ' matched');
+
+      // Step 5: compute pair boundaries per row
+      // CRITICAL: boundaries are OFFSET by voiceover's timeline start position.
+      // Otherwise clips get inserted at timeline=0 instead of voiceover position.
+      stepStatus('compute', 'active');
+      var voTimelineStart = vo.timelineStart || 0;
+      var boundary = voTimelineStart; // start at voiceover position, not origin
+      var placements = []; // {timelineStart, sIn, sOut, vIn, vOut, sDur, vDur, item, isSequence}
+      // Track V usage: when multiple rows share same script line, only first row "owns" the V.
+      var voLineUsed = {};
+      for (var pi = 0; pi < state.rows.length; pi++) {
+        var row = state.rows[pi];
+        var sDur = Math.max(0.04, Number(row.sourceOut) - Number(row.sourceIn));
+        var liIdx = lineIndexByRow[pi];
+        var align = alignResult.alignments[liIdx];
+        var vDur = 0, vIn = null, vOut = null;
+        if (align && align.start != null && !voLineUsed[liIdx]) {
+          vIn  = align.start;
+          vOut = align.end;
+          vDur = Math.max(0, vOut - vIn);
+          voLineUsed[liIdx] = true;
+        }
+        var pairDur = Math.max(sDur, vDur);
+        placements.push({
+          timelineStart: boundary,
+          sIn:  Number(row.sourceIn),
+          sOut: Number(row.sourceOut),
+          sDur: sDur,
+          vIn:  vIn,
+          vOut: vOut,
+          vDur: vDur,
+          item: matches[pi].item,
+          isSequence: matches[pi].isSequence,
+          script: row.script,
+        });
+        boundary += pairDur;
+      }
+      stepStatus('compute', 'done',
+        'VO@' + voTimelineStart.toFixed(1) + 's, total ' + (boundary - voTimelineStart).toFixed(1) + 's');
+
+      // Step 6: execute timeline edits
+      stepStatus('execute', 'active');
+      await executeTimelineBuild(seq, placements, vo);
+      stepStatus('execute', 'done', placements.length + ' clips inserted');
+
+    } catch(err) {
+      console.error('[Autocut] error:', err);
+      var failedStep = steps.find(function(s) { return s.status === 'active'; });
+      if (failedStep) stepStatus(failedStep.key, 'error', err.message);
+      // Show retry hint in status meta when sequence detection failed
+      if (els.runStatusMeta) {
+        var key = failedStep && failedStep.key;
+        if (key === 'seq')      els.runStatusMeta.textContent = 'Add voiceover then ↻';
+        else if (key === 'sources') els.runStatusMeta.textContent = 'Import missing sources then ↻';
+        else                     els.runStatusMeta.textContent = '↻ to retry';
+      }
+    } finally {
+      els.btnPushCurrent.disabled = false;
+      els.btnPushNew.disabled     = false;
+      els.btnRetryRun.disabled    = false;
+      refreshTimeline();
+    }
+  }
+
+  // Execute timeline build using Autocut 1.1's PROVEN pattern:
+  //   For each row:
+  //     1. Capture projectItem's current in/out (to restore later)
+  //     2. Set projectItem in/out to sourceIn/sourceOut
+  //     3. Run transaction: createInsertProjectItemAction (limitShift=true)
+  //     4. Restore projectItem in/out
+  //   Then add subtitles per script line.
+  async function executeTimelineBuild(seq, placements, voInfo) {
+    if (!ppro.SequenceEditor || !ppro.TickTime) {
+      throw new Error('SequenceEditor/TickTime API not available');
+    }
+    var project = await getActiveProject();
+    var editor  = ppro.SequenceEditor.getEditor(seq);
+    if (!editor) throw new Error('Cannot get SequenceEditor for active sequence');
+
+    var targetVTrack = await findFirstEmptyVideoTrack(seq);
+    var targetATrack = await findFirstEmptyAudioTrack(seq, voInfo ? voInfo.trackIndex : -1);
+    console.log('[Autocut] Targets: V' + (targetVTrack + 1) + ', A' + (targetATrack + 1));
+
+    // Place each clip
+    for (var i = 0; i < placements.length; i++) {
+      var p = placements[i];
+      var placeAt = ppro.TickTime.createWithSeconds(p.timelineStart);
+      console.log('[Autocut] Insert #' + (i+1) + ': "' + (p.item.name||'?') +
+                  '" at ' + p.timelineStart.toFixed(2) + 's, trim ' + p.sIn + '-' + p.sOut);
+
+      try {
+        await withTemporaryProjectItemInOut(project, p.item, p.sIn, p.sOut, p.item.name || 'clip', async function() {
+          // Run insert transaction with trimmed source
+          await runTxn(project, 'Autocut #' + (i+1), function(compoundAction) {
+            var action = editor.createInsertProjectItemAction(
+              p.item, placeAt, targetVTrack, targetATrack, true);  // limitShift=TRUE per Autocut
+            compoundAction.addAction(action);
+          });
+        });
+      } catch(err) {
+        console.error('[Autocut] insert #' + (i+1) + ' failed:', err.message);
+        // Don't throw — try remaining clips. Could be source missing audio component.
+      }
+    }
+
+    // Add subtitles per script line (one per unique line)
+    await addSubtitlesForPlacements(seq, placements);
+  }
+
+  // Add a caption/subtitle for each placement (uses script text)
+  async function addSubtitlesForPlacements(seq, placements) {
+    if (!placements.length) return;
+    var lastScript = null;
+    var attempts = 0, success = 0;
+    for (var i = 0; i < placements.length; i++) {
+      var p = placements[i];
+      var txt = (p.script || '').trim();
+      if (!txt || txt === lastScript) continue;
+      lastScript = txt;
+      attempts++;
+      var startT = p.timelineStart;
+      var endT   = p.timelineStart + Math.max(0.5, p.sOut - p.sIn);
+      try {
+        var ct = collectionToArray(seq.captionTracks);
+        var ctrack = ct[0];
+        if (!ctrack) {
+          console.warn('[Autocut] No caption track — skip subtitles (create one in Premiere first)');
+          return;
+        }
+        var clipEl = await ctrack.createCaption(
+          { ticks: secToTicks(startT) },
+          { ticks: secToTicks(endT) });
+        if (clipEl) clipEl.text = txt;
+        success++;
+      } catch(e) {
+        console.warn('[Autocut] subtitle skip:', e.message);
+      }
+    }
+    if (attempts) console.log('[Autocut] Subtitles: ' + success + '/' + attempts + ' added');
+  }
+
+  // === Autocut helpers (copied from autocut 1.1 source) ===
+
+  function runTxn(project, label, buildActions) {
+    return new Promise(function(resolve, reject) {
+      try {
+        project.lockedAccess(function() {
+          try {
+            var ok = project.executeTransaction(function(action) {
+              buildActions(action);
+            }, label);
+            if (!ok) reject(new Error('Transaction failed: ' + label));
+            else resolve();
+          } catch(e) { reject(e); }
+        });
+      } catch(e) { reject(e); }
+    });
+  }
+
+  async function withTemporaryProjectItemInOut(project, projectItem, inSec, outSec, label, task) {
+    if (outSec <= inSec) {
+      throw new Error('outSec must be > inSec for source: ' + label);
+    }
+    var original = await captureProjectItemInOut(projectItem);
+    await setProjectItemInOut(project, projectItem, inSec, outSec, label);
+    try {
+      return await task();
+    } finally {
+      try { await restoreProjectItemInOut(project, projectItem, original, label); }
+      catch(e) { console.warn('[Autocut] restore in/out failed:', e.message); }
+    }
+  }
+
+  async function captureProjectItemInOut(projectItem) {
+    var MT = (ppro.Constants && ppro.Constants.MediaType && ppro.Constants.MediaType.VIDEO) || 1;
+    var inPoint = null, outPoint = null, has = false;
+    try { inPoint  = await projectItem.getInPoint(MT);  has = true; } catch(e) {}
+    try { outPoint = await projectItem.getOutPoint(MT); has = true; } catch(e) {}
+    return { inPoint: inPoint, outPoint: outPoint, has: has };
+  }
+
+  async function setProjectItemInOut(project, projectItem, inSec, outSec, label) {
+    var tIn  = ppro.TickTime.createWithSeconds(inSec);
+    var tOut = ppro.TickTime.createWithSeconds(outSec);
+    await runTxn(project, 'Set In/Out ' + label, function(action) {
+      addProjectItemInOutAction(action, projectItem, tIn, tOut);
+    });
+  }
+
+  async function restoreProjectItemInOut(project, projectItem, original, label) {
+    if (original && original.has && original.inPoint && original.outPoint) {
+      await runTxn(project, 'Restore In/Out ' + label, function(action) {
+        addProjectItemInOutAction(action, projectItem, original.inPoint, original.outPoint);
+      });
+      return;
+    }
+    if (typeof projectItem.createClearInOutPointsAction === 'function') {
+      await runTxn(project, 'Clear In/Out ' + label, function(action) {
+        action.addAction(projectItem.createClearInOutPointsAction());
+      });
+    }
+  }
+
+  function addProjectItemInOutAction(compoundAction, projectItem, inPoint, outPoint) {
+    if (typeof projectItem.createSetInOutPointsAction === 'function') {
+      compoundAction.addAction(projectItem.createSetInOutPointsAction(inPoint, outPoint));
+      return;
+    }
+    if (typeof projectItem.createSetInPointAction === 'function') {
+      compoundAction.addAction(projectItem.createSetInPointAction(inPoint));
+    }
+    if (typeof projectItem.createSetOutPointAction === 'function') {
+      compoundAction.addAction(projectItem.createSetOutPointAction(outPoint));
+    }
+  }
+
+  // Find first video track with no clips (so we don't overwrite existing content)
+  async function findFirstEmptyVideoTrack(seq) {
+    var vCount = await seq.getVideoTrackCount();
+    for (var i = 0; i < vCount; i++) {
+      var t = await seq.getVideoTrack(i);
+      var items = await getClipItems(t);
+      if (items.length === 0) return i;
+    }
+    return 0; // fallback: V1
+  }
+
+  // Find empty audio track, skipping the voiceover's track
+  async function findFirstEmptyAudioTrack(seq, skipTrackIdx) {
+    var aCount = await seq.getAudioTrackCount();
+    for (var i = 0; i < aCount; i++) {
+      if (i === skipTrackIdx) continue;
+      var t = await seq.getAudioTrack(i);
+      var items = await getClipItems(t);
+      if (items.length === 0) return i;
+    }
+    return Math.max(0, skipTrackIdx === 0 ? 1 : 0);
+  }
+
+  // Find a track item whose timeline range contains the given time
+  async function findTrackItemAtTime(seq, vTrackIdx, atSec) {
+    try {
+      var t = await seq.getVideoTrack(vTrackIdx);
+      var items = await getClipItems(t);
+      for (var i = 0; i < items.length; i++) {
+        var s = await clipStartSec(items[i]);
+        var d = await clipDurationSec(items[i]);
+        if (s <= atSec && atSec < s + d) return items[i];
+      }
+    } catch(e) { console.warn('[Autocut] findTrackItemAtTime:', e.message); }
+    return null;
+  }
+
+  // ── UI events ──────────────────────────────────────────────────────────
+  els.sttBackend.addEventListener('change', function() {
+    state.sttBackend = els.sttBackend.value;
+    updateSttConfigVisibility();
+    saveSettings();
+  });
+  els.sttLang.addEventListener('change', function() {
+    state.sttLang = els.sttLang.value;
+    saveSettings();
+  });
+  els.runMode.addEventListener('change', function() {
+    state.runMode = els.runMode.value;
+    saveSettings();
+  });
+  els.transcriptPath.addEventListener('change', function() {
+    var v = els.transcriptPath.value;
+    state.transcriptPath = (v == null ? '' : String(v)).trim();
+    saveSettings();
+  });
+  els.voiceoverPicker.addEventListener('change', function() {
+    state.voiceoverPick = els.voiceoverPicker.value;
+    console.log('[Autocut] voiceover pick =', state.voiceoverPick);
+  });
+  els.btnRefreshSeqInfo.addEventListener('click', async function() {
+    try {
+      var seq = await getActiveSequence();
+      var tracks = await scanAudioTracks(seq);
+      renderSeqDiagnostic(tracks);
+      populateVoiceoverPicker(tracks);
+    } catch(e) {
+      alert('Could not scan sequence: ' + e.message);
+    }
+  });
+
+  // ── Manual Paste section (3-column) ─────────────────────────────────────
+  var manualHeader   = $('manualInputHeader');
+  var manualBody     = $('manualInputBody');
+  var manualChev     = $('manualChevron');
+  var manualColText  = $('manualColText');
+  var manualColTime  = $('manualColTime');
+  var manualColSrc   = $('manualColSource');
+  var manualFillDown = $('manualFillDown');
+  var manualStatus   = $('manualParseStatus');
+  var btnManualParse = $('btnManualParse');
+  var btnManualClear = $('btnManualClear');
+
+  manualHeader.addEventListener('click', function() {
+    var isOpen = manualBody.style.display !== 'none';
+    manualBody.style.display = isOpen ? 'none' : 'flex';
+    manualChev.classList.toggle('is-expanded', !isOpen);
+  });
+
+  btnManualClear.addEventListener('click', function() {
+    manualColText.value = '';
+    manualColTime.value = '';
+    manualColSrc.value  = '';
+    manualStatus.textContent = '';
+    manualStatus.className = 'ac-manualStatus';
+    manualColText.focus();
+  });
+
+  btnManualParse.addEventListener('click', function() {
+    try {
+      var rows = parseManualColumns(
+        manualColText.value,
+        manualColTime.value,
+        manualColSrc.value,
+        manualFillDown.checked
+      );
+      if (rows.length === 0) {
+        manualStatus.className = 'ac-manualStatus is-err';
+        manualStatus.textContent = '✗ No valid rows parsed. Check time format.';
+        return;
+      }
+      manualStatus.className = 'ac-manualStatus is-ok';
+      manualStatus.textContent = '✓ Parsed ' + rows.length + ' rows → Cut List';
+      setRows(rows);
+    } catch(e) {
+      manualStatus.className = 'ac-manualStatus is-err';
+      manualStatus.textContent = '✗ ' + e.message;
+    }
+  });
+
+  // 3-column parser: pair each row of the 3 columns by line index.
+  // fillDown=true: empty cell inherits value from previous row (merged-cell behavior).
+  function parseManualColumns(textCol, timeCol, srcCol, fillDown) {
+    var tLines = String(textCol || '').split(/\r?\n/);
+    var iLines = String(timeCol || '').split(/\r?\n/);
+    var sLines = String(srcCol  || '').split(/\r?\n/);
+    var n = Math.max(tLines.length, iLines.length, sLines.length);
+    var rows = [];
+    var lastT = '', lastI = '', lastS = '';
+    for (var i = 0; i < n; i++) {
+      var t = (tLines[i] || '').trim();
+      var ti = (iLines[i] || '').trim();
+      var s = (sLines[i] || '').trim();
+      if (fillDown) {
+        if (!t)  t  = lastT;
+        if (!ti) ti = lastI;
+        if (!s)  s  = lastS;
+      }
+      // Update "last" only when non-empty (so fill-down propagates)
+      if (t)  lastT = t;
+      if (ti) lastI = ti;
+      if (s)  lastS = s;
+      // Skip rows that are entirely empty (no anchoring data)
+      if (!t && !ti && !s) continue;
+      // A row needs at minimum: time + source (script can be empty)
+      if (!ti || !s) continue;
+      var tc = parseTimecode(ti);
+      if (!tc) continue;
+      rows.push({
+        source:    s,
+        sourceIn:  tc.inSec,
+        sourceOut: tc.outSec,
+        script:    t,
+      });
+    }
+    return rows;
+  }
+
+  // Parse various timecode formats → {inSec, outSec}
+  function parseTimecode(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    // Range: "0:02-0:08" or "0:02 - 0:08"
+    var m = s.split(/\s*[-–—]\s*/);
+    var inSec = tcToSeconds(m[0]);
+    if (inSec == null) return null;
+    if (m.length > 1) {
+      var outSec = tcToSeconds(m[1]);
+      if (outSec != null) return { inSec: inSec, outSec: outSec };
+    }
+    // Only start given → default 1s duration
+    return { inSec: inSec, outSec: inSec + 1.0 };
+  }
+  // Convert "M:SS", "MM:SS.s", "H:MM:SS", "1.5" (decimal sec) → seconds
+  function tcToSeconds(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    var parts = s.split(':');
+    if (parts.length === 2) {
+      var min = parseInt(parts[0], 10), sec = parseFloat(parts[1]);
+      if (!isNaN(min) && !isNaN(sec)) return min * 60 + sec;
+    }
+    if (parts.length === 3) {
+      var h = parseInt(parts[0], 10), mn = parseInt(parts[1], 10), sc = parseFloat(parts[2]);
+      if (!isNaN(h) && !isNaN(mn) && !isNaN(sc)) return h * 3600 + mn * 60 + sc;
+    }
+    return null;
+  }
+  els.btnPushCurrent.addEventListener('click', function() { runAutocut('current'); });
+  els.btnPushNew.addEventListener('click',     function() { runAutocut('new'); });
+  els.btnClearCutlist.addEventListener('click', function(e) {
+    e.stopPropagation();
+    setRows([]);
+    els.runStatusSection.hidden = true;
+    els.missingSection.hidden = true;
+  });
+
+  // Cut List collapse/expand
+  els.cutlistHeader.addEventListener('click', function(e) {
+    // Don't toggle if the user clicked the × clear button
+    if (e.target.id === 'btnClearCutlist') return;
+    var isCollapsed = els.cutlistPreview.classList.contains('ac-collapsed');
+    setCutlistExpanded(isCollapsed); // toggle
+    renderCutlist();                 // re-render to update meta text
+  });
+
+  // Retry / refresh after user manually adds voiceover or imports sources
+  els.btnRetryRun.addEventListener('click', function(e) {
+    e.stopPropagation();
+    runAutocut(lastTarget);
+  });
+
+  // Wire keyboard focus for all Autocut inputs (prevent Premiere shortcut conflicts)
+  [els.transcriptPath, els.sttBackend, els.sttLang, els.runMode, els.voiceoverPicker,
+   manualColText, manualColTime, manualColSrc].forEach(function(el) {
+    if (!el) return;
+    el.addEventListener('focus', window.claimKeyboard);
+    el.addEventListener('blur',  window.releaseKeyboard);
+  });
+
+  // Init
+  loadSettings();
+  setCutlistExpanded(true); // start expanded — collapse only via user click
+  renderCutlist();
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VOICE GEN MODULE (ElevenLabs)
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  var $ = function(id) { return document.getElementById(id); };
+  var els = {
+    statusDot:    $('vgStatusDot'),
+    statusText:   $('vgStatusText'),
+    btnRefresh:   $('vgRefreshVoices'),
+    voiceSelect:  $('vgVoiceSelect'),
+    customVoiceId: $('vgCustomVoiceId'),
+    voiceSource:  $('vgVoiceSource'),
+    modelSelect:  $('vgModelSelect'),
+    script:       $('vgScript'),
+    charCount:    $('vgCharCount'),
+    outputFolder: $('vgOutputFolder'),
+    btnBrowseFolder: $('vgBrowseFolder'),
+    btnResetFolder:  $('vgResetFolder'),
+    filename:     $('vgFilename'),
+    twoVariations: $('vg2Variations'),
+    btnGenerate:  $('vgGenerate'),
+    resultSection: $('vgResultSection'),
+    var1:         $('vgVar1'),
+    var1Size:     $('vgVar1Size'),
+    var1Import:   $('vgVar1Import'),
+    var1Reveal:   $('vgVar1Reveal'),
+    var1Use:      $('vgVar1Use'),
+    var2:         $('vgVar2'),
+    var2Size:     $('vgVar2Size'),
+    var2Import:   $('vgVar2Import'),
+    var2Reveal:   $('vgVar2Reveal'),
+    var2Use:      $('vgVar2Use'),
+    importStatus: $('vgImportStatus'),
+  };
+
+  var voicesLoaded = false;
+  var customOutputFolder = ''; // empty = use bridge default
+  var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
+  var currentMode = 'tts'; // 'tts' | 'sfx' | 'music'
+  var players = {}; // { var1: {audio, isPlaying}, var2: {...} }
+
+  // ── Multi-speaker state ─────────────────────────────────────────────────
+  var VG_SPEAKER_COLORS = ['#a855f7','#3b82f6','#22c55e','#f59e0b','#ef4444','#06b6d4'];
+  var VG_SPEAKERS = [
+    { id: 's1', voiceId: '21m00Tcm4TlvDq8ikWAM', voiceName: 'Rachel', color: '#a855f7' }
+  ];
+  var VG_ACTIVE_SPEAKER = 's1';
+  var VG_SPEAKER_TEXTS = { s1: '' };
+  var VG_PREVIEW_URLS  = {}; // voiceId → ElevenLabs CDN preview_url string
+  var VG_PREVIEW_CACHE = {}; // voiceId → local bridge URL (cached after first fetch)
+  var VG_VOICES_DATA   = []; // { voice_id, label, preview_url, isCustom, isSep }
+  var VG_DROP_BTNS     = {}; // voiceId → ▶ button DOM element in dropdown
+  var VG_PREV_ACTIVE   = null; // voiceId currently being previewed
+  var vgDropResizeHandler = null; // window resize handler while dropdown is open
+
+  function saveCurrentSpeakerText() {
+    if (els.script) {
+      var v = els.script.value;
+      VG_SPEAKER_TEXTS[VG_ACTIVE_SPEAKER] = (v == null ? '' : String(v));
+    }
+    var sp = VG_SPEAKERS.find(function(s) { return s.id === VG_ACTIVE_SPEAKER; });
+    if (sp && els.voiceSelect) {
+      sp.voiceId = els.voiceSelect.value || sp.voiceId;
+      sp.voiceName = vgVoiceName(sp.voiceId);
+    }
+  }
+
+  function renderSpeakerBar() {
+    var bar = $('vgSpeakerBar');
+    if (!bar) return;
+    var addBtn = $('vgAddSpeaker');
+    // Remove all speaker tabs (keep addBtn)
+    var tabs = bar.querySelectorAll('.vg-speakerTab');
+    tabs.forEach(function(t) { bar.removeChild(t); });
+
+    VG_SPEAKERS.forEach(function(sp) {
+      // Use <div role="button"> instead of <button> to avoid UXP nested-button bug
+      // (UXP Chromium doesn't fire click on a <button> nested inside another <button>)
+      var tab = document.createElement('div');
+      tab.className = 'vg-speakerTab' + (sp.id === VG_ACTIVE_SPEAKER ? ' is-active' : '');
+      tab.setAttribute('role', 'button');
+      tab.setAttribute('tabindex', '0');
+      tab.dataset.speakerId = sp.id;
+      tab.style.setProperty('--sp-color', sp.color);
+
+      var nameSpan = document.createElement('span');
+      nameSpan.textContent = sp.voiceName;
+      tab.appendChild(nameSpan);
+
+      if (VG_SPEAKERS.length > 1) {
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'vg-speakerRemove';
+        rm.textContent = '×';
+        (function(spId) {
+          rm.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            removeSpeaker(spId);
+          });
+        })(sp.id);
+        tab.appendChild(rm);
+      }
+
+      (function(spId) {
+        tab.addEventListener('click', function(e) {
+          // Ignore if the remove button was clicked (stopPropagation may not fire first in UXP)
+          if (e.target && e.target.classList && e.target.classList.contains('vg-speakerRemove')) return;
+          switchSpeaker(spId);
+        });
+        tab.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchSpeaker(spId); }
+        });
+      })(sp.id);
+
+      bar.insertBefore(tab, addBtn);
+    });
+  }
+
+  function switchSpeaker(newId) {
+    saveCurrentSpeakerText();
+    VG_ACTIVE_SPEAKER = newId;
+    var sp = VG_SPEAKERS.find(function(s) { return s.id === newId; });
+    if (sp) {
+      if (els.script) els.script.value = VG_SPEAKER_TEXTS[newId] || '';
+      vgSetVoice(sp.voiceId);
+    }
+    renderSpeakerBar();
+  }
+
+  function addSpeaker() {
+    saveCurrentSpeakerText();
+    var newId = 's' + Date.now();
+    var colorIdx = VG_SPEAKERS.length % VG_SPEAKER_COLORS.length;
+    VG_SPEAKERS.push({
+      id: newId,
+      voiceId: 'pNInz6obpgDQGcFmaJgB', // Adam — distinct default second voice
+      voiceName: 'Adam',
+      color: VG_SPEAKER_COLORS[colorIdx],
+    });
+    VG_SPEAKER_TEXTS[newId] = '';
+    switchSpeaker(newId);
+  }
+
+  function removeSpeaker(id) {
+    if (VG_SPEAKERS.length <= 1) return;
+    var idx = VG_SPEAKERS.findIndex(function(s) { return s.id === id; });
+    if (idx < 0) return;
+    VG_SPEAKERS.splice(idx, 1);
+    delete VG_SPEAKER_TEXTS[id];
+    if (VG_ACTIVE_SPEAKER === id) {
+      switchSpeaker(VG_SPEAKERS[Math.max(0, idx - 1)].id);
+    } else {
+      renderSpeakerBar();
+    }
+  }
+
+  // ── Audio engine: delegate to bridge (afplay on macOS) ───────────────────
+  // UXP has no HTMLMediaElement and no AudioContext — the bridge runs afplay
+  // and holds the HTTP connection open until playback finishes. Aborting the
+  // fetch from the plugin side auto-signals the bridge to kill afplay via
+  // a concurrent /tts/stop call.
+  var vgIsPlaying    = false;
+  var vgAbortCtrl    = null;
+  var vgOnStopCb     = null;
+
+  // url must be a full URL like http://localhost:3030/tts/audio/xxx.mp3
+  // onEnd() fires when playback ends naturally OR is stopped.
+  // onError(msg) fires on bridge/network errors.
+  // onProgress is accepted but unused (no seek support via afplay).
+  function vgPlayUrl(url, onProgress, onEnd, onError) {
+    // Stop previous without sending /tts/stop — new /tts/play will kill old process
+    if (vgAbortCtrl) { vgAbortCtrl.abort(); vgAbortCtrl = null; }
+    if (vgOnStopCb)  { var prev = vgOnStopCb; vgOnStopCb = null; prev(); }
+    vgIsPlaying = false;
+
+    var relUrl = url.startsWith(BRIDGE_URL) ? url.slice(BRIDGE_URL.length) : url;
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    vgAbortCtrl  = ctrl;
+    vgOnStopCb   = onEnd || null;
+    vgIsPlaying  = true;
+
+    fetch(BRIDGE_URL + '/tts/play', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ audioUrl: relUrl }),
+      signal:  ctrl ? ctrl.signal : undefined,
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!vgIsPlaying) return; // already stopped by user
+        vgIsPlaying  = false;
+        vgAbortCtrl  = null;
+        var cb = vgOnStopCb; vgOnStopCb = null;
+        if (cb) cb();
+      })
+      .catch(function(e) {
+        if (e && e.name === 'AbortError') return; // intentional stop — onEnd already called
+        vgIsPlaying = false;
+        vgAbortCtrl = null;
+        vgOnStopCb  = null;
+        console.error('[vgPlayUrl]', relUrl, e);
+        if (onError) onError(e.message || String(e));
+      });
+  }
+
+  function vgStopAll() {
+    if (!vgIsPlaying && !vgAbortCtrl) return;
+    if (vgAbortCtrl) { vgAbortCtrl.abort(); vgAbortCtrl = null; }
+    vgIsPlaying = false;
+    var cb = vgOnStopCb; vgOnStopCb = null;
+    if (cb) cb();
+    // Tell bridge to kill afplay
+    fetch(BRIDGE_URL + '/tts/stop', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }).catch(function() {});
+  }
+
+  // ── Player factory (uses Web Audio engine above) ─────────────────────────
+  function createPlayer(slot) {
+    var prefix = 'vgV' + (slot === 'var1' ? 'ar1' : 'ar2');
+    var playBtn  = $(prefix + 'Play');
+    var progWrap = $(prefix + 'ProgWrap');
+    var fill     = $(prefix + 'Fill');
+    var timeEl   = $(prefix + 'Time');
+    var currentUrl = null;
+    var isPlaying  = false;
+
+    function fmt(s) {
+      if (!isFinite(s) || s < 0) s = 0;
+      var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+      return m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+    function setPlaying(val) {
+      isPlaying = val;
+      playBtn.textContent = val ? '⏸' : '▶';
+    }
+
+    playBtn.addEventListener('click', function() {
+      if (!currentUrl) return;
+      if (isPlaying) {
+        vgStopAll();
+        // setPlaying(false) will be called by the onEnd callback we registered
+        return;
+      }
+      setPlaying(true);
+      timeEl.textContent = 'loading...';
+      vgPlayUrl(currentUrl,
+        function(elapsed, dur) {
+          fill.style.width = Math.min(100, elapsed / dur * 100) + '%';
+          timeEl.textContent = fmt(elapsed) + ' / ' + fmt(dur);
+        },
+        function() { setPlaying(false); fill.style.width = '0%'; timeEl.textContent = '0:00 / ?'; },
+        function(e) { setPlaying(false); timeEl.textContent = 'error'; console.warn('[VG player ' + slot + ']', e); }
+      );
+    });
+
+    return {
+      setSrc: function(url) {
+        if (isPlaying) { vgStopAll(); setPlaying(false); }
+        currentUrl = url;
+        fill.style.width = '0%';
+        timeEl.textContent = '0:00 / ?';
+      },
+    };
+  }
+
+  function setStatus(text, ok) {
+    els.statusText.textContent = text;
+    if (ok) els.statusDot.classList.add('is-ok');
+    else    els.statusDot.classList.remove('is-ok');
+  }
+
+  // (sliders + meta are wired via hookSlider below — this just refreshes the meta line)
+  function updateSettingsMeta() {
+    if (!els.settingsMeta) return;
+    function n(el, d) { var v = el && parseFloat(el.value); return isNaN(v) ? d : v; }
+    els.settingsMeta.textContent =
+      'stability ' + n(els.stability, 0.5).toFixed(2) +
+      ' · similarity ' + n(els.similarity, 0.75).toFixed(2) +
+      ' · style ' + n(els.style, 0).toFixed(2);
+  }
+
+  // UXP textarea .value can be null when empty — guard
+  function safeLen(el) {
+    if (!el) return 0;
+    var v = el.value;
+    if (v == null) return 0;
+    return String(v).length;
+  }
+  function updateCharCount() {
+    if (!els.charCount) return;
+    var n = safeLen(els.script);
+    els.charCount.textContent = n + ' / 5000';
+    els.charCount.style.color = n > 5000 ? 'var(--error)' : '';
+  }
+
+  // Try to load voices from user's ElevenLabs account.
+  // Falls back gracefully if key is TTS-restricted (no voices_read perm).
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function vgVoiceName(voiceId) {
+    var v = VG_VOICES_DATA.find(function(x) { return !x.isSep && x.voice_id === voiceId; });
+    if (v) return v.label.replace(/^⭐\s*/, '').split(' · ')[0];
+    var opt = els.voiceSelect ? els.voiceSelect.options[els.voiceSelect.selectedIndex] : null;
+    return opt ? opt.textContent.replace(/^⭐\s*/, '').split(' · ')[0] : 'Voice';
+  }
+
+  function vgSetVoice(voiceId) {
+    if (els.voiceSelect) els.voiceSelect.value = voiceId;
+    var v = VG_VOICES_DATA.find(function(x) { return !x.isSep && x.voice_id === voiceId; });
+    var label = v ? v.label : (els.voiceSelect && els.voiceSelect.options[els.voiceSelect.selectedIndex]
+      ? els.voiceSelect.options[els.voiceSelect.selectedIndex].textContent : voiceId);
+    var labelEl = $('vgVoiceDropLabel');
+    if (labelEl) labelEl.textContent = label.replace(/^⭐\s*/, '');
+    if (els.customVoiceId) els.customVoiceId.hidden = voiceId !== '__custom__';
+  }
+
+  // ── Custom voice dropdown ────────────────────────────────────────────────
+  function renderVoiceDrop() {
+    var panel = $('vgVoiceDropPanel');
+    if (!panel) return;
+    panel.innerHTML = '';
+    VG_DROP_BTNS = {};
+    var currentId = els.voiceSelect ? els.voiceSelect.value : '';
+
+    // Search row
+    var searchWrap = document.createElement('div');
+    searchWrap.className = 'vg-dropSearch';
+    var searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'vg-dropSearchInput';
+    searchInput.placeholder = 'Search voices…';
+    searchWrap.appendChild(searchInput);
+    panel.appendChild(searchWrap);
+
+    // Scrollable list container
+    var listEl = document.createElement('div');
+    listEl.className = 'vg-dropList';
+    panel.appendChild(listEl);
+
+    function buildList(filter) {
+      listEl.innerHTML = '';
+      VG_DROP_BTNS = {};
+      var f = (filter || '').toLowerCase().trim();
+      VG_VOICES_DATA.forEach(function(v) {
+        if (v.isSep) {
+          if (!f) {
+            var sep = document.createElement('div');
+            sep.className = 'vg-dropSep';
+            sep.textContent = '── Default voices ──';
+            listEl.appendChild(sep);
+          }
+          return;
+        }
+        if (f && v.label.toLowerCase().indexOf(f) === -1) return;
+
+        var item = document.createElement('div');
+        item.className = 'vg-dropItem' + (v.voice_id === currentId ? ' is-selected' : '');
+
+        var info = document.createElement('div');
+        info.className = 'vg-dropItemLabel';
+        info.textContent = (v.isCustom ? '⭐ ' : '') + v.label;
+        item.appendChild(info);
+
+        if (v.voice_id !== '__custom__') {
+          var btn = document.createElement('button');
+          btn.className = 'vg-dropItemPrev';
+          btn.textContent = '▶';
+          VG_DROP_BTNS[v.voice_id] = btn;
+          (function(vid, b) {
+            b.addEventListener('click', function(e) {
+              e.stopPropagation();
+              vgPreviewItem(vid, b);
+            });
+          })(v.voice_id, btn);
+          item.appendChild(btn);
+        }
+
+        info.addEventListener('click', function() { vgDropSelect(v.voice_id, v.label); });
+        listEl.appendChild(item);
+      });
+    }
+
+    buildList('');
+    searchInput.addEventListener('input', function() { buildList(searchInput.value); });
+  }
+
+  function repositionVoiceDrop() {
+    var panel = $('vgVoiceDropPanel');
+    var trigger = $('vgVoiceDropTrigger');
+    var container = document.getElementById('tab-voicegen');
+    if (!panel || !trigger || !container) return;
+    var triggerRect = trigger.getBoundingClientRect();
+    var contRect    = container.getBoundingClientRect();
+    panel.style.top   = (triggerRect.bottom - contRect.top)  + 'px';
+    panel.style.left  = (triggerRect.left   - contRect.left) + 'px';
+    panel.style.width = triggerRect.width + 'px';
+  }
+
+  function openVoiceDrop() {
+    var panel = $('vgVoiceDropPanel');
+    var trigger = $('vgVoiceDropTrigger');
+    if (!panel || !trigger) return;
+    repositionVoiceDrop();
+    panel.style.maxHeight = '240px';
+    panel.style.display  = 'flex';   // shows the portal panel
+    trigger.classList.add('is-open');
+    // Attach resize listener so position tracks plugin panel resize
+    if (!vgDropResizeHandler) {
+      vgDropResizeHandler = function() { repositionVoiceDrop(); };
+      window.addEventListener('resize', vgDropResizeHandler);
+    }
+    var si = panel.querySelector('.vg-dropSearchInput');
+    if (si) setTimeout(function() { try { si.focus(); } catch(e) {} }, 30);
+  }
+
+  function closeVoiceDrop() {
+    var panel = $('vgVoiceDropPanel');
+    var trigger = $('vgVoiceDropTrigger');
+    if (panel) panel.style.display = 'none';
+    if (trigger) trigger.classList.remove('is-open');
+    // Remove resize listener
+    if (vgDropResizeHandler) {
+      window.removeEventListener('resize', vgDropResizeHandler);
+      vgDropResizeHandler = null;
+    }
+    if (VG_PREV_ACTIVE) { vgStopAll(); }
+  }
+
+  function vgDropSelect(voiceId, label) {
+    vgSetVoice(voiceId);
+    closeVoiceDrop();
+    // Fire change on hidden select so existing listeners react
+    var evt = document.createEvent('Event');
+    evt.initEvent('change', true, true);
+    if (els.voiceSelect) els.voiceSelect.dispatchEvent(evt);
+  }
+
+  // ── Per-item voice preview ───────────────────────────────────────────────
+  function vgPreviewItem(voiceId, btn) {
+    if (!ELEVENLABS_KEY) { setStatus('Need ElevenLabs key', false); return; }
+
+    // Same voice playing → stop
+    if (VG_PREV_ACTIVE === voiceId) {
+      vgStopAll();
+      return;
+    }
+    // Different voice was playing → reset its button
+    if (VG_PREV_ACTIVE) {
+      var oldBtn = VG_DROP_BTNS[VG_PREV_ACTIVE];
+      if (oldBtn) { oldBtn.textContent = '▶'; oldBtn.classList.remove('is-playing'); }
+      vgStopAll();
+    }
+
+    var url = VG_PREVIEW_CACHE[voiceId];
+    if (url) {
+      vgStartPreviewPlay(voiceId, btn, url);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    (async function() {
+      try {
+        if (VG_PREVIEW_URLS[voiceId]) {
+          var pvResp = await postJsonVG('/tts/voice-preview', {
+            previewUrl: VG_PREVIEW_URLS[voiceId], voiceId: voiceId,
+          });
+          if (!pvResp.ok) throw new Error(pvResp.error || 'preview fetch failed');
+          url = BRIDGE_URL + pvResp.previewUrl;
+        } else {
+          var resp = await postJsonVG('/tts/generate', {
+            apiKey: ELEVENLABS_KEY, voiceId: voiceId,
+            modelId: 'eleven_turbo_v2_5',
+            text: 'Hello, this is a voice sample.',
+            variations: 1, filename: 'preview-' + voiceId,
+          });
+          if (!resp.ok || !resp.variations || !resp.variations[0])
+            throw new Error(resp.error || 'preview failed');
+          url = BRIDGE_URL + resp.variations[0].previewUrl;
+        }
+        VG_PREVIEW_CACHE[voiceId] = url;
+        btn.disabled = false;
+        vgStartPreviewPlay(voiceId, btn, url);
+      } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '▶';
+        VG_PREV_ACTIVE = null;
+        setStatus('Preview: ' + e.message, false);
+      }
+    })();
+  }
+
+  function vgStartPreviewPlay(voiceId, btn, url) {
+    VG_PREV_ACTIVE = voiceId;
+    btn.textContent = '⏸';
+    btn.classList.add('is-playing');
+    vgPlayUrl(url, null,
+      function() {
+        if (VG_PREV_ACTIVE === voiceId) VG_PREV_ACTIVE = null;
+        btn.textContent = '▶';
+        btn.classList.remove('is-playing');
+      },
+      function(e) {
+        if (VG_PREV_ACTIVE === voiceId) VG_PREV_ACTIVE = null;
+        btn.textContent = '▶';
+        btn.classList.remove('is-playing');
+        console.warn('[vgPreview]', e);
+      }
+    );
+  }
+
+  async function loadVoices() {
+    if (!ELEVENLABS_KEY) {
+      setStatus('Set ElevenLabs API key in Settings ⚙', false);
+      els.voiceSource.textContent = 'defaults (no key)';
+      return;
+    }
+    setStatus('Loading voices...', false);
+    try {
+      var resp = await postJsonVG('/tts/voices', { apiKey: ELEVENLABS_KEY });
+      if (!resp.ok) throw new Error(resp.error || 'load failed');
+      var userVoices = resp.voices || [];
+
+      // Rebuild VG_VOICES_DATA: user voices first, then separator, then defaults
+      var defaults = VG_VOICES_DATA.filter(function(v) { return v.isDefault; });
+      VG_VOICES_DATA = [];
+      // Also rebuild hidden select
+      var defaultSelectHtml = els.voiceSelect ? els.voiceSelect.innerHTML : '';
+      if (els.voiceSelect) els.voiceSelect.innerHTML = '';
+
+      userVoices.forEach(function(v) {
+        if (v.preview_url) VG_PREVIEW_URLS[v.voice_id] = v.preview_url;
+        var parts = [v.name];
+        if (v.labels && v.labels.gender) parts.push(v.labels.gender);
+        if (v.labels && v.labels.accent) parts.push(v.labels.accent);
+        var label = parts.join(' · ');
+        VG_VOICES_DATA.push({ voice_id: v.voice_id, label: label, preview_url: v.preview_url || '', isCustom: true });
+        if (els.voiceSelect) {
+          var opt = document.createElement('option');
+          opt.value = v.voice_id; opt.textContent = '⭐ ' + label;
+          els.voiceSelect.appendChild(opt);
+        }
+      });
+
+      if (userVoices.length > 0) {
+        VG_VOICES_DATA.push({ isSep: true });
+        if (els.voiceSelect) {
+          var sepOpt = document.createElement('option');
+          sepOpt.disabled = true; sepOpt.textContent = '── Default voices ──';
+          els.voiceSelect.appendChild(sepOpt);
+        }
+      }
+      defaults.forEach(function(v) { VG_VOICES_DATA.push(v); });
+      if (els.voiceSelect) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = defaultSelectHtml;
+        Array.prototype.forEach.call(tmp.children, function(c) { els.voiceSelect.appendChild(c); });
+      }
+
+      renderVoiceDrop();
+      voicesLoaded = true;
+
+      if (userVoices.length === 0) {
+        setStatus('✓ Key OK (TTS only) · using default voices', true);
+        els.voiceSource.textContent = 'defaults';
+      } else {
+        setStatus('✓ ' + userVoices.length + ' custom + 25 default voices', true);
+        els.voiceSource.textContent = 'custom + defaults';
+      }
+    } catch(e) {
+      console.warn('[VoiceGen] voices fetch failed (expected for TTS-only keys):', e.message);
+      setStatus('✓ Using default voices (key TTS-restricted)', true);
+      els.voiceSource.textContent = 'defaults';
+      voicesLoaded = true;
+    }
+  }
+
+  function postJsonVG(endpoint, body) {
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', BRIDGE_URL + endpoint, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = 120000;
+      xhr.onload = function() {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else reject(new Error(data.error || ('HTTP ' + xhr.status)));
+        } catch(e) { reject(new Error('Invalid response: ' + xhr.responseText.slice(0,200))); }
+      };
+      xhr.onerror = function() { reject(new Error('Bridge offline')); };
+      xhr.ontimeout = function() { reject(new Error('Bridge timeout (2 min)')); };
+      xhr.send(JSON.stringify(body));
+    });
+  }
+
+  function safeVal(el) {
+    if (!el) return '';
+    var v = el.value;
+    return (v == null) ? '' : String(v).trim();
+  }
+
+  function getTtsSettings() {
+    return {}; // eleven_v3 ignores voice_settings — always empty
+  }
+
+  async function generateMultiSpeaker(numVar, customName, outputFmt) {
+    saveCurrentSpeakerText();
+    var active = VG_SPEAKERS.filter(function(sp) {
+      return (VG_SPEAKER_TEXTS[sp.id] || '').trim();
+    });
+    if (active.length === 0) return setStatus('All speakers have empty text', false);
+
+    els.btnGenerate.disabled = true;
+    var resultCards = [];
+    try {
+      for (var i = 0; i < active.length; i++) {
+        var sp = active[i];
+        var spName = (customName || sp.voiceName) + (active.length > 1 ? ('-' + (i + 1)) : '');
+        els.btnGenerate.textContent = '⏳ ' + sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...';
+        setStatus('Generating ' + sp.voiceName + '...', false);
+        var resp = await postJsonVG('/tts/generate', {
+          apiKey: ELEVENLABS_KEY,
+          voiceId: sp.voiceId,
+          modelId: els.modelSelect.value,
+          text: VG_SPEAKER_TEXTS[sp.id],
+          filename: spName,
+          variations: numVar,
+          outputFormat: outputFmt,
+          settings: getTtsSettings(),
+          languageCode: getLangCode(),
+        });
+        if (!resp.ok) throw new Error(sp.voiceName + ': ' + (resp.error || 'failed'));
+        resultCards.push({ speaker: sp, variations: resp.variations || [] });
+      }
+      renderMultiResults(resultCards);
+      setStatus('✓ Generated ' + active.length + ' speakers', true);
+    } catch(e) {
+      setStatus('✗ ' + e.message, false);
+    } finally {
+      els.btnGenerate.disabled = false;
+      els.btnGenerate.textContent = '⚡ GENERATE VOICE';
+    }
+  }
+
+  function getLangCode() {
+    var toggle = $('vgLangOverride');
+    if (!toggle || !toggle.checked) return undefined;
+    var sel = $('vgLangSelect');
+    return (sel && sel.value) ? sel.value : undefined;
+  }
+
+  async function generate() {
+    if (!ELEVENLABS_KEY) {
+      setStatus('Set ElevenLabs API key in Settings first', false);
+      return;
+    }
+    var numVar = els.twoVariations.checked ? 2 : 1;
+    var customName = safeVal(els.filename) || undefined;
+    var outputFmt = ($('vgOutputFormat') && $('vgOutputFormat').value) || 'mp3_44100_128';
+
+    var endpoint, body, label;
+    if (currentMode === 'tts') {
+      saveCurrentSpeakerText();
+      if (VG_SPEAKERS.length > 1) {
+        return await generateMultiSpeaker(numVar, customName, outputFmt);
+      }
+      var voiceId = els.voiceSelect.value || '';
+      if (voiceId === '__custom__') voiceId = safeVal(els.customVoiceId);
+      if (!voiceId) return setStatus('Pick a voice', false);
+      var text = safeVal(els.script);
+      if (!text) return setStatus('Script is empty', false);
+      endpoint = '/tts/generate';
+      body = {
+        apiKey: ELEVENLABS_KEY, voiceId: voiceId, modelId: els.modelSelect.value,
+        text: text, filename: customName, variations: numVar,
+        outputFormat: outputFmt,
+        languageCode: getLangCode(),
+        settings: getTtsSettings(),
+      };
+      label = 'voice';
+    } else if (currentMode === 'sfx') {
+      var sfxText = safeVal($('vgSfxText'));
+      if (!sfxText) return setStatus('Sound description is empty', false);
+      endpoint = '/sfx/generate';
+      body = {
+        apiKey: ELEVENLABS_KEY, text: sfxText,
+        durationSec: parseFloat($('vgSfxDuration').value),
+        promptInfluence: parseFloat($('vgSfxInfluence').value),
+        filename: customName, variations: numVar,
+        outputFormat: ($('vgSfxOutputFormat') && $('vgSfxOutputFormat').value) || 'mp3_44100_128',
+      };
+      label = 'SFX';
+    } else if (currentMode === 'music') {
+      var prompt = safeVal($('vgMusicPrompt'));
+      if (!prompt) return setStatus('Music prompt is empty', false);
+      endpoint = '/music/generate';
+      body = {
+        apiKey: ELEVENLABS_KEY, prompt: prompt,
+        lengthSec: parseFloat($('vgMusicLength').value),
+        filename: customName, variations: numVar,
+      };
+      label = 'music';
+    }
+
+    els.btnGenerate.disabled = true;
+    els.btnGenerate.textContent = '⏳ Generating ' + numVar + ' ' + label + '...';
+    setStatus('Calling ElevenLabs...', false);
+
+    try {
+      var resp = await postJsonVG(endpoint, body);
+      if (!resp.ok) throw new Error(resp.error || 'generation failed');
+      lastVariations = resp.variations || [];
+      renderVariations();
+      els.resultSection.hidden = false;
+      els.importStatus.textContent = '';
+      els.importStatus.className = 'ac-manualStatus';
+      setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+    } catch(e) {
+      setStatus('✗ ' + e.message, false);
+    } finally {
+      els.btnGenerate.disabled = false;
+      els.btnGenerate.textContent = '⚡ GENERATE VOICE';
+    }
+  }
+
+  // Mode switcher
+  function switchMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.vg-modeBtn').forEach(function(btn) {
+      btn.classList.toggle('is-active', btn.dataset.mode === mode);
+    });
+    document.querySelectorAll('.vg-modeContent').forEach(function(c) {
+      c.hidden = c.dataset.mode !== mode;
+    });
+    // Update generate button label
+    var labels = { tts: '⚡ GENERATE VOICE', sfx: '💥 GENERATE SFX', music: '🎵 GENERATE MUSIC' };
+    els.btnGenerate.textContent = labels[mode] || labels.tts;
+  }
+
+  function renderVariations() {
+    var v1 = lastVariations[0];
+    var v2 = lastVariations[1];
+    if (v1) {
+      els.var1.style.display = '';
+      players.var1.setSrc(BRIDGE_URL + v1.previewUrl);
+      els.var1Size.textContent = (v1.sizeBytes / 1024).toFixed(0) + ' KB · ' + v1.filename;
+    } else {
+      els.var1.style.display = 'none';
+    }
+    if (v2) {
+      els.var2.style.display = '';
+      players.var2.setSrc(BRIDGE_URL + v2.previewUrl);
+      els.var2Size.textContent = (v2.sizeBytes / 1024).toFixed(0) + ' KB · ' + v2.filename;
+    } else {
+      els.var2.style.display = 'none';
+    }
+  }
+
+  function renderMultiResults(cards) {
+    var section = els.resultSection;
+    if (!section) return;
+    // Clear and rebuild result section for multi-speaker
+    section.innerHTML = '';
+    section.hidden = false;
+    cards.forEach(function(card) {
+      var header = document.createElement('div');
+      header.className = 'vg-multiSpeakerHeader';
+      header.textContent = card.speaker.voiceName;
+      header.style.borderLeftColor = card.speaker.color;
+      section.appendChild(header);
+
+      card.variations.forEach(function(v, idx) {
+        var wrap = document.createElement('div');
+        wrap.className = 'vg-variation';
+        var sizeTxt = (v.sizeBytes / 1024).toFixed(0) + ' KB · ' + v.filename;
+
+        var cardUrl = BRIDGE_URL + v.previewUrl;
+        var cardPlaying = false;
+
+        var playB = document.createElement('button');
+        playB.className = 'vg-playBtn';
+        playB.textContent = '▶';
+
+        var progWrap = document.createElement('div');
+        progWrap.className = 'vg-progressWrap';
+        var fill = document.createElement('div');
+        fill.className = 'vg-progressFill';
+        progWrap.appendChild(fill);
+
+        var timeEl = document.createElement('span');
+        timeEl.className = 'vg-time';
+        timeEl.textContent = '0:00 / ?';
+
+        function fmtTime(s) {
+          if (!isFinite(s) || s < 0) s = 0;
+          var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+          return m + ':' + (sec < 10 ? '0' : '') + sec;
+        }
+        function setCardPlaying(val) {
+          cardPlaying = val;
+          playB.textContent = val ? '⏸' : '▶';
+        }
+        playB.addEventListener('click', function() {
+          if (cardPlaying) { vgStopAll(); return; }
+          setCardPlaying(true);
+          vgPlayUrl(cardUrl,
+            function(elapsed, dur) {
+              fill.style.width = (dur > 0 ? Math.min(100, elapsed / dur * 100) : 0) + '%';
+              timeEl.textContent = fmtTime(elapsed) + ' / ' + fmtTime(dur);
+            },
+            function() { setCardPlaying(false); fill.style.width = '0%'; },
+            function(e) { setCardPlaying(false); console.warn('[VG multi player]', e); }
+          );
+        });
+
+        var playerRow = document.createElement('div');
+        playerRow.className = 'vg-player';
+        playerRow.appendChild(playB);
+        playerRow.appendChild(progWrap);
+        playerRow.appendChild(timeEl);
+
+        var sizeEl = document.createElement('div');
+        sizeEl.className = 'vg-varSize';
+        sizeEl.textContent = (idx === 0 ? 'Var 1: ' : 'Var 2: ') + sizeTxt;
+
+        var importB = document.createElement('button');
+        importB.className = 'ac-secondaryButton vg-actionButton';
+        importB.textContent = '📥 Import';
+        importB.addEventListener('click', function() { importVariation(v); });
+        var revealB = document.createElement('button');
+        revealB.className = 'ac-secondaryButton vg-actionButton';
+        revealB.textContent = '📁 Finder';
+        revealB.addEventListener('click', function() { revealVariation(v); });
+
+        var actionsRow = document.createElement('div');
+        actionsRow.className = 'vg-resultActions';
+        actionsRow.appendChild(importB);
+        actionsRow.appendChild(revealB);
+
+        wrap.appendChild(sizeEl);
+        wrap.appendChild(playerRow);
+        wrap.appendChild(actionsRow);
+        section.appendChild(wrap);
+      });
+    });
+
+    var statusEl = document.createElement('div');
+    statusEl.id = 'vgImportStatus';
+    statusEl.className = 'ac-manualStatus';
+    section.appendChild(statusEl);
+    // Re-point els.importStatus to the new element
+    els.importStatus = statusEl;
+  }
+
+  // Import workflow: temp file → move to user's chosen folder → import to Premiere
+  async function importVariation(variation) {
+    if (!variation) return;
+    els.importStatus.className = 'ac-manualStatus';
+
+    var finalPath = variation.audioPath;
+
+    // Step 1: if user picked a custom folder, move file there
+    if (customOutputFolder) {
+      els.importStatus.textContent = 'Moving to ' + customOutputFolder + '...';
+      try {
+        var moveResp = await postJsonVG('/tts/move', {
+          sourcePath: variation.audioPath,
+          targetDir:  customOutputFolder,
+        });
+        if (!moveResp.ok) throw new Error(moveResp.error || 'move failed');
+        finalPath = moveResp.targetPath;
+      } catch(e) {
+        els.importStatus.className = 'ac-manualStatus is-err';
+        els.importStatus.textContent = '✗ Move failed: ' + e.message;
+        return;
+      }
+    }
+
+    // Step 2: import into Premiere project
+    els.importStatus.textContent = 'Importing ' + variation.filename + ' to Premiere...';
+    try {
+      if (!ppro || !ppro.Project) throw new Error('Premiere API unavailable');
+      var project = await getActiveProject();
+      if (typeof project.importFiles === 'function') {
+        await project.importFiles([finalPath]);
+      } else if (typeof project.importFile === 'function') {
+        await project.importFile(finalPath);
+      } else {
+        throw new Error('No importFiles API on project');
+      }
+      els.importStatus.className = 'ac-manualStatus is-ok';
+      els.importStatus.textContent = '✓ Saved to ' + (customOutputFolder || 'temp folder') +
+        ', imported "' + variation.filename + '" → see Project Panel';
+    } catch(e) {
+      els.importStatus.className = 'ac-manualStatus is-err';
+      els.importStatus.textContent = '✗ Import: ' + e.message;
+    }
+  }
+
+  async function revealVariation(variation) {
+    if (!variation || !variation.audioPath) return;
+    try {
+      var resp = await postJsonVG('/tts/reveal', { filePath: variation.audioPath });
+      if (!resp.ok) throw new Error(resp.error || 'reveal failed');
+    } catch(e) {
+      alert('File: ' + variation.audioPath + '\n' + e.message);
+    }
+  }
+
+  async function pickOutputFolder() {
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (!uxp || !uxp.storage) {
+        alert('UXP storage API not available');
+        return;
+      }
+      var lfs = uxp.storage.localFileSystem;
+      var folder = await lfs.getFolder();
+      if (!folder) return; // cancelled
+      customOutputFolder = folder.nativePath || folder.path || '';
+      els.outputFolder.value = customOutputFolder;
+      console.log('[VoiceGen] output folder picked:', customOutputFolder);
+    } catch(e) {
+      alert('Cannot pick folder: ' + e.message);
+    }
+  }
+
+  function resetOutputFolder() {
+    customOutputFolder = '';
+    els.outputFolder.value = '';
+  }
+
+  async function useVariationAndGoToAutocut(variation) {
+    await importVariation(variation);
+    setTimeout(function() {
+      var autocutBtn = document.querySelector('.tab-btn[data-tab="autocut"]');
+      if (autocutBtn) autocutBtn.click();
+    }, 400);
+  }
+
+  // Wire events
+  els.btnRefresh.addEventListener('click', loadVoices);
+  els.voiceSelect.addEventListener('change', function() {
+    els.customVoiceId.hidden = els.voiceSelect.value !== '__custom__';
+    if (!els.customVoiceId.hidden) els.customVoiceId.focus();
+    // Keep active speaker's voice in sync
+    saveCurrentSpeakerText();
+    renderSpeakerBar();
+  });
+  els.btnGenerate.addEventListener('click', generate);
+  if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
+  if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
+
+  // Variation 1 buttons
+  if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
+  if (els.var1Reveal) els.var1Reveal.addEventListener('click', function() { revealVariation(lastVariations[0]); });
+  if (els.var1Use)    els.var1Use.addEventListener('click',    function() { useVariationAndGoToAutocut(lastVariations[0]); });
+  // Variation 2 buttons
+  if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
+  if (els.var2Reveal) els.var2Reveal.addEventListener('click', function() { revealVariation(lastVariations[1]); });
+  if (els.var2Use)    els.var2Use.addEventListener('click',    function() { useVariationAndGoToAutocut(lastVariations[1]); });
+
+  if (els.script) els.script.addEventListener('input', updateCharCount);
+
+  // Language Override toggle
+  var langToggle = $('vgLangOverride');
+  if (langToggle) langToggle.addEventListener('change', function() {
+    var sel = $('vgLangSelect');
+    if (sel) sel.hidden = !langToggle.checked;
+  });
+
+  // Add Speaker button
+  var addSpeakerBtn = $('vgAddSpeaker');
+  if (addSpeakerBtn) addSpeakerBtn.addEventListener('click', addSpeaker);
+
+  // Expose voice list so Claude chat can inject it into prompts
+  window.VoiceGenGetVoices = function() {
+    return VG_VOICES_DATA.slice(); // return a copy
+  };
+
+  // ── ElevenLabs API Key Profiles ──────────────────────────────────────────
+  var vgProfileSelect    = $('vgProfileSelect');
+  var vgProfileName      = $('vgProfileName');
+  var vgElKeyInput       = $('vgElKeyInput');
+  var vgElStatus         = $('vgElStatus');
+  var vgSaveKeyBtn       = $('vgSaveKey');
+  var vgAddProfileBtn    = $('vgAddProfile');
+  var vgDeleteProfileBtn = $('vgDeleteProfile');
+
+  function vgPersistProfiles() {
+    var stored = {};
+    try { stored = JSON.parse(localStorage.getItem('claude-plugin-settings') || '{}'); } catch(e) {}
+    stored.elevenlabsProfiles        = EL_PROFILES;
+    stored.elevenlabsActiveProfileId = EL_ACTIVE_PROFILE_ID;
+    stored.elevenlabsKey             = ELEVENLABS_KEY;
+    localStorage.setItem('claude-plugin-settings', JSON.stringify(stored));
+    persistSettingsToFile(stored);
+  }
+
+  function updateVgElStatus() {
+    if (!vgElStatus) return;
+    if (ELEVENLABS_KEY && ELEVENLABS_KEY.length > 8) {
+      var k = ELEVENLABS_KEY;
+      vgElStatus.textContent = k.slice(0, 5) + '…' + k.slice(-4);
+      vgElStatus.classList.add('is-api');
+    } else {
+      vgElStatus.textContent = 'not set';
+      vgElStatus.classList.remove('is-api');
+    }
+  }
+
+  function vgLoadProfileFields() {
+    var active = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+    if (vgProfileName) vgProfileName.value = active ? active.name : '';
+    if (vgElKeyInput)  vgElKeyInput.value  = active ? active.key  : '';
+    updateVgElStatus();
+  }
+
+  function vgRenderProfiles() {
+    if (!vgProfileSelect) return;
+    vgProfileSelect.innerHTML = '';
+    if (!EL_PROFILES.length) {
+      var emptyOpt = document.createElement('option');
+      emptyOpt.value = '';
+      emptyOpt.textContent = '— no profiles —';
+      vgProfileSelect.appendChild(emptyOpt);
+    } else {
+      EL_PROFILES.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name + (p.key ? '' : ' (no key)');
+        if (p.id === EL_ACTIVE_PROFILE_ID) opt.selected = true;
+        vgProfileSelect.appendChild(opt);
+      });
+    }
+    vgLoadProfileFields();
+  }
+
+  // Switch active profile when dropdown changes
+  if (vgProfileSelect) {
+    vgProfileSelect.addEventListener('change', function() {
+      var selId = vgProfileSelect.value;
+      if (!selId) return;
+      EL_ACTIVE_PROFILE_ID = selId;
+      var p = EL_PROFILES.find(function(p) { return p.id === selId; });
+      if (p) {
+        ELEVENLABS_KEY = p.key;
+        voicesLoaded = false;
+        vgPersistProfiles();
+        vgLoadProfileFields();
+        if (ELEVENLABS_KEY) loadVoices();
+        else setStatus('Add an API key to this profile', false);
+      }
+    });
+  }
+
+  // Add new blank profile
+  if (vgAddProfileBtn) {
+    vgAddProfileBtn.addEventListener('click', function() {
+      var newId = 'p_' + Date.now();
+      EL_PROFILES.push({ id: newId, name: 'New Profile', key: '' });
+      EL_ACTIVE_PROFILE_ID = newId;
+      vgRenderProfiles();
+      if (vgProfileName) {
+        try { vgProfileName.focus(); vgProfileName.select(); } catch(e) {}
+      }
+    });
+  }
+
+  // Save (create or update) active profile
+  if (vgSaveKeyBtn) {
+    vgSaveKeyBtn.addEventListener('click', function() {
+      var name = (vgProfileName ? (vgProfileName.value || '') : '').trim() || 'Profile';
+      var key  = (vgElKeyInput  ? (vgElKeyInput.value  || '') : '').trim();
+      if (!EL_ACTIVE_PROFILE_ID || !EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; })) {
+        var newId = 'p_' + Date.now();
+        EL_PROFILES.push({ id: newId, name: name, key: key });
+        EL_ACTIVE_PROFILE_ID = newId;
+      } else {
+        var idx = EL_PROFILES.findIndex(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+        if (idx >= 0) { EL_PROFILES[idx].name = name; EL_PROFILES[idx].key = key; }
+      }
+      ELEVENLABS_KEY = key;
+      vgPersistProfiles();
+      vgRenderProfiles();
+      if (key) {
+        voicesLoaded = false;
+        loadVoices();
+      } else {
+        setStatus('ElevenLabs API key required', false);
+      }
+    });
+  }
+
+  // Delete active profile
+  if (vgDeleteProfileBtn) {
+    vgDeleteProfileBtn.addEventListener('click', function() {
+      if (!EL_ACTIVE_PROFILE_ID) return;
+      EL_PROFILES = EL_PROFILES.filter(function(p) { return p.id !== EL_ACTIVE_PROFILE_ID; });
+      EL_ACTIVE_PROFILE_ID = EL_PROFILES.length ? EL_PROFILES[0].id : null;
+      ELEVENLABS_KEY = '';
+      if (EL_ACTIVE_PROFILE_ID) {
+        var ap = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+        if (ap) ELEVENLABS_KEY = ap.key;
+      }
+      vgPersistProfiles();
+      vgRenderProfiles();
+      voicesLoaded = false;
+      if (ELEVENLABS_KEY) loadVoices();
+      else setStatus('Set ElevenLabs API key in a profile', false);
+    });
+  }
+
+  vgRenderProfiles();
+
+  // Auto-refresh when key changes (called from Settings save handler)
+  window.VoiceGenOnKeyChange = function() {
+    console.log('[VoiceGen] key changed, ELEVENLABS_KEY len=' + (ELEVENLABS_KEY || '').length);
+    voicesLoaded = false;
+    vgRenderProfiles();
+    if (ELEVENLABS_KEY) loadVoices();
+    else setStatus('Set ElevenLabs API key above ↑', false);
+  };
+
+  // ── Cross-tab: Claude chat can push script/SFX to Voice Gen ───────────────
+  window.VoiceGenPushScript = function(text, voiceId, autoGenerate) {
+    // Switch to Voice Gen tab
+    var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
+    if (vgBtn) vgBtn.click();
+    // Switch to TTS mode
+    switchMode('tts');
+    // Set script text
+    if (els.script) {
+      els.script.value = text || '';
+      updateCharCount();
+    }
+    // Set voice if provided
+    if (voiceId) {
+      vgSetVoice(voiceId);
+      // sync active speaker
+      var sp = VG_SPEAKERS.find(function(s) { return s.id === VG_ACTIVE_SPEAKER; });
+      if (sp) sp.voiceId = voiceId;
+      renderSpeakerBar();
+    }
+    // Auto-generate or focus generate button
+    if (autoGenerate) {
+      setTimeout(function() { generate(); }, 200);
+    } else {
+      setTimeout(function() {
+        if (els.btnGenerate) { try { els.btnGenerate.focus(); } catch(e) {} }
+      }, 100);
+    }
+  };
+
+  window.VoiceGenPushSFX = function(text, autoGenerate) {
+    // Switch to Voice Gen tab
+    var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
+    if (vgBtn) vgBtn.click();
+    // Switch to SFX mode
+    switchMode('sfx');
+    // Set SFX text
+    var sfxEl = $('vgSfxText');
+    if (sfxEl) {
+      sfxEl.value = text || '';
+      var cnt = $('vgSfxCharCount');
+      if (cnt) cnt.textContent = (text || '').length + ' / 500';
+    }
+    if (autoGenerate) {
+      setTimeout(function() { generate(); }, 200);
+    } else {
+      setTimeout(function() {
+        if (els.btnGenerate) { try { els.btnGenerate.focus(); } catch(e) {} }
+      }, 100);
+    }
+  };
+
+  // Wire mode buttons
+  document.querySelectorAll('.vg-modeBtn').forEach(function(btn) {
+    btn.addEventListener('click', function() { switchMode(btn.dataset.mode); });
+  });
+
+  // Hook a number input — set initial value, clamp to min/max, sync label,
+  // and inject custom ±  buttons (UXP Chromium doesn't render native spinners).
+  function hookSlider(inputId, labelId, defaultVal, formatter) {
+    var s = $(inputId), v = $(labelId);
+    if (!s) return;
+
+    // Read constraints from element attributes
+    var minV = (s.min !== '' && s.min != null) ? parseFloat(s.min) : -Infinity;
+    var maxV = (s.max !== '' && s.max != null) ? parseFloat(s.max) : Infinity;
+    var stepV = (s.step && s.step !== '' && s.step !== 'any') ? parseFloat(s.step) : 1;
+    var precision = (String(stepV).split('.')[1] || '').length; // decimal places of step
+
+    function clamp(n) {
+      if (isNaN(n)) return defaultVal;
+      if (minV !== -Infinity) n = Math.max(minV, n);
+      if (maxV !== Infinity)  n = Math.min(maxV, n);
+      return parseFloat(n.toFixed(precision));
+    }
+
+    s.value = String(defaultVal);
+
+    function update() {
+      var n = clamp(parseFloat(s.value));
+      s.value = String(n);
+      if (v) v.textContent = formatter(n);
+    }
+
+    s.addEventListener('input',  update);
+    s.addEventListener('change', update);
+    s.addEventListener('blur',   update);
+
+    // Mouse-wheel: scroll while focused — clamp to bounds
+    s.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var n = clamp(parseFloat(s.value) || defaultVal);
+      n = clamp(e.deltaY < 0 ? n + stepV : n - stepV);
+      s.value = String(n);
+      if (v) v.textContent = formatter(n);
+    });
+
+    // Custom ± buttons — UXP Chromium omits native input[type=number] spinners
+    var numRow = s.parentElement;
+    if (numRow && numRow.classList.contains('vg-numRow')) {
+      var btnMinus = document.createElement('button');
+      btnMinus.type = 'button';
+      btnMinus.className = 'vg-stepBtn';
+      btnMinus.textContent = '−';
+      btnMinus.addEventListener('click', function() {
+        s.value = String(clamp((parseFloat(s.value) || defaultVal) - stepV));
+        update();
+      });
+
+      var btnPlus = document.createElement('button');
+      btnPlus.type = 'button';
+      btnPlus.className = 'vg-stepBtn';
+      btnPlus.textContent = '+';
+      btnPlus.addEventListener('click', function() {
+        s.value = String(clamp((parseFloat(s.value) || defaultVal) + stepV));
+        update();
+      });
+
+      numRow.insertBefore(btnMinus, s);
+      var nextSib = s.nextSibling; // vg-nu label or null
+      if (nextSib) numRow.insertBefore(btnPlus, nextSib);
+      else         numRow.appendChild(btnPlus);
+    }
+
+    update();
+  }
+
+  // SFX sliders
+  hookSlider('vgSfxDuration',  'vgSfxDurationValue',  3,   function(n){ return n.toFixed(1) + 's'; });
+  hookSlider('vgSfxInfluence', 'vgSfxInfluenceValue', 0.3, function(n){ return n.toFixed(2); });
+  // Music slider
+  hookSlider('vgMusicLength',  'vgMusicLengthValue',  10,  function(n){ return Math.round(n) + 's'; });
+
+  // SFX char count
+  var sfxText = $('vgSfxText');
+  if (sfxText) sfxText.addEventListener('input', function() {
+    $('vgSfxCharCount').textContent = safeLen(sfxText) + ' / 500';
+  });
+
+  // Music char count
+  var musicPrompt = $('vgMusicPrompt');
+  if (musicPrompt) musicPrompt.addEventListener('input', function() {
+    $('vgMusicCharCount').textContent = safeLen(musicPrompt) + ' / 1000';
+  });
+
+  // Wire setKeyboardFocus for all VoiceGen text inputs (prevent Premiere shortcut conflicts)
+  [$('vgScript'), sfxText, musicPrompt, $('vgProfileName'), $('vgElKeyInput'), $('vgCustomVoiceId'),
+   $('vgFilename'), $('vgOutputFolder')].forEach(function(el) {
+    if (!el) return;
+    el.addEventListener('focus', window.claimKeyboard);
+    el.addEventListener('blur',  window.releaseKeyboard);
+  });
+
+  // ── Voice dropdown init ──────────────────────────────────────────────────
+  // Seed VG_VOICES_DATA from the static default <option> elements
+  (function() {
+    var opts = els.voiceSelect ? els.voiceSelect.options : [];
+    for (var i = 0; i < opts.length; i++) {
+      var o = opts[i];
+      if (!o.value || o.disabled) continue;
+      VG_VOICES_DATA.push({ voice_id: o.value, label: o.textContent, preview_url: '', isDefault: true });
+    }
+  })();
+
+  // Portal the dropdown panel to #tab-voicegen (position:relative) so it escapes
+  // .vg-right's overflow:auto without needing position:fixed (unsupported in UXP).
+  // DOM order: appended last → paints on top of siblings per UXP paint rules.
+  var vgDropPanel = $('vgVoiceDropPanel');
+  var vgTabPanel  = document.getElementById('tab-voicegen');
+  if (vgDropPanel) (vgTabPanel || document.body).appendChild(vgDropPanel);
+
+  // Wire dropdown trigger
+  var dropTrigger = $('vgVoiceDropTrigger');
+  if (dropTrigger) dropTrigger.addEventListener('click', function() {
+    var panel = $('vgVoiceDropPanel');
+    if (panel && panel.style.display === 'flex') closeVoiceDrop(); else openVoiceDrop();
+  });
+
+  // Close on outside click — must check BOTH the trigger container AND the portaled panel
+  document.addEventListener('click', function(e) {
+    var drop  = $('vgVoiceDrop');
+    var panel = $('vgVoiceDropPanel');
+    var inDrop  = drop  && drop.contains(e.target);
+    var inPanel = panel && panel.contains(e.target);
+    if (!inDrop && !inPanel) closeVoiceDrop();
+  });
+
+  // Init — each step in its own try so one failure doesn't stop the rest
+  console.log('[VoiceGen] init v4.1.0, ELEVENLABS_KEY present:', !!ELEVENLABS_KEY,
+              '| length:', (ELEVENLABS_KEY || '').length);
+  try { updateCharCount(); }        catch(e) { console.warn('[VG] updateCharCount:', e.message); }
+  try { players.var1 = createPlayer('var1'); } catch(e) { console.error('[VG] createPlayer var1:', e.message); }
+  try { players.var2 = createPlayer('var2'); } catch(e) { console.error('[VG] createPlayer var2:', e.message); }
+  try { renderSpeakerBar(); } catch(e) { console.warn('[VG] renderSpeakerBar:', e.message); }
+  try { renderVoiceDrop(); }  catch(e) { console.warn('[VG] renderVoiceDrop:', e.message); }
+  if (ELEVENLABS_KEY) {
+    try { loadVoices(); } catch(e) { console.warn('[VG] loadVoices:', e.message); }
+  } else {
+    setStatus('Set ElevenLabs API key in Settings ⚙', false);
+  }
+})();
