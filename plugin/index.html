@@ -41,47 +41,53 @@
     <div id="context-content"></div>
   </div>
 
-  <!-- Chat area -->
-  <div id="chat-area">
-    <div id="empty-state">
-      <div class="logo">&#10022;</div>
-      <p>Ask Claude to help with your<br>Premiere Pro project.</p>
-      <p class="sub">Edit timeline &middot; Add subtitles &middot; Apply effects</p>
-    </div>
-  </div>
+  <!-- Bounded content wrapper: clips chat+input to panel bounds even
+       when #tab-claude has overflow:visible for the settings popup -->
+  <div id="claude-content">
 
-  <!-- Input area -->
-  <div id="input-area">
-
-    <!-- Chips row — only visible when an image is attached -->
-    <div id="chips-row" hidden>
-      <div id="dropzone-chips" class="dropzone-chips"></div>
-    </div>
-
-    <!-- Main row: textarea + attach + send -->
-    <div id="input-row">
-      <textarea
-        id="message-input"
-        placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
-        rows="3"
-      ></textarea>
-      <div id="input-side">
-        <button id="attach-btn" class="icon-btn">&#128206;</button>
-        <button id="send-btn">Send</button>
+    <!-- Chat area -->
+    <div id="chat-area">
+      <div id="empty-state">
+        <div class="logo">&#10022;</div>
+        <p>Ask Claude to help with your<br>Premiere Pro project.</p>
+        <p class="sub">Edit timeline &middot; Add subtitles &middot; Apply effects</p>
       </div>
     </div>
 
-    <div id="quick-actions">
-      <button class="quick-btn" data-prompt="Parse this cutsheet image into a cutlist action.">Parse cutsheet</button>
-      <!-- custom shortcuts rendered here by JS -->
-      <button class="quick-add-btn" id="add-shortcut-btn">+</button>
+    <!-- Input area -->
+    <div id="input-area">
+
+      <!-- Chips row — only visible when an image is attached -->
+      <div id="chips-row" hidden>
+        <div id="dropzone-chips" class="dropzone-chips"></div>
+      </div>
+
+      <!-- Main row: textarea + attach + send -->
+      <div id="input-row">
+        <textarea
+          id="message-input"
+          placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
+          rows="3"
+        ></textarea>
+        <div id="input-side">
+          <button id="attach-btn" class="icon-btn">&#128206;</button>
+          <button id="send-btn">Send</button>
+        </div>
+      </div>
+
+      <div id="quick-actions">
+        <button class="quick-btn" data-prompt="Parse this cutsheet image into a cutlist action.">Parse cutsheet</button>
+        <!-- custom shortcuts rendered here by JS -->
+        <button class="quick-add-btn" id="add-shortcut-btn">+</button>
+      </div>
+
+      <!-- Hidden dropzone: DOM anchor for drag-drop + paste events (no visible UI) -->
+      <div id="dropzone" tabindex="-1" aria-hidden="true" style="display:none;"></div>
     </div>
 
-    <!-- Hidden dropzone: DOM anchor for drag-drop + paste events (no visible UI) -->
-    <div id="dropzone" tabindex="-1" aria-hidden="true" style="display:none;"></div>
-  </div>
+  </div><!-- /claude-content -->
 
-  <!-- Settings popup — portaled to body by JS, anchored below ⚙ button -->
+  <!-- Settings popup — positioned absolute within #tab-claude -->
   <div id="settings-modal">
     <div id="settings-box">
       <div class="settings-header">
