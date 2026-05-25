@@ -1687,16 +1687,12 @@ body {
 .vg-left {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;     /* allow proper shrink so overflow-y: auto actually scrolls */
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;   /* UXP: scroll must be on inner child, not flex container */
   padding: 10px 10px 14px;
-  scrollbar-width: thin;
 }
-.vg-left::-webkit-scrollbar { width: 5px; }
-.vg-left::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
 /* ── Speaker bar ── */
 .vg-speakerBar {
@@ -1817,8 +1813,17 @@ body {
 .vg-genButton:hover { background: #9333ea; }
 .vg-genButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Results ── */
-.vg-results { margin-top: 10px; }
+/* ── Results — inner scroll so it never overflows .vg-left ── */
+.vg-results {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: 10px;
+  scrollbar-width: thin;
+}
+.vg-results::-webkit-scrollbar { width: 4px; }
+.vg-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 .vg-variation {
   background: rgba(255,255,255,0.025);
   border: 1px solid var(--border);
