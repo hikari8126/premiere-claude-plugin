@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.18';
+var PLUGIN_VERSION = 'v4.1.19';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -629,11 +629,12 @@ async function refreshTimeline() {
 // ── Send message ───────────────────────────────────────────────────────────
 
 function sendMessage() {
-  var content = (msgInput.textContent || '').trim();
+  var content = (msgInput.value == null ? '' : String(msgInput.value)).trim();
   // Allow send if EITHER text OR images present
   if ((!content && attachedImages.length === 0) || isStreaming) return;
 
-  msgInput.innerHTML = '';  // clear contenteditable (innerHTML removes stray <br> too)
+  msgInput.value = '';
+  autoResize();
   isStreaming = true;
   sendBtn.disabled = true;
   emptyState.style.display = 'none';
@@ -983,9 +984,14 @@ function esc(str) {
   });
 })();
 
-// ── div[contenteditable] auto-expands via CSS (min/max-height + overflow-y) ──
-// No JS resize needed — just wire up keyboard / input handlers.
+// ── Auto-resize textarea ───────────────────────────────────────────────────
 
+function autoResize() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px';
+}
+
+msgInput.addEventListener('input', autoResize);
 msgInput.addEventListener('focus', window.claimKeyboard);
 msgInput.addEventListener('blur',  window.releaseKeyboard);
 msgInput.addEventListener('keydown', function(e) {
@@ -998,7 +1004,8 @@ sendBtn.addEventListener('click', sendMessage);
 // Built-in "Parse cutsheet" button
 document.querySelectorAll('.quick-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    msgInput.textContent = btn.dataset.prompt;
+    msgInput.value = btn.dataset.prompt;
+    autoResize();
     msgInput.focus();
   });
 });
@@ -1025,7 +1032,8 @@ function renderShortcuts() {
     btn.dataset.promptFull = sc.prompt; // stored for reference, no title (UXP tooltip renders wrong)
     btn.dataset.prompt = sc.prompt;
     btn.addEventListener('click', function() {
-      msgInput.textContent = sc.prompt;
+      msgInput.value = sc.prompt;
+      autoResize();
       msgInput.focus();
     });
     // Long-press / right-click to delete
@@ -1047,6 +1055,9 @@ function closeShortcutPopup() {
   if (_scPopup && _scPopup.parentNode) _scPopup.parentNode.removeChild(_scPopup);
   _scPopup = null;
   document.removeEventListener('click', _scOutsideHandler, true);
+  // Restore the textarea row
+  var inputRow = document.getElementById('input-row');
+  if (inputRow) inputRow.style.display = '';
 }
 function _scOutsideHandler(e) {
   if (_scPopup && !_scPopup.contains(e.target) && e.target.id !== 'add-shortcut-btn') {
@@ -1055,7 +1066,16 @@ function _scOutsideHandler(e) {
 }
 function showAddShortcutPopup() {
   if (_scPopup) { closeShortcutPopup(); return; }
-  var triggerBtn = document.getElementById('add-shortcut-btn');
+  var triggerBtn  = document.getElementById('add-shortcut-btn');
+  var quickActions = document.getElementById('quick-actions');
+  var inputRow    = document.getElementById('input-row');
+
+  // ── Hide the main textarea while popup is open ─────────────────────────
+  // Native <textarea> in UXP/Chromium renders in a higher compositor layer
+  // and always paints above any absolutely-positioned element.
+  // Hiding #input-row eliminates the overlap completely.
+  if (inputRow) inputRow.style.display = 'none';
+
   var popup = document.createElement('div');
   popup.className = 'shortcut-popup';
   _scPopup = popup;
@@ -1069,39 +1089,27 @@ function showAddShortcutPopup() {
       '<button class="sp-save">Save</button>' +
     '</div>';
 
-  // Append to #tab-claude — position:relative + overflow:visible.
-  // The popup must live OUTSIDE #claude-content (overflow:hidden) so it isn't clipped.
+  // Append to #tab-claude (position:relative, overflow:visible) so the popup
+  // isn't clipped by #claude-content (overflow:hidden).
   var container = document.getElementById('tab-claude') || document.body;
   container.appendChild(popup);
 
-  // ── Positioning strategy ───────────────────────────────────────────────
-  // Native <textarea> elements in UXP (Chromium) render in a higher compositor
-  // layer and always paint above absolutely-positioned elements regardless of
-  // DOM order.  The only reliable fix is to keep the popup ENTIRELY above the
-  // #input-area so it never overlaps the main message textarea.
-  //
-  // Anchor: popup BOTTOM = top of #input-area − 6 px gap.
-  // This places the popup inside the chat region where there are no native controls.
-  var inputArea = document.getElementById('input-area');
-  var contRect  = container.getBoundingClientRect();
-  var pw        = Math.min(220, (contRect.width || 240) - 8);
-  var popH      = 178; // title + label input + prompt textarea + actions row
-
+  // ── Position: left-aligned, bottom just above #quick-actions ──────────
+  // Measure after appending so the browser knows the popup dimensions.
+  var contRect = container.getBoundingClientRect();
+  var pw       = Math.min(220, (contRect.width || 240) - 16);
   popup.style.width = pw + 'px';
 
-  // Horizontal: LEFT-aligned with 8 px gap from panel edge
+  // Horizontal: 8 px from panel left edge
   popup.style.left = '8px';
 
-  // Vertical: bottom of popup sits above #input-area top with a comfortable gap
-  if (inputArea) {
-    var inputRect   = inputArea.getBoundingClientRect();
-    var inputTopRel = inputRect.top - contRect.top; // relative to #tab-claude
-    var top = inputTopRel - popH - 14; // 14 px gap above the input area
-    if (top < 4) top = 4;
-    popup.style.top = top + 'px';
-  } else if (triggerBtn) {
-    var r   = triggerBtn.getBoundingClientRect();
-    var top = (r.top - contRect.top) - popH - 14;
+  // Vertical: anchor popup bottom to quick-actions top, 8 px gap
+  var anchor = quickActions || triggerBtn;
+  if (anchor) {
+    var anchorRect  = anchor.getBoundingClientRect();
+    var anchorTopRel = anchorRect.top - contRect.top; // relative to #tab-claude
+    var popH = popup.offsetHeight || 178;
+    var top  = anchorTopRel - popH - 8;
     if (top < 4) top = 4;
     popup.style.top = top + 'px';
   }
