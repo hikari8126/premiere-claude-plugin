@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.17';
+var PLUGIN_VERSION = 'v4.1.18';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -629,12 +629,11 @@ async function refreshTimeline() {
 // ── Send message ───────────────────────────────────────────────────────────
 
 function sendMessage() {
-  var content = (msgInput.value == null ? '' : String(msgInput.value)).trim();
+  var content = (msgInput.textContent || '').trim();
   // Allow send if EITHER text OR images present
   if ((!content && attachedImages.length === 0) || isStreaming) return;
 
-  msgInput.value = '';
-  autoResize();
+  msgInput.innerHTML = '';  // clear contenteditable (innerHTML removes stray <br> too)
   isStreaming = true;
   sendBtn.disabled = true;
   emptyState.style.display = 'none';
@@ -984,14 +983,9 @@ function esc(str) {
   });
 })();
 
-// ── Auto-resize textarea ───────────────────────────────────────────────────
+// ── div[contenteditable] auto-expands via CSS (min/max-height + overflow-y) ──
+// No JS resize needed — just wire up keyboard / input handlers.
 
-function autoResize() {
-  msgInput.style.height = 'auto';
-  msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px'; // match CSS max-height
-}
-
-msgInput.addEventListener('input', autoResize);
 msgInput.addEventListener('focus', window.claimKeyboard);
 msgInput.addEventListener('blur',  window.releaseKeyboard);
 msgInput.addEventListener('keydown', function(e) {
@@ -1004,8 +998,7 @@ sendBtn.addEventListener('click', sendMessage);
 // Built-in "Parse cutsheet" button
 document.querySelectorAll('.quick-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    msgInput.value = btn.dataset.prompt;
-    autoResize();
+    msgInput.textContent = btn.dataset.prompt;
     msgInput.focus();
   });
 });
@@ -1032,8 +1025,7 @@ function renderShortcuts() {
     btn.dataset.promptFull = sc.prompt; // stored for reference, no title (UXP tooltip renders wrong)
     btn.dataset.prompt = sc.prompt;
     btn.addEventListener('click', function() {
-      msgInput.value = sc.prompt;
-      autoResize();
+      msgInput.textContent = sc.prompt;
       msgInput.focus();
     });
     // Long-press / right-click to delete
@@ -1097,22 +1089,19 @@ function showAddShortcutPopup() {
 
   popup.style.width = pw + 'px';
 
-  // Horizontal: right-aligned to the panel, 4 px from the right edge
-  var left = (contRect.width || 240) - pw - 4;
-  if (left < 4) left = 4;
-  popup.style.left = left + 'px';
+  // Horizontal: LEFT-aligned with 8 px gap from panel edge
+  popup.style.left = '8px';
 
-  // Vertical: bottom of popup sits just above top of #input-area
+  // Vertical: bottom of popup sits above #input-area top with a comfortable gap
   if (inputArea) {
     var inputRect   = inputArea.getBoundingClientRect();
     var inputTopRel = inputRect.top - contRect.top; // relative to #tab-claude
-    var top = inputTopRel - popH - 6;
-    if (top < 4) top = 4; // emergency clamp — panel is very short
+    var top = inputTopRel - popH - 14; // 14 px gap above the input area
+    if (top < 4) top = 4;
     popup.style.top = top + 'px';
   } else if (triggerBtn) {
-    // Fallback if inputArea not found
     var r   = triggerBtn.getBoundingClientRect();
-    var top = (r.top - contRect.top) - popH - 6;
+    var top = (r.top - contRect.top) - popH - 14;
     if (top < 4) top = 4;
     popup.style.top = top + 'px';
   }
