@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version          = "2.2"
+    let version          = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.x"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
