@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version          = "4.1.1"
+    let version          = "4.1.2"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
