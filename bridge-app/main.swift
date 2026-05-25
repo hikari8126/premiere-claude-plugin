@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version          = "4.1.2"
+    let version          = "2.0"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
@@ -30,6 +30,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         setupMenuBar()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false  // Log window closing must NOT quit the app
     }
 
     func applicationWillTerminate(_ n: Notification) {
@@ -329,11 +333,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let dir = (launchAgentPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         plist.write(toFile: launchAgentPath, atomically: true)
-
-        let t = Process()
-        t.launchPath = "/bin/launchctl"
-        t.arguments  = ["load", launchAgentPath]
-        try? t.run(); t.waitUntilExit()
+        // Do NOT call launchctl load here — that would start a second instance immediately.
+        // LaunchAgents in ~/Library/LaunchAgents/ are picked up automatically on next login.
+        log("LaunchAgent installed — will auto-start on next login")
     }
 
     func removeLaunchAgent() {
