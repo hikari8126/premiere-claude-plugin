@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version          = "2.0"
+    let version          = "2.1"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
@@ -292,12 +292,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 name: NSWindow.willCloseNotification, object: win)
         }
         logWindow?.makeKeyAndOrderFront(nil)
+        // Switch to .regular so the window gets keyboard focus,
+        // then restore .accessory when it closes — prevents auto-quit on close
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func logWindowClosed() {
         logWindow   = nil
         logTextView = nil
+        // CRITICAL: restore menubar-only mode — otherwise macOS quits the app
+        // when it sees no remaining windows in .regular mode
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: ─── Auto-start (LaunchAgent) ────────────────────────────────────
@@ -403,8 +409,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         a.alertStyle = .informational
         a.addButton(withTitle: "Tải về")
         a.addButton(withTitle: "Để sau")
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        if a.runModal() == .alertFirstButtonReturn, let u = URL(string: url) {
+        let result = a.runModal()
+        NSApp.setActivationPolicy(.accessory)
+        if result == .alertFirstButtonReturn, let u = URL(string: url) {
             NSWorkspace.shared.open(u)
         }
     }
@@ -415,8 +424,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         a.informativeText = "Claude Bridge v\(version) là bản mới nhất."
         a.alertStyle      = .informational
         a.addButton(withTitle: "OK")
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         a.runModal()
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: ─── Quit ────────────────────────────────────────────────────────
