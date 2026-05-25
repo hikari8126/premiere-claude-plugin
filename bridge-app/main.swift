@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version          = "2.1"
+    let version          = "2.2"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
@@ -372,17 +372,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
             guard let self else { return }
             guard let data, error == nil,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let json    = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let latest  = json["version"] as? String,
-                  let dlURL   = json["url"]     as? String else {
+                  let pageURL = json["url"]     as? String else {
                 self.log("Update check failed: \(error?.localizedDescription ?? "bad response")")
                 if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
                 return
             }
-            let notes = json["notes"] as? String ?? ""
+            let notes    = json["notes"]       as? String ?? ""
+            let directDL = json["downloadUrl"] as? String ?? ""
             self.log("Latest: v\(latest)  Current: v\(self.version)")
             if self.isNewer(latest, than: self.version) {
-                DispatchQueue.main.async { self.showUpdateAlert(version: latest, url: dlURL, notes: notes) }
+                DispatchQueue.main.async {
+                    self.showUpdateAlert(version: latest, pageURL: pageURL, downloadURL: directDL, notes: notes)
+                }
             } else if !silent {
                 DispatchQueue.main.async { self.showNoUpdateAlert() }
             }
@@ -400,22 +403,132 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    func showUpdateAlert(version: String, url: String, notes: String) {
+    func showUpdateAlert(version: String, pageURL: String, downloadURL: String, notes: String) {
+        let canAuto   = !downloadURL.isEmpty
+        let bodyText  = notes.isEmpty ? "" : "\(notes)\n\n"
         let a = NSAlert()
         a.messageText     = "⬆️  Bản cập nhật v\(version) có sẵn"
-        a.informativeText = notes.isEmpty
-            ? "Nhấn \"Tải về\" để mở trang download."
-            : "\(notes)\n\nNhấn \"Tải về\" để mở trang download."
+        a.informativeText = canAuto
+            ? "\(bodyText)Nhấn \"Cài ngay\" để tự động tải và cài đặt."
+            : "\(bodyText)Nhấn \"Tải về\" để mở trang download."
         a.alertStyle = .informational
-        a.addButton(withTitle: "Tải về")
+        a.addButton(withTitle: canAuto ? "Cài ngay" : "Tải về")
         a.addButton(withTitle: "Để sau")
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         let result = a.runModal()
         NSApp.setActivationPolicy(.accessory)
-        if result == .alertFirstButtonReturn, let u = URL(string: url) {
+        guard result == .alertFirstButtonReturn else { return }
+        if canAuto {
+            performUpdate(downloadURL: downloadURL, newVersion: version)
+        } else if let u = URL(string: pageURL) {
             NSWorkspace.shared.open(u)
         }
+    }
+
+    // MARK: ─── Self-Update: download → install → relaunch ────────────────────
+
+    func performUpdate(downloadURL: String, newVersion: String) {
+        guard let url = URL(string: downloadURL) else {
+            log("Update: invalid download URL — \(downloadURL)"); return
+        }
+        log("Downloading update v\(newVersion) from: \(downloadURL)")
+        let isRunning = bridgeTask?.isRunning ?? false
+        setStatus("⬇️ Đang tải v\(newVersion)...", running: isRunning)
+
+        let cfg  = URLSessionConfiguration.default
+        cfg.timeoutIntervalForResource = 300
+        let task = URLSession(configuration: cfg).downloadTask(with: url) { [weak self] tempURL, _, error in
+            guard let self else { return }
+            if let error {
+                DispatchQueue.main.async {
+                    self.log("Download failed: \(error.localizedDescription)")
+                    self.setStatus("❌ Tải thất bại — thử lại sau", running: false)
+                }
+                return
+            }
+            guard let tempURL else {
+                DispatchQueue.main.async { self.setStatus("❌ Lỗi tải về", running: false) }
+                return
+            }
+            DispatchQueue.main.async {
+                self.log("Download complete → installing v\(newVersion)...")
+                self.installUpdate(zipURL: tempURL, newVersion: newVersion)
+            }
+        }
+        task.resume()
+    }
+
+    func installUpdate(zipURL: URL, newVersion: String) {
+        let fm     = FileManager.default
+        let tmpDir = NSTemporaryDirectory() + "cb_update_\(newVersion)"
+
+        try? fm.removeItem(atPath: tmpDir)
+        guard (try? fm.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)) != nil else {
+            log("Install failed: cannot create temp dir"); return
+        }
+
+        let zipPath = tmpDir + "/update.zip"
+        do { try fm.moveItem(at: zipURL, to: URL(fileURLWithPath: zipPath)) }
+        catch { log("Install failed — move zip: \(error)"); return }
+
+        setStatus("📦 Đang giải nén...", running: false)
+        log("Unzipping to \(tmpDir)...")
+        let unzip = shTimeout("unzip -q '\(zipPath)' -d '\(tmpDir)'",
+                              env: buildEnv(), timeout: 120)
+        if unzip.status != 0 {
+            log("Unzip failed (exit \(unzip.status)): \(unzip.out)")
+            setStatus("❌ Giải nén thất bại", running: false)
+            return
+        }
+
+        // Find Claude Bridge.app anywhere in extracted tree
+        let find      = sh("find '\(tmpDir)' -maxdepth 4 -name 'Claude Bridge.app' -type d | head -1")
+        let newAppPath = find.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newAppPath.isEmpty else {
+            log("Install failed: Claude Bridge.app not found in zip"); return
+        }
+
+        log("New app at: \(newAppPath)")
+        setStatus("🔄 Đang cài đặt...", running: false)
+
+        stopBridge(intentional: true)
+        Thread.sleep(forTimeInterval: 0.5)
+
+        relaunch(replacingWith: newAppPath)
+    }
+
+    func relaunch(replacingWith newAppPath: String) {
+        let currentPath = Bundle.main.bundlePath
+        let scriptPath  = NSTemporaryDirectory() + "cb_relaunch_\(Int(Date().timeIntervalSince1970)).sh"
+
+        // Shell script: wait for this process to exit, swap bundles, relaunch
+        let script = """
+        #!/bin/bash
+        sleep 2
+        rm   -rf '\(currentPath)'
+        mv   '\(newAppPath)' '\(currentPath)'
+        xattr -dr com.apple.quarantine '\(currentPath)' 2>/dev/null || true
+        sleep 0.5
+        open '\(currentPath)'
+        rm -- "$0"
+        """
+
+        do { try script.write(toFile: scriptPath, atomically: true, encoding: .utf8) }
+        catch { log("Relaunch script write failed: \(error)"); return }
+
+        sh("/bin/chmod +x '\(scriptPath)'")
+
+        // Launch detached — do NOT waitUntilExit
+        let launcher = Process()
+        launcher.launchPath      = "/bin/bash"
+        launcher.arguments       = [scriptPath]
+        launcher.standardOutput  = FileHandle.nullDevice
+        launcher.standardError   = FileHandle.nullDevice
+        try? launcher.run()
+
+        log("Relaunch script detached — quitting current instance...")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
     }
 
     func showNoUpdateAlert() {
