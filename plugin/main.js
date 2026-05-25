@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.15';
+var PLUGIN_VERSION = 'v4.1.16';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1077,27 +1077,32 @@ function showAddShortcutPopup() {
       '<button class="sp-save">Save</button>' +
     '</div>';
 
-  // Append inside #input-area so position:absolute works in UXP
-  // (UXP doesn't support position:fixed)
-  var container = document.getElementById('input-area') || document.body;
+  // Append to #tab-claude — has position:relative AND overflow:visible,
+  // so the popup can float upward over the chat area without being clipped.
+  // (#input-area / #claude-content have overflow:hidden so they would clip it.)
+  var container = document.getElementById('tab-claude') || document.body;
   container.appendChild(popup);
 
-  // Position: above the quick-actions row, right-aligned
-  // #input-area has position:relative so offsetTop is relative to it
+  // Position: always opens UPWARD above the trigger button, right-aligned.
+  // UXP cannot expand the panel downward, so we never fall back to "below".
   if (triggerBtn) {
     var contRect = container.getBoundingClientRect();
-    var r = triggerBtn.getBoundingClientRect();
-    // Convert to container-relative coordinates
-    var relRight  = r.right  - contRect.left;
-    var relTop    = r.top    - contRect.top;
-    var pw = Math.min(220, (contRect.width || 240) - 8);
+    var r        = triggerBtn.getBoundingClientRect();
+    var pw       = Math.min(220, (contRect.width || 240) - 8);
     popup.style.width = pw + 'px';
-    var left = relRight - pw;
+
+    // Horizontal: right-align to trigger button, clamped to container left edge
+    var left = (r.right - contRect.left) - pw;
     if (left < 4) left = 4;
-    // Place above the trigger button (popup height ≈ 175px)
-    var popH = 175;
-    var top  = relTop - popH - 6;
-    if (top < 4) top = relTop + r.height + 4;
+
+    // Vertical: popup bottom sits 6px above trigger button's top edge.
+    // top (relative to #tab-claude) = trigger.top_in_tab - popupHeight - 6
+    var popH       = 178; // design height: title + name input + textarea + actions
+    var triggerTop = r.top - contRect.top;
+    var top        = triggerTop - popH - 6;
+    // Safety clamp: never go above the header (≈ 80px from tab top)
+    if (top < 80) top = Math.max(4, triggerTop - popH - 6);
+
     popup.style.left = left + 'px';
     popup.style.top  = top  + 'px';
   }
