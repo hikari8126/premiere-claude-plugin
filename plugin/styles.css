@@ -475,7 +475,17 @@ body {
 #send-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* ── Quick action buttons ───────────────────────────── */
-#quick-actions { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+#quick-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+  flex-wrap: nowrap;      /* never wrap — keeps input-area at fixed height */
+  overflow-x: auto;       /* scroll horizontally if many shortcuts */
+  overflow-y: hidden;
+  align-items: center;
+  scrollbar-width: none;  /* hide scrollbar (UXP) */
+}
+#quick-actions::-webkit-scrollbar { display: none; }
 .quick-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
