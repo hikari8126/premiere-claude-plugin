@@ -770,9 +770,102 @@ function fillGaps(alignments) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ELEVENLABS TTS — /tts/voices + /tts/generate
+// ═══════════════════════════════════════════════════════════════════════════
+// ELEVENLABS — shared helpers + TTS + Voice Creation
 // ═══════════════════════════════════════════════════════════════════════════
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io';
+
+// Multipart/form-data POST (for voice cloning — no extra deps needed)
+function elevenLabsMultipart(apiKey, urlPath, fields, files) {
+  return new Promise((resolve, reject) => {
+    const boundary = '----ELBoundary' + Date.now().toString(16);
+    const parts    = [];
+
+    // Text fields
+    for (const [name, value] of Object.entries(fields)) {
+      if (value == null) continue;
+      parts.push(Buffer.from(
+        '--' + boundary + '\r\n' +
+        'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
+        String(value) + '\r\n'
+      ));
+    }
+    // File fields
+    for (const { fieldName, buffer, filename, contentType } of files) {
+      parts.push(Buffer.from(
+        '--' + boundary + '\r\n' +
+        'Content-Disposition: form-data; name="' + fieldName + '"; filename="' + filename + '"\r\n' +
+        'Content-Type: ' + (contentType || 'audio/mpeg') + '\r\n\r\n'
+      ));
+      parts.push(buffer);
+      parts.push(Buffer.from('\r\n'));
+    }
+    parts.push(Buffer.from('--' + boundary + '--\r\n'));
+
+    const body    = Buffer.concat(parts);
+    const url     = new URL(ELEVENLABS_BASE + urlPath);
+    const opts    = {
+      hostname: url.hostname, port: 443,
+      path: url.pathname, method: 'POST',
+      headers: {
+        'xi-api-key':    apiKey,
+        'Content-Type':  'multipart/form-data; boundary=' + boundary,
+        'Content-Length': body.length,
+        'Accept':        'application/json',
+      },
+    };
+    const req = require('https').request(opts, response => {
+      const chunks = [];
+      response.on('data', c => chunks.push(c));
+      response.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          try   { resolve(JSON.parse(buf.toString('utf8'))); }
+          catch (e) { reject(new Error('Bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
+        } else {
+          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+        }
+      });
+    });
+    req.on('error', err => reject(new Error('ElevenLabs network: ' + err.message)));
+    req.write(body);
+    req.end();
+  });
+}
+
+// Binary POST — returns { buffer, generationId } (used for voice design preview)
+function elevenLabsBinaryPost(apiKey, urlPath, body) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = JSON.stringify(body);
+    const url     = new URL(ELEVENLABS_BASE + urlPath);
+    const opts    = {
+      hostname: url.hostname, port: 443,
+      path: url.pathname, method: 'POST',
+      headers: {
+        'xi-api-key':     apiKey,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        'Accept':         'audio/mpeg',
+      },
+    };
+    const req = require('https').request(opts, response => {
+      const chunks = [];
+      const generationId = response.headers['history-item-id'] || null;
+      response.on('data', c => chunks.push(c));
+      response.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          resolve({ buffer: buf, generationId });
+        } else {
+          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+        }
+      });
+    });
+    req.on('error', err => reject(new Error('ElevenLabs network: ' + err.message)));
+    req.write(bodyStr);
+    req.end();
+  });
+}
 
 function elevenLabsRequest(apiKey, method, urlPath, body, expectBinary) {
   return new Promise((resolve, reject) => {
@@ -966,6 +1059,95 @@ app.post('/music/generate', async (req, res) => {
   }
 });
 
+// ── POST /voice/clone ─────────────────────────────────────────────────────
+app.post('/voice/clone', async (req, res) => {
+  try {
+    const { apiKey, voiceName, filePath, description, removeNoise } = req.body;
+    if (!apiKey)    throw new Error('apiKey required');
+    if (!voiceName) throw new Error('voiceName required');
+    if (!filePath)  throw new Error('filePath required');
+    if (!fs.existsSync(filePath)) throw new Error('Audio file not found: ' + filePath);
+
+    const fields = { name: voiceName };
+    if (description) fields.description = description;
+    if (removeNoise) fields.remove_background_noise = 'true';
+
+    const audioBuffer   = fs.readFileSync(filePath);
+    const audioFilename = path.basename(filePath);
+    const files = [{
+      fieldName:   'files',
+      buffer:      audioBuffer,
+      filename:    audioFilename,
+      contentType: 'audio/mpeg',
+    }];
+
+    console.log('[voice/clone] name:', voiceName, 'file:', filePath, fs.statSync(filePath).size + 'B');
+    const data = await elevenLabsMultipart(apiKey, '/v1/voices/add', fields, files);
+    res.json({ ok: true, voice_id: data.voice_id, name: voiceName });
+  } catch (err) {
+    console.error('[voice/clone]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── POST /voice/design/preview ────────────────────────────────────────────
+app.post('/voice/design/preview', async (req, res) => {
+  try {
+    const { apiKey, gender, age, accent, accentStrength, text } = req.body;
+    if (!apiKey) throw new Error('apiKey required');
+    if (!text)   throw new Error('text required');
+
+    const body = {
+      gender:          gender  || 'female',
+      age:             age     || 'young',
+      accent:          accent  || 'american',
+      accent_strength: Number(accentStrength || 1.0),
+      text:            text,
+    };
+
+    console.log('[voice/design/preview]', JSON.stringify(body));
+    const result = await elevenLabsBinaryPost(apiKey, '/v1/voice-generation/generate-voice', body);
+
+    const tempDir = getTempDir();
+    ensureDir(tempDir);
+    const fname = 'vd-preview-' + Date.now() + '.mp3';
+    const fpath = path.join(tempDir, fname);
+    fs.writeFileSync(fpath, result.buffer);
+
+    res.json({
+      ok:           true,
+      generationId: result.generationId,
+      previewUrl:   '/tts/audio/' + encodeURIComponent(fname),
+    });
+  } catch (err) {
+    console.error('[voice/design/preview]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── POST /voice/design/save ───────────────────────────────────────────────
+app.post('/voice/design/save', async (req, res) => {
+  try {
+    const { apiKey, voiceName, description, generatedVoiceId } = req.body;
+    if (!apiKey)           throw new Error('apiKey required');
+    if (!voiceName)        throw new Error('voiceName required');
+    if (!generatedVoiceId) throw new Error('generatedVoiceId required');
+
+    const body = {
+      voice_name:         voiceName,
+      voice_description:  description || '',
+      generated_voice_id: generatedVoiceId,
+    };
+
+    console.log('[voice/design/save] name:', voiceName, 'genId:', generatedVoiceId);
+    const data = await elevenLabsRequest(apiKey, 'POST', '/v1/voice-generation/create-voice', body);
+    res.json({ ok: true, voice_id: data.voice_id, name: voiceName });
+  } catch (err) {
+    console.error('[voice/design/save]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Proxy ElevenLabs CDN preview_url — fetches once, caches in temp dir, returns local /tts/audio URL
 app.post('/tts/voice-preview', async (req, res) => {
   try {
@@ -1129,7 +1311,7 @@ app.post('/api/read-image', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.3.8';
+const BRIDGE_VERSION = '1.3.9';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

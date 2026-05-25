@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.19';
+var PLUGIN_VERSION = 'v4.1.20';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2560,6 +2560,13 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     document.querySelectorAll('.vg-modeContent').forEach(function(c) {
       c.hidden = c.dataset.mode !== mode;
     });
+    // Hide genBar + results when in create mode; also hide right panel
+    var isCreate = (mode === 'create');
+    var genBar = document.querySelector('.vg-genBar');
+    var vgRight = document.querySelector('.vg-right');
+    if (genBar)  genBar.style.display  = isCreate ? 'none' : '';
+    if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
+    if (els.resultSection) els.resultSection.hidden = true;
     // Update generate button label
     var labels = { tts: '⚡ GENERATE VOICE', sfx: '💥 GENERATE SFX', music: '🎵 GENERATE MUSIC' };
     els.btnGenerate.textContent = labels[mode] || labels.tts;
@@ -2805,6 +2812,299 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   window.VoiceGenGetVoices = function() {
     return VG_VOICES_DATA.slice(); // return a copy
   };
+
+  // ── Voice Create (Clone + Design) ────────────────────────────────────────
+  (function() {
+    var vcType           = document.getElementById('vcType');
+    var vcCloneSection   = document.getElementById('vcCloneSection');
+    var vcDesignSection  = document.getElementById('vcDesignSection');
+    var vcCloneName      = document.getElementById('vcCloneName');
+    var vcCloneDesc      = document.getElementById('vcCloneDesc');
+    var vcDenoise        = document.getElementById('vcDenoise');
+    var vcCloneSubmit    = document.getElementById('vcCloneSubmit');
+    var vcCloneStatus    = document.getElementById('vcCloneStatus');
+    var vcFromSeqSection = document.getElementById('vcFromSequenceSection');
+    var vcFromFileSection= document.getElementById('vcFromFileSection');
+    var vcClipInfo       = document.getElementById('vcClipInfo');
+    var vcFileInfo       = document.getElementById('vcFileInfo');
+    var vcGetClip        = document.getElementById('vcGetClip');
+    var vcBrowseFile     = document.getElementById('vcBrowseFile');
+
+    var vcGender         = document.getElementById('vcGender');
+    var vcAge            = document.getElementById('vcAge');
+    var vcAccent         = document.getElementById('vcAccent');
+    var vcAccentStrength = document.getElementById('vcAccentStrength');
+    var vcAccentVal      = document.getElementById('vcAccentVal');
+    var vcPreviewText    = document.getElementById('vcPreviewText');
+    var vcDesignPreview  = document.getElementById('vcDesignPreview');
+    var vcPreviewPlayer  = document.getElementById('vcPreviewPlayer');
+    var vcPreviewPlay    = document.getElementById('vcPreviewPlay');
+    var vcPreviewProgWrap= document.getElementById('vcPreviewProgWrap');
+    var vcPreviewFill    = document.getElementById('vcPreviewFill');
+    var vcPreviewTime    = document.getElementById('vcPreviewTime');
+    var vcDesignSaveSec  = document.getElementById('vcDesignSaveSection');
+    var vcDesignName     = document.getElementById('vcDesignName');
+    var vcDesignDesc     = document.getElementById('vcDesignDesc');
+    var vcDesignSave     = document.getElementById('vcDesignSave');
+    var vcDesignStatus   = document.getElementById('vcDesignStatus');
+
+    var vcSelectedFilePath = ''; // for clone: current audio file path
+    var vcGenerationId     = ''; // for design: generationId from preview
+    var vcPreviewAudioUrl  = ''; // for design preview player
+    var vcPreviewIsPlaying = false;
+    var vcPreviewDuration  = 0;
+    var vcPreviewPosition  = 0;
+    var vcPreviewTimer     = null;
+
+    // ── Method selector toggle ──
+    if (vcType) {
+      vcType.addEventListener('change', function() {
+        var m = vcType.value;
+        if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
+        if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
+      });
+    }
+
+    // ── Audio source radio toggle ──
+    document.querySelectorAll('input[name="vcSource"]').forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        var fromSeq = (radio.value === 'sequence' && radio.checked);
+        if (vcFromSeqSection)  vcFromSeqSection.hidden  = !fromSeq;
+        if (vcFromFileSection) vcFromFileSection.hidden = fromSeq;
+        vcSelectedFilePath = '';
+        if (vcClipInfo) vcClipInfo.textContent = 'No clip selected — select a clip in the timeline first';
+        if (vcFileInfo) vcFileInfo.textContent = 'No file selected';
+      });
+    });
+
+    // ── Get from Sequence ──
+    if (vcGetClip) {
+      vcGetClip.addEventListener('click', async function() {
+        if (vcClipInfo) vcClipInfo.textContent = 'Fetching…';
+        try {
+          var premierepro = window.require && window.require('premierepro');
+          if (!premierepro) throw new Error('Premiere Pro API not available');
+          var project   = await premierepro.Project.getActiveProject();
+          if (!project)  throw new Error('No active project');
+          var selection = await premierepro.ProjectUtils.getSelection(project);
+          var items     = await selection.getItems();
+          if (!items || !items.length) throw new Error('No items selected in timeline');
+          var item = items[0];
+          var clip = premierepro.ClipProjectItem.cast(item);
+          if (!clip) throw new Error('Selected item is not a media clip');
+          var fp = await clip.getMediaFilePath();
+          if (!fp) throw new Error('Could not read file path from clip');
+          vcSelectedFilePath = fp;
+          var shortName = fp.split('/').pop();
+          if (vcClipInfo) vcClipInfo.textContent = shortName + '\n' + fp;
+          console.log('[vcGetClip] got path:', fp);
+        } catch(e) {
+          vcSelectedFilePath = '';
+          if (vcClipInfo) vcClipInfo.textContent = '✗ ' + e.message;
+          console.error('[vcGetClip]', e.message);
+        }
+      });
+    }
+
+    // ── Browse File ──
+    if (vcBrowseFile) {
+      vcBrowseFile.addEventListener('click', async function() {
+        try {
+          var uxp = window.require && window.require('uxp');
+          if (!uxp || !uxp.storage) throw new Error('UXP storage not available');
+          var file = await uxp.storage.localFileSystem.getFileForOpening({
+            types: ['mp3','wav','m4a','aac','ogg','flac'],
+          });
+          if (!file) return; // cancelled
+          var fp = file.nativePath || file.path || '';
+          vcSelectedFilePath = fp;
+          var shortName = fp.split('/').pop();
+          if (vcFileInfo) vcFileInfo.textContent = shortName + '\n' + fp;
+        } catch(e) {
+          if (vcFileInfo) vcFileInfo.textContent = '✗ ' + e.message;
+        }
+      });
+    }
+
+    // ── Clone submit ──
+    if (vcCloneSubmit) {
+      vcCloneSubmit.addEventListener('click', async function() {
+        var name = vcCloneName ? vcCloneName.value.trim() : '';
+        if (!name)               return showVcStatus(vcCloneStatus, 'Voice name is required', false);
+        if (!vcSelectedFilePath) return showVcStatus(vcCloneStatus, 'Select an audio file first', false);
+        if (!ELEVENLABS_KEY)     return showVcStatus(vcCloneStatus, 'No ElevenLabs API key set', false);
+
+        vcCloneSubmit.disabled = true;
+        vcCloneSubmit.textContent = '⏳ Cloning…';
+        showVcStatus(vcCloneStatus, 'Uploading audio to ElevenLabs…', null);
+        try {
+          var resp = await postJsonVG('/voice/clone', {
+            apiKey:      ELEVENLABS_KEY,
+            voiceName:   name,
+            filePath:    vcSelectedFilePath,
+            description: vcCloneDesc ? vcCloneDesc.value.trim() : '',
+            removeNoise: vcDenoise  ? vcDenoise.checked : false,
+          });
+          if (!resp.ok) throw new Error(resp.error || 'clone failed');
+          showVcStatus(vcCloneStatus, '✓ Voice cloned! ID: ' + resp.voice_id + '\nReloading voice list…', true);
+          // Reload voice list so new voice appears in dropdown
+          setTimeout(function() { loadVoices(); }, 1500);
+        } catch(e) {
+          showVcStatus(vcCloneStatus, '✗ ' + e.message, false);
+        } finally {
+          vcCloneSubmit.disabled = false;
+          vcCloneSubmit.textContent = '🎙 CLONE VOICE';
+        }
+      });
+    }
+
+    // ── Accent strength slider ──
+    if (vcAccentStrength && vcAccentVal) {
+      vcAccentStrength.addEventListener('input', function() {
+        vcAccentVal.textContent = Number(vcAccentStrength.value).toFixed(1);
+      });
+    }
+
+    // ── Design preview ──
+    if (vcDesignPreview) {
+      vcDesignPreview.addEventListener('click', async function() {
+        var text = vcPreviewText ? vcPreviewText.value.trim() : '';
+        if (!text)           return showVcStatus(vcDesignStatus, 'Enter preview text first', false);
+        if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
+
+        vcDesignPreview.disabled = true;
+        vcDesignPreview.textContent = '⏳ Generating…';
+        showVcStatus(vcDesignStatus, 'Generating voice preview…', null);
+        if (vcPreviewPlayer) vcPreviewPlayer.hidden = true;
+        if (vcDesignSaveSec) vcDesignSaveSec.hidden = true;
+        vcGenerationId = '';
+
+        try {
+          var resp = await postJsonVG('/voice/design/preview', {
+            apiKey:          ELEVENLABS_KEY,
+            gender:          vcGender          ? vcGender.value          : 'female',
+            age:             vcAge             ? vcAge.value             : 'young',
+            accent:          vcAccent          ? vcAccent.value          : 'american',
+            accentStrength:  vcAccentStrength  ? Number(vcAccentStrength.value) : 1.0,
+            text:            text,
+          });
+          if (!resp.ok) throw new Error(resp.error || 'preview failed');
+          vcGenerationId    = resp.generationId || '';
+          vcPreviewAudioUrl = BRIDGE_URL + resp.previewUrl;
+          showVcStatus(vcDesignStatus, '✓ Preview ready. Listen then save if you like it.', true);
+
+          // Show player
+          vcPreviewDuration = 0; vcPreviewPosition = 0;
+          if (vcPreviewPlayer) vcPreviewPlayer.hidden = false;
+          if (vcPreviewFill)   vcPreviewFill.style.width = '0%';
+          if (vcPreviewTime)   vcPreviewTime.textContent = '0:00 / 0:00';
+          if (vcPreviewPlay)   vcPreviewPlay.textContent = '▶';
+          vcPreviewIsPlaying = false;
+
+          // Show save section
+          if (vcDesignSaveSec) vcDesignSaveSec.hidden = false;
+        } catch(e) {
+          showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
+        } finally {
+          vcDesignPreview.disabled = false;
+          vcDesignPreview.textContent = '▶ PREVIEW VOICE';
+        }
+      });
+    }
+
+    // ── Design preview player ──
+    if (vcPreviewPlay) {
+      vcPreviewPlay.addEventListener('click', function() {
+        if (!vcPreviewAudioUrl) return;
+        if (vcPreviewIsPlaying) {
+          // Stop
+          stopVcPreview();
+        } else {
+          startVcPreview();
+        }
+      });
+    }
+
+    function fmtTime(sec) {
+      if (!isFinite(sec)) return '0:00';
+      var m = Math.floor(sec / 60);
+      var s = Math.floor(sec % 60);
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    function stopVcPreview() {
+      if (vcPreviewTimer) { clearInterval(vcPreviewTimer); vcPreviewTimer = null; }
+      // Ask bridge to stop afplay
+      postJsonVG('/tts/stop', {}).catch(function(){});
+      vcPreviewIsPlaying = false;
+      if (vcPreviewPlay) vcPreviewPlay.textContent = '▶';
+    }
+
+    function startVcPreview() {
+      stopVcPreview();
+      vcPreviewIsPlaying = true;
+      if (vcPreviewPlay) vcPreviewPlay.textContent = '⏹';
+      vcPreviewPosition = 0;
+      var startTime = Date.now();
+      // Kick off play on bridge
+      postJsonVG('/tts/play', { audioUrl: vcPreviewAudioUrl.replace(BRIDGE_URL, '') })
+        .then(function() {
+          stopVcPreview();
+        })
+        .catch(function() {
+          stopVcPreview();
+        });
+      // Tick progress
+      vcPreviewTimer = setInterval(function() {
+        if (!vcPreviewIsPlaying) { clearInterval(vcPreviewTimer); vcPreviewTimer = null; return; }
+        vcPreviewPosition = (Date.now() - startTime) / 1000;
+        if (vcPreviewDuration > 0) {
+          var pct = Math.min((vcPreviewPosition / vcPreviewDuration) * 100, 100);
+          if (vcPreviewFill) vcPreviewFill.style.width = pct + '%';
+        }
+        if (vcPreviewTime) vcPreviewTime.textContent = fmtTime(vcPreviewPosition) + ' / ' + fmtTime(vcPreviewDuration || 0);
+      }, 250);
+    }
+
+    // ── Design save ──
+    if (vcDesignSave) {
+      vcDesignSave.addEventListener('click', async function() {
+        var name = vcDesignName ? vcDesignName.value.trim() : '';
+        if (!name)           return showVcStatus(vcDesignStatus, 'Enter a voice name to save', false);
+        if (!vcGenerationId) return showVcStatus(vcDesignStatus, 'Generate a preview first', false);
+        if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
+
+        vcDesignSave.disabled = true;
+        vcDesignSave.textContent = '⏳ Saving…';
+        showVcStatus(vcDesignStatus, 'Saving voice to your library…', null);
+        try {
+          var resp = await postJsonVG('/voice/design/save', {
+            apiKey:           ELEVENLABS_KEY,
+            voiceName:        name,
+            description:      vcDesignDesc ? vcDesignDesc.value.trim() : '',
+            generatedVoiceId: vcGenerationId,
+          });
+          if (!resp.ok) throw new Error(resp.error || 'save failed');
+          showVcStatus(vcDesignStatus, '✓ Voice saved! Reloading voice list…', true);
+          vcGenerationId = '';
+          if (vcDesignSaveSec) vcDesignSaveSec.hidden = true;
+          setTimeout(function() { loadVoices(); }, 1500);
+        } catch(e) {
+          showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
+        } finally {
+          vcDesignSave.disabled = false;
+          vcDesignSave.textContent = '✓ SAVE VOICE';
+        }
+      });
+    }
+
+    function showVcStatus(el, msg, isOk) {
+      if (!el) return;
+      el.hidden = false;
+      el.className = 'vc-status' + (isOk === true ? ' is-ok' : isOk === false ? ' is-error' : '');
+      el.textContent = msg;
+    }
+  })();
 
   // ── ElevenLabs API Key Profiles ──────────────────────────────────────────
   var vgProfileSelect    = $('vgProfileSelect');

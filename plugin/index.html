@@ -160,6 +160,7 @@
       <button class="vg-modeBtn is-active" data-mode="tts">&#127908; Voice</button>
       <button class="vg-modeBtn" data-mode="sfx">&#128165; SFX</button>
       <button class="vg-modeBtn" data-mode="music">&#127925; Music</button>
+      <button class="vg-modeBtn" data-mode="create">&#43; Create</button>
     </div>
 
     <!-- Body: left editor + right settings -->
@@ -203,6 +204,117 @@
             </div>
           </div>
         </div>
+
+        <!-- ── Create Voice (Clone / Design) — no genBar when this is visible ── -->
+        <div class="vg-modeContent vc-panel" data-mode="create" hidden>
+          <div class="vc-scroll">
+
+            <!-- Method selector -->
+            <div class="vc-field">
+              <label class="vc-label">Method</label>
+              <select id="vcType" class="vg-select">
+                <option value="clone">&#127897; Clone Voice</option>
+                <option value="design">&#127912; Design Voice</option>
+              </select>
+            </div>
+
+            <!-- ── CLONE SECTION ── -->
+            <div id="vcCloneSection">
+              <div class="vc-field">
+                <label class="vc-label">Voice Name</label>
+                <input type="text" id="vcCloneName" class="vg-settingInput" placeholder="My Cloned Voice" />
+              </div>
+              <div class="vc-field">
+                <label class="vc-label">Audio Source</label>
+                <div class="vc-radioGroup">
+                  <label class="vc-radio"><input type="radio" name="vcSource" value="sequence" checked /> From Sequence</label>
+                  <label class="vc-radio"><input type="radio" name="vcSource" value="file" /> From File</label>
+                </div>
+              </div>
+              <div id="vcFromSequenceSection" class="vc-field">
+                <div class="vc-clipInfo" id="vcClipInfo">No clip selected — select a clip in the timeline first</div>
+                <button id="vcGetClip" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#9654; Get from Sequence</button>
+              </div>
+              <div id="vcFromFileSection" class="vc-field" hidden>
+                <div class="vc-clipInfo" id="vcFileInfo">No file selected</div>
+                <button id="vcBrowseFile" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#128193; Browse File</button>
+              </div>
+              <div class="vc-field">
+                <label class="vc-label">Description <span class="vg-sm">optional</span></label>
+                <textarea id="vcCloneDesc" class="vg-settingInput" rows="2" style="resize:none;" placeholder="Describe the voice characteristics..."></textarea>
+              </div>
+              <label class="vg-checkRow">
+                <input type="checkbox" id="vcDenoise" />
+                <span>Remove background noise</span>
+              </label>
+              <button id="vcCloneSubmit" class="vg-genButton" style="margin-top:10px;width:100%;">&#127897; CLONE VOICE</button>
+              <div id="vcCloneStatus" class="vc-status" hidden></div>
+            </div>
+
+            <!-- ── DESIGN SECTION ── -->
+            <div id="vcDesignSection" hidden>
+              <div class="vc-row2">
+                <div class="vc-field">
+                  <label class="vc-label">Gender</label>
+                  <select id="vcGender" class="vg-select">
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                  </select>
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Age</label>
+                  <select id="vcAge" class="vg-select">
+                    <option value="young">Young</option>
+                    <option value="middle_aged">Middle aged</option>
+                    <option value="old">Old</option>
+                  </select>
+                </div>
+              </div>
+              <div class="vc-field">
+                <label class="vc-label">Accent</label>
+                <select id="vcAccent" class="vg-select">
+                  <option value="american">American</option>
+                  <option value="british">British</option>
+                  <option value="african">African</option>
+                  <option value="australian">Australian</option>
+                  <option value="indian">Indian</option>
+                </select>
+              </div>
+              <div class="vc-field">
+                <label class="vc-label">Accent Strength <span id="vcAccentVal" class="vg-sm">1.0</span></label>
+                <input type="range" id="vcAccentStrength" class="vc-slider" min="0.3" max="2.0" step="0.1" value="1.0" />
+              </div>
+              <div class="vc-field">
+                <label class="vc-label">Preview Text</label>
+                <textarea id="vcPreviewText" class="vg-settingInput" rows="3" style="resize:none;"
+                  placeholder="Text to preview the voice...">Hello! I am a newly designed voice. How do I sound to you?</textarea>
+              </div>
+              <button id="vcDesignPreview" class="vg-genButton" style="margin-top:6px;width:100%;">&#9654; PREVIEW VOICE</button>
+              <!-- inline audio player for design preview -->
+              <div id="vcPreviewPlayer" class="vc-previewPlayer" hidden>
+                <button class="vg-playBtn" id="vcPreviewPlay">&#9654;</button>
+                <div class="vg-progressWrap" id="vcPreviewProgWrap">
+                  <div class="vg-progressFill" id="vcPreviewFill"></div>
+                </div>
+                <span class="vg-time" id="vcPreviewTime">0:00 / 0:00</span>
+              </div>
+              <!-- Save section — revealed after preview -->
+              <div id="vcDesignSaveSection" class="vc-saveSection" hidden>
+                <div class="vc-field">
+                  <label class="vc-label">Save as Voice Name</label>
+                  <input type="text" id="vcDesignName" class="vg-settingInput" placeholder="My Designed Voice" />
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Description <span class="vg-sm">optional</span></label>
+                  <input type="text" id="vcDesignDesc" class="vg-settingInput" placeholder="Short description..." />
+                </div>
+                <button id="vcDesignSave" class="ac-primaryButton" style="width:100%;">&#10003; SAVE VOICE</button>
+              </div>
+              <div id="vcDesignStatus" class="vc-status" hidden></div>
+            </div>
+
+          </div><!-- /vc-scroll -->
+        </div><!-- /create modeContent -->
 
         <!-- Generate bar -->
         <div class="vg-genBar">
