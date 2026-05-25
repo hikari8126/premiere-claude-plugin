@@ -2553,6 +2553,12 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   }
 
   function renderVariations() {
+    // Show single-speaker container, hide+clear multi-speaker container
+    var singleVars = document.getElementById('vgSingleVars');
+    var multiVars  = document.getElementById('vgMultiVars');
+    if (singleVars) singleVars.style.display = '';
+    if (multiVars)  { multiVars.style.display = 'none'; multiVars.innerHTML = ''; }
+
     var v1 = lastVariations[0];
     var v2 = lastVariations[1];
     if (v1) {
@@ -2572,17 +2578,21 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   }
 
   function renderMultiResults(cards) {
-    var section = els.resultSection;
-    if (!section) return;
-    // Clear and rebuild result section for multi-speaker
-    section.innerHTML = '';
-    section.hidden = false;
+    if (!els.resultSection) return;
+    // Use dedicated multi-speaker container — never touch vgSingleVars (preserves els.var1/var2)
+    var singleVars = document.getElementById('vgSingleVars');
+    var multiVars  = document.getElementById('vgMultiVars');
+    if (!multiVars) return;
+    if (singleVars) singleVars.style.display = 'none';
+    multiVars.innerHTML = '';
+    multiVars.style.display = '';
+    els.resultSection.hidden = false;
     cards.forEach(function(card) {
       var header = document.createElement('div');
       header.className = 'vg-multiSpeakerHeader';
       header.textContent = card.speaker.voiceName;
       header.style.borderLeftColor = card.speaker.color;
-      section.appendChild(header);
+      multiVars.appendChild(header);
 
       card.variations.forEach(function(v, idx) {
         var wrap = document.createElement('div');
@@ -2655,15 +2665,13 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         wrap.appendChild(sizeEl);
         wrap.appendChild(playerRow);
         wrap.appendChild(actionsRow);
-        section.appendChild(wrap);
+        multiVars.appendChild(wrap);
       });
     });
 
     var statusEl = document.createElement('div');
-    statusEl.id = 'vgImportStatus';
     statusEl.className = 'ac-manualStatus';
-    section.appendChild(statusEl);
-    // Re-point els.importStatus to the new element
+    multiVars.appendChild(statusEl);
     els.importStatus = statusEl;
   }
 

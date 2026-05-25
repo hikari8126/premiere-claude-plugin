@@ -210,47 +210,50 @@
         <!-- Results -->
         <div class="vg-results" id="vgResultSection" hidden>
 
-          <!-- Variation 1 -->
-          <div class="vg-variation" id="vgVar1">
-            <div class="vg-varHeader">
-              <span class="vg-varLabel">Variation 1</span>
-              <span class="vg-varSize" id="vgVar1Size"></span>
-            </div>
-            <div class="vg-player">
-              <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
-              <div class="vg-progressWrap" id="vgVar1ProgWrap">
-                <div class="vg-progressFill" id="vgVar1Fill"></div>
+          <!-- Single-speaker output (always in DOM, shown/hidden per mode) -->
+          <div id="vgSingleVars">
+            <div class="vg-variation" id="vgVar1">
+              <div class="vg-varHeader">
+                <span class="vg-varLabel">Variation 1</span>
+                <span class="vg-varSize" id="vgVar1Size"></span>
               </div>
-              <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
+              <div class="vg-player">
+                <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
+                <div class="vg-progressWrap" id="vgVar1ProgWrap">
+                  <div class="vg-progressFill" id="vgVar1Fill"></div>
+                </div>
+                <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
+              </div>
+              <div class="vg-resultActions">
+                <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
+                <button id="vgVar1Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
+                <button id="vgVar1Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
+              </div>
             </div>
-            <div class="vg-resultActions">
-              <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
-              <button id="vgVar1Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
-              <button id="vgVar1Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
+            <div class="vg-variation" id="vgVar2" style="display:none;">
+              <div class="vg-varHeader">
+                <span class="vg-varLabel">Variation 2</span>
+                <span class="vg-varSize" id="vgVar2Size"></span>
+              </div>
+              <div class="vg-player">
+                <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
+                <div class="vg-progressWrap" id="vgVar2ProgWrap">
+                  <div class="vg-progressFill" id="vgVar2Fill"></div>
+                </div>
+                <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
+              </div>
+              <div class="vg-resultActions">
+                <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
+                <button id="vgVar2Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
+                <button id="vgVar2Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
+              </div>
             </div>
+            <div id="vgImportStatus" class="ac-manualStatus"></div>
           </div>
 
-          <!-- Variation 2 -->
-          <div class="vg-variation" id="vgVar2" style="display:none;">
-            <div class="vg-varHeader">
-              <span class="vg-varLabel">Variation 2</span>
-              <span class="vg-varSize" id="vgVar2Size"></span>
-            </div>
-            <div class="vg-player">
-              <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
-              <div class="vg-progressWrap" id="vgVar2ProgWrap">
-                <div class="vg-progressFill" id="vgVar2Fill"></div>
-              </div>
-              <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
-            </div>
-            <div class="vg-resultActions">
-              <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">&#128229; Import</button>
-              <button id="vgVar2Reveal" class="ac-secondaryButton vg-actionButton">&#128193; Finder</button>
-              <button id="vgVar2Use"    class="ac-primaryButton vg-actionButton">&#10003; Use</button>
-            </div>
-          </div>
+          <!-- Multi-speaker output (dynamically filled, never destroys single vars) -->
+          <div id="vgMultiVars" style="display:none;"></div>
 
-          <div id="vgImportStatus" class="ac-manualStatus"></div>
         </div>
 
       </div><!-- /vg-left -->
