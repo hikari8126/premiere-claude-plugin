@@ -62,16 +62,13 @@
         <div id="dropzone-chips" class="dropzone-chips"></div>
       </div>
 
-      <!-- Main row: chat input + attach + send -->
-      <!-- div[contenteditable] instead of <textarea> — avoids UXP compositor
-           layer that makes native form controls paint above all overlays -->
+      <!-- Main row: textarea + attach + send -->
       <div id="input-row">
-        <div
+        <textarea
           id="message-input"
-          class="sp-textarea"
-          contenteditable="plaintext-only"
-          data-placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
-        ></div>
+          placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
+          rows="3"
+        ></textarea>
         <div id="input-side">
           <button id="attach-btn" class="icon-btn">&#128206;</button>
           <button id="send-btn">Send</button>

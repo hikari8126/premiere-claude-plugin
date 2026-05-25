@@ -450,11 +450,7 @@ body {
   background: rgba(168, 85, 247, 0.06);
 }
 
-/* .sp-textarea — div[contenteditable] replaces native <textarea>.
-   Using a div avoids the UXP Chromium compositor layer that forces native
-   form controls to paint above all absolutely-positioned overlays. */
-#message-input,
-.sp-textarea {
+#message-input {
   flex: 1;
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -463,26 +459,14 @@ body {
   padding: 8px 10px;
   font-size: 13px;
   font-family: inherit;
+  resize: none;
   min-height: 80px;
   max-height: 180px;
   line-height: 1.4;
   overflow-y: auto;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  outline: none;
-  cursor: text;
-  box-sizing: border-box;
 }
-#message-input:focus,
-.sp-textarea:focus { border-color: var(--accent); }
-
-/* Placeholder — simulated via :empty + data-placeholder attribute */
-.sp-textarea:empty::before {
-  content: attr(data-placeholder);
-  color: var(--text-dim);
-  pointer-events: none;
-  display: block;
-}
+#message-input:focus { outline: none; border-color: var(--accent); }
+#message-input::placeholder { color: var(--text-dim); }
 
 #send-btn {
   background: var(--accent);
