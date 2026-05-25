@@ -22,8 +22,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
 
-    let version     = "4.1.1"
-    let bridgePort  = 3030
+    let version          = "4.1.1"
+    let bridgePort       = 3030
+    let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
     // MARK: Lifecycle
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -65,9 +66,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(autoStartItem)
 
         menu.addItem(.separator())
-        menu.addItem(item("🐍  Cài Whisper (Autocut STT)", #selector(installWhisper), key: ""))
+        menu.addItem(item("🐍  Cài Whisper (Autocut STT)", #selector(installWhisper),    key: ""))
+        menu.addItem(item("🔍  Kiểm tra cập nhật",         #selector(checkForUpdateMenu), key: "u"))
         menu.addItem(.separator())
-        menu.addItem(item("Thoát",                         #selector(quit),           key: "q"))
+        menu.addItem(item("Thoát",                         #selector(quit),               key: "q"))
 
         statusItem.menu = menu
     }
@@ -213,6 +215,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.restartCount = 0
                 self.setStatus("✅ Bridge đang chạy  —  :\(self.bridgePort)", running: true)
                 self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
+                // Check for updates silently — only shows alert if newer version exists
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates(silent: true) }
             }
         } catch {
             setStatus("❌ Lỗi khởi động: \(error.localizedDescription)", running: false)
@@ -349,6 +353,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         a.addButton(withTitle: "Huỷ")
         guard a.runModal() == .alertFirstButtonReturn else { return }
         openTerminal("pip3 install -U openai-whisper 2>&1 || pip3 install -U openai-whisper --break-system-packages 2>&1 && echo '' && echo '✅ Whisper đã cài xong!' && which whisper")
+    }
+
+    // MARK: ─── Auto-update ────────────────────────────────────────────────
+    @objc func checkForUpdateMenu() { checkForUpdates(silent: false) }
+
+    func checkForUpdates(silent: Bool = true) {
+        guard let url = URL(string: updateManifest) else { return }
+        log("Checking for updates...")
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard let self else { return }
+            guard let data, error == nil,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let latest  = json["version"] as? String,
+                  let dlURL   = json["url"]     as? String else {
+                self.log("Update check failed: \(error?.localizedDescription ?? "bad response")")
+                if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
+                return
+            }
+            let notes = json["notes"] as? String ?? ""
+            self.log("Latest: v\(latest)  Current: v\(self.version)")
+            if self.isNewer(latest, than: self.version) {
+                DispatchQueue.main.async { self.showUpdateAlert(version: latest, url: dlURL, notes: notes) }
+            } else if !silent {
+                DispatchQueue.main.async { self.showNoUpdateAlert() }
+            }
+        }.resume()
+    }
+
+    func isNewer(_ v1: String, than v2: String) -> Bool {
+        let parse: (String) -> [Int] = { $0.split(separator: ".").compactMap { Int($0) } }
+        let a = parse(v1), b = parse(v2)
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0
+            let y = i < b.count ? b[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
+
+    func showUpdateAlert(version: String, url: String, notes: String) {
+        let a = NSAlert()
+        a.messageText     = "⬆️  Bản cập nhật v\(version) có sẵn"
+        a.informativeText = notes.isEmpty
+            ? "Nhấn \"Tải về\" để mở trang download."
+            : "\(notes)\n\nNhấn \"Tải về\" để mở trang download."
+        a.alertStyle = .informational
+        a.addButton(withTitle: "Tải về")
+        a.addButton(withTitle: "Để sau")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn, let u = URL(string: url) {
+            NSWorkspace.shared.open(u)
+        }
+    }
+
+    func showNoUpdateAlert() {
+        let a = NSAlert()
+        a.messageText     = "✅  Đang dùng bản mới nhất"
+        a.informativeText = "Claude Bridge v\(version) là bản mới nhất."
+        a.alertStyle      = .informational
+        a.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        a.runModal()
     }
 
     // MARK: ─── Quit ────────────────────────────────────────────────────────
