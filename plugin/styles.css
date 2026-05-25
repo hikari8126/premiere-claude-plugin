@@ -90,8 +90,18 @@ body {
   position: relative; /* positioning context for absolute children */
 }
 .tab-panel.active { display: flex; }
-/* Claude tab: allow settings popup to overflow without clipping */
+/* Claude tab: overflow:visible so the settings popup isn't clipped */
 #tab-claude { overflow: visible; }
+
+/* Bounded inner wrapper for chat + input — prevents input-area from
+   overflowing the panel even when #tab-claude has overflow:visible */
+#claude-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
 /* ── Header ─────────────────────────────────────────── */
 #header {
@@ -1893,7 +1903,7 @@ body {
 }
 
 /* Mode content (both left editor and right settings panels) */
-.vg-modeContent { display: block; }
+.vg-modeContent { display: block; flex-shrink: 0; }
 .vg-modeContent[hidden] { display: none; }
 
 /* ── Right: settings panel ── */

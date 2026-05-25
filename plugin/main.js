@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.14';
+var PLUGIN_VERSION = 'v4.1.15';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2478,9 +2478,10 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       var text = safeVal(els.script);
       if (!text) return setStatus('Script is empty', false);
       // Default: selected voice name; if user typed something, use that instead
+      // UXP: option.text may be empty — fall back to textContent
       var selOpt = els.voiceSelect.options[els.voiceSelect.selectedIndex];
-      var voiceLabelRaw = (selOpt && selOpt.text) ? selOpt.text.split(' ')[0] : 'voice';
-      var voiceLabel = voiceLabelRaw.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      var selOptText = (selOpt && (selOpt.text || selOpt.textContent || '').trim()) || '';
+      var voiceLabel = (selOptText.split(' ')[0] || 'voice').replace(/[^a-zA-Z0-9_\-]/g, '_') || 'voice';
       var customName = userFilename || voiceLabel;
       endpoint = '/tts/generate';
       body = {
