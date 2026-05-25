@@ -471,7 +471,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.16';
+var PLUGIN_VERSION = 'v4.1.17';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1077,34 +1077,44 @@ function showAddShortcutPopup() {
       '<button class="sp-save">Save</button>' +
     '</div>';
 
-  // Append to #tab-claude — has position:relative AND overflow:visible,
-  // so the popup can float upward over the chat area without being clipped.
-  // (#input-area / #claude-content have overflow:hidden so they would clip it.)
+  // Append to #tab-claude — position:relative + overflow:visible.
+  // The popup must live OUTSIDE #claude-content (overflow:hidden) so it isn't clipped.
   var container = document.getElementById('tab-claude') || document.body;
   container.appendChild(popup);
 
-  // Position: always opens UPWARD above the trigger button, right-aligned.
-  // UXP cannot expand the panel downward, so we never fall back to "below".
-  if (triggerBtn) {
-    var contRect = container.getBoundingClientRect();
-    var r        = triggerBtn.getBoundingClientRect();
-    var pw       = Math.min(220, (contRect.width || 240) - 8);
-    popup.style.width = pw + 'px';
+  // ── Positioning strategy ───────────────────────────────────────────────
+  // Native <textarea> elements in UXP (Chromium) render in a higher compositor
+  // layer and always paint above absolutely-positioned elements regardless of
+  // DOM order.  The only reliable fix is to keep the popup ENTIRELY above the
+  // #input-area so it never overlaps the main message textarea.
+  //
+  // Anchor: popup BOTTOM = top of #input-area − 6 px gap.
+  // This places the popup inside the chat region where there are no native controls.
+  var inputArea = document.getElementById('input-area');
+  var contRect  = container.getBoundingClientRect();
+  var pw        = Math.min(220, (contRect.width || 240) - 8);
+  var popH      = 178; // title + label input + prompt textarea + actions row
 
-    // Horizontal: right-align to trigger button, clamped to container left edge
-    var left = (r.right - contRect.left) - pw;
-    if (left < 4) left = 4;
+  popup.style.width = pw + 'px';
 
-    // Vertical: popup bottom sits 6px above trigger button's top edge.
-    // top (relative to #tab-claude) = trigger.top_in_tab - popupHeight - 6
-    var popH       = 178; // design height: title + name input + textarea + actions
-    var triggerTop = r.top - contRect.top;
-    var top        = triggerTop - popH - 6;
-    // Safety clamp: never go above the header (≈ 80px from tab top)
-    if (top < 80) top = Math.max(4, triggerTop - popH - 6);
+  // Horizontal: right-aligned to the panel, 4 px from the right edge
+  var left = (contRect.width || 240) - pw - 4;
+  if (left < 4) left = 4;
+  popup.style.left = left + 'px';
 
-    popup.style.left = left + 'px';
-    popup.style.top  = top  + 'px';
+  // Vertical: bottom of popup sits just above top of #input-area
+  if (inputArea) {
+    var inputRect   = inputArea.getBoundingClientRect();
+    var inputTopRel = inputRect.top - contRect.top; // relative to #tab-claude
+    var top = inputTopRel - popH - 6;
+    if (top < 4) top = 4; // emergency clamp — panel is very short
+    popup.style.top = top + 'px';
+  } else if (triggerBtn) {
+    // Fallback if inputArea not found
+    var r   = triggerBtn.getBoundingClientRect();
+    var top = (r.top - contRect.top) - popH - 6;
+    if (top < 4) top = 4;
+    popup.style.top = top + 'px';
   }
 
   popup.querySelector('.sp-cancel').addEventListener('click', function(e) {

@@ -1,7 +1,7 @@
 {
   "id": "com.claudeai.premiere-assistant",
   "name": "Claude AI Assistant",
-  "version": "4.1.16",
+  "version": "4.1.17",
   "manifestVersion": 5,
   "main": "index.html",
   "host": {
