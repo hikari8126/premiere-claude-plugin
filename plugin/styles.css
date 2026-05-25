@@ -2199,3 +2199,57 @@ body {
   padding: 0;
 }
 .vg-folderBtn:hover { background: rgba(255,255,255,0.12); }
+
+/* ══════════════════════════════════════════════════════════════
+   Voice Create (Clone + Design)
+   ══════════════════════════════════════════════════════════════ */
+.vc-panel {
+  display: flex; flex-direction: column;
+  flex: 1 1 0; min-height: 0;
+}
+.vc-scroll {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 8px 2px 16px 2px;
+}
+.vc-scroll::-webkit-scrollbar { width: 4px; }
+.vc-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.vc-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 4px; display: block;
+}
+.vc-field { margin-bottom: 10px; }
+.vc-row2 { display: flex; gap: 8px; }
+.vc-row2 .vc-field { flex: 1; min-width: 0; }
+.vc-radioGroup { display: flex; gap: 14px; }
+.vc-radio {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--text); cursor: pointer;
+}
+.vc-radio input { accent-color: var(--accent); cursor: pointer; }
+.vc-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.vc-clipInfo {
+  font-size: 11px; color: var(--text-muted);
+  padding: 6px 8px; border-radius: 5px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  min-height: 30px; word-break: break-all; line-height: 1.4;
+}
+.vc-previewPlayer {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; margin-top: 6px; border-radius: 6px;
+  background: rgba(168,85,247,0.1);
+  border: 1px solid rgba(168,85,247,0.25);
+}
+.vc-saveSection {
+  margin-top: 10px; padding: 10px; border-radius: 6px;
+  border: 1px solid rgba(168,85,247,0.25);
+  background: rgba(168,85,247,0.06);
+}
+.vc-status {
+  font-size: 12px; padding: 7px 9px; margin-top: 7px;
+  border-radius: 5px; background: rgba(255,255,255,0.06);
+  color: var(--text); word-break: break-word;
+}
+.vc-status.is-error { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.vc-status.is-ok    { background: rgba(34,197,94,0.12);  color: #86efac; }
