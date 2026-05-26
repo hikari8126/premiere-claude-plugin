@@ -103,14 +103,31 @@ echo "  Để test: open '${APP_DIR}'"
 echo "  Nếu bị block: right-click → Open → Open"
 echo ""
 
-# ── 7. Create distribution zip ────────────────────────────────────────────
+# ── 7. Create CCX (UXP plugin installer — double-click to install) ────────
 VERSION=$(grep '"version"' plugin/manifest.json | grep -o '[0-9.]*' | head -1)
+CCX_FILE="claude-ai-assistant-v${VERSION}.ccx"
+
+[ -f "$CCX_FILE" ] && rm "$CCX_FILE"
+
+zip -j "$CCX_FILE" \
+  plugin/manifest.json \
+  plugin/index.html \
+  plugin/main.js \
+  plugin/styles.css \
+  plugin/premiere-api.js \
+  -x "*.DS_Store"
+
+CCX_SIZE=$(du -sh "$CCX_FILE" | cut -f1)
+echo "  ✅ CCX: ${CCX_FILE}  (${CCX_SIZE})"
+
+# ── 8. Create distribution zip ────────────────────────────────────────────
 DIST_ZIP="premiere-claude-plugin-v${VERSION}.zip"
 
 [ -f "$DIST_ZIP" ] && rm "$DIST_ZIP"
 
 zip -r "$DIST_ZIP" \
   "${APP_DIR}" \
+  "$CCX_FILE" \
   plugin/manifest.json \
   plugin/index.html \
   plugin/main.js \
@@ -123,11 +140,13 @@ DIST_SIZE=$(du -sh "$DIST_ZIP" | cut -f1)
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📦 Distribution: ${DIST_ZIP}  (${DIST_SIZE})"
+echo "  🔌 Plugin CCX:   ${CCX_FILE}  (${CCX_SIZE})"
 echo ""
 echo "  Hướng dẫn cho teammate:"
 echo "  1. Giải nén zip"
 echo "  2. Kéo 'Claude Bridge.app' vào Applications"
 echo "  3. Double-click để chạy (lần đầu: right-click → Open)"
-echo "  4. Load thư mục plugin/ vào UXP Developer Tool"
+echo "  4. Double-click '${CCX_FILE}' → Creative Cloud cài plugin tự động"
+echo "     (Hoặc: load thư mục plugin/ vào UXP Developer Tool)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
