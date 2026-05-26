@@ -7,6 +7,7 @@ bridge/.env
 
 # Build output
 Claude\ Bridge.app/
+Installer\ Claude\ AI.app/
 *.zip
 
 # Generated / binary output
