@@ -938,9 +938,12 @@ function ensureDir(dir) {
   }
 }
 
-async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVariations, applySeed) {
-  const tempDir = getTempDir();
-  ensureDir(tempDir);
+async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVariations, applySeed, outputDir) {
+  // Save to outputDir when provided; otherwise fall back to temp dir.
+  const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim())
+    ? outputDir.trim()
+    : getTempDir();
+  ensureDir(saveDir);
   const results = [];
   for (let v = 1; v <= numVariations; v++) {
     const reqBody = Object.assign({}, body);
@@ -951,7 +954,7 @@ async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVar
     const fname = numVariations === 1
       ? baseFilename + '.mp3'
       : baseFilename + '-v' + v + '.mp3';
-    const fpath = path.join(tempDir, fname);
+    const fpath = path.join(saveDir, fname);
     fs.writeFileSync(fpath, result.buffer);
     console.log('[' + kind + '] v' + v + ' saved', result.buffer.length, 'bytes →', fpath);
     results.push({
@@ -961,14 +964,14 @@ async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVar
       filename:   fname,
     });
   }
-  return { variations: results, tempDir };
+  return { variations: results, saveDir };
 }
 
 app.post('/tts/generate', async (req, res) => {
   try {
     const {
       apiKey, voiceId, modelId, text, settings,
-      filename, variations, outputFormat, languageCode,
+      filename, variations, outputFormat, languageCode, outputDir,
     } = req.body;
     if (!apiKey)  throw new Error('apiKey required');
     if (!voiceId) throw new Error('voiceId required');
@@ -995,9 +998,9 @@ app.post('/tts/generate', async (req, res) => {
       if (languageCode) body.language_code = languageCode;
     }
 
-    console.log('[tts/generate]', text.length, 'chars, voice:', voiceId, 'model:', body.model_id, 'fmt:', outputFormat || 'default', '| variations:', numVariations);
-    const out = await generateAndSave('tts', apiKey, urlPath, body, baseFilename, numVariations, !isV3);
-    res.json({ ok: true, variations: out.variations, tempDir: out.tempDir });
+    console.log('[tts/generate]', text.length, 'chars, voice:', voiceId, 'model:', body.model_id, 'fmt:', outputFormat || 'default', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+    const out = await generateAndSave('tts', apiKey, urlPath, body, baseFilename, numVariations, !isV3, outputDir);
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
   } catch (err) {
     console.error('[tts/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -1007,7 +1010,7 @@ app.post('/tts/generate', async (req, res) => {
 // SFX (sound effects) — /v1/sound-generation
 app.post('/sfx/generate', async (req, res) => {
   try {
-    const { apiKey, text, durationSec, promptInfluence, filename, variations, outputFormat } = req.body;
+    const { apiKey, text, durationSec, promptInfluence, filename, variations, outputFormat, outputDir } = req.body;
     if (!apiKey) throw new Error('apiKey required');
     if (!text)   throw new Error('text (sound description) required');
 
@@ -1024,9 +1027,9 @@ app.post('/sfx/generate', async (req, res) => {
 
     let sfxUrl = '/v1/sound-generation';
     if (outputFormat) sfxUrl += '?output_format=' + encodeURIComponent(outputFormat);
-    console.log('[sfx/generate]', text, '|', body.duration_seconds + 's', 'fmt:', outputFormat || 'default', '| variations:', numVariations);
-    const out = await generateAndSave('sfx', apiKey, sfxUrl, body, baseFilename, numVariations, false);
-    res.json({ ok: true, variations: out.variations, tempDir: out.tempDir });
+    console.log('[sfx/generate]', text, '|', body.duration_seconds + 's', 'fmt:', outputFormat || 'default', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+    const out = await generateAndSave('sfx', apiKey, sfxUrl, body, baseFilename, numVariations, false, outputDir);
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
   } catch (err) {
     console.error('[sfx/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -1036,7 +1039,7 @@ app.post('/sfx/generate', async (req, res) => {
 // Music — /v1/music
 app.post('/music/generate', async (req, res) => {
   try {
-    const { apiKey, prompt, lengthSec, filename, variations } = req.body;
+    const { apiKey, prompt, lengthSec, filename, variations, outputDir } = req.body;
     if (!apiKey) throw new Error('apiKey required');
     if (!prompt) throw new Error('prompt required');
 
@@ -1050,9 +1053,9 @@ app.post('/music/generate', async (req, res) => {
       music_length_ms: Math.round(Number(lengthSec || 10) * 1000),
     };
 
-    console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations);
-    const out = await generateAndSave('music', apiKey, '/v1/music', body, baseFilename, numVariations, false);
-    res.json({ ok: true, variations: out.variations, tempDir: out.tempDir });
+    console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+    const out = await generateAndSave('music', apiKey, '/v1/music', body, baseFilename, numVariations, false, outputDir);
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
   } catch (err) {
     console.error('[music/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -1290,6 +1293,99 @@ app.post('/tts/reveal', async (req, res) => {
   }
 });
 
+// ── POST /tts/concat-from-sequence ─────────────────────────────────────────
+// Receives [{filePath, inPoint, outPoint}] clips from plugin (A1 track items).
+// Uses ffmpeg to extract each audio segment and concatenate into a single MP3.
+app.post('/tts/concat-from-sequence', async (req, res) => {
+  const { clips, outputDir } = req.body;
+  if (!clips || !Array.isArray(clips) || clips.length === 0) {
+    return res.status(400).json({ ok: false, error: 'No clips provided' });
+  }
+
+  // Check ffmpeg is available
+  try {
+    await new Promise((resolve, reject) => {
+      const p = spawn('ffmpeg', ['-version'], { stdio: 'pipe' });
+      p.on('close', code => (code === 0 ? resolve() : reject(new Error('ffmpeg not found'))));
+      p.on('error', () => reject(new Error('ffmpeg not installed — run: brew install ffmpeg')));
+    });
+  } catch(e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+
+  const tmpDir = getTempDir();
+  ensureDir(tmpDir);
+  const ts = Date.now();
+  const segPaths = [];
+
+  try {
+    // Extract each clip segment to a temp WAV
+    for (let i = 0; i < clips.length; i++) {
+      const { filePath, inPoint, outPoint } = clips[i];
+      if (!filePath) throw new Error(`Clip ${i + 1}: missing filePath`);
+      if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: file not found: ${filePath}`);
+
+      const segPath = path.join(tmpDir, `concat_seg_${ts}_${i}.wav`);
+      await new Promise((resolve, reject) => {
+        const args = [
+          '-y', '-i', filePath,
+          '-ss', String(inPoint || 0),
+          '-to', String(outPoint || 0),
+          '-vn', '-acodec', 'pcm_s16le',
+          segPath,
+        ];
+        const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+        let stderr = '';
+        proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg segment ${i + 1} failed: ${stderr.slice(-300)}`));
+        });
+        proc.on('error', e => reject(new Error('ffmpeg error: ' + e.message)));
+      });
+      segPaths.push(segPath);
+    }
+
+    // Write concat list file
+    const listPath = path.join(tmpDir, `concat_list_${ts}.txt`);
+    fs.writeFileSync(listPath, segPaths.map(p => `file '${p}'`).join('\n'));
+
+    // Concatenate segments → MP3
+    const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim())
+      ? outputDir.trim() : tmpDir;
+    ensureDir(saveDir);
+    const outPath = path.join(saveDir, `sequence_audio_${ts}.mp3`);
+
+    await new Promise((resolve, reject) => {
+      const args = [
+        '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+        '-acodec', 'libmp3lame', '-q:a', '2',
+        outPath,
+      ];
+      const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+      let stderr = '';
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error('ffmpeg concat failed: ' + stderr.slice(-300)));
+      });
+      proc.on('error', e => reject(new Error('ffmpeg error: ' + e.message)));
+    });
+
+    // Cleanup temp segments and list
+    for (const seg of segPaths) { try { fs.unlinkSync(seg); } catch(e) {} }
+    try { fs.unlinkSync(listPath); } catch(e) {}
+
+    console.log('[concat-from-sequence]', clips.length, 'clips →', outPath);
+    res.json({ ok: true, audioPath: outPath });
+
+  } catch(e) {
+    for (const seg of segPaths) { try { fs.unlinkSync(seg); } catch(err) {} }
+    console.error('[concat-from-sequence]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /api/read-image — bridge reads a local file and returns base64 ───
 // Used as a fallback when UXP storage API can't read Finder drag-dropped files
 app.post('/api/read-image', async (req, res) => {
@@ -1311,7 +1407,7 @@ app.post('/api/read-image', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.3.9';
+const BRIDGE_VERSION = '2.4';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

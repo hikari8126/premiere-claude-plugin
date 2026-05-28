@@ -72,9 +72,9 @@ cat > "${APP_DIR}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleExecutable</key>
     <string>Claude Bridge</string>
   <key>CFBundleVersion</key>
-    <string>2.3</string>
+    <string>2.4</string>
   <key>CFBundleShortVersionString</key>
-    <string>2.3</string>
+    <string>2.4</string>
   <key>CFBundlePackageType</key>
     <string>APPL</string>
   <key>NSHighResolutionCapable</key>
@@ -155,7 +155,7 @@ cat > "${INSTALLER_DIR}/Contents/Info.plist" << PLIST
   <key>NSHighResolutionCapable</key>
     <true/>
   <key>NSAppleEventsUsageDescription</key>
-    <string>Installer Claude AI copies files to /Applications.</string>
+    <string>Installer Claude AI dùng Terminal để cài Node.js và Homebrew nếu cần.</string>
   <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

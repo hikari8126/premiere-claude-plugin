@@ -1712,8 +1712,20 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;   /* UXP: scroll must be on inner child, not flex container */
-  padding: 10px 10px 14px;
 }
+/* Inner scrollable wrapper — lets textarea grow freely; panel scrolls when too tall */
+.vg-leftScroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 10px 14px;
+  scrollbar-width: thin;
+}
+.vg-leftScroll::-webkit-scrollbar { width: 4px; }
+.vg-leftScroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 /* ── Speaker bar ── */
 .vg-speakerBar {
@@ -1772,12 +1784,36 @@ body {
 
 /* ── Editor area ── */
 .vg-editorWrap { display: flex; flex-direction: column; }
-.vg-script {
-  flex: 1 1 auto;
+
+/* Grow wrapper — height is driven by the sizer div, not the textarea */
+.vg-scriptGrow {
+  position: relative;
+  min-height: 80px;
+  width: 100%;
+}
+
+/* Invisible sizer: same font/padding as textarea, grows naturally as a block div */
+.vg-scriptSizer {
   width: 100%;
   min-height: 80px;
-  max-height: 220px;  /* prevent textarea eating the entire left panel in small windows */
-  padding: 10px 10px;
+  padding: 10px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  color: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+
+.vg-script {
+  width: 100%;
+  padding: 10px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -1785,11 +1821,21 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 7px;
-  resize: vertical;
+  resize: none;
   outline: none;
-  overflow-y: auto;
   box-sizing: border-box;
 }
+
+/* When inside a grow wrapper, textarea fills it absolutely — no internal scroll */
+.vg-scriptGrow > .vg-script {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+
 .vg-script:focus { border-color: #a855f7; background: rgba(0,0,0,0.4); }
 .vg-editorFoot {
   display: flex;
@@ -1834,17 +1880,11 @@ body {
 .vg-genButton:hover { background: #9333ea; }
 .vg-genButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Results — inner scroll so it never overflows .vg-left ── */
+/* ── Results — part of the outer .vg-leftScroll flow ── */
 .vg-results {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex-shrink: 0;
   margin-top: 10px;
-  scrollbar-width: thin;
 }
-.vg-results::-webkit-scrollbar { width: 4px; }
-.vg-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 .vg-variation {
   background: rgba(255,255,255,0.025);
   border: 1px solid var(--border);

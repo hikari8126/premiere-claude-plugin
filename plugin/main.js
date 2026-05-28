@@ -159,6 +159,38 @@ async function pushClip(arr, item, trackIndex, trackType, clipIndex) {
     name: name || ('Clip ' + clipIndex), startSec: startSec, endSec: endSec });
 }
 
+// Get source file path from a timeline TrackItem.
+// Tries getProjectItem() → ClipProjectItem.cast → getMediaFilePath, then
+// .projectItem property, then direct item.getMediaFilePath as fallback.
+async function vcGetTrackItemFilePath(item) {
+  if (!item) return null;
+  try {
+    var pi = item.getProjectItem && item.getProjectItem();
+    if (pi && typeof pi.then === 'function') pi = await pi;
+    if (pi) {
+      var cast = ppro && ppro.ClipProjectItem && ppro.ClipProjectItem.cast ? ppro.ClipProjectItem.cast(pi) : pi;
+      var fp = (cast || pi).getMediaFilePath && (cast || pi).getMediaFilePath();
+      if (fp && typeof fp.then === 'function') fp = await fp;
+      if (typeof fp === 'string' && fp) return fp;
+    }
+  } catch(e) {}
+  try {
+    var pi2 = item.projectItem;
+    if (pi2) {
+      var cast2 = ppro && ppro.ClipProjectItem && ppro.ClipProjectItem.cast ? ppro.ClipProjectItem.cast(pi2) : pi2;
+      var fp2 = (cast2 || pi2).getMediaFilePath && (cast2 || pi2).getMediaFilePath();
+      if (fp2 && typeof fp2.then === 'function') fp2 = await fp2;
+      if (typeof fp2 === 'string' && fp2) return fp2;
+    }
+  } catch(e) {}
+  try {
+    var fp3 = item.getMediaFilePath && item.getMediaFilePath();
+    if (fp3 && typeof fp3.then === 'function') fp3 = await fp3;
+    if (typeof fp3 === 'string' && fp3) return fp3;
+  } catch(e) {}
+  return null;
+}
+
 async function ppGetTimelineInfo() {
   try {
     var seq = await getActiveSequence();
@@ -471,7 +503,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.20';
+var PLUGIN_VERSION = 'v4.1.35';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -989,6 +1021,15 @@ function esc(str) {
 function autoResize() {
   msgInput.style.height = 'auto';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 180) + 'px';
+}
+
+// VoiceGen textarea auto-resize: set height to '1px' first so the browser is forced
+// to reflow and report the true content height via scrollHeight, then lock that in.
+// Sizer div drives wrapper height — no scrollHeight tricks needed (UXP-safe).
+function vgAutoResize(el) {
+  var sizer = el.parentNode && el.parentNode.querySelector('.vg-scriptSizer');
+  if (!sizer) return;
+  sizer.textContent = (el.value || '') + '\n';
 }
 
 msgInput.addEventListener('input', autoResize);
@@ -1798,6 +1839,15 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
     closeSettingsPanel();
+    // Resize VoiceGen textareas when tab becomes visible
+    if (tab === 'voicegen') {
+      var _vgScript = document.getElementById('vgScript');
+      var _vgSfx    = document.getElementById('vgSfxText');
+      var _vgMusic  = document.getElementById('vgMusicPrompt');
+      if (_vgScript) vgAutoResize(_vgScript);
+      if (_vgSfx)    vgAutoResize(_vgSfx);
+      if (_vgMusic)  vgAutoResize(_vgMusic);
+    }
     // Close voice dropdown (panel is portaled to body, close directly)
     var _vdp = document.getElementById('vgVoiceDropPanel');
     if (_vdp) _vdp.style.display = 'none';
@@ -1936,7 +1986,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     VG_ACTIVE_SPEAKER = newId;
     var sp = VG_SPEAKERS.find(function(s) { return s.id === newId; });
     if (sp) {
-      if (els.script) els.script.value = VG_SPEAKER_TEXTS[newId] || '';
+      if (els.script) { els.script.value = VG_SPEAKER_TEXTS[newId] || ''; vgAutoResize(els.script); }
       vgSetVoice(sp.voiceId);
     }
     renderSpeakerBar();
@@ -2018,6 +2068,35 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       });
   }
 
+  // Play an absolute file path directly — no temp-dir HTTP serving needed.
+  function vgPlayPath(absPath, onProgress, onEnd, onError) {
+    if (vgAbortCtrl) { vgAbortCtrl.abort(); vgAbortCtrl = null; }
+    if (vgOnStopCb)  { var prev = vgOnStopCb; vgOnStopCb = null; prev(); }
+    vgIsPlaying = false;
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    vgAbortCtrl = ctrl;
+    vgOnStopCb  = onEnd || null;
+    vgIsPlaying = true;
+    fetch(BRIDGE_URL + '/tts/play', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ filePath: absPath }),
+      signal:  ctrl ? ctrl.signal : undefined,
+    })
+      .then(function(r) { return r.json(); })
+      .then(function() {
+        if (!vgIsPlaying) return;
+        vgIsPlaying = false; vgAbortCtrl = null;
+        var cb = vgOnStopCb; vgOnStopCb = null; if (cb) cb();
+      })
+      .catch(function(e) {
+        if (e && e.name === 'AbortError') return;
+        vgIsPlaying = false; vgAbortCtrl = null; vgOnStopCb = null;
+        if (onError) onError(e.message || String(e));
+      });
+  }
+
+
   function vgStopAll() {
     if (!vgIsPlaying && !vgAbortCtrl) return;
     if (vgAbortCtrl) { vgAbortCtrl.abort(); vgAbortCtrl = null; }
@@ -2037,8 +2116,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var progWrap = $(prefix + 'ProgWrap');
     var fill     = $(prefix + 'Fill');
     var timeEl   = $(prefix + 'Time');
-    var currentUrl = null;
-    var isPlaying  = false;
+    var currentPath = null; // absolute file path
+    var isPlaying   = false;
 
     function fmt(s) {
       if (!isFinite(s) || s < 0) s = 0;
@@ -2051,28 +2130,21 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     }
 
     playBtn.addEventListener('click', function() {
-      if (!currentUrl) return;
-      if (isPlaying) {
-        vgStopAll();
-        // setPlaying(false) will be called by the onEnd callback we registered
-        return;
-      }
+      if (!currentPath) return;
+      if (isPlaying) { vgStopAll(); return; }
       setPlaying(true);
       timeEl.textContent = 'loading...';
-      vgPlayUrl(currentUrl,
-        function(elapsed, dur) {
-          fill.style.width = Math.min(100, elapsed / dur * 100) + '%';
-          timeEl.textContent = fmt(elapsed) + ' / ' + fmt(dur);
-        },
+      vgPlayPath(currentPath,
+        null,
         function() { setPlaying(false); fill.style.width = '0%'; timeEl.textContent = '0:00 / ?'; },
         function(e) { setPlaying(false); timeEl.textContent = 'error'; console.warn('[VG player ' + slot + ']', e); }
       );
     });
 
     return {
-      setSrc: function(url) {
+      setSrc: function(absPath) {
         if (isPlaying) { vgStopAll(); setPlaying(false); }
-        currentUrl = url;
+        currentPath = absPath;
         fill.style.width = '0%';
         timeEl.textContent = '0:00 / ?';
       },
@@ -2152,51 +2224,61 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     listEl.className = 'vg-dropList';
     panel.appendChild(listEl);
 
+    // Pre-render all items once. Filtering only toggles display — no innerHTML
+    // rebuild on each keystroke, so UXP never resets the input's focus/selection.
+    var _allItems = [];
+    VG_VOICES_DATA.forEach(function(v) {
+      if (v.isSep) {
+        var sep = document.createElement('div');
+        sep.className = 'vg-dropSep';
+        sep.textContent = '── Default voices ──';
+        listEl.appendChild(sep);
+        _allItems.push({ el: sep, isSep: true });
+        return;
+      }
+
+      var item = document.createElement('div');
+      item.className = 'vg-dropItem' + (v.voice_id === currentId ? ' is-selected' : '');
+
+      var info = document.createElement('div');
+      info.className = 'vg-dropItemLabel';
+      info.textContent = (v.isCustom ? '⭐ ' : '') + v.label;
+      item.appendChild(info);
+
+      if (v.voice_id !== '__custom__') {
+        var btn = document.createElement('button');
+        btn.className = 'vg-dropItemPrev';
+        btn.textContent = '▶';
+        VG_DROP_BTNS[v.voice_id] = btn;
+        (function(vid, b) {
+          b.addEventListener('click', function(e) {
+            e.stopPropagation();
+            vgPreviewItem(vid, b);
+          });
+        })(v.voice_id, btn);
+        item.appendChild(btn);
+      }
+
+      info.addEventListener('click', function() { vgDropSelect(v.voice_id, v.label); });
+      listEl.appendChild(item);
+      _allItems.push({ el: item, isSep: false, label: v.label });
+    });
+
     function buildList(filter) {
-      listEl.innerHTML = '';
-      VG_DROP_BTNS = {};
       var f = (filter || '').toLowerCase().trim();
-      VG_VOICES_DATA.forEach(function(v) {
-        if (v.isSep) {
-          if (!f) {
-            var sep = document.createElement('div');
-            sep.className = 'vg-dropSep';
-            sep.textContent = '── Default voices ──';
-            listEl.appendChild(sep);
-          }
-          return;
-        }
-        if (f && v.label.toLowerCase().indexOf(f) === -1) return;
-
-        var item = document.createElement('div');
-        item.className = 'vg-dropItem' + (v.voice_id === currentId ? ' is-selected' : '');
-
-        var info = document.createElement('div');
-        info.className = 'vg-dropItemLabel';
-        info.textContent = (v.isCustom ? '⭐ ' : '') + v.label;
-        item.appendChild(info);
-
-        if (v.voice_id !== '__custom__') {
-          var btn = document.createElement('button');
-          btn.className = 'vg-dropItemPrev';
-          btn.textContent = '▶';
-          VG_DROP_BTNS[v.voice_id] = btn;
-          (function(vid, b) {
-            b.addEventListener('click', function(e) {
-              e.stopPropagation();
-              vgPreviewItem(vid, b);
-            });
-          })(v.voice_id, btn);
-          item.appendChild(btn);
-        }
-
-        info.addEventListener('click', function() { vgDropSelect(v.voice_id, v.label); });
-        listEl.appendChild(item);
+      _allItems.forEach(function(entry) {
+        if (entry.isSep) { entry.el.style.display = f ? 'none' : ''; return; }
+        entry.el.style.display = (!f || entry.label.toLowerCase().indexOf(f) !== -1) ? '' : 'none';
       });
     }
 
-    buildList('');
-    searchInput.addEventListener('input', function() { buildList(searchInput.value); });
+    // claimKeyboard is managed at the dropdown open/close level (openVoiceDrop /
+    // closeVoiceDrop) to avoid repeated setKeyboardFocus(true) calls from phantom
+    // focus events that UXP fires during layout — each call could trigger select-all.
+    var _composing = false;
+    searchInput.addEventListener('compositionstart', function() { _composing = true; });
+    searchInput.addEventListener('compositionend', function() { _composing = false; buildList(searchInput.value); });
+    searchInput.addEventListener('input', function() { if (!_composing) buildList(searchInput.value); });
   }
 
   function repositionVoiceDrop() {
@@ -2217,13 +2299,16 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (!panel || !trigger) return;
     repositionVoiceDrop();
     panel.style.maxHeight = '240px';
-    panel.style.display  = 'flex';   // shows the portal panel
+    panel.style.display  = 'flex';
     trigger.classList.add('is-open');
-    // Attach resize listener so position tracks plugin panel resize
     if (!vgDropResizeHandler) {
       vgDropResizeHandler = function() { repositionVoiceDrop(); };
       window.addEventListener('resize', vgDropResizeHandler);
     }
+    // Claim keyboard once here so Premiere doesn't intercept keys while dropdown
+    // is open. Doing it on the input's focus event caused repeated calls during
+    // UXP layout reflows (each call may trigger select-all on the input).
+    window.claimKeyboard();
     var si = panel.querySelector('.vg-dropSearchInput');
     if (si) setTimeout(function() { try { si.focus(); } catch(e) {} }, 30);
   }
@@ -2233,11 +2318,11 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var trigger = $('vgVoiceDropTrigger');
     if (panel) panel.style.display = 'none';
     if (trigger) trigger.classList.remove('is-open');
-    // Remove resize listener
     if (vgDropResizeHandler) {
       window.removeEventListener('resize', vgDropResizeHandler);
       vgDropResizeHandler = null;
     }
+    window.releaseKeyboard();
     if (VG_PREV_ACTIVE) { vgStopAll(); }
   }
 
@@ -2420,7 +2505,18 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     return {}; // eleven_v3 ignores voice_settings — always empty
   }
 
-  async function generateMultiSpeaker(numVar, customName, outputFmt) {
+  // MMDDHHmmss — 10 chars, second-level uniqueness, e.g. "0528143052"
+  function genTimestamp() {
+    var d = new Date();
+    var p = function(n) { return ('0' + n).slice(-2); };
+    return p(d.getMonth() + 1) + p(d.getDate()) + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  function safeFileStr(s) {
+    return (s || '').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  }
+
+  async function generateMultiSpeaker(numVar, userFilename, outputFmt) {
     saveCurrentSpeakerText();
     var active = VG_SPEAKERS.filter(function(sp) {
       return (VG_SPEAKER_TEXTS[sp.id] || '').trim();
@@ -2429,10 +2525,13 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
     els.btnGenerate.disabled = true;
     var resultCards = [];
+    var ts = genTimestamp();
+    var userSuffix = safeFileStr(userFilename);
     try {
       for (var i = 0; i < active.length; i++) {
         var sp = active[i];
-        var spName = (customName || sp.voiceName) + (active.length > 1 ? ('-' + (i + 1)) : '');
+        var spVoice = safeFileStr(sp.voiceName.split(' ')[0]) || 'voice';
+        var spName = spVoice + (userSuffix ? '_' + userSuffix : '') + '_' + ts + (active.length > 1 ? '-' + (i + 1) : '');
         els.btnGenerate.textContent = '⏳ ' + sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...';
         setStatus('Generating ' + sp.voiceName + '...', false);
         var resp = await postJsonVG('/tts/generate', {
@@ -2445,6 +2544,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
           outputFormat: outputFmt,
           settings: getTtsSettings(),
           languageCode: getLangCode(),
+          outputDir: customOutputFolder || '',
         });
         if (!resp.ok) throw new Error(sp.voiceName + ': ' + (resp.error || 'failed'));
         resultCards.push({ speaker: sp, variations: resp.variations || [] });
@@ -2489,12 +2589,13 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       if (!voiceId) return setStatus('Pick a voice', false);
       var text = safeVal(els.script);
       if (!text) return setStatus('Script is empty', false);
-      // Default: selected voice name; if user typed something, use that instead
-      // UXP: option.text may be empty — fall back to textContent
+      // Voice name is always prefix; user's text (if any) is appended as a note;
+      // timestamp suffix makes every generated file unique → no overwrite on import.
       var selOpt = els.voiceSelect.options[els.voiceSelect.selectedIndex];
       var selOptText = (selOpt && (selOpt.text || selOpt.textContent || '').trim()) || '';
-      var voiceLabel = (selOptText.split(' ')[0] || 'voice').replace(/[^a-zA-Z0-9_\-]/g, '_') || 'voice';
-      var customName = userFilename || voiceLabel;
+      var voiceLabel = safeFileStr(selOptText.split(' ')[0]) || 'voice';
+      var userSuffix = safeFileStr(userFilename);
+      var customName = voiceLabel + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/tts/generate';
       body = {
         apiKey: ELEVENLABS_KEY, voiceId: voiceId, modelId: els.modelSelect.value,
@@ -2502,12 +2603,14 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         outputFormat: outputFmt,
         languageCode: getLangCode(),
         settings: getTtsSettings(),
+        outputDir: customOutputFolder || '',
       };
       label = 'voice';
     } else if (currentMode === 'sfx') {
       var sfxText = safeVal($('vgSfxText'));
       if (!sfxText) return setStatus('Sound description is empty', false);
-      var customName = userFilename || 'sfx';
+      var userSuffix = safeFileStr(userFilename);
+      var customName = 'sfx' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/sfx/generate';
       body = {
         apiKey: ELEVENLABS_KEY, text: sfxText,
@@ -2515,17 +2618,20 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         promptInfluence: parseFloat($('vgSfxInfluence').value),
         filename: customName, variations: numVar,
         outputFormat: ($('vgSfxOutputFormat') && $('vgSfxOutputFormat').value) || 'mp3_44100_128',
+        outputDir: customOutputFolder || '',
       };
       label = 'SFX';
     } else if (currentMode === 'music') {
       var prompt = safeVal($('vgMusicPrompt'));
       if (!prompt) return setStatus('Music prompt is empty', false);
-      var customName = userFilename || 'music';
+      var userSuffix = safeFileStr(userFilename);
+      var customName = 'music' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/music/generate';
       body = {
         apiKey: ELEVENLABS_KEY, prompt: prompt,
         lengthSec: parseFloat($('vgMusicLength').value),
         filename: customName, variations: numVar,
+        outputDir: customOutputFolder || '',
       };
       label = 'music';
     }
@@ -2560,16 +2666,24 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     document.querySelectorAll('.vg-modeContent').forEach(function(c) {
       c.hidden = c.dataset.mode !== mode;
     });
-    // Hide genBar + results when in create mode; also hide right panel
     var isCreate = (mode === 'create');
     var genBar = document.querySelector('.vg-genBar');
     var vgRight = document.querySelector('.vg-right');
     if (genBar)  genBar.style.display  = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     if (els.resultSection) els.resultSection.hidden = true;
-    // Update generate button label
     var labels = { tts: '⚡ GENERATE VOICE', sfx: '💥 GENERATE SFX', music: '🎵 GENERATE MUSIC' };
     els.btnGenerate.textContent = labels[mode] || labels.tts;
+
+    // Reset Create panel to "choose method" state each time it's opened
+    if (isCreate) {
+      var vcSel = document.getElementById('vcType');
+      var vcClone  = document.getElementById('vcCloneSection');
+      var vcDesign = document.getElementById('vcDesignSection');
+      if (vcSel) vcSel.options[0].selected = true; // reset to placeholder
+      if (vcClone)  vcClone.hidden  = true;
+      if (vcDesign) vcDesign.hidden = true;
+    }
   }
 
   function renderVariations() {
@@ -2583,14 +2697,14 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var v2 = lastVariations[1];
     if (v1) {
       els.var1.style.display = '';
-      players.var1.setSrc(BRIDGE_URL + v1.previewUrl);
+      players.var1.setSrc(v1.audioPath);
       els.var1Size.textContent = (v1.sizeBytes / 1024).toFixed(0) + ' KB · ' + v1.filename;
     } else {
       els.var1.style.display = 'none';
     }
     if (v2) {
       els.var2.style.display = '';
-      players.var2.setSrc(BRIDGE_URL + v2.previewUrl);
+      players.var2.setSrc(v2.audioPath);
       els.var2Size.textContent = (v2.sizeBytes / 1024).toFixed(0) + ' KB · ' + v2.filename;
     } else {
       els.var2.style.display = 'none';
@@ -2619,7 +2733,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         wrap.className = 'vg-variation';
         var sizeTxt = (v.sizeBytes / 1024).toFixed(0) + ' KB · ' + v.filename;
 
-        var cardUrl = BRIDGE_URL + v.previewUrl;
+        var cardPath = v.audioPath;
         var cardPlaying = false;
 
         var playB = document.createElement('button');
@@ -2648,11 +2762,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         playB.addEventListener('click', function() {
           if (cardPlaying) { vgStopAll(); return; }
           setCardPlaying(true);
-          vgPlayUrl(cardUrl,
-            function(elapsed, dur) {
-              fill.style.width = (dur > 0 ? Math.min(100, elapsed / dur * 100) : 0) + '%';
-              timeEl.textContent = fmtTime(elapsed) + ' / ' + fmtTime(dur);
-            },
+          vgPlayPath(cardPath,
+            null,
             function() { setCardPlaying(false); fill.style.width = '0%'; },
             function(e) { setCardPlaying(false); console.warn('[VG multi player]', e); }
           );
@@ -2695,15 +2806,28 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     els.importStatus = statusEl;
   }
 
-  // Import workflow: temp file → move to user's chosen folder → import to Premiere
   async function importVariation(variation) {
     if (!variation) return;
     els.importStatus.className = 'ac-manualStatus';
 
+    // If no output folder set yet, prompt now before proceeding
+    if (!customOutputFolder) {
+      els.importStatus.textContent = 'Pick an output folder first…';
+      await pickOutputFolder();
+      if (!customOutputFolder) {
+        els.importStatus.className = 'ac-manualStatus is-err';
+        els.importStatus.textContent = '✗ No output folder selected — import cancelled';
+        return;
+      }
+    }
+
     var finalPath = variation.audioPath;
 
-    // Step 1: if user picked a custom folder, move file there
-    if (customOutputFolder) {
+    // File was already saved to output folder at generation time — skip move
+    var alreadyInDest = customOutputFolder && variation.audioPath &&
+      variation.audioPath.startsWith(customOutputFolder);
+
+    if (!alreadyInDest) {
       els.importStatus.textContent = 'Moving to ' + customOutputFolder + '...';
       try {
         var moveResp = await postJsonVG('/tts/move', {
@@ -2719,7 +2843,6 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       }
     }
 
-    // Step 2: import into Premiere project
     els.importStatus.textContent = 'Importing ' + variation.filename + ' to Premiere...';
     try {
       if (!ppro || !ppro.Project) throw new Error('Premiere API unavailable');
@@ -2732,7 +2855,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         throw new Error('No importFiles API on project');
       }
       els.importStatus.className = 'ac-manualStatus is-ok';
-      els.importStatus.textContent = '✓ Saved to ' + (customOutputFolder || 'temp folder') +
+      els.importStatus.textContent = '✓ Saved to ' + customOutputFolder +
         ', imported "' + variation.filename + '" → see Project Panel';
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
@@ -2795,7 +2918,12 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   if (els.var2Reveal) els.var2Reveal.addEventListener('click', function() { revealVariation(lastVariations[1]); });
   if (els.var2Use)    els.var2Use.addEventListener('click',    function() { useVariationAndGoToAutocut(lastVariations[1]); });
 
-  if (els.script) els.script.addEventListener('input', updateCharCount);
+  if (els.script) {
+    els.script.addEventListener('input', updateCharCount);
+    els.script.addEventListener('input', function() { vgAutoResize(els.script); });
+    // 'paste' may not fire 'input' in UXP — delay so value is updated before measuring
+    els.script.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(els.script); updateCharCount(); }, 0); });
+  }
 
   // Language Override toggle
   var langToggle = $('vgLangOverride');
@@ -2878,30 +3006,102 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     });
 
     // ── Get from Sequence ──
+    // Reads all clips from audio track A1, extracts each segment via ffmpeg,
+    // concatenates them into a single MP3, and sets vcSelectedFilePath to result.
     if (vcGetClip) {
       vcGetClip.addEventListener('click', async function() {
-        if (vcClipInfo) vcClipInfo.textContent = 'Fetching…';
+        if (vcClipInfo) vcClipInfo.textContent = 'Reading A1 clips…';
+        vcGetClip.disabled = true;
+        vcSelectedFilePath = '';
         try {
-          var premierepro = window.require && window.require('premierepro');
-          if (!premierepro) throw new Error('Premiere Pro API not available');
-          var project   = await premierepro.Project.getActiveProject();
-          if (!project)  throw new Error('No active project');
-          var selection = await premierepro.ProjectUtils.getSelection(project);
-          var items     = await selection.getItems();
-          if (!items || !items.length) throw new Error('No items selected in timeline');
-          var item = items[0];
-          var clip = premierepro.ClipProjectItem.cast(item);
-          if (!clip) throw new Error('Selected item is not a media clip');
-          var fp = await clip.getMediaFilePath();
-          if (!fp) throw new Error('Could not read file path from clip');
-          vcSelectedFilePath = fp;
-          var shortName = fp.split('/').pop();
-          if (vcClipInfo) vcClipInfo.textContent = shortName + '\n' + fp;
-          console.log('[vcGetClip] got path:', fp);
+          if (!ppro) throw new Error('Premiere Pro API not available');
+          var seq = await getActiveSequence();
+          var track = null;
+
+          // Path A: trackGroup API
+          try {
+            if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_AUDIO !== undefined) {
+              var aGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_AUDIO);
+              if (aGroup && aGroup.numTracks > 0) track = aGroup.getTrack(0);
+            }
+          } catch(eA) {}
+
+          // Path B: getAudioTrack
+          if (!track) {
+            try {
+              var cnt = seq.getAudioTrackCount && seq.getAudioTrackCount();
+              if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+              if (cnt > 0) {
+                track = seq.getAudioTrack && seq.getAudioTrack(0);
+                if (track && typeof track.then === 'function') track = await track;
+              }
+            } catch(eB) {}
+          }
+
+          if (!track) throw new Error('Cannot access audio track A1');
+
+          var items = await getClipItems(track);
+          if (!items.length) throw new Error('No clips on audio track A1');
+
+          if (vcClipInfo) vcClipInfo.textContent = 'Found ' + items.length + ' clip(s), reading paths…';
+
+          var clipList = [];
+          for (var i = 0; i < items.length; i++) {
+            var ti = items[i];
+
+            // Source in/out points (position in source media file)
+            var inSec = 0, outSec = 0;
+            try {
+              var ip = ti.getInPoint && ti.getInPoint();
+              if (ip && typeof ip.then === 'function') ip = await ip;
+              if (ip) inSec = getTimeSec(ip);
+            } catch(e) {}
+            try {
+              var op = ti.getOutPoint && ti.getOutPoint();
+              if (op && typeof op.then === 'function') op = await op;
+              if (op) outSec = getTimeSec(op);
+            } catch(e) {}
+
+            // Fallback when in/out unavailable: use clip duration from timeline
+            // (only correct if clip's head is not trimmed, inPoint=0)
+            if (!outSec || outSec <= inSec) {
+              try {
+                var gs = ti.getStart && ti.getStart();
+                if (gs && typeof gs.then === 'function') gs = await gs;
+                var ge = ti.getEnd && ti.getEnd();
+                if (ge && typeof ge.then === 'function') ge = await ge;
+                inSec = 0; outSec = getTimeSec(ge) - getTimeSec(gs);
+              } catch(e) {}
+            }
+
+            var fp = await vcGetTrackItemFilePath(ti);
+            if (!fp) throw new Error('Clip ' + (i + 1) + ': cannot get source file path — try "From File" instead');
+
+            clipList.push({ filePath: fp, inPoint: inSec, outPoint: outSec });
+          }
+
+          if (vcClipInfo) vcClipInfo.textContent = 'Concatenating ' + clipList.length + ' clip(s) via ffmpeg…';
+
+          var resp = await postJsonVG('/tts/concat-from-sequence', {
+            clips:     clipList,
+            outputDir: customOutputFolder || '',
+          });
+          if (!resp.ok) throw new Error(resp.error || 'Concat failed');
+
+          vcSelectedFilePath = resp.audioPath;
+          var shortName = resp.audioPath.split('/').pop();
+          var nClips = clipList.length;
+          if (vcClipInfo) {
+            vcClipInfo.textContent = '✓ ' + shortName + ' (' + nClips + ' clip' + (nClips > 1 ? 's' : '') + ')';
+            vcClipInfo.title = resp.audioPath;
+          }
+          console.log('[vcGetClip] concat result:', resp.audioPath);
         } catch(e) {
           vcSelectedFilePath = '';
           if (vcClipInfo) vcClipInfo.textContent = '✗ ' + e.message;
-          console.error('[vcGetClip]', e.message);
+          console.error('[vcGetClip]', e);
+        } finally {
+          vcGetClip.disabled = false;
         }
       });
     }
@@ -3261,6 +3461,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (els.script) {
       els.script.value = text || '';
       updateCharCount();
+      vgAutoResize(els.script);
     }
     // Set voice if provided
     if (voiceId) {
@@ -3383,17 +3584,25 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   // Music slider
   hookSlider('vgMusicLength',  'vgMusicLengthValue',  10,  function(n){ return Math.round(n) + 's'; });
 
-  // SFX char count
+  // SFX char count + auto-resize
   var sfxText = $('vgSfxText');
-  if (sfxText) sfxText.addEventListener('input', function() {
-    $('vgSfxCharCount').textContent = safeLen(sfxText) + ' / 500';
-  });
+  if (sfxText) {
+    sfxText.addEventListener('input', function() {
+      $('vgSfxCharCount').textContent = safeLen(sfxText) + ' / 500';
+      vgAutoResize(sfxText);
+    });
+    sfxText.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(sfxText); }, 0); });
+  }
 
-  // Music char count
+  // Music char count + auto-resize
   var musicPrompt = $('vgMusicPrompt');
-  if (musicPrompt) musicPrompt.addEventListener('input', function() {
-    $('vgMusicCharCount').textContent = safeLen(musicPrompt) + ' / 1000';
-  });
+  if (musicPrompt) {
+    musicPrompt.addEventListener('input', function() {
+      $('vgMusicCharCount').textContent = safeLen(musicPrompt) + ' / 1000';
+      vgAutoResize(musicPrompt);
+    });
+    musicPrompt.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(musicPrompt); }, 0); });
+  }
 
   // Wire setKeyboardFocus for all VoiceGen text inputs (prevent Premiere shortcut conflicts)
   [$('vgScript'), sfxText, musicPrompt, $('vgProfileName'), $('vgElKeyInput'), $('vgCustomVoiceId'),
@@ -3438,7 +3647,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 
   // Init — each step in its own try so one failure doesn't stop the rest
-  console.log('[VoiceGen] init v4.1.13, ELEVENLABS_KEY present:', !!ELEVENLABS_KEY,
+  console.log('[VoiceGen] init v4.1.34, ELEVENLABS_KEY present:', !!ELEVENLABS_KEY,
               '| length:', (ELEVENLABS_KEY || '').length);
   try { updateCharCount(); }        catch(e) { console.warn('[VG] updateCharCount:', e.message); }
   try { players.var1 = createPlayer('var1'); } catch(e) { console.error('[VG] createPlayer var1:', e.message); }
@@ -3450,4 +3659,20 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   } else {
     setStatus('Set ElevenLabs API key in Settings ⚙', false);
   }
+
+  // Poll for project change every 5 s — reset output folder when user switches projects
+  // so stale folder paths from the previous project don't carry over.
+  var _vgProjectId = null;
+  setInterval(async function() {
+    try {
+      if (!ppro || !ppro.Project) return;
+      var proj = await getActiveProject();
+      var pid = (typeof proj.path === 'string' && proj.path) || proj.name || '';
+      if (_vgProjectId !== null && pid && pid !== _vgProjectId) {
+        resetOutputFolder();
+        console.log('[VoiceGen] project changed → output folder reset');
+      }
+      if (pid) _vgProjectId = pid;
+    } catch(e) {}
+  }, 5000);
 })();
