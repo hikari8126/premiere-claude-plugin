@@ -69,6 +69,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         body.addSubview(sub)
 
         let checks = [
+            "🍺  Kiểm tra & cài Homebrew (package manager cho macOS)",
             "🔧  Kiểm tra & cài Node.js (môi trường chạy Bridge)",
             "🎬  Kiểm tra & cài ffmpeg (xử lý audio Voice Gen)",
             "⚡  Cài Claude Bridge vào Applications (quản lý AI server)",
@@ -76,8 +77,8 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
             "🚀  Khởi động Bridge ngay sau khi cài xong",
         ]
         for (i, text) in checks.enumerated() {
-            let lbl = makeLabel(text, size: 13, bold: false, color: NSColor(white: 0.85, alpha: 1))
-            lbl.frame = NSRect(x: 12, y: 168 - i * 28, width: 420, height: 20)
+            let lbl = makeLabel(text, size: 12.5, bold: false, color: NSColor(white: 0.85, alpha: 1))
+            lbl.frame = NSRect(x: 12, y: 168 - i * 25, width: 420, height: 20)
             body.addSubview(lbl)
         }
 
@@ -114,7 +115,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         // 5 steps, evenly spaced
         let stepYs = [305, 275, 245, 215, 185]
         let stepTexts = [
-            "⏳  Kiểm tra & cài Node.js...",
+            "⏳  Kiểm tra & cài Homebrew + Node.js...",
             "⏳  Kiểm tra & cài ffmpeg...",
             "⏳  Claude Bridge.app → /Applications...",
             "⏳  Plugin CCX → Premiere Pro (Creative Cloud)...",
@@ -415,7 +416,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         guard step >= 1, step <= 5, let lbl = labels[step - 1] else { return }
 
         let baseTexts = [
-            "Node.js (môi trường chạy Bridge)",
+            "Homebrew + Node.js (môi trường chạy Bridge)",
             "ffmpeg (xử lý audio Voice Gen)",
             "Claude Bridge.app → /Applications",
             "Plugin CCX → Premiere Pro (Creative Cloud)",
