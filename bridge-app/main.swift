@@ -111,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func promptInstallCLI() {
         let a = NSAlert()
         a.messageText     = "Cần cài Claude CLI"
-        a.informativeText = "Claude Bridge cần Claude CLI để kết nối AI.\n\nSẽ mở Terminal và tự cài đặt — cần mật khẩu máy tính, mất khoảng 2 phút."
+        a.informativeText = "Claude Bridge cần Claude CLI để kết nối AI.\n\nSẽ mở Terminal và tự cài đặt — mất khoảng 2–5 phút."
         a.alertStyle      = .informational
         a.addButton(withTitle: "Cài ngay")
         a.addButton(withTitle: "Để sau")
@@ -120,7 +120,50 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         setStatus("⏳ Đang cài Claude CLI...", running: false)
-        openTerminal("npm install -g @anthropic-ai/claude-code 2>&1 && echo '✅ Claude CLI đã cài xong! Bạn có thể đóng cửa sổ này.'")
+
+        // Write a robust install script that handles:
+        //   • npm not found  → install Node.js via Homebrew first
+        //   • EACCES error   → fix npm global prefix to ~/.npm-global (user-writable)
+        let scriptPath = NSTemporaryDirectory() + "install_claude_cli.sh"
+        let script = """
+        #!/bin/bash
+        set -e
+
+        # Activate Homebrew (Apple Silicon + Intel)
+        eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+        eval "$(/usr/local/bin/brew shellenv)"    2>/dev/null || true
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+        # Install Node.js if npm not found
+        if ! command -v npm &>/dev/null; then
+          echo "📦 npm chưa có — đang cài Node.js..."
+          if ! command -v brew &>/dev/null; then
+            echo "📦 Cài Homebrew trước..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null
+          fi
+          brew install node
+          eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+        fi
+
+        # Fix EACCES: redirect npm global to user-writable directory
+        NPM_GLOBAL="$HOME/.npm-global"
+        mkdir -p "$NPM_GLOBAL"
+        npm config set prefix "$NPM_GLOBAL"
+        export PATH="$NPM_GLOBAL/bin:$PATH"
+
+        echo "📦 Đang cài Claude CLI..."
+        npm install -g @anthropic-ai/claude-code
+
+        echo ""
+        echo "✅ Claude CLI đã cài xong! Bạn có thể đóng cửa sổ này."
+        """
+
+        do { try script.write(toFile: scriptPath, atomically: true, encoding: .utf8) }
+        catch { log("Cannot write install script: \(error)"); return }
+        sh("/bin/chmod +x '\(scriptPath)'")
+        openTerminal("/bin/bash '\(scriptPath)'")
+
         pollUntil(check: { !self.findClaude().isEmpty }, interval: 4, timeout: 300) {
             self.firstRunSetup()
         }
