@@ -72,9 +72,9 @@ cat > "${APP_DIR}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleExecutable</key>
     <string>Claude Bridge</string>
   <key>CFBundleVersion</key>
-    <string>2.4</string>
+    <string>2.5</string>
   <key>CFBundleShortVersionString</key>
-    <string>2.4</string>
+    <string>2.5</string>
   <key>CFBundlePackageType</key>
     <string>APPL</string>
   <key>NSHighResolutionCapable</key>
