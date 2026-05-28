@@ -1293,6 +1293,64 @@ app.post('/tts/reveal', async (req, res) => {
   }
 });
 
+// ── Version comparison helper ──────────────────────────────────────────────
+function isNewer(a, b) {
+  const pa = String(a).replace(/^v/, '').split('.').map(Number);
+  const pb = String(b).replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const va = pa[i] || 0, vb = pb[i] || 0;
+    if (va > vb) return true;
+    if (va < vb) return false;
+  }
+  return false;
+}
+
+// ── POST /plugin/check-update — compare plugin version against Gist ────────
+const UPDATE_MANIFEST_URL = 'https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json';
+
+app.post('/plugin/check-update', async (req, res) => {
+  const { currentVersion } = req.body;
+  try {
+    const r    = await fetch(UPDATE_MANIFEST_URL + '?t=' + Date.now());
+    const data = await r.json();
+    const latestVersion  = data.pluginVersion    || '';
+    const downloadUrl    = data.pluginDownloadUrl || '';
+    const hasUpdate = latestVersion && downloadUrl && isNewer(latestVersion, currentVersion);
+    res.json({ ok: true, hasUpdate: !!hasUpdate, latestVersion, downloadUrl });
+  } catch(e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /plugin/update — download CCX and open with Creative Cloud ─────────
+app.post('/plugin/update', async (req, res) => {
+  const { downloadUrl, version } = req.body;
+  if (!downloadUrl) return res.status(400).json({ ok: false, error: 'downloadUrl required' });
+  try {
+    const tmpDir = getTempDir();
+    ensureDir(tmpDir);
+    const ccxPath = path.join(tmpDir, `claude-ai-assistant-v${version || 'latest'}.ccx`);
+
+    // Download CCX
+    const r = await fetch(downloadUrl);
+    if (!r.ok) throw new Error(`Download failed: ${r.status}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    fs.writeFileSync(ccxPath, buf);
+    console.log('[plugin/update] downloaded', ccxPath, buf.length + 'B');
+
+    // Open with Creative Cloud (macOS: open triggers CC installer)
+    await new Promise((resolve, reject) => {
+      const proc = spawn('open', [ccxPath], { detached: true });
+      proc.on('close', resolve);
+      proc.on('error', reject);
+    });
+    res.json({ ok: true });
+  } catch(e) {
+    console.error('[plugin/update]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /tts/concat-from-sequence ─────────────────────────────────────────
 // Receives [{filePath, inPoint, outPoint}] clips from plugin (A1 track items).
 // Uses ffmpeg to extract each audio segment and concatenate into a single MP3.
@@ -1407,7 +1465,7 @@ app.post('/api/read-image', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '2.4';
+const BRIDGE_VERSION = '2.5';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

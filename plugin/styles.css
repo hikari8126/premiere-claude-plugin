@@ -80,6 +80,32 @@ body {
   box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
 }
 
+/* ── Plugin update banner ────────────────────────────── */
+#pluginUpdateBanner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: #1a2e1a;
+  border-bottom: 1px solid #2d5a2d;
+  font-size: 11px;
+  color: #86efac;
+}
+#pluginUpdateBanner[hidden] { display: none; }
+#pluginUpdateBanner span { flex: 1; }
+#pluginUpdateBanner .text-btn {
+  font-size: 10px;
+  padding: 2px 7px;
+  border: 1px solid #2d5a2d;
+  border-radius: 4px;
+}
+#pluginUpdateBanner #pluginUpdateBtn {
+  background: #166534;
+  color: #bbf7d0;
+  border-color: #15803d;
+}
+
 /* ── Tab panels ─────────────────────────────────────── */
 .tab-panel {
   display: none;

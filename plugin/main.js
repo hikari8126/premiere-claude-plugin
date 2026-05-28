@@ -503,7 +503,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.35';
+var PLUGIN_VERSION = 'v4.1.37';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -544,6 +544,7 @@ refreshTimeline();
 registerTimelineEvents();        // primary: event-driven
 setInterval(checkBridge, 15000); // health check every 15s
 setInterval(pollTimeline, 5000); // fallback poll every 5s (skips if unchanged)
+setTimeout(checkPluginUpdate, 4000); // version check after bridge has time to connect
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
@@ -586,6 +587,73 @@ function setStatus(state, text) {
                       : state === 'warn' ? 'warn'
                       : '';
   statusText.textContent = text;
+}
+
+// ── Plugin auto-update ─────────────────────────────────────────────────────
+
+var _pluginUpdateDismissed = false;
+
+function checkPluginUpdate() {
+  if (_pluginUpdateDismissed) return;
+  var current = PLUGIN_VERSION.replace(/^v/, '');
+  var xhr = new XMLHttpRequest();
+  xhr.timeout = 10000;
+  xhr.open('POST', BRIDGE_URL + '/plugin/check-update', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onload = function() {
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (data.ok && data.hasUpdate) showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+    } catch(e) {}
+  };
+  xhr.onerror = function() {};
+  xhr.ontimeout = function() {};
+  xhr.send(JSON.stringify({ currentVersion: current }));
+}
+
+function showPluginUpdateBanner(latestVersion, downloadUrl) {
+  var banner  = document.getElementById('pluginUpdateBanner');
+  var msg     = document.getElementById('pluginUpdateMsg');
+  var updateBtn = document.getElementById('pluginUpdateBtn');
+  var dismissBtn = document.getElementById('pluginUpdateDismiss');
+  if (!banner || !msg) return;
+
+  msg.textContent = 'Plugin v' + latestVersion + ' available';
+  banner.hidden = false;
+
+  updateBtn.onclick = function() {
+    updateBtn.disabled = true;
+    updateBtn.textContent = 'Downloading…';
+    msg.textContent = 'Downloading Plugin v' + latestVersion + '…';
+    var xhr2 = new XMLHttpRequest();
+    xhr2.timeout = 60000;
+    xhr2.open('POST', BRIDGE_URL + '/plugin/update', true);
+    xhr2.setRequestHeader('Content-Type', 'application/json');
+    xhr2.onload = function() {
+      try {
+        var data = JSON.parse(xhr2.responseText);
+        if (data.ok) {
+          msg.textContent = 'Creative Cloud đang mở — click Install, sau đó Reload plugin trong Premiere';
+          updateBtn.hidden = true;
+        } else {
+          msg.textContent = '✗ ' + (data.error || 'Update failed');
+          updateBtn.disabled = false;
+          updateBtn.textContent = 'Retry';
+        }
+      } catch(e) {}
+    };
+    xhr2.onerror = function() {
+      msg.textContent = '✗ Bridge offline';
+      updateBtn.disabled = false;
+      updateBtn.textContent = 'Retry';
+    };
+    xhr2.send(JSON.stringify({ downloadUrl: downloadUrl, version: latestVersion }));
+  };
+
+  dismissBtn.onclick = function() {
+    banner.hidden = true;
+    _pluginUpdateDismissed = true;
+  };
 }
 
 // ── Timeline context ───────────────────────────────────────────────────────
