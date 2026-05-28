@@ -140,6 +140,15 @@
         <strong>CLI mode:</strong> uses <code>claude</code> CLI (Claude Code OAuth) — model is fixed by your subscription.
       </p>
 
+      <div class="setting-row" style="align-items:center;">
+        <label>Plugin version</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="settings-plugin-version" style="opacity:0.6;font-size:12px;"></span>
+          <button class="btn-secondary" id="check-update-btn" style="padding:3px 10px;font-size:11px;">Check for updates</button>
+          <span id="check-update-status" style="font-size:11px;opacity:0.7;"></span>
+        </div>
+      </div>
+
       <div class="settings-actions">
         <button class="btn-secondary" id="close-settings">Cancel</button>
         <button class="btn-primary" id="save-settings">Save</button>

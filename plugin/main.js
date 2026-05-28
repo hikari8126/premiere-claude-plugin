@@ -503,7 +503,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.37';
+var PLUGIN_VERSION = 'v4.1.38';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1437,10 +1437,14 @@ function openSettingsPanel() {
   var statusBar  = document.getElementById('status-bar');
   var headerH    = header    ? (header.offsetTop    + header.offsetHeight)    : 40;
   var statusH    = statusBar ? (statusBar.offsetTop + statusBar.offsetHeight) : 0;
-  var topPx      = Math.max(headerH, statusH) + 2; // 2px gap below header
+  var topPx      = Math.max(headerH, statusH) + 2;
   settingsModal.style.top = topPx + 'px';
   settingsModal.style.display = 'block';
   populateBridgeInfo();
+  var spv = document.getElementById('settings-plugin-version');
+  if (spv) spv.textContent = PLUGIN_VERSION;
+  var cuStatus = document.getElementById('check-update-status');
+  if (cuStatus) cuStatus.textContent = '';
 }
 function closeSettingsPanel() {
   settingsModal.style.display = 'none';
@@ -1452,6 +1456,36 @@ document.getElementById('settings-btn').addEventListener('click', function(e) {
   else openSettingsPanel();
 });
 document.getElementById('close-settings').addEventListener('click', closeSettingsPanel);
+
+document.getElementById('check-update-btn').addEventListener('click', function() {
+  var btn      = document.getElementById('check-update-btn');
+  var cuStatus = document.getElementById('check-update-status');
+  btn.disabled = true;
+  if (cuStatus) cuStatus.textContent = 'Checking…';
+  var current = PLUGIN_VERSION.replace(/^v/, '');
+  var xhr = new XMLHttpRequest();
+  xhr.timeout = 10000;
+  xhr.open('POST', BRIDGE_URL + '/plugin/check-update', true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onload = function() {
+    btn.disabled = false;
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (data.ok && data.hasUpdate) {
+        if (cuStatus) cuStatus.textContent = 'v' + data.latestVersion + ' available!';
+        _pluginUpdateDismissed = false;
+        showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+      } else if (data.ok) {
+        if (cuStatus) cuStatus.textContent = 'Up to date ✓';
+      } else {
+        if (cuStatus) cuStatus.textContent = 'Check failed';
+      }
+    } catch(e) { if (cuStatus) cuStatus.textContent = 'Error'; }
+  };
+  xhr.onerror   = function() { btn.disabled = false; if (cuStatus) cuStatus.textContent = 'Bridge offline'; };
+  xhr.ontimeout = function() { btn.disabled = false; if (cuStatus) cuStatus.textContent = 'Timeout'; };
+  xhr.send(JSON.stringify({ currentVersion: current }));
+});
 
 // Click outside to close (check via DOM containment)
 document.addEventListener('click', function(e) {
