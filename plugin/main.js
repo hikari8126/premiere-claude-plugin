@@ -503,7 +503,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.38';
+var PLUGIN_VERSION = 'v4.1.39';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1989,13 +1989,9 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var1:         $('vgVar1'),
     var1Size:     $('vgVar1Size'),
     var1Import:   $('vgVar1Import'),
-    var1Reveal:   $('vgVar1Reveal'),
-    var1Use:      $('vgVar1Use'),
     var2:         $('vgVar2'),
     var2Size:     $('vgVar2Size'),
     var2Import:   $('vgVar2Import'),
-    var2Reveal:   $('vgVar2Reveal'),
-    var2Use:      $('vgVar2Use'),
     importStatus: $('vgImportStatus'),
   };
 
@@ -2171,7 +2167,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   }
 
   // Play an absolute file path directly — no temp-dir HTTP serving needed.
-  function vgPlayPath(absPath, onProgress, onEnd, onError) {
+  // startOffset (optional): seconds to seek to before playing (uses ffplay on bridge).
+  function vgPlayPath(absPath, onProgress, onEnd, onError, startOffset) {
     if (vgAbortCtrl) { vgAbortCtrl.abort(); vgAbortCtrl = null; }
     if (vgOnStopCb)  { var prev = vgOnStopCb; vgOnStopCb = null; prev(); }
     vgIsPlaying = false;
@@ -2179,10 +2176,12 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     vgAbortCtrl = ctrl;
     vgOnStopCb  = onEnd || null;
     vgIsPlaying = true;
+    var body = { filePath: absPath };
+    if (startOffset > 0) body.startOffset = startOffset;
     fetch(BRIDGE_URL + '/tts/play', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ filePath: absPath }),
+      body:    JSON.stringify(body),
       signal:  ctrl ? ctrl.signal : undefined,
     })
       .then(function(r) { return r.json(); })
@@ -2211,44 +2210,91 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     }).catch(function() {});
   }
 
-  // ── Player factory (uses Web Audio engine above) ─────────────────────────
+  // ── Player factory ────────────────────────────────────────────────────────
   function createPlayer(slot) {
     var prefix = 'vgV' + (slot === 'var1' ? 'ar1' : 'ar2');
     var playBtn  = $(prefix + 'Play');
     var progWrap = $(prefix + 'ProgWrap');
     var fill     = $(prefix + 'Fill');
     var timeEl   = $(prefix + 'Time');
-    var currentPath = null; // absolute file path
+    var currentPath = null;
     var isPlaying   = false;
+    var duration    = 0;
+    var startedAt   = 0;
+    var startOffset = 0;
+    var ticker      = null;
 
     function fmt(s) {
       if (!isFinite(s) || s < 0) s = 0;
       var m = Math.floor(s / 60), sec = Math.floor(s % 60);
       return m + ':' + (sec < 10 ? '0' : '') + sec;
     }
+    function updateTick() {
+      var elapsed = startOffset + (Date.now() - startedAt) / 1000;
+      if (duration > 0 && elapsed > duration) elapsed = duration;
+      timeEl.textContent = fmt(elapsed) + ' / ' + fmt(duration);
+      fill.style.width = duration > 0 ? (elapsed / duration * 100).toFixed(1) + '%' : '0%';
+    }
+    function stopTicker() {
+      if (ticker) { clearInterval(ticker); ticker = null; }
+    }
     function setPlaying(val) {
       isPlaying = val;
       playBtn.textContent = val ? '⏸' : '▶';
+      if (!val) stopTicker();
+    }
+    function doPlay(offset) {
+      offset = offset || 0;
+      startOffset = offset;
+      startedAt   = Date.now();
+      setPlaying(true);
+      ticker = setInterval(updateTick, 200);
+      vgPlayPath(currentPath, null,
+        function() {
+          setPlaying(false);
+          fill.style.width = duration > 0 ? '100%' : '0%';
+          timeEl.textContent = fmt(duration) + ' / ' + fmt(duration);
+        },
+        function(e) { setPlaying(false); timeEl.textContent = 'error'; console.warn('[VG player ' + slot + ']', e); },
+        offset
+      );
     }
 
     playBtn.addEventListener('click', function() {
       if (!currentPath) return;
       if (isPlaying) { vgStopAll(); return; }
-      setPlaying(true);
-      timeEl.textContent = 'loading...';
-      vgPlayPath(currentPath,
-        null,
-        function() { setPlaying(false); fill.style.width = '0%'; timeEl.textContent = '0:00 / ?'; },
-        function(e) { setPlaying(false); timeEl.textContent = 'error'; console.warn('[VG player ' + slot + ']', e); }
-      );
+      doPlay(0);
     });
+
+    if (progWrap) {
+      progWrap.addEventListener('click', function(e) {
+        if (!currentPath || duration <= 0) return;
+        var rect = progWrap.getBoundingClientRect();
+        var frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        var offset = frac * duration;
+        if (isPlaying) { vgStopAll(); stopTicker(); setPlaying(false); }
+        setTimeout(function() { doPlay(offset); }, 60);
+      });
+    }
 
     return {
       setSrc: function(absPath) {
         if (isPlaying) { vgStopAll(); setPlaying(false); }
+        stopTicker();
         currentPath = absPath;
+        duration = 0;
         fill.style.width = '0%';
         timeEl.textContent = '0:00 / ?';
+        fetch(BRIDGE_URL + '/tts/duration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioPath: absPath }),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.ok && d.duration > 0) {
+            duration = d.duration;
+            timeEl.textContent = '0:00 / ' + fmt(duration);
+          }
+        }).catch(function() {});
       },
     };
   }
@@ -2776,16 +2822,6 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (els.resultSection) els.resultSection.hidden = true;
     var labels = { tts: '⚡ GENERATE VOICE', sfx: '💥 GENERATE SFX', music: '🎵 GENERATE MUSIC' };
     els.btnGenerate.textContent = labels[mode] || labels.tts;
-
-    // Reset Create panel to "choose method" state each time it's opened
-    if (isCreate) {
-      var vcSel = document.getElementById('vcType');
-      var vcClone  = document.getElementById('vcCloneSection');
-      var vcDesign = document.getElementById('vcDesignSection');
-      if (vcSel) vcSel.options[0].selected = true; // reset to placeholder
-      if (vcClone)  vcClone.hidden  = true;
-      if (vcDesign) vcDesign.hidden = true;
-    }
   }
 
   function renderVariations() {
@@ -2852,23 +2888,70 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         timeEl.className = 'vg-time';
         timeEl.textContent = '0:00 / ?';
 
+        var cardDuration = 0;
+        var cardStartedAt = 0;
+        var cardStartOffset = 0;
+        var cardTicker = null;
+
         function fmtTime(s) {
           if (!isFinite(s) || s < 0) s = 0;
           var m = Math.floor(s / 60), sec = Math.floor(s % 60);
           return m + ':' + (sec < 10 ? '0' : '') + sec;
         }
+        function stopCardTicker() {
+          if (cardTicker) { clearInterval(cardTicker); cardTicker = null; }
+        }
+        function updateCardTick() {
+          var elapsed = cardStartOffset + (Date.now() - cardStartedAt) / 1000;
+          if (cardDuration > 0 && elapsed > cardDuration) elapsed = cardDuration;
+          timeEl.textContent = fmtTime(elapsed) + ' / ' + fmtTime(cardDuration);
+          fill.style.width = cardDuration > 0 ? (elapsed / cardDuration * 100).toFixed(1) + '%' : '0%';
+        }
         function setCardPlaying(val) {
           cardPlaying = val;
           playB.textContent = val ? '⏸' : '▶';
+          if (!val) stopCardTicker();
+        }
+        function doCardPlay(offset) {
+          offset = offset || 0;
+          cardStartOffset = offset;
+          cardStartedAt   = Date.now();
+          setCardPlaying(true);
+          cardTicker = setInterval(updateCardTick, 200);
+          vgPlayPath(cardPath, null,
+            function() {
+              setCardPlaying(false);
+              fill.style.width = cardDuration > 0 ? '100%' : '0%';
+              timeEl.textContent = fmtTime(cardDuration) + ' / ' + fmtTime(cardDuration);
+            },
+            function(e) { setCardPlaying(false); console.warn('[VG multi player]', e); },
+            offset
+          );
         }
         playB.addEventListener('click', function() {
           if (cardPlaying) { vgStopAll(); return; }
-          setCardPlaying(true);
-          vgPlayPath(cardPath,
-            null,
-            function() { setCardPlaying(false); fill.style.width = '0%'; },
-            function(e) { setCardPlaying(false); console.warn('[VG multi player]', e); }
-          );
+          doCardPlay(0);
+        });
+
+        // Fetch duration for this card
+        fetch(BRIDGE_URL + '/tts/duration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioPath: cardPath }),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.ok && d.duration > 0) {
+            cardDuration = d.duration;
+            timeEl.textContent = '0:00 / ' + fmtTime(cardDuration);
+          }
+        }).catch(function() {});
+
+        progWrap.addEventListener('click', function(e) {
+          if (cardDuration <= 0) return;
+          var rect = progWrap.getBoundingClientRect();
+          var frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          var offset = frac * cardDuration;
+          if (cardPlaying) { vgStopAll(); stopCardTicker(); setCardPlaying(false); }
+          setTimeout(function() { doCardPlay(offset); }, 60);
         });
 
         var playerRow = document.createElement('div');
@@ -2883,17 +2966,12 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
         var importB = document.createElement('button');
         importB.className = 'ac-secondaryButton vg-actionButton';
-        importB.textContent = '📥 Import';
+        importB.textContent = 'Import';
         importB.addEventListener('click', function() { importVariation(v); });
-        var revealB = document.createElement('button');
-        revealB.className = 'ac-secondaryButton vg-actionButton';
-        revealB.textContent = '📁 Finder';
-        revealB.addEventListener('click', function() { revealVariation(v); });
 
         var actionsRow = document.createElement('div');
         actionsRow.className = 'vg-resultActions';
         actionsRow.appendChild(importB);
-        actionsRow.appendChild(revealB);
 
         wrap.appendChild(sizeEl);
         wrap.appendChild(playerRow);
@@ -3011,14 +3089,9 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
-  // Variation 1 buttons
+  // Variation buttons
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
-  if (els.var1Reveal) els.var1Reveal.addEventListener('click', function() { revealVariation(lastVariations[0]); });
-  if (els.var1Use)    els.var1Use.addEventListener('click',    function() { useVariationAndGoToAutocut(lastVariations[0]); });
-  // Variation 2 buttons
   if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
-  if (els.var2Reveal) els.var2Reveal.addEventListener('click', function() { revealVariation(lastVariations[1]); });
-  if (els.var2Use)    els.var2Use.addEventListener('click',    function() { useVariationAndGoToAutocut(lastVariations[1]); });
 
   if (els.script) {
     els.script.addEventListener('input', updateCharCount);
