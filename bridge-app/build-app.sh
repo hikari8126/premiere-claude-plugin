@@ -9,6 +9,7 @@ INSTALLER_NAME="Installer Claude AI"
 INSTALLER_DIR="${INSTALLER_NAME}.app"
 SDK=$(xcrun --show-sdk-path)
 MACOS_MIN="13.0"
+PLUGIN_VERSION=$(grep '"version"' plugin/manifest.json | grep -o '[0-9.]*' | head -1)
 
 echo ""
 echo "╔════════════════════════════════════════════════╗"
@@ -57,7 +58,7 @@ cp -r bridge/node_modules       "${APP_DIR}/Contents/Resources/server/"
 echo "  ✅ server.js + node_modules bundled (no npm install needed)"
 
 # ── 4. Info.plist ─────────────────────────────────────────────────────────
-cat > "${APP_DIR}/Contents/Info.plist" << 'PLIST'
+cat > "${APP_DIR}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,9 +73,11 @@ cat > "${APP_DIR}/Contents/Info.plist" << 'PLIST'
   <key>CFBundleExecutable</key>
     <string>Claude Bridge</string>
   <key>CFBundleVersion</key>
-    <string>2.6</string>
+    <string>2.7</string>
   <key>CFBundleShortVersionString</key>
-    <string>2.6</string>
+    <string>2.7</string>
+  <key>PluginVersion</key>
+    <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>
     <string>APPL</string>
   <key>NSHighResolutionCapable</key>
