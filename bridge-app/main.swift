@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var autoStartItem:  NSMenuItem!
 
     let version          = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.x"
+    let pluginVersion    = Bundle.main.infoDictionary?["PluginVersion"]              as? String ?? "0"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
@@ -367,24 +368,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func checkForUpdateMenu() { checkForUpdates(silent: false) }
 
     func checkForUpdates(silent: Bool = true) {
-        guard let url = URL(string: updateManifest) else { return }
-        log("Checking for updates...")
+        let bustedURL = updateManifest + "?t=\(Int(Date().timeIntervalSince1970))"
+        guard let url = URL(string: bustedURL) else { return }
+        log("Checking for updates (Bridge v\(version), Plugin v\(pluginVersion))...")
         URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
             guard let self else { return }
             guard let data, error == nil,
-                  let json    = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let latest  = json["version"] as? String,
-                  let pageURL = json["url"]     as? String else {
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 self.log("Update check failed: \(error?.localizedDescription ?? "bad response")")
                 if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
                 return
             }
-            let notes    = json["notes"]       as? String ?? ""
-            let directDL = json["downloadUrl"] as? String ?? ""
-            self.log("Latest: v\(latest)  Current: v\(self.version)")
-            if self.isNewer(latest, than: self.version) {
+            let latestBridge = json["version"]           as? String ?? ""
+            let bridgePage   = json["url"]               as? String ?? ""
+            let bridgeDL     = json["downloadUrl"]       as? String ?? ""
+            let notes        = json["notes"]             as? String ?? ""
+            let latestPlugin = json["pluginVersion"]     as? String ?? ""
+            let pluginDL     = json["pluginDownloadUrl"] as? String ?? ""
+
+            let bridgeNewer = !latestBridge.isEmpty && self.isNewer(latestBridge, than: self.version)
+            let pluginNewer = !latestPlugin.isEmpty && !pluginDL.isEmpty && self.isNewer(latestPlugin, than: self.pluginVersion)
+
+            self.log("Bridge: v\(self.version) → v\(latestBridge) (\(bridgeNewer ? "UPDATE" : "up-to-date"))")
+            self.log("Plugin: v\(self.pluginVersion) → v\(latestPlugin) (\(pluginNewer ? "UPDATE" : "up-to-date"))")
+
+            if bridgeNewer || pluginNewer {
                 DispatchQueue.main.async {
-                    self.showUpdateAlert(version: latest, pageURL: pageURL, downloadURL: directDL, notes: notes)
+                    self.showUpdateResults(
+                        bridgeNewer: bridgeNewer, latestBridge: latestBridge,
+                        bridgePage: bridgePage, bridgeDL: bridgeDL,
+                        pluginNewer: pluginNewer, latestPlugin: latestPlugin,
+                        pluginDL: pluginDL, notes: notes
+                    )
                 }
             } else if !silent {
                 DispatchQueue.main.async { self.showNoUpdateAlert() }
@@ -403,27 +418,92 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    func showUpdateAlert(version: String, pageURL: String, downloadURL: String, notes: String) {
-        let canAuto   = !downloadURL.isEmpty
-        let bodyText  = notes.isEmpty ? "" : "\(notes)\n\n"
+    func showUpdateResults(bridgeNewer: Bool, latestBridge: String,
+                           bridgePage: String,  bridgeDL: String,
+                           pluginNewer: Bool,   latestPlugin: String,
+                           pluginDL: String,    notes: String) {
         let a = NSAlert()
-        a.messageText     = "⬆️  Bản cập nhật v\(version) có sẵn"
-        a.informativeText = canAuto
-            ? "\(bodyText)Nhấn \"Cài ngay\" để tự động tải và cài đặt."
-            : "\(bodyText)Nhấn \"Tải về\" để mở trang download."
         a.alertStyle = .informational
-        a.addButton(withTitle: canAuto ? "Cài ngay" : "Tải về")
+
+        var titleParts = [String]()
+        if bridgeNewer { titleParts.append("Bridge v\(latestBridge)") }
+        if pluginNewer { titleParts.append("Plugin v\(latestPlugin)") }
+        a.messageText = "⬆️  Bản cập nhật: \(titleParts.joined(separator: " + "))"
+
+        var infoLines = [String]()
+        if !notes.isEmpty { infoLines.append(notes) }
+        if bridgeNewer { infoLines.append("• Bridge: tự động tải + cài đặt, app tự khởi động lại") }
+        if pluginNewer { infoLines.append("• Plugin: tải .ccx → Creative Cloud mở → click Install") }
+        a.informativeText = infoLines.joined(separator: "\n")
+
+        if bridgeNewer && pluginNewer {
+            a.addButton(withTitle: "Cài Bridge")
+            a.addButton(withTitle: "Cài Plugin")
+        } else if bridgeNewer {
+            a.addButton(withTitle: "Cài ngay")
+        } else {
+            a.addButton(withTitle: "Cài Plugin")
+        }
         a.addButton(withTitle: "Để sau")
+
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         let result = a.runModal()
         NSApp.setActivationPolicy(.accessory)
-        guard result == .alertFirstButtonReturn else { return }
-        if canAuto {
-            performUpdate(downloadURL: downloadURL, newVersion: version)
-        } else if let u = URL(string: pageURL) {
-            NSWorkspace.shared.open(u)
+
+        if bridgeNewer && pluginNewer {
+            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: bridgeDL, newVersion: latestBridge) }
+            else if result == .alertSecondButtonReturn { performPluginUpdate(downloadURL: pluginDL, version: latestPlugin) }
+        } else if bridgeNewer {
+            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: bridgeDL, newVersion: latestBridge) }
+        } else {
+            if result == .alertFirstButtonReturn  { performPluginUpdate(downloadURL: pluginDL, version: latestPlugin) }
         }
+    }
+
+    func performPluginUpdate(downloadURL: String, version: String) {
+        guard let url = URL(string: downloadURL) else {
+            log("Plugin update: invalid URL — \(downloadURL)"); return
+        }
+        let isRunning = bridgeTask?.isRunning ?? false
+        log("Downloading Plugin v\(version) from: \(downloadURL)")
+        setStatus("⬇️ Đang tải Plugin v\(version)...", running: isRunning)
+
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForResource = 120
+        URLSession(configuration: cfg).downloadTask(with: url) { [weak self] tempURL, _, error in
+            guard let self else { return }
+            if let error {
+                DispatchQueue.main.async {
+                    self.log("Plugin download failed: \(error.localizedDescription)")
+                    self.setStatus(isRunning ? "✅ Bridge đang chạy  —  :\(self.bridgePort)" : "❌ Bridge dừng",
+                                   running: isRunning)
+                }
+                return
+            }
+            guard let tempURL else { return }
+            let ccxName = "claude-ai-assistant-v\(version).ccx"
+            let ccxURL  = URL(fileURLWithPath: (NSTemporaryDirectory() as NSString).appendingPathComponent(ccxName))
+            try? FileManager.default.removeItem(at: ccxURL)
+            try? FileManager.default.moveItem(at: tempURL, to: ccxURL)
+
+            DispatchQueue.main.async {
+                self.log("Plugin downloaded → \(ccxURL.path)")
+                self.setStatus(isRunning ? "✅ Bridge đang chạy  —  :\(self.bridgePort)" : "❌ Bridge dừng",
+                               running: isRunning)
+                NSWorkspace.shared.open(ccxURL)
+
+                let a = NSAlert()
+                a.messageText     = "🎉 Plugin v\(version) đã tải về"
+                a.informativeText = "Creative Cloud đang mở để cài đặt.\n\n1. Click \"Install\" trong cửa sổ Creative Cloud\n2. Mở Premiere Pro → plugin sẽ được cập nhật tự động"
+                a.alertStyle      = .informational
+                a.addButton(withTitle: "OK")
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+                a.runModal()
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }.resume()
     }
 
     // MARK: ─── Self-Update: download → install → relaunch ────────────────────
@@ -534,7 +614,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showNoUpdateAlert() {
         let a = NSAlert()
         a.messageText     = "✅  Đang dùng bản mới nhất"
-        a.informativeText = "Claude Bridge v\(version) là bản mới nhất."
+        a.informativeText = "Bridge v\(version) + Plugin v\(pluginVersion) đều là bản mới nhất."
         a.alertStyle      = .informational
         a.addButton(withTitle: "OK")
         NSApp.setActivationPolicy(.regular)
