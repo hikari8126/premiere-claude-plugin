@@ -72,6 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
         menu.addItem(item("🐍  Cài Whisper (Autocut STT)", #selector(installWhisper),    key: ""))
+        menu.addItem(item("🎬  Cài ffmpeg (Voice & Audio)", #selector(installFfmpeg),    key: ""))
         menu.addItem(item("🔍  Kiểm tra cập nhật",         #selector(checkForUpdateMenu), key: "u"))
         menu.addItem(.separator())
         menu.addItem(item("Thoát",                         #selector(quit),               key: "q"))
@@ -394,6 +395,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         t.arguments  = ["unload", launchAgentPath]
         try? t.run(); t.waitUntilExit()
         try? FileManager.default.removeItem(atPath: launchAgentPath)
+    }
+
+    // MARK: ─── ffmpeg ────────────────────────────────────────────────────────
+    @objc func installFfmpeg() {
+        let a = NSAlert()
+        a.messageText     = "Cài ffmpeg cho Voice Gen"
+        a.informativeText = "ffmpeg được dùng để xử lý audio trong tính năng Voice Clone & Voice Gen.\n\nSẽ mở Terminal cài tự động qua Homebrew (~300MB, cần vài phút)."
+        a.addButton(withTitle: "Cài ngay")
+        a.addButton(withTitle: "Huỷ")
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+
+        let brewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
+        let brew = brewPaths.first { FileManager.default.fileExists(atPath: $0) } ?? "brew"
+        openTerminal("'\(brew)' install ffmpeg 2>&1 && echo '' && echo '✅ ffmpeg đã cài xong!' && ffmpeg -version | head -1")
     }
 
     // MARK: ─── Whisper ─────────────────────────────────────────────────────

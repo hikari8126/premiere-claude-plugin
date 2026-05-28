@@ -18,11 +18,12 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
     var progressView: NSView?
     var doneView:     NSView?
 
-    // Progress labels (4 steps)
+    // Progress labels (5 steps)
     var step1Label:  NSTextField?
     var step2Label:  NSTextField?
     var step3Label:  NSTextField?
     var step4Label:  NSTextField?
+    var step5Label:  NSTextField?
     var progressBar: NSProgressIndicator?
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -69,13 +70,14 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
 
         let checks = [
             "🔧  Kiểm tra & cài Node.js (môi trường chạy Bridge)",
+            "🎬  Kiểm tra & cài ffmpeg (xử lý audio Voice Gen)",
             "⚡  Cài Claude Bridge vào Applications (quản lý AI server)",
             "🔌  Cài plugin CCX vào Adobe Premiere Pro",
             "🚀  Khởi động Bridge ngay sau khi cài xong",
         ]
         for (i, text) in checks.enumerated() {
             let lbl = makeLabel(text, size: 13, bold: false, color: NSColor(white: 0.85, alpha: 1))
-            lbl.frame = NSRect(x: 12, y: 152 - i * 28, width: 420, height: 20)
+            lbl.frame = NSRect(x: 12, y: 168 - i * 28, width: 420, height: 20)
             body.addSubview(lbl)
         }
 
@@ -95,7 +97,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         welcomeView = container
     }
 
-    // MARK: ─── Progress Screen (4 steps) ─────────────────────────────────
+    // MARK: ─── Progress Screen (5 steps) ─────────────────────────────────
     func showProgress() {
         clearContent()
 
@@ -106,13 +108,14 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         container.addSubview(header)
 
         let title = makeLabel("Đang cài đặt...", size: 18, bold: true, color: .white)
-        title.frame = NSRect(x: 40, y: 340, width: 440, height: 26)
+        title.frame = NSRect(x: 40, y: 335, width: 440, height: 26)
         container.addSubview(title)
 
-        // 4 steps, evenly spaced
-        let stepYs = [295, 260, 225, 190]
+        // 5 steps, evenly spaced
+        let stepYs = [305, 275, 245, 215, 185]
         let stepTexts = [
             "⏳  Kiểm tra & cài Node.js...",
+            "⏳  Kiểm tra & cài ffmpeg...",
             "⏳  Claude Bridge.app → /Applications...",
             "⏳  Plugin CCX → Premiere Pro (Creative Cloud)...",
             "⏳  Khởi động Claude Bridge...",
@@ -128,13 +131,14 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         step2Label = lblRefs[1]
         step3Label = lblRefs[2]
         step4Label = lblRefs[3]
+        step5Label = lblRefs[4]
 
         // Progress bar
         let pb = NSProgressIndicator(frame: NSRect(x: 40, y: 155, width: 440, height: 14))
         pb.style          = .bar
         pb.isIndeterminate = false
         pb.minValue       = 0
-        pb.maxValue       = 4
+        pb.maxValue       = 5
         pb.doubleValue    = 0
         pb.wantsLayer     = true
         container.addSubview(pb)
@@ -242,8 +246,16 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
                 self.progressBar?.doubleValue = 1
             }
 
-            // ── Step 2: Copy Claude Bridge.app → /Applications ────────────
+            // ── Step 2: Check / install ffmpeg ────────────────────────────
             DispatchQueue.main.async { self.setStep(2, status: .running) }
+            self.ensureFfmpeg()
+            DispatchQueue.main.async {
+                self.setStep(2, status: .done)
+                self.progressBar?.doubleValue = 2
+            }
+
+            // ── Step 3: Copy Claude Bridge.app → /Applications ────────────
+            DispatchQueue.main.async { self.setStep(3, status: .running) }
 
             let dest = "/Applications/Claude Bridge.app"
             do {
@@ -254,7 +266,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
                 _ = self.sh("xattr -dr com.apple.quarantine '\(dest)' 2>/dev/null || true")
             } catch {
                 DispatchQueue.main.async {
-                    self.setStep(2, status: .failed)
+                    self.setStep(3, status: .failed)
                     self.showDone(success: false,
                                   errorMsg: "Không thể copy Claude Bridge.app:\n\(error.localizedDescription)\n\nThử chạy installer bằng right-click → Open.")
                 }
@@ -262,12 +274,12 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
             }
 
             DispatchQueue.main.async {
-                self.setStep(2, status: .done)
-                self.progressBar?.doubleValue = 2
+                self.setStep(3, status: .done)
+                self.progressBar?.doubleValue = 3
             }
 
-            // ── Step 3: Install CCX plugin ────────────────────────────────
-            DispatchQueue.main.async { self.setStep(3, status: .running) }
+            // ── Step 4: Install CCX plugin ────────────────────────────────
+            DispatchQueue.main.async { self.setStep(4, status: .running) }
 
             if FileManager.default.fileExists(atPath: ccxPath) {
                 NSWorkspace.shared.open(URL(fileURLWithPath: ccxPath))
@@ -275,18 +287,18 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
             }
 
             DispatchQueue.main.async {
-                self.setStep(3, status: .done)
-                self.progressBar?.doubleValue = 3
+                self.setStep(4, status: .done)
+                self.progressBar?.doubleValue = 4
             }
 
-            // ── Step 4: Launch Claude Bridge ──────────────────────────────
-            DispatchQueue.main.async { self.setStep(4, status: .running) }
+            // ── Step 5: Launch Claude Bridge ──────────────────────────────
+            DispatchQueue.main.async { self.setStep(5, status: .running) }
             Thread.sleep(forTimeInterval: 0.5)
 
             DispatchQueue.main.async {
                 NSWorkspace.shared.open(URL(fileURLWithPath: dest))
-                self.setStep(4, status: .done)
-                self.progressBar?.doubleValue = 4
+                self.setStep(5, status: .done)
+                self.progressBar?.doubleValue = 5
             }
 
             Thread.sleep(forTimeInterval: 1.0)
@@ -371,15 +383,40 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    // MARK: ─── ffmpeg Prerequisite ───────────────────────────────────────
+    func findFfmpeg() -> String {
+        let candidates = [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+        ]
+        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            return found
+        }
+        let r = sh("/usr/bin/which ffmpeg 2>/dev/null")
+        return r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Silently installs ffmpeg via Homebrew if missing. Never blocks the install flow.
+    func ensureFfmpeg() {
+        guard findFfmpeg().isEmpty else { return }
+
+        let brew = findBrew()
+        guard !brew.isEmpty else { return }
+
+        // Install silently in the background (no Terminal window)
+        _ = sh("'\(brew)' install ffmpeg 2>&1 || true")
+    }
+
     // MARK: ─── Step Status ────────────────────────────────────────────────
     enum StepStatus { case running, done, failed }
 
     func setStep(_ step: Int, status: StepStatus) {
-        let labels = [step1Label, step2Label, step3Label, step4Label]
-        guard step >= 1, step <= 4, let lbl = labels[step - 1] else { return }
+        let labels = [step1Label, step2Label, step3Label, step4Label, step5Label]
+        guard step >= 1, step <= 5, let lbl = labels[step - 1] else { return }
 
         let baseTexts = [
             "Node.js (môi trường chạy Bridge)",
+            "ffmpeg (xử lý audio Voice Gen)",
             "Claude Bridge.app → /Applications",
             "Plugin CCX → Premiere Pro (Creative Cloud)",
             "Khởi động Claude Bridge",
@@ -410,7 +447,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         welcomeView = nil; progressView = nil; doneView = nil
         step1Label  = nil; step2Label   = nil
         step3Label  = nil; step4Label   = nil
-        progressBar = nil
+        step5Label  = nil; progressBar  = nil
     }
 
     // MARK: ─── UI Helpers ─────────────────────────────────────────────────

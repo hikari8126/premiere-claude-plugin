@@ -1241,24 +1241,29 @@ app.get('/tts/audio/:filename', (req, res) => {
 let currentAfplay = null;
 
 app.post('/tts/play', async (req, res) => {
-  const { audioUrl, filePath: fp } = req.body;
+  const { audioUrl, filePath: fp, startOffset } = req.body;
   let filePath = fp;
   if (!filePath && audioUrl) {
-    // Convert /tts/audio/<filename> → absolute path in temp dir
     const match = audioUrl.match(/^\/tts\/audio\/(.+)$/);
     if (match) filePath = path.join(getTempDir(), decodeURIComponent(match[1]));
   }
   if (!filePath) return res.json({ ok: false, error: 'no file specified' });
   if (!fs.existsSync(filePath)) return res.json({ ok: false, error: 'file not found: ' + path.basename(filePath) });
 
-  // Kill any currently playing audio
   if (currentAfplay) { try { currentAfplay.kill(); } catch(e) {} currentAfplay = null; }
+
+  const offset = parseFloat(startOffset) || 0;
 
   try {
     await new Promise((resolve, reject) => {
-      const proc = process.platform === 'win32'
-        ? spawn('cmd', ['/c', 'start', '/wait', '""', filePath], { shell: true })
-        : spawn('afplay', [filePath]);
+      let proc;
+      if (process.platform === 'win32') {
+        proc = spawn('cmd', ['/c', 'start', '/wait', '""', filePath], { shell: true });
+      } else if (offset > 0) {
+        proc = spawn('ffplay', ['-nodisp', '-autoexit', '-ss', String(offset), filePath], { stdio: 'pipe' });
+      } else {
+        proc = spawn('afplay', [filePath]);
+      }
       currentAfplay = proc;
       proc.on('close', (code) => { if (currentAfplay === proc) currentAfplay = null; resolve(code); });
       proc.on('error', (e) => { if (currentAfplay === proc) currentAfplay = null; reject(e); });
@@ -1273,6 +1278,28 @@ app.post('/tts/play', async (req, res) => {
 app.post('/tts/stop', (req, res) => {
   if (currentAfplay) { try { currentAfplay.kill(); } catch(e) {} currentAfplay = null; }
   res.json({ ok: true });
+});
+
+// ── POST /tts/duration — get audio file duration via ffprobe ──────────────
+app.post('/tts/duration', async (req, res) => {
+  const { audioPath } = req.body;
+  if (!audioPath) return res.json({ ok: false, error: 'audioPath required' });
+  if (!fs.existsSync(audioPath)) return res.json({ ok: false, error: 'file not found' });
+  try {
+    const dur = await new Promise((resolve, reject) => {
+      const proc = spawn('ffprobe', [
+        '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', audioPath,
+      ], { stdio: 'pipe' });
+      let out = '';
+      proc.stdout.on('data', d => { out += d.toString(); });
+      proc.on('close', code => code === 0 ? resolve(parseFloat(out.trim())) : reject(new Error('ffprobe exit ' + code)));
+      proc.on('error', reject);
+    });
+    res.json({ ok: true, duration: dur });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // ── POST /tts/reveal — reveal file in Finder (macOS) / Explorer (Windows) ──
@@ -1465,7 +1492,7 @@ app.post('/api/read-image', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.4.0';
+const BRIDGE_VERSION = '1.4.1';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

@@ -608,7 +608,7 @@ body {
 
 #settings-box {
   width: 100%;
-  max-width: 400px;
+  max-width: 350px;
   margin-left: auto; /* right-align the box within the modal */
   background: var(--surface);
   border: 1px solid var(--accent);
