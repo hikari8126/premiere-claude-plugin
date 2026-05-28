@@ -168,6 +168,7 @@
 
       <!-- ── LEFT: Script editor ── -->
       <div class="vg-left">
+      <div class="vg-leftScroll">
 
         <!-- TTS editor -->
         <div class="vg-modeContent" data-mode="tts">
@@ -175,8 +176,11 @@
             <button id="vgAddSpeaker" class="vg-addSpeakerBtn">+ Add speaker</button>
           </div>
           <div class="vg-editorWrap">
-            <textarea id="vgScript" class="vg-script" spellcheck="false"
-              placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
+            <div class="vg-scriptGrow">
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgScript" class="vg-script" spellcheck="false"
+                placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
+            </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
             </div>
@@ -186,8 +190,11 @@
         <!-- SFX editor -->
         <div class="vg-modeContent" data-mode="sfx" hidden>
           <div class="vg-editorWrap">
-            <textarea id="vgSfxText" class="vg-script" spellcheck="false"
-              placeholder="Describe the sound effect...&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
+            <div class="vg-scriptGrow">
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgSfxText" class="vg-script" spellcheck="false"
+                placeholder="Describe the sound effect...&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
+            </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgSfxCharCount">0 / 500</span>
             </div>
@@ -197,8 +204,11 @@
         <!-- Music editor -->
         <div class="vg-modeContent" data-mode="music" hidden>
           <div class="vg-editorWrap">
-            <textarea id="vgMusicPrompt" class="vg-script" spellcheck="false"
-              placeholder="Describe the music...&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
+            <div class="vg-scriptGrow">
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgMusicPrompt" class="vg-script" spellcheck="false"
+                placeholder="Describe the music...&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
+            </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgMusicCharCount">0 / 1000</span>
             </div>
@@ -213,13 +223,14 @@
             <div class="vc-field">
               <label class="vc-label">Method</label>
               <select id="vcType" class="vg-select">
+                <option value="" disabled selected>— Choose method —</option>
                 <option value="clone">&#127897; Clone Voice</option>
                 <option value="design">&#127912; Design Voice</option>
               </select>
             </div>
 
             <!-- ── CLONE SECTION ── -->
-            <div id="vcCloneSection">
+            <div id="vcCloneSection" hidden>
               <div class="vc-field">
                 <label class="vc-label">Voice Name</label>
                 <input type="text" id="vcCloneName" class="vg-settingInput" placeholder="My Cloned Voice" />
@@ -232,8 +243,8 @@
                 </div>
               </div>
               <div id="vcFromSequenceSection" class="vc-field">
-                <div class="vc-clipInfo" id="vcClipInfo">No clip selected — select a clip in the timeline first</div>
-                <button id="vcGetClip" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#9654; Get from Sequence</button>
+                <div class="vc-clipInfo" id="vcClipInfo">Click below to extract all clips from audio track A1</div>
+                <button id="vcGetClip" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#9654; Extract A1 Clips</button>
               </div>
               <div id="vcFromFileSection" class="vc-field" hidden>
                 <div class="vc-clipInfo" id="vcFileInfo">No file selected</div>
@@ -374,6 +385,7 @@
 
         </div>
 
+      </div><!-- /vg-leftScroll -->
       </div><!-- /vg-left -->
 
       <!-- ── RIGHT: Settings panel ── -->
@@ -547,8 +559,8 @@
           </div>
         </div>
         <div class="vg-sg">
-          <div class="vg-sl">Filename <span class="vg-sm">.mp3 appended</span></div>
-          <input id="vgFilename" type="text" class="vg-settingInput" placeholder="auto" />
+          <div class="vg-sl">Filename suffix <span class="vg-sm">voice · note · timestamp</span></div>
+          <input id="vgFilename" type="text" class="vg-settingInput" placeholder="optional note" />
         </div>
 
         </div><!-- /vg-rightScroll -->

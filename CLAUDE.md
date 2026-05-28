@@ -13,7 +13,7 @@ Plugin 3-in-1 tích hợp thẳng vào Adobe Premiere Pro:
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 
-**Version hiện tại:** 4.1.1  
+**Version hiện tại:** 4.1.27  
 **Yêu cầu hệ điều hành:** macOS (Apple Silicon hoặc Intel)
 
 ---
