@@ -401,25 +401,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func installFfmpeg() {
         let a = NSAlert()
         a.messageText     = "Cài ffmpeg cho Voice Gen"
-        a.informativeText = "ffmpeg được dùng để xử lý audio trong tính năng Voice Clone & Voice Gen.\n\nSẽ mở Terminal cài tự động qua Homebrew (~300MB, cần vài phút)."
+        a.informativeText = "ffmpeg được dùng để xử lý audio trong tính năng Voice Clone & Voice Gen.\n\nSẽ mở Terminal cài tự động (cần Homebrew + ~300MB, vài phút)."
         a.addButton(withTitle: "Cài ngay")
         a.addButton(withTitle: "Huỷ")
         guard a.runModal() == .alertFirstButtonReturn else { return }
 
-        let brewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
-        let brew = brewPaths.first { FileManager.default.fileExists(atPath: $0) } ?? "brew"
-        openTerminal("'\(brew)' install ffmpeg 2>&1 && echo '' && echo '✅ ffmpeg đã cài xong!' && ffmpeg -version | head -1")
+        let cmd = """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
+        eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"    || true
+
+        if ! command -v brew &>/dev/null; then
+          echo "🍺 Homebrew chưa có — đang cài..."
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"
+        fi
+
+        if ! command -v brew &>/dev/null; then
+          echo "❌ Cài Homebrew thất bại. Vui lòng cài thủ công tại https://brew.sh rồi chạy lại."
+          exit 1
+        fi
+
+        echo "🎬 Đang cài ffmpeg..."
+        brew install ffmpeg 2>&1
+        echo ""
+        echo "✅ ffmpeg đã cài xong!"
+        ffmpeg -version | head -1
+        """
+        openTerminal(cmd)
     }
 
     // MARK: ─── Whisper ─────────────────────────────────────────────────────
     @objc func installWhisper() {
         let a = NSAlert()
         a.messageText     = "Cài Whisper cho Autocut"
-        a.informativeText = "Whisper là model AI nhận diện giọng nói, dùng cho tính năng Autocut.\n\nSẽ mở Terminal cài tự động (~500MB, cần vài phút)."
+        a.informativeText = "Whisper là model AI nhận diện giọng nói, dùng cho tính năng Autocut.\n\nSẽ mở Terminal cài tự động (cần Homebrew + Python + ~500MB, vài phút)."
         a.addButton(withTitle: "Cài ngay")
         a.addButton(withTitle: "Huỷ")
         guard a.runModal() == .alertFirstButtonReturn else { return }
-        openTerminal("pip3 install -U openai-whisper 2>&1 || pip3 install -U openai-whisper --break-system-packages 2>&1 && echo '' && echo '✅ Whisper đã cài xong!' && which whisper")
+
+        let cmd = """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
+        eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"    || true
+
+        if ! command -v brew &>/dev/null; then
+          echo "🍺 Homebrew chưa có — đang cài..."
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"
+        fi
+
+        if ! command -v brew &>/dev/null; then
+          echo "❌ Cài Homebrew thất bại. Vui lòng cài thủ công tại https://brew.sh rồi chạy lại."
+          exit 1
+        fi
+
+        if ! command -v pip3 &>/dev/null; then
+          echo "🐍 pip3 chưa có — đang cài Python..."
+          brew install python3 2>&1
+        fi
+
+        echo "🐍 Đang cài Whisper..."
+        pip3 install -U openai-whisper 2>&1 || pip3 install -U openai-whisper --break-system-packages 2>&1
+        echo ""
+        echo "✅ Whisper đã cài xong!"
+        which whisper
+        """
+        openTerminal(cmd)
     }
 
     // MARK: ─── Auto-update ────────────────────────────────────────────────
