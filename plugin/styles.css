@@ -2475,57 +2475,82 @@ body {
 .sac-blockSection {
   flex: 0 0 auto;
   display: flex; flex-direction: column;
-  max-height: 50%;
+  max-height: 52%;
+  min-height: 120px;
   border-top: 1px solid rgba(255,255,255,0.08);
   padding: 8px 10px 0;
 }
 .sac-blockHeader {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .sac-blockTitle {
   font-size: 11px; font-weight: 700;
-  color: rgba(255,255,255,0.7);
-  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.8);
+  letter-spacing: 0.05em;
 }
 .sac-blockMeta {
-  font-size: 10px; color: rgba(255,255,255,0.35);
+  font-size: 10px; color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.06);
+  padding: 1px 7px; border-radius: 10px;
 }
 .sac-clearBtn {
   margin-left: auto;
-  width: 18px; height: 18px; padding: 0;
+  width: 20px; height: 20px; padding: 0;
   border: none; border-radius: 50%;
   background: transparent;
   color: rgba(255,255,255,0.25);
-  font-size: 11px; cursor: pointer; outline: none;
+  font-size: 12px; cursor: pointer; outline: none;
 }
 .sac-clearBtn:hover { color: #fca5a5; background: rgba(239,68,68,0.15); }
 .sac-blockList {
   flex: 1 1 0; min-height: 0;
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 6px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 .sac-blockCard {
   flex: 0 0 auto;
-  border-left: 3px solid;
-  border-radius: 0 6px 6px 0;
-  background: rgba(255,255,255,0.03);
-  padding: 6px 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
 }
 .sac-blockCardHeader {
-  font-size: 9.5px; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  margin-bottom: 4px;
+  padding: 5px 10px;
+  font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
 }
-.sac-blockText, .sac-blockSrc {
-  font-size: 10.5px;
-  color: rgba(255,255,255,0.6);
+.sac-blockCardBody {
+  padding: 4px 0 6px;
+}
+.sac-blockText {
+  padding: 2px 10px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.78);
   line-height: 1.5;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.sac-blockSrc { color: rgba(255,255,255,0.4); font-size: 10px; }
+.sac-blockDivider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 3px 10px;
+}
+.sac-blockSrc {
+  padding: 2px 10px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.45);
+  line-height: 1.5;
+}
+.sac-blockTimeBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 1px 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.35);
+  font-family: ui-monospace, monospace;
+}
 
 /* ── Action bar ── */
 .sac-actionBar {
