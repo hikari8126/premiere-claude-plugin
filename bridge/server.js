@@ -1546,32 +1546,47 @@ Rules:
 Return ONLY a JSON array, no markdown, no explanation:
 [{"text":"...","time":"...","source":"..."},...]`;
 
+  // Save image to temp file (needed for CLI mode)
+  const ext     = mimeType.includes('png') ? 'png' : 'jpg';
+  const tmpImg  = path.join(os.tmpdir(), 'sac_parse_' + Date.now() + '.' + ext);
+  fs.writeFileSync(tmpImg, Buffer.from(b64data, 'base64'));
+
   try {
-    let rows;
+    let outputText = '';
+
     if (API_KEY) {
-      // Use Anthropic SDK
+      // ── API key mode: Anthropic SDK ──────────────────────────────────────
       const Anthropic = require('@anthropic-ai/sdk');
-      const client = new Anthropic({ apiKey: API_KEY });
-      const response = await client.messages.create({
+      const client    = new Anthropic({ apiKey: API_KEY });
+      const response  = await client.messages.create({
         model: DEFAULT_MODEL,
         max_tokens: 2048,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64data } },
-            { type: 'text', text: prompt },
-          ],
-        }],
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64data } },
+          { type: 'text', text: prompt },
+        ]}],
       });
-      const text = response.content[0]?.text || '';
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) throw new Error('No JSON array in response');
-      rows = JSON.parse(jsonMatch[0]);
+      outputText = response.content[0]?.text || '';
     } else {
-      return res.json({ ok: false, error: 'Cần API key để dùng tính năng parse ảnh. Thêm ANTHROPIC_API_KEY vào bridge/.env' });
+      // ── CLI mode: pass image via @path token ─────────────────────────────
+      const cliPrompt = `@${tmpImg}\n\n${prompt}`;
+      outputText = await new Promise((resolve, reject) => {
+        let out = '', err = '';
+        const proc = spawn('claude', ['--print', cliPrompt], { env: cleanEnv() });
+        proc.stdout.on('data', d => { out += d.toString(); });
+        proc.stderr.on('data', d => { err += d.toString(); });
+        proc.on('close', code => code === 0 ? resolve(out) : reject(new Error(err || 'claude CLI exit ' + code)));
+        proc.on('error', reject);
+      });
     }
+
+    const jsonMatch = outputText.match(/\[[\s\S]*?\]/);
+    if (!jsonMatch) throw new Error('Không tìm thấy JSON array trong phản hồi của Claude');
+    const rows = JSON.parse(jsonMatch[0]);
+    fs.unlinkSync(tmpImg);
     res.json({ ok: true, rows });
   } catch (e) {
+    try { fs.unlinkSync(tmpImg); } catch (_) {}
     res.json({ ok: false, error: e.message });
   }
 });
