@@ -2450,6 +2450,27 @@ body {
 .sac-previewBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Screenshot panel ── */
+.sac-chooseImgBtn {
+  flex: 0 0 auto;
+  height: 32px; padding: 0 16px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(168,85,247,0.4);
+  border-radius: 16px;
+  background: rgba(168,85,247,0.1);
+  color: #d8b4fe;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; outline: none;
+  align-self: center;
+}
+.sac-chooseImgBtn:hover { background: rgba(168,85,247,0.2); }
+.sac-screenshotFooter {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 8px 0 0;
+}
+.sac-screenshotFooter .sac-previewBtn {
+  flex: 1 1 auto;
+}
 .sac-drop {
   flex: 0 0 auto;
   display: flex; flex-direction: column;
@@ -2466,9 +2487,12 @@ body {
 .sac-dropText  { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.7); }
 .sac-dropHint  { font-size: 10px; color: rgba(255,255,255,0.3); }
 .sac-imgPreview {
-  width: 100%; border-radius: 6px;
+  width: 100%; max-height: 180px;
+  object-fit: contain;
+  border-radius: 6px;
   margin-bottom: 10px;
   border: 1px solid rgba(255,255,255,0.1);
+  flex: 0 0 auto;
 }
 
 /* ── Block preview ── */

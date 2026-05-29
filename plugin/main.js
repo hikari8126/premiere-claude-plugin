@@ -1981,6 +1981,35 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     });
   });
 
+  // ── TSV parser — handles quoted cells with embedded newlines ────────────
+  // Google Sheets wraps cells containing \n or \t in double-quotes.
+  // Standard: tab = col sep, \n = row sep, "" inside quotes = literal "
+  function parseTSV(text) {
+    var rows = [], row = [], cell = '', inQ = false, i = 0, ch, nx;
+    while (i < text.length) {
+      ch = text[i]; nx = text[i + 1];
+      if (inQ) {
+        if (ch === '"' && nx === '"') { cell += '"'; i += 2; }       // escaped quote
+        else if (ch === '"')          { inQ = false; i++; }          // end quote
+        else                          { cell += ch; i++; }
+      } else {
+        if      (ch === '"')                      { inQ = true; i++; }
+        else if (ch === '\t')                     { row.push(cell); cell = ''; i++; }
+        else if (ch === '\n' || ch === '\r') {
+          row.push(cell); cell = '';
+          if (row.some(function(c) { return c !== ''; })) rows.push(row);
+          row = [];
+          if (ch === '\r' && nx === '\n') i++;    // CRLF
+          i++;
+        } else { cell += ch; i++; }
+      }
+    }
+    // flush last cell/row
+    row.push(cell);
+    if (row.some(function(c) { return c !== ''; })) rows.push(row);
+    return rows;
+  }
+
   // ── Row factory ─────────────────────────────────────────────────────────
   function makeInput(placeholder) {
     var inp = document.createElement('input');
@@ -1998,16 +2027,15 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       var text = e.clipboardData && e.clipboardData.getData('text/plain');
       if (!text || text.indexOf('\n') === -1) return; // single cell → normal paste
       e.preventDefault();
-      // Clear all rows and replace with pasted data
+      var rows = parseTSV(text);
+      if (rows.length === 0) return;
       $('sacBody').innerHTML = '';
       rowSeq = 0;
-      var lines = text.split(/\r?\n/).filter(function(l) { return l.trim() !== ''; });
-      lines.forEach(function(line) {
-        var parts = line.split('\t');
+      rows.forEach(function(cols) {
         createRow(
-          parts[0] ? parts[0].trim() : '',
-          parts[1] ? parts[1].trim() : '',
-          parts[2] ? parts[2].trim() : ''
+          cols[0] ? cols[0].trim() : '',
+          cols[1] ? cols[1].trim() : '',
+          cols[2] ? cols[2].trim() : ''
         );
       });
     });
@@ -2176,19 +2204,19 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     rows.forEach(function(r) { createRow(r.text, r.time, r.src); });
   };
 
-  // ── Screenshot: paste handler ────────────────────────────────────────────
+  // ── Screenshot: UXP file picker ─────────────────────────────────────────
   var sacImgDataUrl = null;
 
-  document.addEventListener('paste', function(e) {
-    if ($('sacPanelScreenshot').style.display === 'none') return;
-    var items = e.clipboardData && e.clipboardData.items;
-    if (!items) return;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') === -1) continue;
-      var blob = items[i].getAsFile();
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        sacImgDataUrl = ev.target.result;
+  function sacLoadImageFile(file) {
+    file.read({ format: require('uxp').storage.formats.binary })
+      .then(function(data) {
+        var bytes = new Uint8Array(data);
+        var bin = '';
+        for (var b = 0; b < bytes.length; b++) bin += String.fromCharCode(bytes[b]);
+        var ext  = file.name.split('.').pop().toLowerCase();
+        var mime = (ext === 'png') ? 'image/png' : 'image/jpeg';
+        sacImgDataUrl = 'data:' + mime + ';base64,' + btoa(bin);
+
         var canvas = $('sacImgCanvas');
         var img = new Image();
         img.onload = function() {
@@ -2198,13 +2226,33 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
           canvas.hidden = false;
         };
         img.src = sacImgDataUrl;
-        $('sacDrop').classList.add('has-image');
+        $('sacDrop').style.display = 'none';
         $('sacParseImg').disabled = false;
-      };
-      reader.readAsDataURL(blob);
-      break;
-    }
-  });
+      })
+      .catch(function(e) {
+        $('sacImgStatus').textContent = '❌ Không đọc được file: ' + e.message;
+      });
+  }
+
+  var sacChooseImg = $('sacChooseImg');
+  if (sacChooseImg) {
+    sacChooseImg.addEventListener('click', function() {
+      try {
+        var storage = require('uxp').storage;
+        storage.localFileSystem.getFileForOpening({
+          allowMultiple: false,
+          types: storage.fileTypes.images,
+        }).then(function(file) {
+          if (!file) return;
+          sacLoadImageFile(file);
+        }).catch(function(e) {
+          console.error('[SAC] file picker:', e);
+        });
+      } catch(e) {
+        $('sacImgStatus').textContent = '❌ File picker không khả dụng: ' + e.message;
+      }
+    });
+  }
 
   // ── Event listeners ──────────────────────────────────────────────────────
   $('sacAddRow').addEventListener('click', function() { createRow(); });
