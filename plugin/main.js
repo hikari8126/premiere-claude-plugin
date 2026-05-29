@@ -1976,8 +1976,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       });
       btn.classList.add('is-active');
       var method = btn.dataset.method;
-      $('sacPanelManual').hidden     = (method !== 'manual');
-      $('sacPanelScreenshot').hidden = (method !== 'screenshot');
+      $('sacPanelManual').style.display     = (method === 'manual')     ? 'flex' : 'none';
+      $('sacPanelScreenshot').style.display = (method === 'screenshot') ? 'flex' : 'none';
     });
   });
 
@@ -2119,7 +2119,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     });
 
     parsedBlocks = blocks;
-    $('sacBlockSection').hidden = false;
+    $('sacBlockSection').style.display = 'flex';
     $('sacRunBtn').disabled = (blocks.length === 0);
   }
 
@@ -2138,7 +2138,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   var sacImgDataUrl = null;
 
   document.addEventListener('paste', function(e) {
-    if ($('sacPanelScreenshot').hidden) return;
+    if ($('sacPanelScreenshot').style.display === 'none') return;
     var items = e.clipboardData && e.clipboardData.items;
     if (!items) return;
     for (var i = 0; i < items.length; i++) {
@@ -2180,7 +2180,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 
   $('sacClearBlocks').addEventListener('click', function() {
-    $('sacBlockSection').hidden = true;
+    $('sacBlockSection').style.display = 'none';
     parsedBlocks = [];
   });
 
@@ -2211,7 +2211,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         btn.disabled = false;
         btn.textContent = '✔ Validate';
         $('sacStatus').textContent = '❌ Bridge offline: ' + e.message;
-        $('sacStatus').hidden = false;
+        $('sacStatus').style.display = 'block';
       });
   });
 
