@@ -503,7 +503,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.39';
+var PLUGIN_VERSION = 'v4.2.0-beta.1';
 
 // ── State ──────────────────────────────────────────────────────────────────
 

@@ -1492,7 +1492,7 @@ app.post('/api/read-image', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.4.1';
+const BRIDGE_VERSION = '1.5.0-beta.1';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
