@@ -1522,6 +1522,60 @@ app.post('/superautocut/validate', (req, res) => {
   res.json({ ok: true, blockCount: blocks.length });
 });
 
+// ── POST /superautocut/parse-image — Claude Vision parses cutsheet screenshot
+app.post('/superautocut/parse-image', async (req, res) => {
+  const { imageBase64 } = req.body || {};
+  if (!imageBase64) return res.json({ ok: false, error: 'No image provided' });
+
+  // Extract mime + base64 data
+  const match = imageBase64.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return res.json({ ok: false, error: 'Invalid image format' });
+  const [, mimeType, b64data] = match;
+
+  const prompt = `You are given a screenshot of a video editing cutsheet table.
+The table has up to 3 columns:
+  1. Script/Text — voiceover script (may be empty if this row belongs to a merged cell above)
+  2. Time — timestamp range like "0:02-0:08" or single "0:04" (may be empty)
+  3. Source — source clip name like "Yoselin 33" (may be empty)
+
+Rules:
+- Merged cells: if a cell visually spans multiple rows, put the value only in the FIRST row; use empty string "" for subsequent rows
+- Multi-line text inside one cell: treat as one string, separate lines with \\n
+- Empty cells: use empty string ""
+
+Return ONLY a JSON array, no markdown, no explanation:
+[{"text":"...","time":"...","source":"..."},...]`;
+
+  try {
+    let rows;
+    if (API_KEY) {
+      // Use Anthropic SDK
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: API_KEY });
+      const response = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: 2048,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64data } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      });
+      const text = response.content[0]?.text || '';
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error('No JSON array in response');
+      rows = JSON.parse(jsonMatch[0]);
+    } else {
+      return res.json({ ok: false, error: 'Cần API key để dùng tính năng parse ảnh. Thêm ANTHROPIC_API_KEY vào bridge/.env' });
+    }
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
 const BRIDGE_VERSION = '1.5.0-beta.1';
 app.get('/health', (_req, res) => {

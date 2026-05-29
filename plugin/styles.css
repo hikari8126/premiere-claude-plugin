@@ -2409,16 +2409,19 @@ body {
 .sac-col-text { flex: 3 1 0; min-width: 0; }
 .sac-col-time { flex: 0 0 90px; }
 .sac-col-src  { flex: 2 1 0; min-width: 0; }
-.sac-col-del  { flex: 0 0 26px; align-items: center; justify-content: center; }
-.sac-delBtn {
-  width: 18px; height: 18px; padding: 0;
+.sac-col-act  { flex: 0 0 40px; align-items: center; justify-content: center;
+                gap: 2px; padding: 0 2px; }
+.sac-rowBtn {
+  width: 16px; height: 16px; padding: 0;
   border: none; border-radius: 50%;
   background: transparent;
-  color: rgba(255,255,255,0.2);
-  font-size: 14px; line-height: 1;
+  font-size: 12px; line-height: 1;
   cursor: pointer; outline: none;
 }
+.sac-delBtn { color: rgba(255,255,255,0.18); }
 .sac-delBtn:hover { background: rgba(239,68,68,0.2); color: #fca5a5; }
+.sac-insBtn { color: rgba(255,255,255,0.18); }
+.sac-insBtn:hover { background: rgba(168,85,247,0.25); color: #d8b4fe; }
 
 /* ── Table footer ── */
 .sac-tableFooter {
@@ -2437,6 +2440,16 @@ body {
   cursor: pointer; outline: none;
 }
 .sac-addBtn:hover { border-color: #a855f7; color: #d8b4fe; }
+.sac-clearBoardBtn {
+  flex: 0 0 auto;
+  height: 28px; width: 28px; padding: 0;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(255,255,255,0.3);
+  font-size: 12px; cursor: pointer; outline: none;
+}
+.sac-clearBoardBtn:hover { border-color: #ef4444; color: #fca5a5; background: rgba(239,68,68,0.1); }
 .sac-previewBtn {
   flex: 1 1 0;
   height: 28px; padding: 0 12px;
