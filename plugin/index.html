@@ -635,11 +635,14 @@
     <div class="sac-panel" id="sacPanelScreenshot" style="display:none">
       <div class="sac-drop" id="sacDrop">
         <div class="sac-dropIcon">📷</div>
-        <div class="sac-dropText">Paste ảnh cutsheet vào đây</div>
-        <div class="sac-dropHint">Cmd+V sau khi chụp màn hình</div>
+        <div class="sac-dropText">Chụp màn hình cutsheet</div>
+        <div class="sac-dropHint">rồi chọn file ảnh bên dưới</div>
       </div>
+      <button id="sacChooseImg" class="sac-chooseImgBtn">📂 Chọn file ảnh...</button>
       <canvas id="sacImgCanvas" class="sac-imgPreview" hidden></canvas>
-      <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
+      <div class="sac-screenshotFooter">
+        <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
+      </div>
       <div id="sacImgStatus" class="sac-statusMsg"></div>
     </div>
 
