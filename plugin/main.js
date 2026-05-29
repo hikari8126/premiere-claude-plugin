@@ -1993,6 +1993,24 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     inp.addEventListener('blur', function() {
       if (window.releaseKeyboard) window.releaseKeyboard();
     });
+    // Multi-row paste from Google Sheets / Excel
+    inp.addEventListener('paste', function(e) {
+      var text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (!text || text.indexOf('\n') === -1) return; // single cell → normal paste
+      e.preventDefault();
+      // Clear all rows and replace with pasted data
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      var lines = text.split(/\r?\n/).filter(function(l) { return l.trim() !== ''; });
+      lines.forEach(function(line) {
+        var parts = line.split('\t');
+        createRow(
+          parts[0] ? parts[0].trim() : '',
+          parts[1] ? parts[1].trim() : '',
+          parts[2] ? parts[2].trim() : ''
+        );
+      });
+    });
     return inp;
   }
 
@@ -2187,25 +2205,6 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       break;
     }
   });
-
-  // ── Paste multi-row from spreadsheet (Google Sheets / Excel) ────────────
-  // When copied from a sheet, data is tab-separated columns + newline-separated rows.
-  // If the clipboard has newlines → intercept and create rows automatically.
-  $('sacBody').addEventListener('paste', function(e) {
-    var text = e.clipboardData && e.clipboardData.getData('text/plain');
-    if (!text || text.indexOf('\n') === -1) return; // single cell paste, let default handle
-    e.preventDefault();
-    e.stopPropagation();
-    var lines = text.split(/\r?\n/).filter(function(l) { return l.trim() !== ''; });
-    lines.forEach(function(line) {
-      var parts = line.split('\t');
-      createRow(
-        parts[0] ? parts[0].trim() : '',
-        parts[1] ? parts[1].trim() : '',
-        parts[2] ? parts[2].trim() : ''
-      );
-    });
-  }, true);
 
   // ── Event listeners ──────────────────────────────────────────────────────
   $('sacAddRow').addEventListener('click', function() { createRow(); });
