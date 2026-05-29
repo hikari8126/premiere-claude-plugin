@@ -2010,6 +2010,26 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     return rows;
   }
 
+  // ── Expand multi-line text cells into separate rows ──────────────────────
+  // Google Sheets: a merged cell spanning N rows exports the text in the
+  // first row only. But if a single cell contains \n (typed newlines), we
+  // split those into individual rows (first row keeps time+source, rest empty).
+  function expandRows(rows) {
+    var out = [];
+    rows.forEach(function(cols) {
+      var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
+      if (text.indexOf('\n') !== -1) {
+        var lines = text.split('\n').filter(function(l) { return l.trim(); });
+        lines.forEach(function(line, i) {
+          out.push([ line.trim(), i === 0 ? time : '', i === 0 ? src : '' ]);
+        });
+      } else {
+        out.push(cols);
+      }
+    });
+    return out;
+  }
+
   // ── Row factory ─────────────────────────────────────────────────────────
   function makeInput(placeholder) {
     var inp = document.createElement('input');
@@ -2027,7 +2047,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       var text = e.clipboardData && e.clipboardData.getData('text/plain');
       if (!text || text.indexOf('\n') === -1) return; // single cell → normal paste
       e.preventDefault();
-      var rows = parseTSV(text);
+      var rows = expandRows(parseTSV(text));
       if (rows.length === 0) return;
       $('sacBody').innerHTML = '';
       rowSeq = 0;
@@ -2048,7 +2068,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     return cell;
   }
 
-  function createRow(text, time, src) {
+  // afterRow: if provided, insert new row after that element; else append
+  function createRow(text, time, src, afterRow) {
     var id = ++rowSeq;
     var row = document.createElement('div');
     row.className = 'sac-row';
@@ -2062,21 +2083,35 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (src)  inpSrc.value  = src;
 
     var delBtn = document.createElement('button');
-    delBtn.className = 'sac-delBtn';
+    delBtn.className = 'sac-rowBtn sac-delBtn';
+    delBtn.title = 'Xoá dòng này';
     delBtn.textContent = '×';
     delBtn.addEventListener('click', function() { row.remove(); });
+
+    var insBtn = document.createElement('button');
+    insBtn.className = 'sac-rowBtn sac-insBtn';
+    insBtn.title = 'Thêm dòng bên dưới';
+    insBtn.textContent = '+';
+    insBtn.addEventListener('click', function() { createRow('', '', '', row); });
 
     var cText = makeCell('sac-col-text'); cText.appendChild(inpText);
     var cTime = makeCell('sac-col-time'); cTime.appendChild(inpTime);
     var cSrc  = makeCell('sac-col-src');  cSrc.appendChild(inpSrc);
-    var cDel  = makeCell('sac-col-del');  cDel.appendChild(delBtn);
+    var cAct  = makeCell('sac-col-act');
+    cAct.appendChild(insBtn);
+    cAct.appendChild(delBtn);
 
     row.appendChild(cText);
     row.appendChild(cTime);
     row.appendChild(cSrc);
-    row.appendChild(cDel);
+    row.appendChild(cAct);
 
-    $('sacBody').appendChild(row);
+    var body = $('sacBody');
+    if (afterRow && afterRow.nextSibling) {
+      body.insertBefore(row, afterRow.nextSibling);
+    } else {
+      body.appendChild(row);
+    }
     return row;
   }
 
@@ -2223,10 +2258,11 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
           canvas.width  = img.width;
           canvas.height = img.height;
           canvas.getContext('2d').drawImage(img, 0, 0);
-          canvas.hidden = false;
+          canvas.style.display = 'block';
         };
         img.src = sacImgDataUrl;
         $('sacDrop').style.display = 'none';
+        $('sacChooseImg').textContent = '📂 Đổi ảnh...';
         $('sacParseImg').disabled = false;
       })
       .catch(function(e) {
@@ -2257,17 +2293,73 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   // ── Event listeners ──────────────────────────────────────────────────────
   $('sacAddRow').addEventListener('click', function() { createRow(); });
 
+  $('sacClearBoard').addEventListener('click', function() {
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    $('sacBlockSection').style.display = 'none';
+    $('sacStatus').style.display = 'none';
+    parsedBlocks = [];
+    createRow(); createRow(); createRow();
+  });
+
   $('sacPreviewBtn').addEventListener('click', function() {
     var blocks = parseBlocks();
     var status = $('sacStatus');
     if (blocks.length === 0) {
       status.textContent = 'Chưa có dữ liệu. Điền ít nhất 1 dòng có cả Script và Source.';
-      status.hidden = false;
+      status.style.display = 'block';
       return;
     }
-    status.hidden = true;
+    status.style.display = 'none';
     renderBlocks(blocks);
   });
+
+  // ── Parse với AI (screenshot → rows) ────────────────────────────────────
+  var sacParseImg = $('sacParseImg');
+  if (sacParseImg) {
+    sacParseImg.addEventListener('click', function() {
+      if (!sacImgDataUrl) return;
+      sacParseImg.disabled = true;
+      sacParseImg.textContent = '⏳ Đang phân tích...';
+      $('sacImgStatus').textContent = '';
+      $('sacImgStatus').style.display = 'none';
+
+      fetch(BRIDGE_URL + '/superautocut/parse-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: sacImgDataUrl }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          sacParseImg.disabled = false;
+          sacParseImg.textContent = 'Parse với AI →';
+          if (!d.ok || !d.rows || d.rows.length === 0) {
+            $('sacImgStatus').textContent = '❌ ' + (d.error || 'Không parse được.');
+            $('sacImgStatus').style.display = 'block';
+            return;
+          }
+          // Switch to manual tab and load rows
+          document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+            b.classList.toggle('is-active', b.dataset.method === 'manual');
+          });
+          $('sacPanelManual').style.display = 'flex';
+          $('sacPanelScreenshot').style.display = 'none';
+          $('sacBody').innerHTML = ''; rowSeq = 0;
+          var expanded = expandRows(d.rows.map(function(r) {
+            return [ r.text || '', r.time || '', r.source || '' ];
+          }));
+          expanded.forEach(function(cols) {
+            createRow(cols[0], cols[1], cols[2]);
+          });
+        })
+        .catch(function(e) {
+          sacParseImg.disabled = false;
+          sacParseImg.textContent = 'Parse với AI →';
+          $('sacImgStatus').textContent = '❌ Bridge lỗi: ' + e.message;
+          $('sacImgStatus').style.display = 'block';
+        });
+    });
+  }
 
   $('sacClearBlocks').addEventListener('click', function() {
     $('sacBlockSection').style.display = 'none';
