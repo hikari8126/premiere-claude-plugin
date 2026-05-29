@@ -2010,22 +2010,40 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     return rows;
   }
 
-  // ── Expand multi-line text cells into separate rows ──────────────────────
-  // Google Sheets: a merged cell spanning N rows exports the text in the
-  // first row only. But if a single cell contains \n (typed newlines), we
-  // split those into individual rows (first row keeps time+source, rest empty).
+  // ── Expand multi-line / multi-value cells into separate rows ─────────────
+  // Handles three cases:
+  //   A) text cell has \n  → split text into rows (first keeps time+src)
+  //   B) time cell has \n  → split time values into rows (first keeps text+src)
+  //   C) time cell has space-separated timestamps like "0:04 0:07 0:13"
+  var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
+  function splitTimes(t) {
+    if (!t) return [t];
+    if (t.indexOf('\n') !== -1) return t.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    var parts = t.trim().split(/\s+/);
+    if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
+    return [t];
+  }
   function expandRows(rows) {
     var out = [];
     rows.forEach(function(cols) {
       var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
+      // A: multi-line text cell
       if (text.indexOf('\n') !== -1) {
-        var lines = text.split('\n').filter(function(l) { return l.trim(); });
+        var lines = text.split('\n').filter(function(l){ return l.trim(); });
         lines.forEach(function(line, i) {
           out.push([ line.trim(), i === 0 ? time : '', i === 0 ? src : '' ]);
         });
-      } else {
-        out.push(cols);
+        return;
       }
+      // B+C: multi-value time cell
+      var times = splitTimes(time);
+      if (times.length > 1) {
+        times.forEach(function(t, i) {
+          out.push([ i === 0 ? text : '', t, i === 0 ? src : '' ]);
+        });
+        return;
+      }
+      out.push(cols);
     });
     return out;
   }
