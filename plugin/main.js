@@ -1959,10 +1959,266 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUTOCUT MODULE — removed, placeholder tab only
+// SUPER AUTO CUT MODULE — Phase 1: Spreadsheet UI + Block Parsing
 // ═══════════════════════════════════════════════════════════════════════════
-/* AUTOCUT MODULE REMOVED — placeholder tab only (function body stripped) */
-(function() { /* Autocut removed */ })();
+(function() {
+  'use strict';
+  var $ = function(id) { return document.getElementById(id); };
+
+  var rowSeq = 0;
+  var parsedBlocks = [];
+
+  // ── Method switching ────────────────────────────────────────────────────
+  document.querySelectorAll('.sac-methodBtn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+        b.classList.remove('is-active');
+      });
+      btn.classList.add('is-active');
+      var method = btn.dataset.method;
+      $('sacPanelManual').hidden     = (method !== 'manual');
+      $('sacPanelScreenshot').hidden = (method !== 'screenshot');
+    });
+  });
+
+  // ── Row factory ─────────────────────────────────────────────────────────
+  function makeInput(placeholder) {
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'sac-input';
+    inp.placeholder = placeholder;
+    inp.addEventListener('focus', function() {
+      if (window.claimKeyboard) window.claimKeyboard();
+    });
+    inp.addEventListener('blur', function() {
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    });
+    return inp;
+  }
+
+  function makeCell(colClass) {
+    var cell = document.createElement('div');
+    cell.className = 'sac-cell ' + colClass;
+    return cell;
+  }
+
+  function createRow(text, time, src) {
+    var id = ++rowSeq;
+    var row = document.createElement('div');
+    row.className = 'sac-row';
+    row.dataset.rowId = String(id);
+
+    var inpText = makeInput('Script text...');
+    var inpTime = makeInput('0:00-0:10');
+    var inpSrc  = makeInput('Source name');
+    if (text) inpText.value = text;
+    if (time) inpTime.value = time;
+    if (src)  inpSrc.value  = src;
+
+    var delBtn = document.createElement('button');
+    delBtn.className = 'sac-delBtn';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', function() { row.remove(); });
+
+    var cText = makeCell('sac-col-text'); cText.appendChild(inpText);
+    var cTime = makeCell('sac-col-time'); cTime.appendChild(inpTime);
+    var cSrc  = makeCell('sac-col-src');  cSrc.appendChild(inpSrc);
+    var cDel  = makeCell('sac-col-del');  cDel.appendChild(delBtn);
+
+    row.appendChild(cText);
+    row.appendChild(cTime);
+    row.appendChild(cSrc);
+    row.appendChild(cDel);
+
+    $('sacBody').appendChild(row);
+    return row;
+  }
+
+  // ── Block parsing ───────────────────────────────────────────────────────
+  // Rule:
+  //   • Both text + source non-empty → NEW block
+  //   • Only text non-empty          → add text to current block
+  //   • Only source non-empty        → add source to current block
+  //   • Both empty                   → skip
+  function parseBlocks() {
+    var rows = Array.from($('sacBody').querySelectorAll('.sac-row'));
+    var data = rows.map(function(row) {
+      var inputs = row.querySelectorAll('.sac-input');
+      return {
+        text: inputs[0] ? inputs[0].value.trim() : '',
+        time: inputs[1] ? inputs[1].value.trim() : '',
+        src:  inputs[2] ? inputs[2].value.trim() : '',
+      };
+    });
+
+    var blocks  = [];
+    var current = null;
+
+    data.forEach(function(r) {
+      var hasText = r.text !== '';
+      var hasSrc  = r.src  !== '';
+      if (!hasText && !hasSrc) return; // skip blank rows
+
+      if (hasText && hasSrc) {
+        // Both → start new block
+        current = { texts: [r.text], sources: [{ name: r.src, time: r.time }] };
+        blocks.push(current);
+      } else if (hasText) {
+        // Text only → add to current block
+        if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
+        current.texts.push(r.text);
+      } else {
+        // Source only → add to current block
+        if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
+        current.sources.push({ name: r.src, time: r.time });
+      }
+    });
+
+    return blocks;
+  }
+
+  // ── Block preview ───────────────────────────────────────────────────────
+  var BLOCK_COLORS = ['#a855f7','#f59e0b','#10b981','#3b82f6','#ef4444','#ec4899'];
+
+  function renderBlocks(blocks) {
+    var list = $('sacBlockList');
+    list.innerHTML = '';
+    $('sacBlockCount').textContent = blocks.length + ' block' + (blocks.length !== 1 ? 's' : '');
+
+    blocks.forEach(function(block, i) {
+      var color = BLOCK_COLORS[i % BLOCK_COLORS.length];
+      var card  = document.createElement('div');
+      card.className = 'sac-blockCard';
+      card.style.borderColor = color;
+
+      var header = document.createElement('div');
+      header.className = 'sac-blockCardHeader';
+      header.style.color = color;
+      header.textContent = 'Block ' + (i + 1)
+        + '  ·  ' + block.texts.length + ' text'
+        + (block.texts.length !== 1 ? 's' : '')
+        + '  ·  ' + block.sources.length + ' source'
+        + (block.sources.length !== 1 ? 's' : '');
+      card.appendChild(header);
+
+      var body = document.createElement('div');
+      block.texts.forEach(function(t) {
+        var el = document.createElement('div');
+        el.className = 'sac-blockText';
+        el.textContent = '💬 ' + t;
+        body.appendChild(el);
+      });
+      block.sources.forEach(function(s) {
+        var el = document.createElement('div');
+        el.className = 'sac-blockSrc';
+        el.textContent = '🎬 ' + s.name + (s.time ? '  [' + s.time + ']' : '');
+        body.appendChild(el);
+      });
+      card.appendChild(body);
+      list.appendChild(card);
+    });
+
+    parsedBlocks = blocks;
+    $('sacBlockSection').hidden = false;
+    $('sacRunBtn').disabled = (blocks.length === 0);
+  }
+
+  // ── Populate from AI-parsed data (used by Phase 2 screenshot parser) ────
+  window.sacLoadBlocks = function(blocks) {
+    renderBlocks(blocks);
+  };
+
+  window.sacLoadRows = function(rows) {
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    rows.forEach(function(r) { createRow(r.text, r.time, r.src); });
+  };
+
+  // ── Screenshot: paste handler ────────────────────────────────────────────
+  var sacImgDataUrl = null;
+
+  document.addEventListener('paste', function(e) {
+    if ($('sacPanelScreenshot').hidden) return;
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') === -1) continue;
+      var blob = items[i].getAsFile();
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        sacImgDataUrl = ev.target.result;
+        var canvas = $('sacImgCanvas');
+        var img = new Image();
+        img.onload = function() {
+          canvas.width  = img.width;
+          canvas.height = img.height;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          canvas.hidden = false;
+        };
+        img.src = sacImgDataUrl;
+        $('sacDrop').classList.add('has-image');
+        $('sacParseImg').disabled = false;
+      };
+      reader.readAsDataURL(blob);
+      break;
+    }
+  });
+
+  // ── Event listeners ──────────────────────────────────────────────────────
+  $('sacAddRow').addEventListener('click', function() { createRow(); });
+
+  $('sacPreviewBtn').addEventListener('click', function() {
+    var blocks = parseBlocks();
+    var status = $('sacStatus');
+    if (blocks.length === 0) {
+      status.textContent = 'Chưa có dữ liệu. Điền ít nhất 1 dòng có cả Script và Source.';
+      status.hidden = false;
+      return;
+    }
+    status.hidden = true;
+    renderBlocks(blocks);
+  });
+
+  $('sacClearBlocks').addEventListener('click', function() {
+    $('sacBlockSection').hidden = true;
+    parsedBlocks = [];
+  });
+
+  $('sacValidateBtn').addEventListener('click', function() {
+    if (parsedBlocks.length === 0) return;
+    var btn = $('sacValidateBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Validating...';
+    fetch(BRIDGE_URL + '/superautocut/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blocks: parsedBlocks }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        btn.disabled = false;
+        btn.textContent = '✔ Validate';
+        var status = $('sacStatus');
+        if (d.ok) {
+          status.textContent = '✅ ' + d.blockCount + ' blocks hợp lệ.';
+          status.hidden = false;
+        } else {
+          status.textContent = '❌ ' + (d.errors ? d.errors.join(' | ') : d.error);
+          status.hidden = false;
+        }
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = '✔ Validate';
+        $('sacStatus').textContent = '❌ Bridge offline: ' + e.message;
+        $('sacStatus').hidden = false;
+      });
+  });
+
+  // ── Init: 3 empty rows ───────────────────────────────────────────────────
+  createRow(); createRow(); createRow();
+
+})(); // END Super Auto Cut module
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VOICE GEN MODULE (ElevenLabs)
