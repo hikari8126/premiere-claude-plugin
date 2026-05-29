@@ -597,21 +597,38 @@
 
     <!-- ── MANUAL PANEL ── -->
     <div class="sac-panel" id="sacPanelManual">
+
+      <!-- Spreadsheet -->
       <div class="sac-tableWrap">
-        <!-- Header -->
         <div class="sac-thead">
           <div class="sac-th sac-col-text">Script</div>
           <div class="sac-th sac-col-time">In → Out</div>
           <div class="sac-th sac-col-src">Source (bin)</div>
           <div class="sac-th sac-col-del"></div>
         </div>
-        <!-- Rows -->
         <div id="sacBody" class="sac-tbody"></div>
       </div>
       <div class="sac-tableFooter">
         <button id="sacAddRow" class="sac-addBtn">+ Row</button>
         <button id="sacPreviewBtn" class="sac-previewBtn">Xem blocks →</button>
       </div>
+
+      <!-- Block preview (inside manual panel so flex space is shared) -->
+      <div id="sacBlockSection" class="sac-blockSection" style="display:none">
+        <div class="sac-blockHeader">
+          <span class="sac-blockTitle">✂️ Blocks</span>
+          <span id="sacBlockCount" class="sac-blockMeta"></span>
+          <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
+        </div>
+        <div id="sacBlockList" class="sac-blockList"></div>
+        <div class="sac-actionBar">
+          <button id="sacValidateBtn" class="sac-validateBtn">✔ Validate</button>
+          <button id="sacRunBtn" class="sac-runBtn" disabled>▶ Run AutoCut</button>
+        </div>
+      </div>
+
+      <div id="sacStatus" class="sac-statusMsg" style="display:none"></div>
+
     </div>
 
     <!-- ── SCREENSHOT PANEL ── -->
@@ -625,24 +642,6 @@
       <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
       <div id="sacImgStatus" class="sac-statusMsg"></div>
     </div>
-
-    <!-- ── BLOCK PREVIEW ── -->
-    <div id="sacBlockSection" class="sac-blockSection" style="display:none">
-      <div class="sac-blockHeader">
-        <span class="sac-blockTitle">✂️ Blocks</span>
-        <span id="sacBlockCount" class="sac-blockMeta"></span>
-        <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
-      </div>
-      <div id="sacBlockList" class="sac-blockList"></div>
-
-      <!-- Actions -->
-      <div class="sac-actionBar">
-        <button id="sacValidateBtn" class="sac-validateBtn">✔ Validate</button>
-        <button id="sacRunBtn" class="sac-runBtn" disabled>▶ Run AutoCut</button>
-      </div>
-    </div>
-
-    <div id="sacStatus" class="sac-statusMsg" hidden></div>
 
   </div><!-- /sac-app -->
 

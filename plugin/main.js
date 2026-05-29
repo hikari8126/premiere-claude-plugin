@@ -2079,6 +2079,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
   // ── Block preview ───────────────────────────────────────────────────────
   var BLOCK_COLORS = ['#a855f7','#f59e0b','#10b981','#3b82f6','#ef4444','#ec4899'];
+  var BLOCK_BG     = ['rgba(168,85,247,0.12)','rgba(245,158,11,0.1)','rgba(16,185,129,0.1)',
+                      'rgba(59,130,246,0.1)','rgba(239,68,68,0.1)','rgba(236,72,153,0.1)'];
 
   function renderBlocks(blocks) {
     var list = $('sacBlockList');
@@ -2087,13 +2089,16 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
     blocks.forEach(function(block, i) {
       var color = BLOCK_COLORS[i % BLOCK_COLORS.length];
-      var card  = document.createElement('div');
-      card.className = 'sac-blockCard';
-      card.style.borderColor = color;
+      var bg    = BLOCK_BG[i % BLOCK_BG.length];
 
+      var card = document.createElement('div');
+      card.className = 'sac-blockCard';
+
+      // Header
       var header = document.createElement('div');
       header.className = 'sac-blockCardHeader';
       header.style.color = color;
+      header.style.background = bg;
       header.textContent = 'Block ' + (i + 1)
         + '  ·  ' + block.texts.length + ' text'
         + (block.texts.length !== 1 ? 's' : '')
@@ -2101,19 +2106,38 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         + (block.sources.length !== 1 ? 's' : '');
       card.appendChild(header);
 
+      // Body
       var body = document.createElement('div');
+      body.className = 'sac-blockCardBody';
+
       block.texts.forEach(function(t) {
         var el = document.createElement('div');
         el.className = 'sac-blockText';
         el.textContent = '💬 ' + t;
         body.appendChild(el);
       });
+
+      if (block.texts.length > 0 && block.sources.length > 0) {
+        var div = document.createElement('div');
+        div.className = 'sac-blockDivider';
+        body.appendChild(div);
+      }
+
       block.sources.forEach(function(s) {
         var el = document.createElement('div');
         el.className = 'sac-blockSrc';
-        el.textContent = '🎬 ' + s.name + (s.time ? '  [' + s.time + ']' : '');
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = '🎬 ' + s.name;
+        el.appendChild(nameSpan);
+        if (s.time) {
+          var badge = document.createElement('span');
+          badge.className = 'sac-blockTimeBadge';
+          badge.textContent = s.time;
+          el.appendChild(badge);
+        }
         body.appendChild(el);
       });
+
       card.appendChild(body);
       list.appendChild(card);
     });
@@ -2163,6 +2187,25 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       break;
     }
   });
+
+  // ── Paste multi-row from spreadsheet (Google Sheets / Excel) ────────────
+  // When copied from a sheet, data is tab-separated columns + newline-separated rows.
+  // If the clipboard has newlines → intercept and create rows automatically.
+  $('sacBody').addEventListener('paste', function(e) {
+    var text = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (!text || text.indexOf('\n') === -1) return; // single cell paste, let default handle
+    e.preventDefault();
+    e.stopPropagation();
+    var lines = text.split(/\r?\n/).filter(function(l) { return l.trim() !== ''; });
+    lines.forEach(function(line) {
+      var parts = line.split('\t');
+      createRow(
+        parts[0] ? parts[0].trim() : '',
+        parts[1] ? parts[1].trim() : '',
+        parts[2] ? parts[2].trim() : ''
+      );
+    });
+  }, true);
 
   // ── Event listeners ──────────────────────────────────────────────────────
   $('sacAddRow').addEventListener('click', function() { createRow(); });
