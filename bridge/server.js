@@ -1491,6 +1491,37 @@ app.post('/api/read-image', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SUPER AUTO CUT endpoints
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── POST /superautocut/validate — validate block structure ─────────────────
+app.post('/superautocut/validate', (req, res) => {
+  const { blocks } = req.body || {};
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return res.json({ ok: false, error: 'No blocks provided' });
+  }
+
+  const errors = [];
+  blocks.forEach((block, i) => {
+    const label = `Block ${i + 1}`;
+    if (!Array.isArray(block.texts) || block.texts.length === 0) {
+      errors.push(`${label}: không có text`);
+    }
+    if (!Array.isArray(block.sources) || block.sources.length === 0) {
+      errors.push(`${label}: không có source`);
+    } else {
+      block.sources.forEach((s, j) => {
+        if (!s.name || !s.name.trim()) errors.push(`${label} source ${j + 1}: thiếu tên`);
+        if (!s.time || !s.time.trim()) errors.push(`${label} source ${j + 1}: thiếu timestamp`);
+      });
+    }
+  });
+
+  if (errors.length > 0) return res.json({ ok: false, errors });
+  res.json({ ok: true, blockCount: blocks.length });
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
 const BRIDGE_VERSION = '1.5.0-beta.1';
 app.get('/health', (_req, res) => {
