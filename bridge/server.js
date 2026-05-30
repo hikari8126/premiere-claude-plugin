@@ -87,6 +87,7 @@ Available manual-edit actions (rarely needed — only when user explicitly asks)
 - set_volume     {trackIndex, clipIndex, volumeDb}              → set volume
 - voicegen_script {text, voiceId?, autoGenerate?}              → push script to Voice Gen tab (auto-switch)
 - voicegen_sfx   {text, autoGenerate?}                         → push SFX prompt to Voice Gen tab
+- autocut_load   {rows: [{script, source, time?|sourceIn?+sourceOut?}]} → organize a cutsheet into the Autocut tab spreadsheet (auto-switch)
 
 ── VOICE GEN INTEGRATION ────────────────────────────────────────────────
 When the user asks you to:
@@ -97,6 +98,17 @@ When the user asks you to:
     → emit a voicegen_sfx action
   • You can also specify a voiceId from known ElevenLabs IDs (optional)
   • These actions auto-switch the plugin to the Voice Gen tab
+
+── AUTOCUT TAB INTEGRATION ───────────────────────────────────────────────
+When the user gives you a messy/complex script or cutsheet and asks you to
+"organize", "clean up", "chuẩn hóa", or "load/đẩy vào Autocut":
+  → Reorganize into clean rows and emit an \`autocut_load\` action.
+  → Each row: {"script": "<text>", "source": "<bin clip name>", "time": "0:02-0:08"}
+     • time may be a string ("0:02-0:08" or "0:05") OR numeric sourceIn/sourceOut (seconds).
+  → This fills the Autocut spreadsheet (3 cols: Script | In→Out | Source) and switches
+     the plugin to the Autocut tab. The user then reviews and clicks Validate.
+  → Apply the SAME merged-cell logic as cutlist below (one script + many sources →
+     many rows; one source + many script lines → many rows).
 
 ── AUTOCUT CUTLIST PARSING ──────────────────────────────────────────────
 When the user attaches a cutsheet (image OR text), parse to \`cutlist\` action.
@@ -1522,6 +1534,44 @@ app.post('/superautocut/validate', (req, res) => {
   res.json({ ok: true, blockCount: blocks.length });
 });
 
+// ── POST /superautocut/voice-align ──────────────────────────────────────────
+// Transcribe a single voice file (whole cutsheet) then align each block's text
+// to find where that block's voice segment starts/ends.
+// Body: { audioPath, blocks: [{texts: [...]}], language? }
+// Returns: { ok, alignments: [{start, end, duration, matched, status}], fullText }
+app.post('/superautocut/voice-align', async (req, res) => {
+  try {
+    const { audioPath, blocks = [], language } = req.body || {};
+    if (!audioPath) throw new Error('audioPath is required');
+    if (!Array.isArray(blocks) || blocks.length === 0) throw new Error('blocks is required');
+
+    // 1) Whisper → word timestamps
+    const { words, fullText } = await transcribeWhisper(audioPath, language);
+
+    // 2) One script line per block (join all of the block's text lines)
+    const scriptLines = blocks.map(b =>
+      (Array.isArray(b.texts) ? b.texts.join(' ') : String(b.texts || '')).trim()
+    );
+
+    // 3) Align → per-block start/end, then derive duration
+    console.log('[voice-align] scriptLines:', JSON.stringify(scriptLines));
+    console.log('[voice-align] transcript:', (fullText || '').slice(0, 300));
+    const aligned = alignScriptToWords(words, scriptLines);
+    console.log('[voice-align] results:', aligned.map(a => a.status + '(' + a.matched + ')').join(' | '));
+    const alignments = aligned.map(a => ({
+      start:   a.start,
+      end:     a.end,
+      duration: (a.start != null && a.end != null) ? Math.max(0, a.end - a.start) : null,
+      matched: a.matched,
+      status:  a.status,
+    }));
+
+    res.json({ ok: true, alignments, fullText });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── POST /superautocut/parse-image — Claude Vision parses cutsheet screenshot
 app.post('/superautocut/parse-image', async (req, res) => {
   const { imageBase64 } = req.body || {};
@@ -1592,7 +1642,7 @@ Return ONLY a JSON array, no markdown, no explanation:
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.1';
+const BRIDGE_VERSION = '1.5.0-beta.3';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
