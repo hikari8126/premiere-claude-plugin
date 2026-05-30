@@ -168,7 +168,47 @@
     <div class="vg-statusBar" id="vgStatusBar">
       <span class="vg-statusDot" id="vgStatusDot"></span>
       <span id="vgStatusText">Connecting...</span>
+      <button id="vgSettingsBtn" class="ac-iconBtn" title="API & Output settings">&#9881;</button>
       <button id="vgRefreshVoices" class="ac-iconBtn">&#8635;</button>
+    </div>
+
+    <!-- Collapsible settings panel (toggled by the ⚙ button) -->
+    <div class="vg-settingsPanel" id="vgSettingsPanel" hidden>
+
+      <!-- ElevenLabs API Key Profiles -->
+      <div class="vg-sg vg-apiKeySection">
+        <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
+        <div class="vg-profileRow">
+          <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
+          <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
+        </div>
+        <div class="vg-profileNameRow">
+          <input type="text" id="vgProfileName" class="vg-settingInput"
+            placeholder="Profile name..." autocomplete="off" />
+        </div>
+        <div class="vg-apiKeyRow">
+          <input type="password" id="vgElKeyInput" class="vg-settingInput vg-apiKeyInput"
+            placeholder="sk_..." autocomplete="off" />
+        </div>
+        <div class="vg-profileActions">
+          <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
+          <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
+        </div>
+        <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
+      </div>
+
+      <!-- Output Format -->
+      <div class="vg-sg">
+        <div class="vg-sl">Output Format</div>
+        <select id="vgOutputFormat" class="vg-select">
+          <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
+          <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+          <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
+          <option value="pcm_16000">PCM 16kHz</option>
+          <option value="pcm_24000">PCM 24kHz</option>
+        </select>
+      </div>
+
     </div>
 
     <!-- Mode selector -->
@@ -371,6 +411,7 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
               </div>
             </div>
             <div class="vg-variation" id="vgVar2" style="display:none;">
@@ -387,6 +428,7 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
               </div>
             </div>
             <div id="vgImportStatus" class="ac-manualStatus"></div>
@@ -407,31 +449,7 @@
         </div>
         <div class="vg-rightScroll">
 
-        <!-- ElevenLabs API Key Profiles — always visible, top of settings -->
-        <div class="vg-sg vg-apiKeySection">
-          <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
-          <!-- Profile selector row -->
-          <div class="vg-profileRow">
-            <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
-            <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
-          </div>
-          <!-- Profile name input -->
-          <div class="vg-profileNameRow">
-            <input type="text" id="vgProfileName" class="vg-settingInput"
-              placeholder="Profile name..." autocomplete="off" />
-          </div>
-          <!-- Key input -->
-          <div class="vg-apiKeyRow">
-            <input type="password" id="vgElKeyInput" class="vg-settingInput vg-apiKeyInput"
-              placeholder="sk_..." autocomplete="off" />
-          </div>
-          <!-- Actions -->
-          <div class="vg-profileActions">
-            <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
-            <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
-          </div>
-          <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
-        </div>
+        <!-- API Key Profiles + Output Format moved to the ⚙ settings panel (top) -->
 
         <!-- TTS settings -->
         <div class="vg-modeContent" data-mode="tts">
@@ -512,17 +530,6 @@
             </select>
           </div>
 
-          <div class="vg-sg">
-            <div class="vg-sl">Output Format</div>
-            <select id="vgOutputFormat" class="vg-select">
-              <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
-              <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
-              <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
-              <option value="pcm_16000">PCM 16kHz</option>
-              <option value="pcm_24000">PCM 24kHz</option>
-            </select>
-          </div>
-
         </div><!-- /tts settings -->
 
         <!-- SFX settings -->
@@ -598,8 +605,12 @@
     <!-- ── MANUAL PANEL ── -->
     <div class="sac-panel" id="sacPanelManual">
 
-      <!-- Spreadsheet -->
-      <div class="sac-tableWrap">
+      <!-- Spreadsheet (collapsible) -->
+      <div class="sac-sectionToggle" id="sacScriptToggle">
+        <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
+        <span>📝 Script input</span>
+      </div>
+      <div class="sac-tableWrap" id="sacTableWrap">
         <div class="sac-thead">
           <div class="sac-th sac-col-text">Script</div>
           <div class="sac-th sac-col-time">In → Out</div>
@@ -608,10 +619,10 @@
         </div>
         <div id="sacBody" class="sac-tbody"></div>
       </div>
-      <div class="sac-tableFooter">
+      <div class="sac-tableFooter" id="sacTableFooter">
         <button id="sacAddRow" class="sac-addBtn">+ Row</button>
         <button id="sacClearBoard" class="sac-clearBoardBtn">🗑</button>
-        <button id="sacPreviewBtn" class="sac-previewBtn">Xem blocks →</button>
+        <button id="sacPreviewBtn" class="sac-previewBtn">✔ Validate</button>
       </div>
 
       <!-- Block preview (inside manual panel so flex space is shared) -->
@@ -622,9 +633,20 @@
           <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
         </div>
         <div id="sacBlockList" class="sac-blockList"></div>
+        <div class="sac-voicePanel">
+          <div class="sac-voiceRow">
+            <button id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn">⚡ Gen voice (Voice Gen) →</button>
+            <button id="sacVoiceBtn" class="sac-voiceBtn" title="Chọn file voice có sẵn">📂</button>
+          </div>
+          <div class="sac-voicePlayer" id="sacVoicePlayer" style="display:none">
+            <button id="sacVoicePlay" class="sac-voicePlayBtn">▶</button>
+            <div id="sacVoiceProgWrap" class="sac-voiceProgWrap"><div id="sacVoiceFill" class="sac-voiceFill"></div></div>
+            <span id="sacVoiceTime" class="sac-voiceTime">0:00 / 0:00</span>
+          </div>
+          <div id="sacVoiceInfo" class="sac-voiceInfo">Chưa có voice</div>
+        </div>
         <div class="sac-actionBar">
-          <button id="sacValidateBtn" class="sac-validateBtn">✔ Validate</button>
-          <button id="sacRunBtn" class="sac-runBtn" disabled>▶ Run AutoCut</button>
+          <button id="sacActionBtn" class="sac-actionBtn is-run" style="display:none">▶ Run AutoCut</button>
         </div>
       </div>
 
@@ -635,12 +657,13 @@
     <!-- ── SCREENSHOT PANEL ── -->
     <div class="sac-panel" id="sacPanelScreenshot" style="display:none">
       <div class="sac-drop" id="sacDrop">
-        <div class="sac-dropIcon">📷</div>
-        <div class="sac-dropText">Chụp màn hình cutsheet</div>
-        <div class="sac-dropHint">rồi chọn file ảnh bên dưới</div>
+        <img id="sacImgPreview" class="sac-imgPreview" hidden />
+        <div class="sac-dropPrompt" id="sacDropPrompt">
+          <div class="sac-dropIcon">📷</div>
+          <div class="sac-dropText">Chụp màn hình cutsheet</div>
+          <div class="sac-dropHint">Bấm vào đây để chọn ảnh</div>
+        </div>
       </div>
-      <button id="sacChooseImg" class="sac-chooseImgBtn">📂 Chọn file ảnh...</button>
-      <canvas id="sacImgCanvas" class="sac-imgPreview" hidden></canvas>
       <div class="sac-screenshotFooter">
         <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
       </div>
@@ -798,6 +821,7 @@
     </div>
 
   </div><!-- /ac-app (hidden) -->
+
 </div><!-- /tab-autocut -->
 
 <!-- Settings panel (floating, draggable) -->
