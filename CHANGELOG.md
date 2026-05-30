@@ -3,6 +3,36 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.2.0-beta.22 — 2026-05-30
+
+### ✅ Thêm mới / Cải tiến
+- **SAC Phase 5 Assembly**: Thêm voice panel dưới block list — nút "⚡ Gen voice → Voice Gen", file picker, progress player (play/pause + progress bar + timestamp)
+- **`autocut_load` action**: Claude có thể đẩy cutsheet đã tổ chức thẳng vào spreadsheet Autocut (tự switch tab). Nhận `rows[]` dạng SAC-native hoặc cutlist-style (`script/source/sourceIn/sourceOut`)
+- **Bin traversal + fuzzy matching**: 3-pass lookup — (1) exact (tolerant extension), (2) prefix word-boundary, (3) folder+clip split ("Senyue 62" → folder "Senyue" / clip "62"). BFS walk toàn project tree qua `ppro.FolderItem.cast()`
+- **Folder hint button (📁)**: Mỗi ô Source có nút gợi ý folder từ bin scan gần nhất, reset gate validate khi sửa
+- **Unified Run gate**: `sacActionBtn` chỉ hiện khi CẢ HAI pass — structure validated (`sacValidatePassed`) VÀ voice aligned (`sacVoiceReady`)
+- **Multi-time zip mode**: Time cell nhiều dòng nay hỗ trợ B1 (zip src theo từng time) lẫn B2 (carry cùng một src cho tất cả times)
+- **Collapsible UI**: Spreadsheet section có toggle ▾/▸; Block cards có collapse/expand theo click header
+- **Block voice badge**: Mỗi block card có `sac-blockVoiceBadge` (điền sau khi align voice)
+- **VoiceGen ⚙ panel**: API Key Profiles + Output Format gom vào panel collapsible (nút ⚙), thay vì luôn hiển thị. Thêm nút "→ Autocut" trên từng variation
+- **Screenshot panel**: Thay `<canvas>` + nút "Chọn file ảnh" bằng `<img>` + drop zone clickable toàn bộ
+- **`POST /superautocut/voice-align`**: Bridge endpoint mới — Whisper transcribe 1 file audio → align từng block's text → trả `{start, end, duration, matched, status}` per block
+- **`push.sh`**: Script build + push tự động lên GitHub (134 lines)
+- Bridge version bump: `1.5.0-beta.1` → `1.5.0-beta.3`
+
+### 🐛 Bugs đã fix
+- **EL_PROFILES rỗng sau load settings** — Nguyên nhân: migration path cũ không khởi tạo profile nếu `elevenlabsKey` undefined. Cách fix: thêm guard sau `applySettings()` — nếu `EL_PROFILES.length === 0` thì tạo profile Default với `ELEVENLABS_KEY`
+- **Multi-time B2: src bị xóa ở row > 0** — Nguyên nhân: logic cũ luôn dùng `i === 0 ? src : ''`. Cách fix: detect `zipSrc = srcLines.length === times.length`, nếu false thì carry `src` cho tất cả rows
+
+### 🔧 Kỹ thuật / Approach
+- Bin traversal dùng `ppro.FolderItem.cast(item)` — trả `null` cho clip/sequence (không phải folder), tránh infinite loop; BFS với guard `< 10000`
+- `sacNorm()` collapse toàn bộ whitespace (`\s+` → `' '`) — xử lý NBSP và double-space trong tên bin
+- `sacCountBinMatches()` đếm distinct matches Pass 1+2 để phát hiện tên ambiguous trước khi validate
+- Voice player dùng UXP `uxp.storage` path + `HTMLMediaElement` (không dùng `new Audio()` — unsupported trong UXP)
+- `autocut_load` handler trong `ppExecuteAction()` gọi `window.AutocutPushRows()` (exposed từ IIFE SAC module) — tránh coupling trực tiếp vào closure
+
+---
+
 ---
 
 ## v4.2.0-beta.22 — 2026-05-30
