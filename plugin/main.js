@@ -3202,7 +3202,8 @@ function sacCountBinMatches(items, targetName) {
           var ts      = parseSourceTime(src.time);
           var clipDur = ts.outSec - ts.inSec;
 
-          await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, -1);
+          // vIdx=0 (V1), aIdx=1 (A2) — source audio đi A2, không đụng A1 dành cho voice
+          await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
           console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec + ']s @' + cursor.toFixed(2));
 
           srcTotal += clipDur;
