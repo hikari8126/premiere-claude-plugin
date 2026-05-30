@@ -3136,9 +3136,21 @@ function sacCountBinMatches(items, targetName) {
     return found2 ? found2.item : null;
   }
 
-  // Place a clip using SequenceEditor.createOverwriteItemAction inside a transaction.
-  // Sets source in/out (ClipProjectItem.createSetInOutPointsAction) in the same transaction.
-  // vIdx = video track (0=V1), -1 = skip video. aIdx = audio track (0=A1), -1 = skip audio.
+  // Commit a single lockedAccess/executeTransaction and await if needed.
+  async function sacCommitTx(project, fn, label) {
+    var r = project.lockedAccess(function() {
+      project.executeTransaction(fn, label || 'SAC tx');
+    });
+    if (r && typeof r.then === 'function') await r;
+  }
+
+  // Place a clip on the timeline.
+  // TWO separate committed transactions: (1) set source in/out, (2) insert.
+  // Reason: in a combined transaction, createSetInOutPointsAction on a shared
+  // master clip (e.g. the voice file) takes effect after the transaction commits,
+  // not before the insert action inside the SAME transaction. Splitting into two
+  // separate commits ensures in/out is fully applied before the insert runs.
+  // vIdx = video track (0=V1), 5 = far-away track (effectively skip). aIdx similar.
   async function sacInsertClipAt(project, seqEditor, item, atSec, inSec, outSec, vIdx, aIdx) {
     var timeAt = sacMakeTime(atSec);
     var inPt   = sacMakeTime(inSec);
@@ -3149,19 +3161,17 @@ function sacCountBinMatches(items, targetName) {
       try { clipItem = ppro.ClipProjectItem.cast(item); } catch(e) {}
     }
 
-    var r = project.lockedAccess(function() {
-      project.executeTransaction(function(compoundAction) {
-        // 1. Trim source in/out on master clip
-        if (clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
-          compoundAction.addAction(clipItem.createSetInOutPointsAction(inPt, outPt));
-        }
-        // 2. Overwrite onto timeline at atSec
-        compoundAction.addAction(
-          seqEditor.createOverwriteItemAction(item, timeAt, vIdx, aIdx)
-        );
-      }, 'SAC insert clip');
-    });
-    if (r && typeof r.then === 'function') await r;
+    // Tx 1: commit in/out change first
+    if (clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
+      await sacCommitTx(project, function(ca) {
+        ca.addAction(clipItem.createSetInOutPointsAction(inPt, outPt));
+      }, 'SAC set in/out');
+    }
+
+    // Tx 2: insert — master clip in/out is now committed, insert uses it
+    await sacCommitTx(project, function(ca) {
+      ca.addAction(seqEditor.createOverwriteItemAction(item, timeAt, vIdx, aIdx));
+    }, 'SAC insert clip');
   }
 
   async function sacRunAutoCut() {
@@ -3187,41 +3197,15 @@ function sacCountBinMatches(items, targetName) {
       var cursor = await sacGetSequenceEnd(seq);
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length);
 
-      // Split voice into per-block files via bridge (fix UXP master clip in/out bug:
-      // createSetInOutPointsAction changes master clip globally, affecting all placed
-      // track items. Each block needs its own independent ProjectItem.)
+      // Import voice file once (find in bin first, only import if missing)
       var voicePath = sacVoicePath || window.sacVoicePath;
-      var voiceItems = []; // index = block index → ProjectItem|null
+      var voiceItem = null;
       if (voicePath) {
-        status.textContent = '⏳ Split voice theo blocks...';
-        var segments = blocks.map(function(b) {
-          return {
-            start: b.voiceStart != null ? b.voiceStart : 0,
-            end:   b.voiceEnd   != null ? b.voiceEnd + 0.2 : 0,  // +0.2s buffer
-          };
-        });
-        var blocksWithVoice = blocks.some(function(b) { return b.voiceStart != null; });
-        if (blocksWithVoice) {
-          try {
-            var splitResp = await fetch(BRIDGE_URL + '/superautocut/split-voice', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioPath: voicePath, segments: segments }),
-            });
-            var splitData = await splitResp.json();
-            if (!splitData.ok) throw new Error(splitData.error || 'split failed');
-
-            status.textContent = '⏳ Import voice segments...';
-            for (var si = 0; si < splitData.files.length; si++) {
-              var item = null;
-              try { item = await sacFindOrImportFile(splitData.files[si]); } catch(e) {}
-              voiceItems.push(item);
-              console.log('[SAC] Voice block ' + si + ':', item ? 'ok' : 'import failed');
-            }
-          } catch(e) {
-            console.warn('[SAC] split-voice failed:', e.message);
-          }
-        }
+        status.textContent = '⏳ Import voice...';
+        try {
+          voiceItem = await sacFindOrImportFile(voicePath);
+          console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
+        } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
       }
 
       var placed = 0;
@@ -3241,23 +3225,24 @@ function sacCountBinMatches(items, targetName) {
           var clipDur = ts.outSec - ts.inSec;
 
           await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
-          console.log('[SAC] V1 "' + src.name + '" src[' + ts.inSec + '-' + ts.outSec +
-            ']s @timeline ' + cursor.toFixed(2) + 's');
+          console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec +
+            ']s @' + cursor.toFixed(2) + 's');
 
           srcTotal += clipDur;
           cursor   += clipDur;
         }
 
-        // Place per-block voice file on A1 (each block has its own ProjectItem —
-        // no shared master clip, so in/out doesn't bleed between blocks)
-        var blockVoiceItem = voiceItems[i] || null;
-        if (blockVoiceItem && block.voiceStart != null && block.voiceEnd != null) {
+        // Place voice segment on A1 — two-transaction approach:
+        // Tx1 commits setInOut, Tx2 inserts using committed in/out
+        if (voiceItem && block.voiceStart != null && block.voiceEnd != null) {
           var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
-          // File is pre-cut [voiceStart, voiceEnd+0.2], so insert full duration (in=0, out=vDur+0.2)
-          await sacInsertClipAt(project, seqEditor, blockVoiceItem, blockStart,
-                                0, vDur + 0.2, 5, 0);
-          console.log('[SAC] A1 voice block ' + i + ' dur=' + vDur.toFixed(2) +
-            's @timeline ' + blockStart.toFixed(2) + 's');
+          var vOut = block.voiceEnd + 0.2; // +0.2s buffer
+
+          await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
+                                block.voiceStart, vOut, 5, 0);
+          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' +
+            vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
+
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
