@@ -1642,7 +1642,7 @@ Return ONLY a JSON array, no markdown, no explanation:
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.3';
+const BRIDGE_VERSION = '1.5.0-beta.4';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -1662,6 +1662,56 @@ app.get('/health', (_req, res) => {
       ok:    fs.existsSync(WHISPER_BIN),
     },
   });
+});
+
+// ── POST /superautocut/split-voice ────────────────────────────────────────
+// Split a voice file into N segments using ffmpeg (one per block).
+// Fixes UXP bug: createSetInOutPointsAction changes master clip globally,
+// affecting all placed track items. Giving each block its own file avoids this.
+// Input:  { audioPath, segments: [{start, end}] }
+// Output: { ok, files: [path0, path1, ...] }
+app.post('/superautocut/split-voice', async (req, res) => {
+  const { audioPath, segments } = req.body;
+  if (!audioPath || !fs.existsSync(audioPath))
+    return res.status(400).json({ ok: false, error: 'audioPath not found: ' + audioPath });
+  if (!Array.isArray(segments) || segments.length === 0)
+    return res.status(400).json({ ok: false, error: 'No segments provided' });
+
+  const tmpDir = getTempDir();
+  ensureDir(tmpDir);
+  const ts  = Date.now();
+  const ext = path.extname(audioPath) || '.mp3';
+
+  const files = [];
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      const { start, end } = segments[i];
+      const outPath = path.join(tmpDir, `sac_voice_b${i}_${ts}${ext}`);
+      await new Promise((resolve, reject) => {
+        const args = [
+          '-y', '-i', audioPath,
+          '-ss', String(start),
+          '-to', String(end),
+          '-vn',                         // drop video if any
+          '-acodec', 'copy',             // stream copy (fast, no re-encode)
+          '-avoid_negative_ts', 'make_zero',
+          outPath,
+        ];
+        const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+        let stderr = '';
+        proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg block ${i} failed: ` + stderr.slice(-200)));
+        });
+        proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
+      });
+      files.push(outPath);
+    }
+    res.json({ ok: true, files });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
