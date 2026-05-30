@@ -3246,6 +3246,7 @@ function sacCountBinMatches(items, targetName) {
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
+        cursor += 0.3; // 0.3s gap between blocks
         placed++;
       }
 
