@@ -3101,9 +3101,28 @@ function sacCountBinMatches(items, targetName) {
     return end;
   }
 
-  // Import a file into the project panel and return its ProjectItem.
-  async function sacImportFile(filePath) {
+  // Find or import a file: search bin first, only import if not already in project.
+  // Prevents duplicate imports when Run AutoCut is called multiple times.
+  async function sacFindOrImportFile(filePath) {
     var proj = await getActiveProject();
+    var rootItem = null;
+    if (typeof proj.getRootItem === 'function') {
+      rootItem = proj.getRootItem();
+      if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+    }
+    if (!rootItem) rootItem = proj.rootItem;
+
+    var fname = filePath.split('/').pop().split('\\').pop();
+    var binItems = rootItem ? (await sacCollectBinItems(rootItem)) : [];
+
+    // Search existing bin first
+    var found = binItems.find(function(b) { return b.name === fname; });
+    if (found) {
+      console.log('[SAC] Voice already in project bin:', fname);
+      return found.item;
+    }
+
+    // Not found — import
     if (typeof proj.importFiles === 'function') {
       await proj.importFiles([filePath]);
     } else if (typeof proj.importFile === 'function') {
@@ -3111,16 +3130,10 @@ function sacCountBinMatches(items, targetName) {
     } else {
       throw new Error('No importFiles API on project');
     }
-    var rootItem = null;
-    if (typeof proj.getRootItem === 'function') {
-      rootItem = proj.getRootItem();
-      if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
-    }
-    if (!rootItem) rootItem = proj.rootItem;
-    var fname = filePath.split('/').pop().split('\\').pop();
-    var binItems = rootItem ? (await sacCollectBinItems(rootItem)) : [];
-    var found = binItems.find(function(b) { return b.name === fname; });
-    return found ? found.item : null;
+    // Re-scan bin to find the newly imported item
+    var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
+    var found2 = binItems2.find(function(b) { return b.name === fname; });
+    return found2 ? found2.item : null;
   }
 
   // Place a clip using SequenceEditor.createOverwriteItemAction inside a transaction.
@@ -3180,7 +3193,7 @@ function sacCountBinMatches(items, targetName) {
       if (voicePath) {
         status.textContent = '⏳ Import voice file...';
         try {
-          voiceItem = await sacImportFile(voicePath);
+          voiceItem = await sacFindOrImportFile(voicePath);
           console.log('[SAC] Voice imported:', voiceItem ? 'ok' : 'not found in bin');
         } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
       }
