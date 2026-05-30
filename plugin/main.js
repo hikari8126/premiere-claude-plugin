@@ -3149,10 +3149,36 @@ function sacCountBinMatches(items, targetName) {
     console.log('[SAC probe] ' + label + ' methods:', methods.sort().join(', '));
   }
 
+  // Get a track object from a sequence, trying multiple API patterns.
+  // isVideo=true → video track trackIdx; isVideo=false → audio track trackIdx.
+  async function sacGetTrack(seq, isVideo, trackIdx) {
+    // Path A: trackGroup API (guarded — ppro.Backend may be undefined)
+    try {
+      if (ppro.Backend && seq.trackGroup) {
+        var mt = isVideo ? ppro.Backend.MEDIATYPE_VIDEO : ppro.Backend.MEDIATYPE_AUDIO;
+        var grp = seq.trackGroup(mt);
+        if (grp && grp.numTracks > trackIdx) return grp.getTrack(trackIdx);
+      }
+    } catch(eA) {}
+    // Path B: getVideoTrack / getAudioTrack (similar to getAudioTrack used in VoiceClone)
+    try {
+      var getMethod = isVideo ? 'getVideoTrack' : 'getAudioTrack';
+      var cntMethod = isVideo ? 'getVideoTrackCount' : 'getAudioTrackCount';
+      var cnt = seq[cntMethod] && seq[cntMethod]();
+      if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+      if (cnt > trackIdx) {
+        var tr = seq[getMethod] && seq[getMethod](trackIdx);
+        if (tr && typeof tr.then === 'function') tr = await tr;
+        if (tr) return tr;
+      }
+    } catch(eB) {}
+    return null;
+  }
+
   async function sacInsertClipAt(seq, item, atSec, vIdx, aIdx) {
     var t = sacMakeTime(atSec);
-    var mediaType = (vIdx >= 0) ? ppro.Backend.MEDIATYPE_VIDEO : ppro.Backend.MEDIATYPE_AUDIO;
-    var trackIdx  = (vIdx >= 0) ? vIdx : aIdx;
+    var isVideo   = (vIdx >= 0);
+    var trackIdx  = isVideo ? vIdx : aIdx;
 
     // ── Approach 1: methods directly on sequence ─────────────────────────────
     var seqCandidates = ['overwriteClip','insertClip','appendClipToTrack','addClip',
@@ -3168,11 +3194,10 @@ function sacCountBinMatches(items, targetName) {
       }
     }
 
-    // ── Approach 2: ClipTrack methods ────────────────────────────────────────
+    // ── Approach 2: ClipTrack / Track methods ────────────────────────────────
     try {
-      var group = seq.trackGroup(mediaType);
-      if (group && group.numTracks > trackIdx) {
-        var track = group.getTrack(trackIdx);
+      var track = await sacGetTrack(seq, isVideo, trackIdx);
+      if (track) {
         var ct = ppro.ClipTrack && ppro.ClipTrack.queryCast(track);
         var ctTarget = ct || track;
         var ctCandidates = ['overwriteClip','insertClip','appendClip','addClip',
@@ -3188,7 +3213,7 @@ function sacCountBinMatches(items, targetName) {
           }
         }
       }
-    } catch(eGroup) { console.warn('[SAC] trackGroup access failed:', eGroup.message); }
+    } catch(eGroup) { console.warn('[SAC] track access failed:', eGroup.message); }
 
     // ── Approach 3: ppro.Sequence static methods ─────────────────────────────
     if (ppro.Sequence) {
