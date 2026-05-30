@@ -3132,22 +3132,93 @@ function sacCountBinMatches(items, targetName) {
   // Insert a clip at `atSec` in the sequence.
   // vIdx = video track index (0-based), -1 = no video.
   // aIdx = audio track index (0-based), -1 = no audio.
+  // Probe helper — log all callable methods on an object (walks prototype chain)
+  function sacProbeMethods(obj, label) {
+    if (!obj) { console.log('[SAC probe] ' + label + ' = null'); return; }
+    var seen = {};
+    var methods = [];
+    var o = obj;
+    for (var depth = 0; depth < 5 && o; depth++) {
+      try {
+        Object.getOwnPropertyNames(o).forEach(function(k) {
+          if (!seen[k]) { seen[k] = 1; try { if (typeof obj[k] === 'function') methods.push(k); } catch(e) {} }
+        });
+      } catch(e) {}
+      o = Object.getPrototypeOf(o);
+    }
+    console.log('[SAC probe] ' + label + ' methods:', methods.sort().join(', '));
+  }
+
   async function sacInsertClipAt(seq, item, atSec, vIdx, aIdx) {
     var t = sacMakeTime(atSec);
-    var err1 = null;
-    if (typeof seq.overwriteClip === 'function') {
-      try {
-        var r = seq.overwriteClip(item, t, vIdx, aIdx);
-        if (r && typeof r.then === 'function') await r;
-        return;
-      } catch(e) { err1 = e; }
+    var mediaType = (vIdx >= 0) ? ppro.Backend.MEDIATYPE_VIDEO : ppro.Backend.MEDIATYPE_AUDIO;
+    var trackIdx  = (vIdx >= 0) ? vIdx : aIdx;
+
+    // ── Approach 1: methods directly on sequence ─────────────────────────────
+    var seqCandidates = ['overwriteClip','insertClip','appendClipToTrack','addClip',
+                         'placeClip','addTrackItem','insertTrackItem','overwrite','insert'];
+    for (var i = 0; i < seqCandidates.length; i++) {
+      if (typeof seq[seqCandidates[i]] === 'function') {
+        try {
+          console.log('[SAC] seq.' + seqCandidates[i] + '() @' + atSec.toFixed(2));
+          var r = seq[seqCandidates[i]](item, t, vIdx, aIdx);
+          if (r && typeof r.then === 'function') await r;
+          return;
+        } catch(e) { console.warn('[SAC] seq.' + seqCandidates[i] + ' failed:', e.message); }
+      }
     }
-    if (typeof seq.insertClip === 'function') {
-      var r2 = seq.insertClip(item, t, vIdx, aIdx);
-      if (r2 && typeof r2.then === 'function') await r2;
-      return;
+
+    // ── Approach 2: ClipTrack methods ────────────────────────────────────────
+    try {
+      var group = seq.trackGroup(mediaType);
+      if (group && group.numTracks > trackIdx) {
+        var track = group.getTrack(trackIdx);
+        var ct = ppro.ClipTrack && ppro.ClipTrack.queryCast(track);
+        var ctTarget = ct || track;
+        var ctCandidates = ['overwriteClip','insertClip','appendClip','addClip',
+                            'insertTrackItem','overwrite','insert','appendTrackItem'];
+        for (var j = 0; j < ctCandidates.length; j++) {
+          if (typeof ctTarget[ctCandidates[j]] === 'function') {
+            try {
+              console.log('[SAC] ClipTrack.' + ctCandidates[j] + '() @' + atSec.toFixed(2));
+              var r2 = ctTarget[ctCandidates[j]](item, t);
+              if (r2 && typeof r2.then === 'function') await r2;
+              return;
+            } catch(e2) { console.warn('[SAC] ClipTrack.' + ctCandidates[j] + ' failed:', e2.message); }
+          }
+        }
+      }
+    } catch(eGroup) { console.warn('[SAC] trackGroup access failed:', eGroup.message); }
+
+    // ── Approach 3: ppro.Sequence static methods ─────────────────────────────
+    if (ppro.Sequence) {
+      var staticCandidates = ['overwriteClip','insertClip','insertMedia','overwriteMedia'];
+      for (var k = 0; k < staticCandidates.length; k++) {
+        if (typeof ppro.Sequence[staticCandidates[k]] === 'function') {
+          try {
+            console.log('[SAC] ppro.Sequence.' + staticCandidates[k] + '() @' + atSec.toFixed(2));
+            var r3 = ppro.Sequence[staticCandidates[k]](seq, item, t, vIdx, aIdx);
+            if (r3 && typeof r3.then === 'function') await r3;
+            return;
+          } catch(e3) { console.warn('[SAC] ppro.Sequence.' + staticCandidates[k] + ' failed:', e3.message); }
+        }
+      }
     }
-    throw new Error('No overwriteClip/insertClip API on sequence' + (err1 ? ': ' + err1.message : ''));
+
+    // ── Nothing worked — dump probe info so we know what IS available ─────────
+    sacProbeMethods(seq, 'sequence');
+    try {
+      var g2 = seq.trackGroup(mediaType);
+      if (g2 && g2.numTracks > trackIdx) {
+        var tr2 = g2.getTrack(trackIdx);
+        sacProbeMethods(tr2, 'track');
+        var ct2 = ppro.ClipTrack && ppro.ClipTrack.queryCast(tr2);
+        if (ct2) sacProbeMethods(ct2, 'ClipTrack');
+      }
+    } catch(ep) {}
+    if (ppro.Sequence) sacProbeMethods(ppro.Sequence, 'ppro.Sequence');
+
+    throw new Error('Không tìm được insert API — xem Console để biết methods khả dụng');
   }
 
   async function sacRunAutoCut() {
