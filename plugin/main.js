@@ -3187,36 +3187,49 @@ function sacCountBinMatches(items, targetName) {
       var cursor = await sacGetSequenceEnd(seq);
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length);
 
-      // Import voice file once
+      // Split voice into per-block files via bridge (fix UXP master clip in/out bug:
+      // createSetInOutPointsAction changes master clip globally, affecting all placed
+      // track items. Each block needs its own independent ProjectItem.)
       var voicePath = sacVoicePath || window.sacVoicePath;
-      var voiceItem = null;
+      var voiceItems = []; // index = block index → ProjectItem|null
       if (voicePath) {
-        status.textContent = '⏳ Import voice file...';
-        try {
-          voiceItem = await sacFindOrImportFile(voicePath);
-          console.log('[SAC] Voice imported:', voiceItem ? 'ok' : 'not found in bin');
-        } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
+        status.textContent = '⏳ Split voice theo blocks...';
+        var segments = blocks.map(function(b) {
+          return {
+            start: b.voiceStart != null ? b.voiceStart : 0,
+            end:   b.voiceEnd   != null ? b.voiceEnd + 0.2 : 0,  // +0.2s buffer
+          };
+        });
+        var blocksWithVoice = blocks.some(function(b) { return b.voiceStart != null; });
+        if (blocksWithVoice) {
+          try {
+            var splitResp = await fetch(BRIDGE_URL + '/superautocut/split-voice', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioPath: voicePath, segments: segments }),
+            });
+            var splitData = await splitResp.json();
+            if (!splitData.ok) throw new Error(splitData.error || 'split failed');
+
+            status.textContent = '⏳ Import voice segments...';
+            for (var si = 0; si < splitData.files.length; si++) {
+              var item = null;
+              try { item = await sacFindOrImportFile(splitData.files[si]); } catch(e) {}
+              voiceItems.push(item);
+              console.log('[SAC] Voice block ' + si + ':', item ? 'ok' : 'import failed');
+            }
+          } catch(e) {
+            console.warn('[SAC] split-voice failed:', e.message);
+          }
+        }
       }
 
       var placed = 0;
-      console.log('[SAC] ── Assembly plan ──────────────────────');
-      for (var i = 0; i < blocks.length; i++) {
-        var block = blocks[i];
-        console.log('[SAC] Block ' + i + ': sources=' + (block.sources||[]).length +
-          ' voice=[' + (block.voiceStart != null ? block.voiceStart.toFixed(2) : 'n/a') +
-          '-' + (block.voiceEnd != null ? block.voiceEnd.toFixed(2) : 'n/a') + ']s');
-      }
-      console.log('[SAC] cursor start:', cursor.toFixed(2) + 's');
-      console.log('[SAC] ────────────────────────────────────────');
-
       for (var i = 0; i < blocks.length; i++) {
         var block      = blocks[i];
-        var blockStart = cursor;  // captured BEFORE placing sources
+        var blockStart = cursor;
         var srcTotal   = 0;
         status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
-
-        console.log('[SAC] Block ' + i + ' START — cursor=' + cursor.toFixed(2) +
-          's blockStart=' + blockStart.toFixed(2) + 's');
 
         // Place each source clip on V1 (video only), source audio → A2
         for (var j = 0; j < (block.sources || []).length; j++) {
@@ -3228,29 +3241,26 @@ function sacCountBinMatches(items, targetName) {
           var clipDur = ts.outSec - ts.inSec;
 
           await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
-          console.log('[SAC]   V1 "' + src.name + '" src[' + ts.inSec + '-' + ts.outSec +
-            ']s → timeline@' + cursor.toFixed(2) + 's dur=' + clipDur.toFixed(2) + 's');
+          console.log('[SAC] V1 "' + src.name + '" src[' + ts.inSec + '-' + ts.outSec +
+            ']s @timeline ' + cursor.toFixed(2) + 's');
 
           srcTotal += clipDur;
           cursor   += clipDur;
         }
 
-        // Place voice segment on A1 (audio only, vIdx=5 để tránh cắm nhầm vào V1)
-        // +0.2s padding vào outPoint để tránh voice bị cắt quá sát
-        if (voiceItem && block.voiceStart != null && block.voiceEnd != null) {
-          var vOut     = block.voiceEnd + 0.2;  // 0.2s buffer
-          var vDur     = block.voiceDuration || (block.voiceEnd - block.voiceStart);
-
-          await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
-                                block.voiceStart, vOut, 5, 0);
-          console.log('[SAC]   A1 voice src[' + block.voiceStart.toFixed(2) + '-' +
-            vOut.toFixed(2) + ']s → timeline@' + blockStart.toFixed(2) +
-            's dur=' + vDur.toFixed(2) + 's');
-
+        // Place per-block voice file on A1 (each block has its own ProjectItem —
+        // no shared master clip, so in/out doesn't bleed between blocks)
+        var blockVoiceItem = voiceItems[i] || null;
+        if (blockVoiceItem && block.voiceStart != null && block.voiceEnd != null) {
+          var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
+          // File is pre-cut [voiceStart, voiceEnd+0.2], so insert full duration (in=0, out=vDur+0.2)
+          await sacInsertClipAt(project, seqEditor, blockVoiceItem, blockStart,
+                                0, vDur + 0.2, 5, 0);
+          console.log('[SAC] A1 voice block ' + i + ' dur=' + vDur.toFixed(2) +
+            's @timeline ' + blockStart.toFixed(2) + 's');
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
-        console.log('[SAC] Block ' + i + ' END — cursor=' + cursor.toFixed(2) + 's');
         placed++;
       }
 
