@@ -3040,55 +3040,68 @@ function sacCountBinMatches(items, targetName) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 5 — Assembly
+  // PHASE 5 — Assembly  (UXP API: SequenceEditor + transaction)
+  // Ref: https://developer.adobe.com/premiere-pro/uxp/ppro_reference/classes/sequenceeditor/
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Parse "M:SS" or "M:SS-M:SS" to {inSec, outSec}.
-  // Single timestamp defaults to 3s duration.
+  // Parse "M:SS" or "M:SS-M:SS" → {inSec, outSec}. Single ts defaults to 3s.
   function parseSourceTime(str) {
     if (!str || !str.trim()) return { inSec: 0, outSec: 3 };
     var s = str.trim();
     var m = s.match(/^(\d+):(\d+)(?:-(\d+):(\d+))?$/);
     if (!m) return { inSec: 0, outSec: 3 };
-    var inSec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    var inSec  = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     var outSec = (m[3] != null)
       ? parseInt(m[3], 10) * 60 + parseInt(m[4], 10)
       : inSec + 3;
     return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
   }
 
-  // Build a TickTime-compatible object for sequence insert APIs.
+  // TickTime via ppro.TickTime.createWithSeconds (official UXP API).
   function sacMakeTime(seconds) {
-    var ticks = secToTicks(seconds);
     if (ppro && ppro.TickTime) {
-      try { return ppro.TickTime.fromSeconds(seconds); } catch(e1) {}
-      try { return new ppro.TickTime(ticks); } catch(e2) {}
+      try { return ppro.TickTime.createWithSeconds(seconds); } catch(e) {}
     }
-    return { seconds: seconds, ticks: ticks };
+    return { seconds: seconds, ticks: secToTicks(seconds) };
   }
 
-  // Return the end position (seconds) of the last clip on V1.
+  // Return seconds position of the last clip on V1 (append cursor).
   async function sacGetSequenceEnd(seq) {
     var end = 0;
+    var track = null;
+    // Path A: trackGroup (guarded — ppro.Backend may be undefined)
     try {
-      var vGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_VIDEO);
-      if (vGroup && vGroup.numTracks > 0) {
-        var track = vGroup.getTrack(0);
-        var items = await getClipItems(track);
-        for (var i = 0; i < items.length; i++) {
-          try {
-            var e = items[i].getEnd && items[i].getEnd();
-            if (e && typeof e.then === 'function') e = await e;
-            var eSec = getTimeSec(e);
-            if (eSec > end) end = eSec;
-          } catch(err2) {}
-        }
+      if (ppro.Backend && seq.trackGroup) {
+        var grp = seq.trackGroup(ppro.Backend.MEDIATYPE_VIDEO);
+        if (grp && grp.numTracks > 0) track = grp.getTrack(0);
       }
-    } catch(err) {}
+    } catch(eA) {}
+    // Path B: getVideoTrack (same pattern as getAudioTrack used in VoiceClone)
+    if (!track) {
+      try {
+        var cnt = seq.getVideoTrackCount && seq.getVideoTrackCount();
+        if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+        if (cnt > 0) {
+          track = seq.getVideoTrack && seq.getVideoTrack(0);
+          if (track && typeof track.then === 'function') track = await track;
+        }
+      } catch(eB) {}
+    }
+    if (track) {
+      var items = await getClipItems(track);
+      for (var i = 0; i < items.length; i++) {
+        try {
+          var e = items[i].getEnd && items[i].getEnd();
+          if (e && typeof e.then === 'function') e = await e;
+          var eSec = getTimeSec(e);
+          if (eSec > end) end = eSec;
+        } catch(err) {}
+      }
+    }
     return end;
   }
 
-  // Import a file path into the project panel, then find + return its ProjectItem.
+  // Import a file into the project panel and return its ProjectItem.
   async function sacImportFile(filePath) {
     var proj = await getActiveProject();
     if (typeof proj.importFiles === 'function') {
@@ -3110,140 +3123,32 @@ function sacCountBinMatches(items, targetName) {
     return found ? found.item : null;
   }
 
-  // Set in/out points on a ProjectItem (master clip range for next insert call).
-  async function sacSetItemPoints(item, inSec, outSec) {
-    if (!item) return;
-    try {
-      var tIn  = sacMakeTime(inSec);
-      var tOut = sacMakeTime(outSec);
-      if (typeof item.setInPoint === 'function') {
-        var r1 = item.setInPoint(tIn, 0);
-        if (r1 && typeof r1.then === 'function') await r1;
-      }
-      if (typeof item.setOutPoint === 'function') {
-        var r2 = item.setOutPoint(tOut, 0);
-        if (r2 && typeof r2.then === 'function') await r2;
-      }
-    } catch(e) {
-      console.warn('[SAC] setInPoint/setOutPoint:', e.message);
-    }
-  }
+  // Place a clip using SequenceEditor.createOverwriteItemAction inside a transaction.
+  // Sets source in/out (ClipProjectItem.createSetInOutPointsAction) in the same transaction.
+  // vIdx = video track (0=V1), -1 = skip video. aIdx = audio track (0=A1), -1 = skip audio.
+  async function sacInsertClipAt(project, seqEditor, item, atSec, inSec, outSec, vIdx, aIdx) {
+    var timeAt = sacMakeTime(atSec);
+    var inPt   = sacMakeTime(inSec);
+    var outPt  = sacMakeTime(outSec);
 
-  // Insert a clip at `atSec` in the sequence.
-  // vIdx = video track index (0-based), -1 = no video.
-  // aIdx = audio track index (0-based), -1 = no audio.
-  // Probe helper — log all callable methods on an object (walks prototype chain)
-  function sacProbeMethods(obj, label) {
-    if (!obj) { console.log('[SAC probe] ' + label + ' = null'); return; }
-    var seen = {};
-    var methods = [];
-    var o = obj;
-    for (var depth = 0; depth < 5 && o; depth++) {
-      try {
-        Object.getOwnPropertyNames(o).forEach(function(k) {
-          if (!seen[k]) { seen[k] = 1; try { if (typeof obj[k] === 'function') methods.push(k); } catch(e) {} }
-        });
-      } catch(e) {}
-      o = Object.getPrototypeOf(o);
-    }
-    console.log('[SAC probe] ' + label + ' methods:', methods.sort().join(', '));
-  }
-
-  // Get a track object from a sequence, trying multiple API patterns.
-  // isVideo=true → video track trackIdx; isVideo=false → audio track trackIdx.
-  async function sacGetTrack(seq, isVideo, trackIdx) {
-    // Path A: trackGroup API (guarded — ppro.Backend may be undefined)
-    try {
-      if (ppro.Backend && seq.trackGroup) {
-        var mt = isVideo ? ppro.Backend.MEDIATYPE_VIDEO : ppro.Backend.MEDIATYPE_AUDIO;
-        var grp = seq.trackGroup(mt);
-        if (grp && grp.numTracks > trackIdx) return grp.getTrack(trackIdx);
-      }
-    } catch(eA) {}
-    // Path B: getVideoTrack / getAudioTrack (similar to getAudioTrack used in VoiceClone)
-    try {
-      var getMethod = isVideo ? 'getVideoTrack' : 'getAudioTrack';
-      var cntMethod = isVideo ? 'getVideoTrackCount' : 'getAudioTrackCount';
-      var cnt = seq[cntMethod] && seq[cntMethod]();
-      if (cnt && typeof cnt.then === 'function') cnt = await cnt;
-      if (cnt > trackIdx) {
-        var tr = seq[getMethod] && seq[getMethod](trackIdx);
-        if (tr && typeof tr.then === 'function') tr = await tr;
-        if (tr) return tr;
-      }
-    } catch(eB) {}
-    return null;
-  }
-
-  async function sacInsertClipAt(seq, item, atSec, vIdx, aIdx) {
-    var t = sacMakeTime(atSec);
-    var isVideo   = (vIdx >= 0);
-    var trackIdx  = isVideo ? vIdx : aIdx;
-
-    // ── Approach 1: methods directly on sequence ─────────────────────────────
-    var seqCandidates = ['overwriteClip','insertClip','appendClipToTrack','addClip',
-                         'placeClip','addTrackItem','insertTrackItem','overwrite','insert'];
-    for (var i = 0; i < seqCandidates.length; i++) {
-      if (typeof seq[seqCandidates[i]] === 'function') {
-        try {
-          console.log('[SAC] seq.' + seqCandidates[i] + '() @' + atSec.toFixed(2));
-          var r = seq[seqCandidates[i]](item, t, vIdx, aIdx);
-          if (r && typeof r.then === 'function') await r;
-          return;
-        } catch(e) { console.warn('[SAC] seq.' + seqCandidates[i] + ' failed:', e.message); }
-      }
+    var clipItem = null;
+    if (ppro.ClipProjectItem) {
+      try { clipItem = ppro.ClipProjectItem.cast(item); } catch(e) {}
     }
 
-    // ── Approach 2: ClipTrack / Track methods ────────────────────────────────
-    try {
-      var track = await sacGetTrack(seq, isVideo, trackIdx);
-      if (track) {
-        var ct = ppro.ClipTrack && ppro.ClipTrack.queryCast(track);
-        var ctTarget = ct || track;
-        var ctCandidates = ['overwriteClip','insertClip','appendClip','addClip',
-                            'insertTrackItem','overwrite','insert','appendTrackItem'];
-        for (var j = 0; j < ctCandidates.length; j++) {
-          if (typeof ctTarget[ctCandidates[j]] === 'function') {
-            try {
-              console.log('[SAC] ClipTrack.' + ctCandidates[j] + '() @' + atSec.toFixed(2));
-              var r2 = ctTarget[ctCandidates[j]](item, t);
-              if (r2 && typeof r2.then === 'function') await r2;
-              return;
-            } catch(e2) { console.warn('[SAC] ClipTrack.' + ctCandidates[j] + ' failed:', e2.message); }
-          }
+    var r = project.lockedAccess(function() {
+      project.executeTransaction(function(compoundAction) {
+        // 1. Trim source in/out on master clip
+        if (clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
+          compoundAction.addAction(clipItem.createSetInOutPointsAction(inPt, outPt));
         }
-      }
-    } catch(eGroup) { console.warn('[SAC] track access failed:', eGroup.message); }
-
-    // ── Approach 3: ppro.Sequence static methods ─────────────────────────────
-    if (ppro.Sequence) {
-      var staticCandidates = ['overwriteClip','insertClip','insertMedia','overwriteMedia'];
-      for (var k = 0; k < staticCandidates.length; k++) {
-        if (typeof ppro.Sequence[staticCandidates[k]] === 'function') {
-          try {
-            console.log('[SAC] ppro.Sequence.' + staticCandidates[k] + '() @' + atSec.toFixed(2));
-            var r3 = ppro.Sequence[staticCandidates[k]](seq, item, t, vIdx, aIdx);
-            if (r3 && typeof r3.then === 'function') await r3;
-            return;
-          } catch(e3) { console.warn('[SAC] ppro.Sequence.' + staticCandidates[k] + ' failed:', e3.message); }
-        }
-      }
-    }
-
-    // ── Nothing worked — dump probe info so we know what IS available ─────────
-    sacProbeMethods(seq, 'sequence');
-    try {
-      var g2 = seq.trackGroup(mediaType);
-      if (g2 && g2.numTracks > trackIdx) {
-        var tr2 = g2.getTrack(trackIdx);
-        sacProbeMethods(tr2, 'track');
-        var ct2 = ppro.ClipTrack && ppro.ClipTrack.queryCast(tr2);
-        if (ct2) sacProbeMethods(ct2, 'ClipTrack');
-      }
-    } catch(ep) {}
-    if (ppro.Sequence) sacProbeMethods(ppro.Sequence, 'ppro.Sequence');
-
-    throw new Error('Không tìm được insert API — xem Console để biết methods khả dụng');
+        // 2. Overwrite onto timeline at atSec
+        compoundAction.addAction(
+          seqEditor.createOverwriteItemAction(item, timeAt, vIdx, aIdx)
+        );
+      }, 'SAC insert clip');
+    });
+    if (r && typeof r.then === 'function') await r;
   }
 
   async function sacRunAutoCut() {
@@ -3253,20 +3158,23 @@ function sacCountBinMatches(items, targetName) {
 
     try {
       if (!ppro) throw new Error('Premiere Pro API không khả dụng — chạy trong Premiere');
+      if (!ppro.SequenceEditor) throw new Error('ppro.SequenceEditor không có — Premiere 25.x+ required');
 
       var blocks = parsedBlocks.filter(function(b) {
         return (b.sources && b.sources.length > 0) || b.voiceStart != null;
       });
-      if (blocks.length === 0) {
-        throw new Error('Không có blocks — validate + align voice trước');
-      }
+      if (blocks.length === 0) throw new Error('Không có blocks — validate + align voice trước');
 
-      var seq = await getActiveSequence();
+      var project   = await getActiveProject();
+      var seq       = await getActiveSequence();
+      var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
+      if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
+
       status.textContent = '⏳ Tìm vị trí cuối timeline...';
       var cursor = await sacGetSequenceEnd(seq);
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length);
 
-      // Import voice file once (it may not be in the project yet)
+      // Import voice file once
       var voicePath = sacVoicePath || window.sacVoicePath;
       var voiceItem = null;
       if (voicePath) {
@@ -3274,9 +3182,7 @@ function sacCountBinMatches(items, targetName) {
         try {
           voiceItem = await sacImportFile(voicePath);
           console.log('[SAC] Voice imported:', voiceItem ? 'ok' : 'not found in bin');
-        } catch(e) {
-          console.warn('[SAC] Voice import failed:', e.message);
-        }
+        } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
       }
 
       var placed = 0;
@@ -3285,44 +3191,39 @@ function sacCountBinMatches(items, targetName) {
         status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
 
         var blockStart = cursor;
-        var srcTotal = 0;
+        var srcTotal   = 0;
 
-        // Place each source clip on V1 sequentially
+        // Place each source clip on V1 (video only, aIdx=-1)
         for (var j = 0; j < (block.sources || []).length; j++) {
-          var src = block.sources[j];
+          var src     = block.sources[j];
           var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
-          if (!srcItem) {
-            console.warn('[SAC] Source missing in sacSourceMap:', src.name);
-            continue;
-          }
-          var ts = parseSourceTime(src.time);
+          if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
+
+          var ts      = parseSourceTime(src.time);
           var clipDur = ts.outSec - ts.inSec;
 
-          await sacSetItemPoints(srcItem, ts.inSec, ts.outSec);
-          await sacInsertClipAt(seq, srcItem, cursor, 0, -1);
-          console.log('[SAC] V1 clip "' + src.name + '" [' + ts.inSec + '-' + ts.outSec + ']s → seq @' + cursor.toFixed(2));
+          await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, -1);
+          console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec + ']s @' + cursor.toFixed(2));
 
           srcTotal += clipDur;
           cursor   += clipDur;
         }
 
-        // Place voice segment on A1 aligned to block start
+        // Place voice segment on A1 (audio only, vIdx=-1)
         if (voiceItem && block.voiceStart != null && block.voiceEnd != null) {
           var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
-          await sacSetItemPoints(voiceItem, block.voiceStart, block.voiceEnd);
-          await sacInsertClipAt(seq, voiceItem, blockStart, -1, 0);
-          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' + block.voiceEnd.toFixed(2) + ']s → seq @' + blockStart.toFixed(2));
-
-          // Block ends at whichever is longer: video or voice
+          await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
+                                block.voiceStart, block.voiceEnd, -1, 0);
+          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' +
+                      block.voiceEnd.toFixed(2) + ']s @' + blockStart.toFixed(2));
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
         placed++;
       }
 
-      var endSec = cursor.toFixed(1);
       status.textContent = '✅ Xong! ' + placed + '/' + blocks.length +
-        ' blocks — timeline đến ' + endSec + 's';
+        ' blocks — timeline đến ' + cursor.toFixed(1) + 's';
 
     } catch(e) {
       status.textContent = '❌ ' + e.message;
