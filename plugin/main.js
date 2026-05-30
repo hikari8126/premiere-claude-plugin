@@ -3199,14 +3199,26 @@ function sacCountBinMatches(items, targetName) {
       }
 
       var placed = 0;
+      console.log('[SAC] ── Assembly plan ──────────────────────');
       for (var i = 0; i < blocks.length; i++) {
         var block = blocks[i];
+        console.log('[SAC] Block ' + i + ': sources=' + (block.sources||[]).length +
+          ' voice=[' + (block.voiceStart != null ? block.voiceStart.toFixed(2) : 'n/a') +
+          '-' + (block.voiceEnd != null ? block.voiceEnd.toFixed(2) : 'n/a') + ']s');
+      }
+      console.log('[SAC] cursor start:', cursor.toFixed(2) + 's');
+      console.log('[SAC] ────────────────────────────────────────');
+
+      for (var i = 0; i < blocks.length; i++) {
+        var block      = blocks[i];
+        var blockStart = cursor;  // captured BEFORE placing sources
+        var srcTotal   = 0;
         status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
 
-        var blockStart = cursor;
-        var srcTotal   = 0;
+        console.log('[SAC] Block ' + i + ' START — cursor=' + cursor.toFixed(2) +
+          's blockStart=' + blockStart.toFixed(2) + 's');
 
-        // Place each source clip on V1 (video only, aIdx=-1)
+        // Place each source clip on V1 (video only), source audio → A2
         for (var j = 0; j < (block.sources || []).length; j++) {
           var src     = block.sources[j];
           var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
@@ -3215,24 +3227,30 @@ function sacCountBinMatches(items, targetName) {
           var ts      = parseSourceTime(src.time);
           var clipDur = ts.outSec - ts.inSec;
 
-          // vIdx=0 (V1), aIdx=1 (A2) — source audio đi A2, không đụng A1 dành cho voice
           await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
-          console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec + ']s @' + cursor.toFixed(2));
+          console.log('[SAC]   V1 "' + src.name + '" src[' + ts.inSec + '-' + ts.outSec +
+            ']s → timeline@' + cursor.toFixed(2) + 's dur=' + clipDur.toFixed(2) + 's');
 
           srcTotal += clipDur;
           cursor   += clipDur;
         }
 
-        // Place voice segment on A1 (audio only, vIdx=-1)
+        // Place voice segment on A1 (audio only, vIdx=5 để tránh cắm nhầm vào V1)
+        // +0.2s padding vào outPoint để tránh voice bị cắt quá sát
         if (voiceItem && block.voiceStart != null && block.voiceEnd != null) {
-          var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
+          var vOut     = block.voiceEnd + 0.2;  // 0.2s buffer
+          var vDur     = block.voiceDuration || (block.voiceEnd - block.voiceStart);
+
           await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
-                                block.voiceStart, block.voiceEnd, -1, 0);
-          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' +
-                      block.voiceEnd.toFixed(2) + ']s @' + blockStart.toFixed(2));
+                                block.voiceStart, vOut, 5, 0);
+          console.log('[SAC]   A1 voice src[' + block.voiceStart.toFixed(2) + '-' +
+            vOut.toFixed(2) + ']s → timeline@' + blockStart.toFixed(2) +
+            's dur=' + vDur.toFixed(2) + 's');
+
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
+        console.log('[SAC] Block ' + i + ' END — cursor=' + cursor.toFixed(2) + 's');
         placed++;
       }
 
