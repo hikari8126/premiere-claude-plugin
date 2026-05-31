@@ -3445,22 +3445,40 @@ function sacCountBinMatches(items, targetName) {
         }
         if (!seq) throw new Error('Không tạo được sequence mới');
 
-        // Apply fps/ratio settings if API available and ratio is not "match"
+        // Apply fps/ratio via setSettings (both async direct and transaction-wrapped)
         if (ratio !== 'match') {
           try {
             var parts = ratio.split('x');
             var w = parseInt(parts[0]), h = parseInt(parts[1]);
-            var settings = seq.getSettings && seq.getSettings();
-            if (settings && typeof settings.then === 'function') settings = await settings;
+            console.log('[SAC] Applying settings:', w + 'x' + h + ' @' + fps + 'fps');
+
+            // getSettings() is async in UXP
+            var settings = await seq.getSettings();
+            console.log('[SAC] getSettings OK, keys:', Object.keys(settings || {}).join(', '));
+
             if (settings) {
-              if (w && h)  { settings.videoFrameWidth = w; settings.videoFrameHeight = h; }
-              if (fps > 0) { settings.videoFrameRate  = ppro.TickTime.createWithSeconds(1 / fps); }
-              if (typeof seq.setSettings === 'function') {
-                var r = seq.setSettings(settings);
-                if (r && typeof r.then === 'function') await r;
+              if (w && h)  { settings.videoFrameWidth  = w; settings.videoFrameHeight = h; }
+              if (fps > 0) { settings.videoFrameRate   = ppro.TickTime.createWithSeconds(1 / fps); }
+
+              // Approach A: direct async setSettings
+              try {
+                await seq.setSettings(settings);
+                console.log('[SAC] setSettings (direct) OK');
+              } catch(eA) {
+                console.warn('[SAC] setSettings direct failed:', eA.message, '— trying transaction');
+                // Approach B: wrap in transaction
+                var rs = project.lockedAccess(function() {
+                  project.executeTransaction(function(ca) {
+                    var action = seq.createSetSettingsAction && seq.createSetSettingsAction(settings);
+                    if (action) ca.addAction(action);
+                    else seq.setSettings(settings);
+                  }, 'SAC set seq settings');
+                });
+                if (rs && typeof rs.then === 'function') await rs;
+                console.log('[SAC] setSettings (transaction) OK');
               }
             }
-          } catch(es) { console.warn('[SAC] setSettings failed:', es.message); }
+          } catch(es) { console.warn('[SAC] setSettings failed entirely:', es.message); }
         }
 
         if (typeof project.openSequence    === 'function') await project.openSequence(seq);
