@@ -3470,35 +3470,49 @@ function sacCountBinMatches(items, targetName) {
               } catch(eRect) { console.warn('[SAC] setVideoFrameRect failed:', eRect.message); }
             }
 
-            // Frame rate — try property assignment first, then methods
+            // Frame rate — Premiere calls this "Timebase" (duration of 1 frame as TickTime).
+            // Try videoTimeBase property first, then FrameRate variants.
             if (fps > 0) {
               var frSet = false;
-              var frObj = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
-                        : ppro.TickTime.createWithSeconds(1 / fps);
 
-              // A: direct property assignment (works in some UXP versions)
+              // A: videoTimeBase as TickTime (1 frame duration) — matches PR "Timebase" setting
               try {
-                settings.videoFrameRate = frObj;
+                var frameTickTime = ppro.TickTime.createWithSeconds(1 / fps);
+                settings.videoTimeBase = frameTickTime;
                 frSet = true;
-                console.log('[SAC] FPS set via property assignment');
+                console.log('[SAC] FPS set via videoTimeBase TickTime:', fps);
               } catch(eA) {}
 
-              // B: setter methods (try several name variants)
+              // B: videoFrameRate property
               if (!frSet) {
-                var frMethods = ['setVideoFrameRate', 'setFrameRate', 'setVideoFrameRateAsFrameRate'];
+                try {
+                  var frObj = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
+                            : ppro.TickTime.createWithSeconds(1 / fps);
+                  settings.videoFrameRate = frObj;
+                  frSet = true;
+                  console.log('[SAC] FPS set via videoFrameRate property:', fps);
+                } catch(eB) {}
+              }
+
+              // C: setter methods
+              if (!frSet) {
+                var frMethods = ['setVideoTimeBase', 'setVideoFrameRate', 'setFrameRate'];
                 for (var fri = 0; fri < frMethods.length && !frSet; fri++) {
                   try {
                     if (typeof settings[frMethods[fri]] === 'function') {
-                      var frr = settings[frMethods[fri]](frObj);
+                      var frArg = (frMethods[fri] === 'setVideoTimeBase')
+                        ? ppro.TickTime.createWithSeconds(1 / fps)
+                        : (ppro.FrameRate ? ppro.FrameRate.createWithValue(fps) : ppro.TickTime.createWithSeconds(1 / fps));
+                      var frr = settings[frMethods[fri]](frArg);
                       if (frr && typeof frr.then === 'function') await frr;
                       frSet = true;
-                      console.log('[SAC] FPS set via', frMethods[fri]);
+                      console.log('[SAC] FPS set via', frMethods[fri], ':', fps);
                     }
-                  } catch(eB) {}
+                  } catch(eC) {}
                 }
               }
 
-              if (!frSet) console.warn('[SAC] FPS setting not supported — set manually in Premiere');
+              if (!frSet) console.warn('[SAC] FPS setting unsupported — set manually in Premiere');
             }
 
             // Apply via transaction
