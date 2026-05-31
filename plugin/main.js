@@ -2200,35 +2200,55 @@ function sacCountBinMatches(items, targetName) {
   }
   function expandRows(rows) {
     var out = [];
-    rows.forEach(function(cols) {
+    var i = 0;
+    while (i < rows.length) {
+      var cols = rows[i];
       var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
+
       // A: multi-line text cell
+      // Zip with subsequent rows that have EMPTY text — lets Google Sheets layout like:
+      //   Row 1: "Line A\nLine B" | 0:04-0:05 | ClipX       ← multiline text cell
+      //   Row 2: ""               | 0:35-0:37 | ClipY       ← empty text, carries data for Line B
+      // → expand to: ["Line A"|0:04-0:05|ClipX], ["Line B"|0:35-0:37|ClipY]
       if (text.indexOf('\n') !== -1) {
-        var lines = text.split('\n').filter(function(l){ return l.trim(); });
-        lines.forEach(function(line, i) {
-          out.push([ line.trim(), i === 0 ? time : '', i === 0 ? src : '' ]);
+        var lines = text.split('\n').filter(function(l) { return l.trim(); });
+        var extra = 0; // number of subsequent rows consumed
+        lines.forEach(function(line, li) {
+          var t = time, s = src;
+          if (li > 0) {
+            var nextIdx = i + li;
+            if (nextIdx < rows.length && !((rows[nextIdx][0] || '').trim())) {
+              // Next row has empty text → zip it with this line
+              t = rows[nextIdx][1] || '';
+              s = rows[nextIdx][2] || '';
+              extra = li; // track how many extra rows we'll skip
+            } else {
+              t = ''; s = ''; // no matching row → empty time/src
+            }
+          }
+          out.push([line.trim(), t, s]);
         });
-        return;
+        i += extra + 1;
+        continue;
       }
+
       // B+C: multi-value time cell
-      // Two sub-cases:
-      //   B1) src also has multiple lines matching time count → zip (each time gets its own source)
-      //       e.g. time="0-3\n6-8\n7:44-7:47", src="ClipA\nClipB\nClipC"
-      //   B2) src is a single value → carry the same source for all times
-      //       e.g. time="0:04 0:07 0:13", src="Studio Senyue 70" (folder/clip case)
       var times = splitTimes(time);
       if (times.length > 1) {
         var srcLines = src.indexOf('\n') !== -1
           ? src.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
           : [src];
-        var zipSrc = srcLines.length === times.length; // zip only when counts match
-        times.forEach(function(t, i) {
-          out.push([ i === 0 ? text : '', t, zipSrc ? srcLines[i] : src ]);
+        var zipSrc = srcLines.length === times.length;
+        times.forEach(function(t, ti) {
+          out.push([ ti === 0 ? text : '', t, zipSrc ? srcLines[ti] : src ]);
         });
-        return;
+        i++;
+        continue;
       }
+
       out.push(cols);
-    });
+      i++;
+    }
     return out;
   }
 
@@ -3315,16 +3335,18 @@ function sacCountBinMatches(items, targetName) {
 
         // Place each source clip on V1 (video only), source audio → A2
         for (var j = 0; j < (block.sources || []).length; j++) {
-          var src     = block.sources[j];
-          var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
-          if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
+          var src = block.sources[j];
 
+          // Skip check MUST come before srcItem lookup — skipped sources have no item
           if (src.skipped) {
             console.log('[SAC] V1 "' + src.name + '" SKIPPED — 1s gap @' + cursor.toFixed(2) + 's');
             srcTotal += 1.0;
             cursor   += 1.0;
             continue;
           }
+
+          var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
+          if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
 
           var ts      = parseSourceTime(src.time);
           var clipDur = ts.outSec - ts.inSec;
