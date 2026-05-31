@@ -3445,40 +3445,38 @@ function sacCountBinMatches(items, targetName) {
         }
         if (!seq) throw new Error('Không tạo được sequence mới');
 
-        // Apply fps/ratio via setSettings (both async direct and transaction-wrapped)
+        // Apply custom ratio/fps via createSetSettingsAction (correct UXP API).
+        // API: getSettings() async → mutate via setVideoFrameRect(RectF) +
+        //      setVideoFrameRate(FrameRate) → createSetSettingsAction → transaction.
         if (ratio !== 'match') {
           try {
             var parts = ratio.split('x');
             var w = parseInt(parts[0]), h = parseInt(parts[1]);
-            console.log('[SAC] Applying settings:', w + 'x' + h + ' @' + fps + 'fps');
 
-            // getSettings() is async in UXP
             var settings = await seq.getSettings();
-            console.log('[SAC] getSettings OK, keys:', Object.keys(settings || {}).join(', '));
-
             if (settings) {
-              if (w && h)  { settings.videoFrameWidth  = w; settings.videoFrameHeight = h; }
-              if (fps > 0) { settings.videoFrameRate   = ppro.TickTime.createWithSeconds(1 / fps); }
-
-              // Approach A: direct async setSettings
-              try {
-                await seq.setSettings(settings);
-                console.log('[SAC] setSettings (direct) OK');
-              } catch(eA) {
-                console.warn('[SAC] setSettings direct failed:', eA.message, '— trying transaction');
-                // Approach B: wrap in transaction
-                var rs = project.lockedAccess(function() {
-                  project.executeTransaction(function(ca) {
-                    var action = seq.createSetSettingsAction && seq.createSetSettingsAction(settings);
-                    if (action) ca.addAction(action);
-                    else seq.setSettings(settings);
-                  }, 'SAC set seq settings');
-                });
-                if (rs && typeof rs.then === 'function') await rs;
-                console.log('[SAC] setSettings (transaction) OK');
+              // Frame dimensions via RectF
+              if (w && h) {
+                var frameRect = await settings.getVideoFrameRect();
+                frameRect.width  = w;
+                frameRect.height = h;
+                await settings.setVideoFrameRect(frameRect);
               }
+              // Frame rate via FrameRate
+              if (fps > 0 && ppro.FrameRate) {
+                var fr = ppro.FrameRate.createWithValue(fps);
+                await settings.setVideoFrameRate(fr);
+              }
+              // Apply via transaction
+              var rs = project.lockedAccess(function() {
+                project.executeTransaction(function(ca) {
+                  ca.addAction(seq.createSetSettingsAction(settings));
+                }, 'SAC set seq settings');
+              });
+              if (rs && typeof rs.then === 'function') await rs;
+              console.log('[SAC] Sequence settings applied:', w + 'x' + h + ' @' + fps + 'fps');
             }
-          } catch(es) { console.warn('[SAC] setSettings failed entirely:', es.message); }
+          } catch(es) { console.warn('[SAC] createSetSettingsAction failed:', es.message); }
         }
 
         if (typeof project.openSequence    === 'function') await project.openSequence(seq);
