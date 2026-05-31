@@ -3446,36 +3446,57 @@ function sacCountBinMatches(items, targetName) {
         if (!seq) throw new Error('Không tạo được sequence mới');
 
         // Apply custom ratio/fps via createSetSettingsAction (correct UXP API).
-        // API: getSettings() async → mutate via setVideoFrameRect(RectF) +
-        //      setVideoFrameRate(FrameRate) → createSetSettingsAction → transaction.
         if (ratio !== 'match') {
           try {
             var parts = ratio.split('x');
             var w = parseInt(parts[0]), h = parseInt(parts[1]);
-
             var settings = await seq.getSettings();
-            if (settings) {
-              // Frame dimensions via RectF
-              if (w && h) {
+            if (!settings) throw new Error('getSettings returned null');
+
+            // Log available methods for debugging
+            var settingsMethods = Object.getOwnPropertyNames(
+              Object.getPrototypeOf(settings) || {}
+            ).filter(function(k) { try { return typeof settings[k] === 'function'; } catch(e) { return false; } });
+            console.log('[SAC] SequenceSettings methods:', settingsMethods.join(', '));
+
+            // Frame dimensions via RectF — each step isolated
+            if (w && h) {
+              try {
                 var frameRect = await settings.getVideoFrameRect();
                 frameRect.width  = w;
                 frameRect.height = h;
                 await settings.setVideoFrameRect(frameRect);
-              }
-              // Frame rate via FrameRate
-              if (fps > 0 && ppro.FrameRate) {
-                var fr = ppro.FrameRate.createWithValue(fps);
-                await settings.setVideoFrameRate(fr);
-              }
-              // Apply via transaction
-              var rs = project.lockedAccess(function() {
-                project.executeTransaction(function(ca) {
-                  ca.addAction(seq.createSetSettingsAction(settings));
-                }, 'SAC set seq settings');
-              });
-              if (rs && typeof rs.then === 'function') await rs;
-              console.log('[SAC] Sequence settings applied:', w + 'x' + h + ' @' + fps + 'fps');
+                console.log('[SAC] Frame rect set:', w + 'x' + h);
+              } catch(eRect) { console.warn('[SAC] setVideoFrameRect failed:', eRect.message); }
             }
+
+            // Frame rate — try known method names
+            if (fps > 0) {
+              try {
+                var frMethods = ['setVideoFrameRate','setFrameRate','setVideoFrameRateAsFrameRate'];
+                var frSet = false;
+                for (var fri = 0; fri < frMethods.length && !frSet; fri++) {
+                  if (typeof settings[frMethods[fri]] === 'function') {
+                    var fr = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
+                           : ppro.TickTime.createWithSeconds(1 / fps);
+                    var frr = settings[frMethods[fri]](fr);
+                    if (frr && typeof frr.then === 'function') await frr;
+                    console.log('[SAC] FPS set via', frMethods[fri]);
+                    frSet = true;
+                  }
+                }
+                if (!frSet) console.warn('[SAC] No setVideoFrameRate method found');
+              } catch(eFps) { console.warn('[SAC] fps set failed:', eFps.message); }
+            }
+
+            // Apply via transaction
+            var rs = project.lockedAccess(function() {
+              project.executeTransaction(function(ca) {
+                ca.addAction(seq.createSetSettingsAction(settings));
+              }, 'SAC set seq settings');
+            });
+            if (rs && typeof rs.then === 'function') await rs;
+            console.log('[SAC] createSetSettingsAction committed');
           } catch(es) { console.warn('[SAC] createSetSettingsAction failed:', es.message); }
         }
 
