@@ -207,7 +207,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             log("Port \(bridgePort) already serving — adopting existing bridge")
             restartCount = 0
             intentionalStop = false
-            setStatus("✅ Bridge đang chạy  —  :\(bridgePort)", running: true)
+            updateStatusWithBridgeVersion()
             return
         }
 
@@ -262,7 +262,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 guard task.isRunning else { return }
                 self.restartCount = 0
-                self.setStatus("✅ Bridge đang chạy  —  :\(self.bridgePort)", running: true)
+                self.updateStatusWithBridgeVersion()
                 self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
                 // Check for updates silently — only shows alert if newer version exists
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates(silent: true) }
@@ -284,10 +284,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func restartBridge() {
         log("Restart requested by user")
-        stopBridge(intentional: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        setStatus("⏳ Đang khởi động lại Bridge...", running: false)
+        intentionalStop = true
+        // Kill managed process
+        bridgeTask?.interrupt()
+        bridgeTask?.terminate()
+        bridgeTask = nil
+        // Also force-kill anything on port — handles externally-started bridges
+        sh("lsof -ti :\(bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null")
+        Thread.sleep(forTimeInterval: 0.5)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.intentionalStop = false
-            self.firstRunSetup()   // re-check auth before starting
+            self.startBridge()  // skip auth re-check on explicit restart
+        }
+    }
+
+    // Fetch bridge version from /health and update status label
+    func updateStatusWithBridgeVersion() {
+        DispatchQueue.global().async {
+            let h = self.sh("curl -s --max-time 3 http://127.0.0.1:\(self.bridgePort)/health 2>/dev/null")
+            var label = "✅ Bridge  —  :\(self.bridgePort)"
+            if let data = h.out.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let ver  = json["version"] as? String {
+                label = "✅ Bridge v\(ver)  —  :\(self.bridgePort)"
+            }
+            DispatchQueue.main.async { self.setStatus(label, running: true) }
         }
     }
 
