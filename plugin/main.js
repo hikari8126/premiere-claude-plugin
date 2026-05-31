@@ -2160,43 +2160,25 @@ async function ppGetOrCreateVOBin(proj) {
 async function ppMoveToVOBin(item, proj) {
   if (!item || !proj) return;
   try {
-    var bin = await ppGetOrCreateVOBin(proj);
-    if (!bin) return;
+    var binRaw = await ppGetOrCreateVOBin(proj);
+    if (!binRaw) return;
 
-    var moved = false;
+    // Must cast to FolderItem — createMoveItemAction only exists on FolderItem, not ProjectItem
+    var bin = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(binRaw) : binRaw;
+    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return; }
 
-    // A: item.moveBin(bin) — ProjectItem method (most common UXP pattern)
-    if (!moved && typeof item.moveBin === 'function') {
-      try {
-        var r = item.moveBin(bin);
-        if (r && typeof r.then === 'function') await r;
-        moved = true; console.log('[ppVO] Moved via item.moveBin');
-      } catch(eA) { console.warn('[ppVO] item.moveBin failed:', eA.message); }
+    if (typeof bin.createMoveItemAction !== 'function') {
+      console.warn('[ppVO] createMoveItemAction still not found after cast');
+      return;
     }
 
-    // B: bin.createMoveItemAction in transaction
-    if (!moved && typeof bin.createMoveItemAction === 'function') {
-      try {
-        var action = bin.createMoveItemAction(item, bin);
-        var rs = proj.lockedAccess(function() {
-          proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to VO bin');
-        });
-        if (rs && typeof rs.then === 'function') await rs;
-        moved = true; console.log('[ppVO] Moved via createMoveItemAction');
-      } catch(eB) { console.warn('[ppVO] createMoveItemAction failed:', eB.message); }
-    }
-
-    // C: ppro.ProjectItem.moveBin static (some versions)
-    if (!moved && ppro.ProjectItem && typeof ppro.ProjectItem.moveBin === 'function') {
-      try {
-        var rc = ppro.ProjectItem.moveBin(item, bin);
-        if (rc && typeof rc.then === 'function') await rc;
-        moved = true; console.log('[ppVO] Moved via ppro.ProjectItem.moveBin');
-      } catch(eC) {}
-    }
-
-    if (!moved) console.warn('[ppVO] No working moveBin API found');
-  } catch(e) { console.warn('[ppVO] ppMoveToVOBin error:', e.message); }
+    var action = bin.createMoveItemAction(item, bin);
+    var rs = proj.lockedAccess(function() {
+      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to VO bin');
+    });
+    if (rs && typeof rs.then === 'function') await rs;
+    console.log('[ppVO] Moved to voice over bin');
+  } catch(e) { console.warn('[ppVO] ppMoveToVOBin failed:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
