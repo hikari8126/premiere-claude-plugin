@@ -2118,6 +2118,61 @@ function sacCountBinMatches(items, targetName) {
   }).length;
 }
 
+// ── Voice-over bin helpers ─────────────────────────────────────────────────
+// Find a bin whose name matches "voice over" / "voiceover" / "vo" near root.
+// Creates it at root if not found.
+async function ppGetOrCreateVOBin(proj) {
+  if (!proj) return null;
+  var root = null;
+  try {
+    root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+  } catch(e) { return null; }
+  if (!root) return null;
+
+  // Search direct children of root (1 level)
+  try {
+    var children = await sacGetFolderChildren(root);
+    for (var i = 0; i < children.length; i++) {
+      var n = await sacGetItemName(children[i]);
+      if (/^(voice\s*over|vo)$/i.test(n.trim())) return children[i];
+    }
+  } catch(e) {}
+
+  // Not found — create "voice over" bin at root via Action + transaction
+  try {
+    var createAction = root.createBinAction('voice over', false);
+    var r = proj.lockedAccess(function() {
+      proj.executeTransaction(function(ca) { ca.addAction(createAction); }, 'Create VO bin');
+    });
+    if (r && typeof r.then === 'function') await r;
+    // Re-scan to find the newly created bin
+    var children2 = await sacGetFolderChildren(root);
+    for (var j = 0; j < children2.length; j++) {
+      var n2 = await sacGetItemName(children2[j]);
+      if (/^(voice\s*over|vo)$/i.test(n2.trim())) return children2[j];
+    }
+  } catch(e) { console.warn('[ppVO] createBin failed:', e.message); }
+  return null;
+}
+
+// Move a ProjectItem to the "voice over" bin (find or create it).
+async function ppMoveToVOBin(item, proj) {
+  if (!item || !proj) return;
+  try {
+    var bin = await ppGetOrCreateVOBin(proj);
+    if (!bin) return;
+    // API: destinationFolder.createMoveItemAction(item, newParent)
+    // newParent = destination (the bin itself is the new parent)
+    var moveAction = bin.createMoveItemAction(item, bin);
+    var rs = proj.lockedAccess(function() {
+      proj.executeTransaction(function(ca) { ca.addAction(moveAction); }, 'Move to VO bin');
+    });
+    if (rs && typeof rs.then === 'function') await rs;
+    console.log('[ppVO] Moved to voice over bin');
+  } catch(e) { console.warn('[ppVO] moveBin failed:', e.message); }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPER AUTO CUT MODULE — Phase 1: Spreadsheet UI + Block Parsing
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3388,6 +3443,8 @@ function sacCountBinMatches(items, targetName) {
     // Re-scan bin to find the newly imported item
     var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
     var found2 = binItems2.find(function(b) { return b.name === fname; });
+    // Move to "voice over" bin
+    if (found2) await ppMoveToVOBin(found2.item, proj);
     return found2 ? found2.item : null;
   }
 
@@ -4696,6 +4753,20 @@ function sacCountBinMatches(items, targetName) {
       els.importStatus.className = 'ac-manualStatus is-ok';
       els.importStatus.textContent = '✓ Saved to ' + customOutputFolder +
         ', imported "' + variation.filename + '" → see Project Panel';
+      // Move to "voice over" bin (fire-and-forget, don't block UI)
+      try {
+        var rootItem = null;
+        if (typeof project.getRootItem === 'function') {
+          rootItem = project.getRootItem();
+          if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+        }
+        if (rootItem) {
+          var fname = (variation.filename || finalPath.split('/').pop());
+          var binItems = await sacCollectBinItems(rootItem);
+          var voItem = binItems.find(function(b) { return b.name === fname; });
+          if (voItem) await ppMoveToVOBin(voItem.item, project);
+        }
+      } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
       els.importStatus.textContent = '✗ Import: ' + e.message;
