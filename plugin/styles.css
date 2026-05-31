@@ -2779,6 +2779,10 @@ body {
   flex: 0 0 40px; font-size: 9px; color: rgba(255,255,255,0.35);
   text-align: right;
 }
+.sac-nsfNote {
+  flex: 1; font-size: 9px; color: rgba(255,255,255,0.25);
+  font-style: italic;
+}
 .sac-nsfInput, .sac-nsfSelect {
   flex: 1; height: 22px; padding: 0 6px; border-radius: 4px;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);

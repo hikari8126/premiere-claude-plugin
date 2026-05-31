@@ -3075,6 +3075,16 @@ function sacCountBinMatches(items, targetName) {
         status.textContent = sacVoiceReady
           ? ('✅ ' + d.blockCount + ' blocks OK + voice sẵn sàng. Bấm "Run AutoCut".' + note)
           : ('✅ ' + d.blockCount + ' blocks hợp lệ. Thêm voice (⚡ Gen / 📂) để mở Run.' + note);
+        // Auto-collapse script section after successful validate
+        var wrap = $('sacTableWrap'), footer = $('sacTableFooter');
+        if (wrap && wrap.style.display !== 'none') {
+          wrap.style.display = 'none';
+          if (footer) footer.style.display = 'none';
+          var chev = $('sacScriptChevron');
+          if (chev) chev.textContent = '▸';
+          var blockSec = $('sacBlockSection');
+          if (blockSec) blockSec.style.flex = '1 1 0';
+        }
       }
       sacUpdateRunVisibility();
     } catch(e) {
@@ -3427,103 +3437,47 @@ function sacCountBinMatches(items, targetName) {
         var ratio    = ratioSel ? ratioSel.value : 'match';
         var fps      = fpsSel  ? parseFloat(fpsSel.value) : 29.97;
 
-        // Create sequence: "match" = createSequenceFromMedia (matches first source clip)
-        // Other ratios = createSequence then attempt setSettings if API available
+        // Find first non-skipped source ProjectItem (for createSequenceFromMedia)
         var firstSrcItem = null;
         for (var bi = 0; bi < blocks.length && !firstSrcItem; bi++) {
-          for (var si = 0; si < (blocks[bi].sources || []).length; si++) {
-            var sn = blocks[bi].sources[si];
-            if (!sn.skipped) { firstSrcItem = sacSourceMap[sn.name] || window.sacSourceMap[sn.name]; break; }
+          for (var si2 = 0; si2 < (blocks[bi].sources || []).length; si2++) {
+            var sn2 = blocks[bi].sources[si2];
+            if (!sn2.skipped) { firstSrcItem = sacSourceMap[sn2.name] || window.sacSourceMap[sn2.name]; break; }
           }
         }
 
-        if (ratio === 'match' && firstSrcItem && typeof project.createSequenceFromMedia === 'function') {
+        // Sequence timebase is IMMUTABLE after creation — must be baked in at creation time.
+        // Strategy:
+        //   - Always use createSequenceFromMedia when source clips available → fps matches source
+        //   - "Match source clips" mode: also uses source frame size → nothing else needed
+        //   - Custom ratio: use createSequenceFromMedia for fps, then override frame size via setSettings
+        if (firstSrcItem && typeof project.createSequenceFromMedia === 'function') {
           seq = await project.createSequenceFromMedia(seqName, [firstSrcItem]);
+          console.log('[SAC] Sequence created from media (fps from source clip)');
         }
-        if (!seq) {
-          seq = await project.createSequence(seqName);
-        }
+        if (!seq) seq = await project.createSequence(seqName);
         if (!seq) throw new Error('Không tạo được sequence mới');
 
-        // Apply custom ratio/fps via createSetSettingsAction (correct UXP API).
+        // Apply custom frame size (ratio ≠ match). FPS comes from source via createSequenceFromMedia.
         if (ratio !== 'match') {
           try {
             var parts = ratio.split('x');
             var w = parseInt(parts[0]), h = parseInt(parts[1]);
             var settings = await seq.getSettings();
-            if (!settings) throw new Error('getSettings returned null');
-
-            // Log available methods for debugging
-            var settingsMethods = Object.getOwnPropertyNames(
-              Object.getPrototypeOf(settings) || {}
-            ).filter(function(k) { try { return typeof settings[k] === 'function'; } catch(e) { return false; } });
-            console.log('[SAC] SequenceSettings methods:', settingsMethods.join(', '));
-
-            // Frame dimensions via RectF — each step isolated
-            if (w && h) {
-              try {
-                var frameRect = await settings.getVideoFrameRect();
-                frameRect.width  = w;
-                frameRect.height = h;
-                await settings.setVideoFrameRect(frameRect);
-                console.log('[SAC] Frame rect set:', w + 'x' + h);
-              } catch(eRect) { console.warn('[SAC] setVideoFrameRect failed:', eRect.message); }
+            if (settings && w && h) {
+              var frameRect = await settings.getVideoFrameRect();
+              frameRect.width  = w;
+              frameRect.height = h;
+              await settings.setVideoFrameRect(frameRect);
+              var rs = project.lockedAccess(function() {
+                project.executeTransaction(function(ca) {
+                  ca.addAction(seq.createSetSettingsAction(settings));
+                }, 'SAC set frame size');
+              });
+              if (rs && typeof rs.then === 'function') await rs;
+              console.log('[SAC] Frame size applied:', w + 'x' + h);
             }
-
-            // Frame rate — Premiere calls this "Timebase" (duration of 1 frame as TickTime).
-            // Try videoTimeBase property first, then FrameRate variants.
-            if (fps > 0) {
-              var frSet = false;
-
-              // A: videoTimeBase as TickTime (1 frame duration) — matches PR "Timebase" setting
-              try {
-                var frameTickTime = ppro.TickTime.createWithSeconds(1 / fps);
-                settings.videoTimeBase = frameTickTime;
-                frSet = true;
-                console.log('[SAC] FPS set via videoTimeBase TickTime:', fps);
-              } catch(eA) {}
-
-              // B: videoFrameRate property
-              if (!frSet) {
-                try {
-                  var frObj = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
-                            : ppro.TickTime.createWithSeconds(1 / fps);
-                  settings.videoFrameRate = frObj;
-                  frSet = true;
-                  console.log('[SAC] FPS set via videoFrameRate property:', fps);
-                } catch(eB) {}
-              }
-
-              // C: setter methods
-              if (!frSet) {
-                var frMethods = ['setVideoTimeBase', 'setVideoFrameRate', 'setFrameRate'];
-                for (var fri = 0; fri < frMethods.length && !frSet; fri++) {
-                  try {
-                    if (typeof settings[frMethods[fri]] === 'function') {
-                      var frArg = (frMethods[fri] === 'setVideoTimeBase')
-                        ? ppro.TickTime.createWithSeconds(1 / fps)
-                        : (ppro.FrameRate ? ppro.FrameRate.createWithValue(fps) : ppro.TickTime.createWithSeconds(1 / fps));
-                      var frr = settings[frMethods[fri]](frArg);
-                      if (frr && typeof frr.then === 'function') await frr;
-                      frSet = true;
-                      console.log('[SAC] FPS set via', frMethods[fri], ':', fps);
-                    }
-                  } catch(eC) {}
-                }
-              }
-
-              if (!frSet) console.warn('[SAC] FPS setting unsupported — set manually in Premiere');
-            }
-
-            // Apply via transaction
-            var rs = project.lockedAccess(function() {
-              project.executeTransaction(function(ca) {
-                ca.addAction(seq.createSetSettingsAction(settings));
-              }, 'SAC set seq settings');
-            });
-            if (rs && typeof rs.then === 'function') await rs;
-            console.log('[SAC] createSetSettingsAction committed');
-          } catch(es) { console.warn('[SAC] createSetSettingsAction failed:', es.message); }
+          } catch(es) { console.warn('[SAC] Frame size failed:', es.message); }
         }
 
         if (typeof project.openSequence    === 'function') await project.openSequence(seq);
