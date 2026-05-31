@@ -2557,16 +2557,24 @@ function sacCountBinMatches(items, targetName) {
       if (count > 1) ambiguousNames[name] = count;
     });
 
+    var allRows = document.querySelectorAll('.sac-blockSrc');
+    console.log('[SAC validate] names:', names, '| DOM rows found:', allRows.length);
+    allRows.forEach(function(el) {
+      console.log('[SAC validate] row srcName="' + el.dataset.srcName + '" blockIdx=' + el.dataset.blockIdx);
+    });
+
     for (var i = 0; i < names.length; i++) {
       var name = names[i];
       var item = sacMatchBinItem(binItems, name);
       sacSourceMap[name] = item || null;
       var isAmbiguous = !!ambiguousNames[name];
+      console.log('[SAC validate] "' + name + '" →', item ? '✓ found' : '✗ missing', '| ambiguous:', isAmbiguous);
 
       // Update every source row with this name (may appear in multiple blocks)
       document.querySelectorAll('.sac-blockSrc').forEach(function(el) {
         if (el.dataset.srcName !== name) return;
         var statusEl = el.querySelector('.sac-srcStatus');
+        console.log('[SAC validate] updating row "' + name + '" → statusEl:', statusEl ? 'found' : 'NULL');
         if (!statusEl) return;
         if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
