@@ -673,7 +673,8 @@
                 <option value="match">Match source clips</option>
                 <option value="1920x1080">1920×1080 — 16:9</option>
                 <option value="3840x2160">3840×2160 — 4K</option>
-                <option value="1080x1920">1080×1920 — 9:16</option>
+                <option value="1080x1920" selected>1080×1920 — 9:16</option>
+                <option value="1080x1350">1080×1350 — 4:5</option>
                 <option value="1080x1080">1080×1080 — 1:1</option>
               </select>
             </div>
@@ -698,12 +699,13 @@
 
     <!-- ── SUCCESS PANEL (shown after assembly completes) ── -->
     <div id="sacSuccessPanel" class="sac-successPanel" style="display:none">
-      <div class="sac-successIcon">✅</div>
-      <div class="sac-successTitle">AutoCut hoàn thành!</div>
+      <div class="sac-successCheck">✓</div>
+      <div class="sac-successTitle">AutoCut hoàn thành</div>
       <div id="sacSuccessStats" class="sac-successStats"></div>
+      <div class="sac-successDivider"></div>
       <div class="sac-successActions">
-        <button id="sacBackToScript" class="sac-successSecondaryBtn">↩ Back to last script</button>
-        <button id="sacNewAutocut"   class="sac-successPrimaryBtn">🆕 New AutoCut</button>
+        <button id="sacNewAutocut"   class="sac-successPrimaryBtn">↺ New AutoCut</button>
+        <button id="sacBackToScript" class="sac-successSecondaryBtn">↩ Back to script</button>
       </div>
     </div>
 

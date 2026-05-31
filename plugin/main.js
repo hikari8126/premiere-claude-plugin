@@ -3470,23 +3470,35 @@ function sacCountBinMatches(items, targetName) {
               } catch(eRect) { console.warn('[SAC] setVideoFrameRect failed:', eRect.message); }
             }
 
-            // Frame rate — try known method names
+            // Frame rate — try property assignment first, then methods
             if (fps > 0) {
+              var frSet = false;
+              var frObj = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
+                        : ppro.TickTime.createWithSeconds(1 / fps);
+
+              // A: direct property assignment (works in some UXP versions)
               try {
-                var frMethods = ['setVideoFrameRate','setFrameRate','setVideoFrameRateAsFrameRate'];
-                var frSet = false;
+                settings.videoFrameRate = frObj;
+                frSet = true;
+                console.log('[SAC] FPS set via property assignment');
+              } catch(eA) {}
+
+              // B: setter methods (try several name variants)
+              if (!frSet) {
+                var frMethods = ['setVideoFrameRate', 'setFrameRate', 'setVideoFrameRateAsFrameRate'];
                 for (var fri = 0; fri < frMethods.length && !frSet; fri++) {
-                  if (typeof settings[frMethods[fri]] === 'function') {
-                    var fr = ppro.FrameRate ? ppro.FrameRate.createWithValue(fps)
-                           : ppro.TickTime.createWithSeconds(1 / fps);
-                    var frr = settings[frMethods[fri]](fr);
-                    if (frr && typeof frr.then === 'function') await frr;
-                    console.log('[SAC] FPS set via', frMethods[fri]);
-                    frSet = true;
-                  }
+                  try {
+                    if (typeof settings[frMethods[fri]] === 'function') {
+                      var frr = settings[frMethods[fri]](frObj);
+                      if (frr && typeof frr.then === 'function') await frr;
+                      frSet = true;
+                      console.log('[SAC] FPS set via', frMethods[fri]);
+                    }
+                  } catch(eB) {}
                 }
-                if (!frSet) console.warn('[SAC] No setVideoFrameRate method found');
-              } catch(eFps) { console.warn('[SAC] fps set failed:', eFps.message); }
+              }
+
+              if (!frSet) console.warn('[SAC] FPS setting not supported — set manually in Premiere');
             }
 
             // Apply via transaction
