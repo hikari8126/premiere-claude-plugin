@@ -1690,25 +1690,38 @@ ${numberedInput}`;
       });
       output = resp.content[0].text.trim();
     } else {
-      const { execSync } = require('child_process');
-      output = execSync(`echo ${JSON.stringify(prompt)} | claude --print`, {
-        encoding: 'utf8', timeout: 30000,
-      }).trim();
+      // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
+      const { spawnSync } = require('child_process');
+      const result = spawnSync('claude', ['--print'], {
+        input: prompt, encoding: 'utf8', timeout: 30000,
+      });
+      if (result.error) throw result.error;
+      output = (result.stdout || '').trim();
     }
-    const normalizedLines = output.split('\n').map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
-    // Fallback: if count mismatch, return original
-    if (normalizedLines.length !== lines.length) {
-      console.warn('[normalize] Line count mismatch, returning originals');
-      return res.json({ ok: true, lines, warning: 'count_mismatch' });
+
+    // Parse output: strip leading numbers if Claude added them, drop blank lines
+    const allLines = output.split('\n')
+      .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
+      .filter(Boolean);
+
+    // If all expected lines start with [tag], use them directly
+    const taggedLines = allLines.filter(l => /^\[.+?\]/.test(l));
+    if (taggedLines.length === lines.length) {
+      return res.json({ ok: true, lines: taggedLines });
     }
-    res.json({ ok: true, lines: normalizedLines });
+    if (allLines.length === lines.length) {
+      return res.json({ ok: true, lines: allLines });
+    }
+    // Count mismatch: log and return originals as fallback
+    console.warn(`[normalize] Count mismatch: expected ${lines.length}, got ${allLines.length} (tagged: ${taggedLines.length})`);
+    res.json({ ok: true, lines, warning: 'count_mismatch' });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.6';
+const BRIDGE_VERSION = '1.5.0-beta.7';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
