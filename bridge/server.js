@@ -87,6 +87,7 @@ Available manual-edit actions (rarely needed — only when user explicitly asks)
 - set_volume     {trackIndex, clipIndex, volumeDb}              → set volume
 - voicegen_script {text, voiceId?, autoGenerate?}              → push script to Voice Gen tab (auto-switch)
 - voicegen_sfx   {text, autoGenerate?}                         → push SFX prompt to Voice Gen tab
+- autocut_load   {rows: [{script, source, time?|sourceIn?+sourceOut?}]} → organize a cutsheet into the Autocut tab spreadsheet (auto-switch)
 
 ── VOICE GEN INTEGRATION ────────────────────────────────────────────────
 When the user asks you to:
@@ -97,6 +98,17 @@ When the user asks you to:
     → emit a voicegen_sfx action
   • You can also specify a voiceId from known ElevenLabs IDs (optional)
   • These actions auto-switch the plugin to the Voice Gen tab
+
+── AUTOCUT TAB INTEGRATION ───────────────────────────────────────────────
+When the user gives you a messy/complex script or cutsheet and asks you to
+"organize", "clean up", "chuẩn hóa", or "load/đẩy vào Autocut":
+  → Reorganize into clean rows and emit an \`autocut_load\` action.
+  → Each row: {"script": "<text>", "source": "<bin clip name>", "time": "0:02-0:08"}
+     • time may be a string ("0:02-0:08" or "0:05") OR numeric sourceIn/sourceOut (seconds).
+  → This fills the Autocut spreadsheet (3 cols: Script | In→Out | Source) and switches
+     the plugin to the Autocut tab. The user then reviews and clicks Validate.
+  → Apply the SAME merged-cell logic as cutlist below (one script + many sources →
+     many rows; one source + many script lines → many rows).
 
 ── AUTOCUT CUTLIST PARSING ──────────────────────────────────────────────
 When the user attaches a cutsheet (image OR text), parse to \`cutlist\` action.
@@ -1491,8 +1503,225 @@ app.post('/api/read-image', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SUPER AUTO CUT endpoints
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── POST /superautocut/validate — validate block structure ─────────────────
+app.post('/superautocut/validate', (req, res) => {
+  const { blocks } = req.body || {};
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return res.json({ ok: false, error: 'No blocks provided' });
+  }
+
+  const errors = [];
+  blocks.forEach((block, i) => {
+    const label = `Block ${i + 1}`;
+    if (!Array.isArray(block.texts) || block.texts.length === 0) {
+      errors.push(`${label}: không có text`);
+    }
+    if (!Array.isArray(block.sources) || block.sources.length === 0) {
+      errors.push(`${label}: không có source`);
+    } else {
+      block.sources.forEach((s, j) => {
+        if (!s.name || !s.name.trim()) errors.push(`${label} source ${j + 1}: thiếu tên`);
+        if (!s.time || !s.time.trim()) errors.push(`${label} source ${j + 1}: thiếu timestamp`);
+      });
+    }
+  });
+
+  if (errors.length > 0) return res.json({ ok: false, errors });
+  res.json({ ok: true, blockCount: blocks.length });
+});
+
+// ── POST /superautocut/voice-align ──────────────────────────────────────────
+// Transcribe a single voice file (whole cutsheet) then align each block's text
+// to find where that block's voice segment starts/ends.
+// Body: { audioPath, blocks: [{texts: [...]}], language? }
+// Returns: { ok, alignments: [{start, end, duration, matched, status}], fullText }
+app.post('/superautocut/voice-align', async (req, res) => {
+  try {
+    const { audioPath, blocks = [], language } = req.body || {};
+    if (!audioPath) throw new Error('audioPath is required');
+    if (!Array.isArray(blocks) || blocks.length === 0) throw new Error('blocks is required');
+
+    // 1) Whisper → word timestamps
+    const { words, fullText } = await transcribeWhisper(audioPath, language);
+
+    // 2) One script line per block (join all of the block's text lines)
+    const scriptLines = blocks.map(b =>
+      (Array.isArray(b.texts) ? b.texts.join(' ') : String(b.texts || '')).trim()
+    );
+
+    // 3) Align → per-block start/end, then derive duration
+    console.log('[voice-align] scriptLines:', JSON.stringify(scriptLines));
+    console.log('[voice-align] transcript:', (fullText || '').slice(0, 300));
+    const aligned = alignScriptToWords(words, scriptLines);
+    console.log('[voice-align] results:', aligned.map(a => a.status + '(' + a.matched + ')').join(' | '));
+    const alignments = aligned.map(a => ({
+      start:   a.start,
+      end:     a.end,
+      duration: (a.start != null && a.end != null) ? Math.max(0, a.end - a.start) : null,
+      matched: a.matched,
+      status:  a.status,
+    }));
+
+    res.json({ ok: true, alignments, fullText });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── POST /superautocut/parse-image — Claude Vision parses cutsheet screenshot
+app.post('/superautocut/parse-image', async (req, res) => {
+  const { imageBase64 } = req.body || {};
+  if (!imageBase64) return res.json({ ok: false, error: 'No image provided' });
+
+  // Extract mime + base64 data
+  const match = imageBase64.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return res.json({ ok: false, error: 'Invalid image format' });
+  const [, mimeType, b64data] = match;
+
+  const prompt = `You are given a screenshot of a video editing cutsheet table.
+The table has up to 3 columns:
+  1. Script/Text — voiceover script (may be empty if this row belongs to a merged cell above)
+  2. Time — timestamp range like "0:02-0:08" or single "0:04" (may be empty)
+  3. Source — source clip name like "Yoselin 33" (may be empty)
+
+Rules:
+- Merged cells: if a cell visually spans multiple rows, put the value only in the FIRST row; use empty string "" for subsequent rows
+- Multi-line text inside one cell: treat as one string, separate lines with \\n
+- Empty cells: use empty string ""
+
+Return ONLY a JSON array, no markdown, no explanation:
+[{"text":"...","time":"...","source":"..."},...]`;
+
+  // Save image to temp file (needed for CLI mode)
+  const ext     = mimeType.includes('png') ? 'png' : 'jpg';
+  const tmpImg  = path.join(os.tmpdir(), 'sac_parse_' + Date.now() + '.' + ext);
+  fs.writeFileSync(tmpImg, Buffer.from(b64data, 'base64'));
+
+  try {
+    let outputText = '';
+
+    if (API_KEY) {
+      // ── API key mode: Anthropic SDK ──────────────────────────────────────
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client    = new Anthropic({ apiKey: API_KEY });
+      const response  = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64data } },
+          { type: 'text', text: prompt },
+        ]}],
+      });
+      outputText = response.content[0]?.text || '';
+    } else {
+      // ── CLI mode: pass image via @path token ─────────────────────────────
+      const cliPrompt = `@${tmpImg}\n\n${prompt}`;
+      outputText = await new Promise((resolve, reject) => {
+        let out = '', err = '';
+        const proc = spawn('claude', ['--print', cliPrompt], { env: cleanEnv() });
+        proc.stdout.on('data', d => { out += d.toString(); });
+        proc.stderr.on('data', d => { err += d.toString(); });
+        proc.on('close', code => code === 0 ? resolve(out) : reject(new Error(err || 'claude CLI exit ' + code)));
+        proc.on('error', reject);
+      });
+    }
+
+    const jsonMatch = outputText.match(/\[[\s\S]*?\]/);
+    if (!jsonMatch) throw new Error('Không tìm thấy JSON array trong phản hồi của Claude');
+    const rows = JSON.parse(jsonMatch[0]);
+    fs.unlinkSync(tmpImg);
+    res.json({ ok: true, rows });
+  } catch (e) {
+    try { fs.unlinkSync(tmpImg); } catch (_) {}
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /superautocut/normalize-script ────────────────────────────────────
+// Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
+// Input:  { lines: string[] }   — mảng string, 1 phần tử / block
+// Output: { ok, lines: string[] }
+app.post('/superautocut/normalize-script', async (req, res) => {
+  const { lines } = req.body;
+  if (!Array.isArray(lines) || lines.length === 0)
+    return res.status(400).json({ ok: false, error: 'No lines provided' });
+
+  const numberedInput = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+  const prompt =
+`Bạn là chuyên gia hiệu đính script cho TTS (Text-to-Speech) ElevenLabs.
+
+Phân tích toàn bộ script để xác định tone/mood tổng thể, sau đó với MỖI DÒNG:
+1. Thêm một tag cảm xúc trong [] ở ĐẦU DÒNG để hướng dẫn giọng đọc ElevenLabs
+2. Thêm hoặc thay dấu ! ? phù hợp với tone và cảm xúc của câu (nếu dấu cũ chưa đúng thì thay)
+3. Sửa lỗi chính tả nếu có
+4. TUYỆT ĐỐI không thay đổi từ ngữ, nội dung hay ý nghĩa
+
+Tags gợi ý (chọn tag phù hợp nhất với từng câu, không bắt buộc dùng list này):
+[excited] [energetic] [warm] [friendly] [confident] [dramatic] [urgent]
+[whispering] [conversational] [serious] [calm] [laughing] [curious]
+
+Ví dụ:
+  Input:  "Grab it now"          → Output: "[excited] Grab it now!"
+  Input:  "Chỉ còn 3 ngày"       → Output: "[urgent] Chỉ còn 3 ngày!"
+  Input:  "Bạn có biết không"    → Output: "[curious] Bạn có biết không?"
+  Input:  "Sản phẩm tốt nhất."   → Output: "[confident] Sản phẩm tốt nhất!"
+
+Quy tắc output:
+- Trả về đúng ${lines.length} dòng, giữ nguyên thứ tự
+- Mỗi dòng BẮT BUỘC có tag [] ở đầu
+- Không thêm số thứ tự, gạch đầu dòng, hay bất kỳ text nào ngoài script
+
+Script (${lines.length} dòng):
+${numberedInput}`;
+
+  try {
+    let output = '';
+    if (API_KEY) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: API_KEY });
+      const resp = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      output = resp.content[0].text.trim();
+    } else {
+      // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
+      const { spawnSync } = require('child_process');
+      const result = spawnSync('claude', ['--print'], {
+        input: prompt, encoding: 'utf8', timeout: 30000,
+      });
+      if (result.error) throw result.error;
+      output = (result.stdout || '').trim();
+    }
+
+    // Parse output: strip leading numbers if Claude added them, drop blank lines
+    const allLines = output.split('\n')
+      .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
+      .filter(Boolean);
+
+    // If all expected lines start with [tag], use them directly
+    const taggedLines = allLines.filter(l => /^\[.+?\]/.test(l));
+    if (taggedLines.length === lines.length) {
+      return res.json({ ok: true, lines: taggedLines });
+    }
+    if (allLines.length === lines.length) {
+      return res.json({ ok: true, lines: allLines });
+    }
+    // Count mismatch: log and return originals as fallback
+    console.warn(`[normalize] Count mismatch: expected ${lines.length}, got ${allLines.length} (tagged: ${taggedLines.length})`);
+    res.json({ ok: true, lines, warning: 'count_mismatch' });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.4.1';
+const BRIDGE_VERSION = '1.5.0-beta.7';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -1512,6 +1741,56 @@ app.get('/health', (_req, res) => {
       ok:    fs.existsSync(WHISPER_BIN),
     },
   });
+});
+
+// ── POST /superautocut/split-voice ────────────────────────────────────────
+// Split a voice file into N segments using ffmpeg (one per block).
+// Fixes UXP bug: createSetInOutPointsAction changes master clip globally,
+// affecting all placed track items. Giving each block its own file avoids this.
+// Input:  { audioPath, segments: [{start, end}] }
+// Output: { ok, files: [path0, path1, ...] }
+app.post('/superautocut/split-voice', async (req, res) => {
+  const { audioPath, segments } = req.body;
+  if (!audioPath || !fs.existsSync(audioPath))
+    return res.status(400).json({ ok: false, error: 'audioPath not found: ' + audioPath });
+  if (!Array.isArray(segments) || segments.length === 0)
+    return res.status(400).json({ ok: false, error: 'No segments provided' });
+
+  const tmpDir = getTempDir();
+  ensureDir(tmpDir);
+  const ts  = Date.now();
+  const ext = path.extname(audioPath) || '.mp3';
+
+  const files = [];
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      const { start, end } = segments[i];
+      const outPath = path.join(tmpDir, `sac_voice_b${i}_${ts}${ext}`);
+      await new Promise((resolve, reject) => {
+        const args = [
+          '-y', '-i', audioPath,
+          '-ss', String(start),
+          '-to', String(end),
+          '-vn',                         // drop video if any
+          '-acodec', 'copy',             // stream copy (fast, no re-encode)
+          '-avoid_negative_ts', 'make_zero',
+          outPath,
+        ];
+        const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+        let stderr = '';
+        proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg block ${i} failed: ` + stderr.slice(-200)));
+        });
+        proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
+      });
+      files.push(outPath);
+    }
+    res.json({ ok: true, files });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────

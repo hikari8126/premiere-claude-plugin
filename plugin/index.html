@@ -168,7 +168,47 @@
     <div class="vg-statusBar" id="vgStatusBar">
       <span class="vg-statusDot" id="vgStatusDot"></span>
       <span id="vgStatusText">Connecting...</span>
+      <button id="vgSettingsBtn" class="ac-iconBtn" title="API & Output settings">&#9881;</button>
       <button id="vgRefreshVoices" class="ac-iconBtn">&#8635;</button>
+    </div>
+
+    <!-- Collapsible settings panel (toggled by the ⚙ button) -->
+    <div class="vg-settingsPanel" id="vgSettingsPanel" hidden>
+
+      <!-- ElevenLabs API Key Profiles -->
+      <div class="vg-sg vg-apiKeySection">
+        <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
+        <div class="vg-profileRow">
+          <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
+          <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
+        </div>
+        <div class="vg-profileNameRow">
+          <input type="text" id="vgProfileName" class="vg-settingInput"
+            placeholder="Profile name..." autocomplete="off" />
+        </div>
+        <div class="vg-apiKeyRow">
+          <input type="password" id="vgElKeyInput" class="vg-settingInput vg-apiKeyInput"
+            placeholder="sk_..." autocomplete="off" />
+        </div>
+        <div class="vg-profileActions">
+          <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
+          <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
+        </div>
+        <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
+      </div>
+
+      <!-- Output Format -->
+      <div class="vg-sg">
+        <div class="vg-sl">Output Format</div>
+        <select id="vgOutputFormat" class="vg-select">
+          <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
+          <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+          <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
+          <option value="pcm_16000">PCM 16kHz</option>
+          <option value="pcm_24000">PCM 24kHz</option>
+        </select>
+      </div>
+
     </div>
 
     <!-- Mode selector -->
@@ -371,6 +411,7 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
               </div>
             </div>
             <div class="vg-variation" id="vgVar2" style="display:none;">
@@ -387,6 +428,7 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
               </div>
             </div>
             <div id="vgImportStatus" class="ac-manualStatus"></div>
@@ -407,31 +449,7 @@
         </div>
         <div class="vg-rightScroll">
 
-        <!-- ElevenLabs API Key Profiles — always visible, top of settings -->
-        <div class="vg-sg vg-apiKeySection">
-          <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
-          <!-- Profile selector row -->
-          <div class="vg-profileRow">
-            <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
-            <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
-          </div>
-          <!-- Profile name input -->
-          <div class="vg-profileNameRow">
-            <input type="text" id="vgProfileName" class="vg-settingInput"
-              placeholder="Profile name..." autocomplete="off" />
-          </div>
-          <!-- Key input -->
-          <div class="vg-apiKeyRow">
-            <input type="password" id="vgElKeyInput" class="vg-settingInput vg-apiKeyInput"
-              placeholder="sk_..." autocomplete="off" />
-          </div>
-          <!-- Actions -->
-          <div class="vg-profileActions">
-            <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
-            <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
-          </div>
-          <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
-        </div>
+        <!-- API Key Profiles + Output Format moved to the ⚙ settings panel (top) -->
 
         <!-- TTS settings -->
         <div class="vg-modeContent" data-mode="tts">
@@ -512,17 +530,6 @@
             </select>
           </div>
 
-          <div class="vg-sg">
-            <div class="vg-sl">Output Format</div>
-            <select id="vgOutputFormat" class="vg-select">
-              <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
-              <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
-              <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
-              <option value="pcm_16000">PCM 16kHz</option>
-              <option value="pcm_24000">PCM 24kHz</option>
-            </select>
-          </div>
-
         </div><!-- /tts settings -->
 
         <!-- SFX settings -->
@@ -586,11 +593,134 @@
 <!-- TAB: AUTOCUT  (placeholder — coming soon)             -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-autocut">
-  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:32px 24px;text-align:center;color:var(--text-muted, #6b7280);">
-    <div style="font-size:36px;margin-bottom:16px;">✂️</div>
-    <div style="font-size:14px;font-weight:600;color:var(--text, #e2e8f0);margin-bottom:8px;">Autocut</div>
-    <div style="font-size:12px;line-height:1.6;">Tính năng đang được phát triển.<br>Sẽ có trong bản cập nhật tiếp theo.</div>
-  </div>
+  <!-- ═══ SUPER AUTO CUT ═══ -->
+  <div class="sac-app">
+
+    <!-- Method bar -->
+    <div class="sac-methodBar">
+      <button class="sac-methodBtn is-active" data-method="manual">📝 Manual</button>
+      <button class="sac-methodBtn" data-method="screenshot">📷 Ảnh</button>
+    </div>
+
+    <!-- ── MANUAL PANEL ── -->
+    <div class="sac-panel" id="sacPanelManual">
+
+      <!-- Spreadsheet (collapsible) -->
+      <div class="sac-sectionToggle" id="sacScriptToggle">
+        <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
+        <span>📝 Script input</span>
+      </div>
+      <div class="sac-tableWrap" id="sacTableWrap">
+        <div class="sac-thead">
+          <div class="sac-th sac-col-text">Script</div>
+          <div class="sac-th sac-col-time">In → Out</div>
+          <div class="sac-th sac-col-src">Source (bin)</div>
+          <div class="sac-th sac-col-act"></div>
+        </div>
+        <div id="sacBody" class="sac-tbody"></div>
+      </div>
+      <div class="sac-tableFooter" id="sacTableFooter">
+        <button id="sacAddRow" class="sac-addBtn">+ Row</button>
+        <button id="sacClearBoard" class="sac-clearBoardBtn">🗑</button>
+        <button id="sacPreviewBtn" class="sac-previewBtn">✔ Validate</button>
+      </div>
+
+      <!-- Block preview (inside manual panel so flex space is shared) -->
+      <div id="sacBlockSection" class="sac-blockSection" style="display:none">
+        <div class="sac-blockHeader">
+          <span class="sac-blockTitle">✂️ Blocks</span>
+          <span id="sacBlockCount" class="sac-blockMeta"></span>
+          <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
+        </div>
+        <div id="sacBlockList" class="sac-blockList"></div>
+        <!-- Voice panel — hidden once voice ready or "without voice" clicked -->
+        <div class="sac-voicePanel" id="sacVoicePanel">
+          <div class="sac-voiceRow">
+            <button id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn">⚡ Gen voice (Voice Gen) →</button>
+            <button id="sacVoiceBtn" class="sac-voiceBtn" title="Chọn file voice có sẵn">📂</button>
+            <span class="sac-vDivider"></span>
+            <button id="sacCutNoVoiceBtn" class="sac-cutNoVoiceBtn">✂ Without voice</button>
+          </div>
+          <div class="sac-voicePlayer" id="sacVoicePlayer" style="display:none">
+            <button id="sacVoicePlay" class="sac-voicePlayBtn">▶</button>
+            <div id="sacVoiceProgWrap" class="sac-voiceProgWrap"><div id="sacVoiceFill" class="sac-voiceFill"></div></div>
+            <span id="sacVoiceTime" class="sac-voiceTime">0:00 / 0:00</span>
+          </div>
+          <div id="sacVoiceInfo" class="sac-voiceInfo">Chưa có voice</div>
+        </div>
+
+        <!-- Cut panel — replaces voice panel when ready -->
+        <div id="sacCutPanel" class="sac-cutPanel" style="display:none">
+          <div class="sac-cutStatusRow">
+            <span id="sacCutLabel" class="sac-cutLabel"></span>
+            <button id="sacCutBack" class="sac-cutBackBtn">✕</button>
+          </div>
+          <div class="sac-cutRow">
+            <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
+            <span class="sac-cutDivider"></span>
+            <button id="sacCutNew" class="sac-cutBtn">▶ New seq</button>
+            <button id="sacCutNewSettings" class="sac-cutSettingsBtn" title="New seq settings">⚙</button>
+          </div>
+          <!-- Inline settings for New seq (toggle on ⚙ click) -->
+          <div id="sacNewSeqForm" class="sac-newSeqForm" style="display:none">
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">Name</span>
+              <input id="sacNewSeqName" class="sac-nsfInput" type="text" placeholder="AutoCut">
+            </div>
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">Ratio</span>
+              <select id="sacNewSeqRatio" class="sac-nsfSelect">
+                <option value="match">Match source clips</option>
+                <option value="1920x1080">1920×1080 — 16:9</option>
+                <option value="3840x2160">3840×2160 — 4K</option>
+                <option value="1080x1920" selected>1080×1920 — 9:16</option>
+                <option value="1080x1350">1080×1350 — 4:5</option>
+                <option value="1080x1080">1080×1080 — 1:1</option>
+              </select>
+            </div>
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">FPS</span>
+              <span class="sac-nsfNote">từ source clip</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sacStatus" class="sac-statusMsg" style="display:none"></div>
+
+    </div>
+
+    <!-- ── SUCCESS PANEL (shown after assembly completes) ── -->
+    <div id="sacSuccessPanel" class="sac-successPanel" style="display:none">
+      <div class="sac-successCheck">✓</div>
+      <div class="sac-successTitle">AutoCut hoàn thành</div>
+      <div id="sacSuccessStats" class="sac-successStats"></div>
+      <div class="sac-successDivider"></div>
+      <div class="sac-successActions">
+        <button id="sacNewAutocut"   class="sac-successPrimaryBtn">↺ New AutoCut</button>
+        <button id="sacBackToScript" class="sac-successSecondaryBtn">↩ Back to script</button>
+      </div>
+    </div>
+
+    <!-- ── SCREENSHOT PANEL ── -->
+    <div class="sac-panel" id="sacPanelScreenshot" style="display:none">
+      <div class="sac-drop" id="sacDrop">
+        <img id="sacImgPreview" class="sac-imgPreview" hidden />
+        <div class="sac-dropPrompt" id="sacDropPrompt">
+          <div class="sac-dropIcon">📷</div>
+          <div class="sac-dropText">Chụp màn hình cutsheet</div>
+          <div class="sac-dropHint">Bấm vào đây để chọn ảnh</div>
+        </div>
+      </div>
+      <div class="sac-screenshotFooter">
+        <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
+      </div>
+      <div id="sacImgStatus" class="sac-statusMsg"></div>
+    </div>
+
+  </div><!-- /sac-app -->
+
+  <!-- legacy hidden shell kept for reference only -->
   <div class="ac-app" style="display:none">
     <!-- ── CONFIG BAR (STT + AUTO MODE) ── -->
     <div class="ac-configBar">
@@ -739,6 +869,7 @@
     </div>
 
   </div><!-- /ac-app (hidden) -->
+
 </div><!-- /tab-autocut -->
 
 <!-- Settings panel (floating, draggable) -->
