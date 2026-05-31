@@ -3121,6 +3121,16 @@ function sacCountBinMatches(items, targetName) {
   var sacNoVoiceCb = $('sacNoVoice');
   if (sacNoVoiceCb) sacNoVoiceCb.addEventListener('change', sacUpdateRunVisibility);
 
+  // Sequence target toggle — Current seq / New seq
+  document.querySelectorAll('.sac-seqBtn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.sac-seqBtn').forEach(function(b) {
+        b.classList.remove('is-active');
+      });
+      btn.classList.add('is-active');
+    });
+  });
+
   // Success panel buttons
   var sacBackBtn = $('sacBackToScript');
   if (sacBackBtn) sacBackBtn.addEventListener('click', function() {
@@ -3345,13 +3355,32 @@ function sacCountBinMatches(items, targetName) {
       });
       if (blocks.length === 0) throw new Error('Không có blocks — validate + align voice trước');
 
-      var project   = await getActiveProject();
-      var seq       = await getActiveSequence();
+      var project = await getActiveProject();
+      var activeSeqBtn = document.querySelector('.sac-seqBtn.is-active');
+      var seqMode = activeSeqBtn ? activeSeqBtn.dataset.mode : 'current';
+      var seq, cursor;
+
+      if (seqMode === 'new') {
+        status.textContent = '⏳ Tạo sequence mới...';
+        var seqName = 'AutoCut ' + new Date().toLocaleDateString('vi-VN', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
+        seq = await project.createSequence(seqName);
+        if (!seq) throw new Error('Không tạo được sequence mới');
+        // Open + make active so seqEditor and sacGetSequenceEnd work on it
+        if (typeof project.openSequence === 'function') await project.openSequence(seq);
+        if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
+        cursor = 0;
+        console.log('[SAC] New sequence created:', seqName);
+      } else {
+        seq    = await getActiveSequence();
+        status.textContent = '⏳ Tìm vị trí cuối timeline...';
+        cursor = await sacGetSequenceEnd(seq);
+      }
+
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
-
-      status.textContent = '⏳ Tìm vị trí cuối timeline...';
-      var cursor = await sacGetSequenceEnd(seq);
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
         noVoiceMode ? '(without voice)' : '');
 
