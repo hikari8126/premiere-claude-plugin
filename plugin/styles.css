@@ -2712,6 +2712,27 @@ body {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 8px 0 8px;
 }
+.sac-seqBar {
+  flex: 0 0 auto;
+  display: flex; justify-content: center;
+  padding: 4px 0 0;
+}
+.sac-seqToggle {
+  display: flex; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+.sac-seqBtn {
+  flex: 1; height: 22px; padding: 0 10px;
+  background: transparent; border: none;
+  color: rgba(255,255,255,0.35);
+  font-size: 9px; cursor: pointer;
+  white-space: nowrap;
+}
+.sac-seqBtn + .sac-seqBtn { border-left: 1px solid rgba(255,255,255,0.1); }
+.sac-seqBtn.is-active { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
+.sac-seqBtn:hover:not(.is-active) { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.55); }
+
 .sac-noVoiceLabel {
   display: flex; align-items: center; gap: 4px;
   font-size: 9.5px; color: rgba(255,255,255,0.4);
