@@ -646,12 +646,27 @@
           <div id="sacVoiceInfo" class="sac-voiceInfo">Chưa có voice</div>
         </div>
         <div class="sac-actionBar">
+          <label id="sacNoVoiceLabel" class="sac-noVoiceLabel" style="display:none">
+            <input type="checkbox" id="sacNoVoice">
+            <span>Without voice</span>
+          </label>
           <button id="sacActionBtn" class="sac-actionBtn is-run" style="display:none">▶ Run AutoCut</button>
         </div>
       </div>
 
       <div id="sacStatus" class="sac-statusMsg" style="display:none"></div>
 
+    </div>
+
+    <!-- ── SUCCESS PANEL (shown after assembly completes) ── -->
+    <div id="sacSuccessPanel" class="sac-successPanel" style="display:none">
+      <div class="sac-successIcon">✅</div>
+      <div class="sac-successTitle">AutoCut hoàn thành!</div>
+      <div id="sacSuccessStats" class="sac-successStats"></div>
+      <div class="sac-successActions">
+        <button id="sacBackToScript" class="sac-successSecondaryBtn">↩ Back to last script</button>
+        <button id="sacNewAutocut"   class="sac-successPrimaryBtn">🆕 New AutoCut</button>
+      </div>
     </div>
 
     <!-- ── SCREENSHOT PANEL ── -->

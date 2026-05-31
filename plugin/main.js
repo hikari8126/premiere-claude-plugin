@@ -2140,7 +2140,11 @@ function sacCountBinMatches(items, targetName) {
     if (btn) btn.style.display = show ? '' : 'none';
   }
   function sacUpdateRunVisibility() {
-    sacShowRun(sacValidatePassed && sacVoiceReady);
+    var noVoice = $('sacNoVoice') && $('sacNoVoice').checked;
+    sacShowRun(sacValidatePassed && (sacVoiceReady || noVoice));
+    // Show "Without voice" label once validate passed
+    var lbl = $('sacNoVoiceLabel');
+    if (lbl) lbl.style.display = sacValidatePassed ? '' : 'none';
   }
 
   // ── Method switching ────────────────────────────────────────────────────
@@ -3113,6 +3117,39 @@ function sacCountBinMatches(items, targetName) {
   // Run button — only visible after Validate passes (see sacValidateAll).
   $('sacActionBtn').addEventListener('click', sacRunAutoCut);
 
+  // Without voice checkbox — re-evaluate Run visibility when toggled
+  var sacNoVoiceCb = $('sacNoVoice');
+  if (sacNoVoiceCb) sacNoVoiceCb.addEventListener('change', sacUpdateRunVisibility);
+
+  // Success panel buttons
+  var sacBackBtn = $('sacBackToScript');
+  if (sacBackBtn) sacBackBtn.addEventListener('click', function() {
+    $('sacSuccessPanel').style.display = 'none';
+    $('sacPanelManual').style.display = 'flex';
+  });
+  var sacNewBtn = $('sacNewAutocut');
+  if (sacNewBtn) sacNewBtn.addEventListener('click', function() {
+    // Full reset — clear everything
+    $('sacSuccessPanel').style.display = 'none';
+    parsedBlocks = [];
+    sacSourceMap = {};
+    sacVoicePath = null;
+    window.sacVoicePath = null;
+    sacValidatePassed = false;
+    sacVoiceReady = false;
+    sacUpdateRunVisibility();
+    $('sacBlockSection').style.display = 'none';
+    $('sacVoicePlayer').style.display = 'none';
+    $('sacVoiceInfo').textContent = 'Chưa có voice';
+    $('sacStatus').style.display = 'none';
+    var noVoiceCb = $('sacNoVoice');
+    if (noVoiceCb) noVoiceCb.checked = false;
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    createRow(); createRow(); createRow();
+    $('sacPanelManual').style.display = 'flex';
+  });
+
   // Voice controls (Phase 4a / Approach B)
   var sacVoiceBtn = $('sacVoiceBtn');
   if (sacVoiceBtn) sacVoiceBtn.addEventListener('click', sacPickVoiceFile);
@@ -3301,8 +3338,10 @@ function sacCountBinMatches(items, targetName) {
       if (!ppro) throw new Error('Premiere Pro API không khả dụng — chạy trong Premiere');
       if (!ppro.SequenceEditor) throw new Error('ppro.SequenceEditor không có — Premiere 25.x+ required');
 
+      var noVoiceMode = $('sacNoVoice') && $('sacNoVoice').checked;
+
       var blocks = parsedBlocks.filter(function(b) {
-        return (b.sources && b.sources.length > 0) || b.voiceStart != null;
+        return (b.sources && b.sources.length > 0) || (!noVoiceMode && b.voiceStart != null);
       });
       if (blocks.length === 0) throw new Error('Không có blocks — validate + align voice trước');
 
@@ -3313,17 +3352,20 @@ function sacCountBinMatches(items, targetName) {
 
       status.textContent = '⏳ Tìm vị trí cuối timeline...';
       var cursor = await sacGetSequenceEnd(seq);
-      console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length);
+      console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
+        noVoiceMode ? '(without voice)' : '');
 
-      // Import voice file once (find in bin first, only import if missing)
-      var voicePath = sacVoicePath || window.sacVoicePath;
+      // Import voice file once — skip if Without Voice mode
       var voiceItem = null;
-      if (voicePath) {
-        status.textContent = '⏳ Import voice...';
-        try {
-          voiceItem = await sacFindOrImportFile(voicePath);
-          console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
-        } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
+      if (!noVoiceMode) {
+        var voicePath = sacVoicePath || window.sacVoicePath;
+        if (voicePath) {
+          status.textContent = '⏳ Import voice...';
+          try {
+            voiceItem = await sacFindOrImportFile(voicePath);
+            console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
+          } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
+        }
       }
 
       var placed = 0;
@@ -3359,11 +3401,10 @@ function sacCountBinMatches(items, targetName) {
           cursor   += clipDur;
         }
 
-        // Place voice segment on A1 — two-transaction approach:
-        // Tx1 commits setInOut, Tx2 inserts using committed in/out
-        if (voiceItem && block.voiceStart != null && block.voiceEnd != null) {
+        // Place voice segment on A1 (skipped in Without Voice mode)
+        if (!noVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
           var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
-          var vOut = block.voiceEnd + 0.2; // +0.2s buffer
+          var vOut = block.voiceEnd + 0.2;
 
           await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
                                 block.voiceStart, vOut, 5, 0);
@@ -3373,14 +3414,20 @@ function sacCountBinMatches(items, targetName) {
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
-        cursor += 1.0; // 1s gap on timeline between blocks
+        cursor += 1.0; // 1s gap between blocks
         placed++;
-        // 300ms code delay — let Premiere finish processing transactions before next block
         await new Promise(function(r) { setTimeout(r, 300); });
       }
 
-      status.textContent = '✅ Xong! ' + placed + '/' + blocks.length +
-        ' blocks — timeline đến ' + cursor.toFixed(1) + 's';
+      // ── Show success panel ────────────────────────────────────────────────
+      var statsEl = $('sacSuccessStats');
+      if (statsEl) {
+        statsEl.textContent = placed + ' blocks · ' + cursor.toFixed(1) + 's' +
+          (noVoiceMode ? ' · without voice' : '');
+      }
+      status.style.display = 'none';
+      $('sacPanelManual').style.display = 'none';
+      $('sacSuccessPanel').style.display = 'flex';
 
     } catch(e) {
       status.textContent = '❌ ' + e.message;
@@ -4418,9 +4465,7 @@ function sacCountBinMatches(items, targetName) {
         var toAutocutB = document.createElement('button');
         toAutocutB.className = 'ac-secondaryButton vg-actionButton';
         toAutocutB.textContent = '→ Autocut';
-        toAutocutB.addEventListener('click', function() {
-          if (typeof window.AutocutPushVoice === 'function') window.AutocutPushVoice(v.audioPath);
-        });
+        toAutocutB.addEventListener('click', function() { moveToAutocut(v); });
 
         var actionsRow = document.createElement('div');
         actionsRow.className = 'vg-resultActions';
@@ -4556,11 +4601,26 @@ function sacCountBinMatches(items, targetName) {
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
   if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
 
-  // Move to Autocut — feed the generated voice into the Autocut pipeline
-  function moveToAutocut(v) {
-    if (v && v.audioPath && typeof window.AutocutPushVoice === 'function') {
-      window.AutocutPushVoice(v.audioPath);
+  // Move to Autocut — save to output folder (if set) then feed to Autocut pipeline
+  async function moveToAutocut(v) {
+    if (!v || !v.audioPath) return;
+    var finalPath = v.audioPath;
+
+    // Save to output folder first (same flow as Import button)
+    if (customOutputFolder) {
+      var alreadyInDest = v.audioPath.startsWith(customOutputFolder);
+      if (!alreadyInDest) {
+        try {
+          var moveResp = await postJsonVG('/tts/move', {
+            sourcePath: v.audioPath,
+            targetDir:  customOutputFolder,
+          });
+          if (moveResp.ok) finalPath = moveResp.targetPath;
+        } catch(e) { console.warn('[VG→AC] Move failed:', e.message); }
+      }
     }
+
+    if (typeof window.AutocutPushVoice === 'function') window.AutocutPushVoice(finalPath);
   }
   var vgV1ToAC = $('vgVar1ToAutocut'), vgV2ToAC = $('vgVar2ToAutocut');
   if (vgV1ToAC) vgV1ToAC.addEventListener('click', function() { moveToAutocut(lastVariations[0]); });
