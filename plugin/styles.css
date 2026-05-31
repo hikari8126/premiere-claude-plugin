@@ -2709,9 +2709,43 @@ body {
 /* ── Action bar — single button, centered, half width ── */
 .sac-actionBar {
   flex: 0 0 auto;
-  display: flex; justify-content: center;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 8px 0 8px;
 }
+.sac-noVoiceLabel {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 9.5px; color: rgba(255,255,255,0.4);
+  cursor: pointer;
+}
+.sac-noVoiceLabel input { cursor: pointer; width: 11px; height: 11px; }
+
+/* ── Success panel ── */
+.sac-successPanel {
+  flex: 1 1 0; min-height: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px; padding: 24px 16px;
+  text-align: center;
+}
+.sac-successIcon  { font-size: 36px; line-height: 1; }
+.sac-successTitle { font-size: 14px; font-weight: 700; color: #10b981; }
+.sac-successStats { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: -4px; }
+.sac-successActions {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 220px;
+  margin-top: 8px;
+}
+.sac-successPrimaryBtn {
+  height: 32px; padding: 0 14px; border: none; border-radius: 16px;
+  background: #10b981; color: white;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.sac-successPrimaryBtn:hover { background: #059669; }
+.sac-successSecondaryBtn {
+  height: 28px; padding: 0 14px; border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.15); background: transparent;
+  color: rgba(255,255,255,0.55); font-size: 10px; cursor: pointer;
+}
+.sac-successSecondaryBtn:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
 .sac-actionBtn {
   flex: 0 0 50%;
   height: 32px; padding: 0 14px;
