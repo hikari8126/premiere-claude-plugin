@@ -2578,12 +2578,10 @@ function sacCountBinMatches(items, targetName) {
       var src  = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
       if (!src) return;
 
-      var isSkipped = !!src.skipped;
-      src.skipped   = !isSkipped;
+      src.skipped = !src.skipped;
 
-      var statusEl  = srcEl.querySelector('.sac-srcStatus');
-      var nameSpan  = srcEl.querySelector('.sac-srcName');
-
+      var statusEl = srcEl.querySelector('.sac-srcStatus');
+      var nameSpan = srcEl.querySelector('.sac-srcName');
       if (src.skipped) {
         btn.textContent = 'Undo';
         btn.classList.add('is-active');
@@ -2595,8 +2593,33 @@ function sacCountBinMatches(items, targetName) {
         if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; }
         if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
       }
+
+      // Re-check if all missing sources are now skipped → open Run gate
+      sacCheckSkipGate();
     });
     srcEl.appendChild(btn);
+  }
+
+  // After each skip toggle: if every missing source is now skipped, pass the
+  // validate gate so the Run button appears (skipped sources → 1s gap in assembly).
+  function sacCheckSkipGate() {
+    if (!parsedBlocks.length) return;
+    var allResolved = parsedBlocks.every(function(block) {
+      return (block.sources || []).every(function(src) {
+        return !!(sacSourceMap[src.name]) || !!src.skipped;
+      });
+    });
+    if (allResolved) {
+      sacValidatePassed = true;
+      var st = $('sacStatus');
+      if (st) {
+        st.textContent = '✅ Tất cả sources đã resolved (validate ✓ hoặc skip ⏭).';
+        st.style.display = 'block';
+      }
+    } else {
+      sacValidatePassed = false;
+    }
+    sacUpdateRunVisibility();
   }
 
   // ── Folder hint UI ─────────────────────────────────────────────────────────
