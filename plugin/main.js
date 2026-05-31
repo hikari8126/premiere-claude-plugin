@@ -2439,11 +2439,14 @@ function sacCountBinMatches(items, targetName) {
         body.appendChild(div);
       }
 
-      block.sources.forEach(function(s) {
+      block.sources.forEach(function(s, si) {
         var el = document.createElement('div');
         el.className = 'sac-blockSrc';
-        el.dataset.srcName = s.name; // for async status update
+        el.dataset.srcName  = s.name; // for async status update
+        el.dataset.blockIdx = String(i);
+        el.dataset.srcIdx   = String(si);
         var nameSpan = document.createElement('span');
+        nameSpan.className = 'sac-srcName';
         nameSpan.textContent = '🎬 ' + s.name;
         el.appendChild(nameSpan);
         if (s.time) {
@@ -2534,6 +2537,8 @@ function sacCountBinMatches(items, targetName) {
         } else {
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
+          // Add Skip button for missing sources
+          sacAddSkipButton(el);
         }
       });
     }
@@ -2556,6 +2561,42 @@ function sacCountBinMatches(items, targetName) {
 
     window.sacSourceMap = sacSourceMap; // expose for Phase 5 assembly
     return { missing: missingNames, ambiguous: ambiguousNames, premiereAvailable: true };
+  }
+
+  // ── Skip source button ──────────────────────────────────────────────────────
+  // Appears on source rows with ✗ validation. Marks the source as skipped so
+  // assembly replaces it with a 1s gap instead of a real clip.
+  function sacAddSkipButton(srcEl) {
+    if (srcEl.querySelector('.sac-skipBtn')) return; // already added
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sac-skipBtn';
+    btn.textContent = 'Skip';
+    btn.addEventListener('click', function() {
+      var bIdx = parseInt(srcEl.dataset.blockIdx, 10);
+      var sIdx = parseInt(srcEl.dataset.srcIdx,   10);
+      var src  = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+      if (!src) return;
+
+      var isSkipped = !!src.skipped;
+      src.skipped   = !isSkipped;
+
+      var statusEl  = srcEl.querySelector('.sac-srcStatus');
+      var nameSpan  = srcEl.querySelector('.sac-srcName');
+
+      if (src.skipped) {
+        btn.textContent = 'Undo';
+        btn.classList.add('is-active');
+        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; }
+        if (nameSpan)  { nameSpan.style.opacity = '0.4'; nameSpan.style.textDecoration = 'line-through'; }
+      } else {
+        btn.textContent = 'Skip';
+        btn.classList.remove('is-active');
+        if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; }
+        if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+      }
+    });
+    srcEl.appendChild(btn);
   }
 
   // ── Folder hint UI ─────────────────────────────────────────────────────────
@@ -3066,39 +3107,73 @@ function sacCountBinMatches(items, targetName) {
   }
 
   // Return seconds position of the last clip on V1 (append cursor).
-  async function sacGetSequenceEnd(seq) {
-    var end = 0;
-    var track = null;
-    // Path A: trackGroup (guarded — ppro.Backend may be undefined)
+  // Scan one track for the furthest clip end (seconds).
+  async function sacScanTrackEnd(track, endRef) {
+    if (!track) return;
     try {
-      if (ppro.Backend && seq.trackGroup) {
-        var grp = seq.trackGroup(ppro.Backend.MEDIATYPE_VIDEO);
-        if (grp && grp.numTracks > 0) track = grp.getTrack(0);
-      }
-    } catch(eA) {}
-    // Path B: getVideoTrack (same pattern as getAudioTrack used in VoiceClone)
-    if (!track) {
-      try {
-        var cnt = seq.getVideoTrackCount && seq.getVideoTrackCount();
-        if (cnt && typeof cnt.then === 'function') cnt = await cnt;
-        if (cnt > 0) {
-          track = seq.getVideoTrack && seq.getVideoTrack(0);
-          if (track && typeof track.then === 'function') track = await track;
-        }
-      } catch(eB) {}
-    }
-    if (track) {
       var items = await getClipItems(track);
       for (var i = 0; i < items.length; i++) {
         try {
           var e = items[i].getEnd && items[i].getEnd();
           if (e && typeof e.then === 'function') e = await e;
           var eSec = getTimeSec(e);
-          if (eSec > end) end = eSec;
-        } catch(err) {}
+          if (eSec > endRef.v) endRef.v = eSec;
+        } catch(er) {}
+      }
+    } catch(er) {}
+  }
+
+  // Return the end position (seconds) of the last clip across ALL tracks.
+  // Checks video+audio via multiple API paths so the cursor never resets to 0.
+  async function sacGetSequenceEnd(seq) {
+    var endRef = { v: 0 }; // use object so sacScanTrackEnd can mutate it
+
+    // Path A: trackGroup API (if ppro.Backend exists)
+    try {
+      if (ppro.Backend && seq.trackGroup) {
+        var TYPES = [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO];
+        for (var ti = 0; ti < TYPES.length; ti++) {
+          var grp = seq.trackGroup(TYPES[ti]);
+          if (!grp) continue;
+          for (var gi = 0; gi < grp.numTracks; gi++) {
+            await sacScanTrackEnd(grp.getTrack(gi), endRef);
+          }
+        }
+      }
+    } catch(eA) {}
+
+    // Path B: getVideoTrack / getAudioTrack (async per-track API)
+    if (endRef.v === 0) {
+      var trackGetters = [
+        { cntFn: 'getVideoTrackCount', getFn: 'getVideoTrack' },
+        { cntFn: 'getAudioTrackCount', getFn: 'getAudioTrack' },
+      ];
+      for (var p = 0; p < trackGetters.length; p++) {
+        try {
+          var cnt = seq[trackGetters[p].cntFn] && seq[trackGetters[p].cntFn]();
+          if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+          cnt = Number(cnt) || 0;
+          for (var idx = 0; idx < cnt; idx++) {
+            var tr = seq[trackGetters[p].getFn] && seq[trackGetters[p].getFn](idx);
+            if (tr && typeof tr.then === 'function') tr = await tr;
+            await sacScanTrackEnd(tr, endRef);
+          }
+        } catch(eB) {}
       }
     }
-    return end;
+
+    // Path C: sequence duration as last resort
+    if (endRef.v === 0) {
+      try {
+        var dur = seq.getDuration && seq.getDuration();
+        if (dur && typeof dur.then === 'function') dur = await dur;
+        var d = getTimeSec(dur);
+        if (d > 0) endRef.v = d;
+      } catch(eC) {}
+    }
+
+    console.log('[SAC] sacGetSequenceEnd =', endRef.v.toFixed(2) + 's');
+    return endRef.v;
   }
 
   // Find or import a file: search bin first, only import if not already in project.
@@ -3220,6 +3295,13 @@ function sacCountBinMatches(items, targetName) {
           var src     = block.sources[j];
           var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
           if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
+
+          if (src.skipped) {
+            console.log('[SAC] V1 "' + src.name + '" SKIPPED — 1s gap @' + cursor.toFixed(2) + 's');
+            srcTotal += 1.0;
+            cursor   += 1.0;
+            continue;
+          }
 
           var ts      = parseSourceTime(src.time);
           var clipDur = ts.outSec - ts.inSec;
