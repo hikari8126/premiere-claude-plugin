@@ -1641,8 +1641,59 @@ Return ONLY a JSON array, no markdown, no explanation:
   }
 });
 
+// ── POST /superautocut/normalize-script ────────────────────────────────────
+// Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
+// Input:  { lines: string[] }   — mảng string, 1 phần tử / block
+// Output: { ok, lines: string[] }
+app.post('/superautocut/normalize-script', async (req, res) => {
+  const { lines } = req.body;
+  if (!Array.isArray(lines) || lines.length === 0)
+    return res.status(400).json({ ok: false, error: 'No lines provided' });
+
+  const numberedInput = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+  const prompt =
+`Bạn là công cụ hiệu đính văn bản. Nhiệm vụ:
+- Sửa dấu câu đúng chỗ (dấu chấm, phẩy, hỏi, chấm than, dấu hai chấm)
+- Sửa lỗi chính tả nếu có
+- TUYỆT ĐỐI KHÔNG thay đổi từ ngữ, nội dung hay ý nghĩa của câu
+- Giữ nguyên số dòng, thứ tự và phong cách viết
+
+Trả về đúng ${lines.length} dòng đã hiệu đính, không có số thứ tự, không có giải thích.
+
+Script:
+${numberedInput}`;
+
+  try {
+    let output = '';
+    if (API_KEY) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: API_KEY });
+      const resp = await client.messages.create({
+        model: DEFAULT_MODEL,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      output = resp.content[0].text.trim();
+    } else {
+      const { execSync } = require('child_process');
+      output = execSync(`echo ${JSON.stringify(prompt)} | claude --print`, {
+        encoding: 'utf8', timeout: 30000,
+      }).trim();
+    }
+    const normalizedLines = output.split('\n').map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+    // Fallback: if count mismatch, return original
+    if (normalizedLines.length !== lines.length) {
+      console.warn('[normalize] Line count mismatch, returning originals');
+      return res.json({ ok: true, lines, warning: 'count_mismatch' });
+    }
+    res.json({ ok: true, lines: normalizedLines });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.4';
+const BRIDGE_VERSION = '1.5.0-beta.5';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

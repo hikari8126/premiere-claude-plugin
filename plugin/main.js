@@ -2860,17 +2860,37 @@ function sacCountBinMatches(items, targetName) {
     }).catch(function(){});
   }
 
-  // ── Gen voice = jump to Voice Gen tab with the script pre-filled ──────────
-  // Reuses the Voice Gen tab fully (its own searchable dropdown + generate).
-  // After generating there, the user clicks "→ Autocut" to push the audio back.
-  function sacGenVoice() {
+  // ── Gen voice = normalize via Claude → push to Voice Gen tab ───────────────
+  async function sacGenVoice() {
     var blocks = parseBlocks();
     if (blocks.length === 0) { sacSetVoiceInfo('⚠ Chưa có script để gen.'); return; }
-    // Join all block texts in cutsheet order — one block per line.
-    var text = blocks.map(function(b) { return b.texts.join(' '); }).join('\n');
+
+    // One line per block (join multi-text blocks with space)
+    var lines = blocks.map(function(b) { return b.texts.join(' '); });
+
+    sacSetVoiceInfo('⏳ Chuẩn hóa script qua Claude...');
+    var normalizedLines = lines; // fallback = originals
+    try {
+      var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: lines }),
+      });
+      var d = await resp.json();
+      if (d.ok && Array.isArray(d.lines) && d.lines.length === lines.length) {
+        normalizedLines = d.lines;
+        console.log('[SAC] Script normalized:', normalizedLines);
+      } else {
+        console.warn('[SAC] Normalize skipped:', d.error || d.warning);
+      }
+    } catch(e) {
+      console.warn('[SAC] Normalize bridge error:', e.message, '— dùng script gốc');
+    }
+
+    var text = normalizedLines.join('\n');
     if (typeof window.VoiceGenPushScript === 'function') {
-      window.VoiceGenPushScript(text, null, false); // switch tab + fill script, no auto-gen
-      sacSetVoiceInfo('→ Đã đẩy script sang Voice Gen. Chọn giọng + Generate, rồi bấm "→ Autocut".');
+      window.VoiceGenPushScript(text, null, false);
+      sacSetVoiceInfo('→ Script đã chuẩn hóa + đẩy sang Voice Gen. Chọn giọng + Generate, rồi bấm "→ Autocut".');
     } else {
       sacSetVoiceInfo('❌ Voice Gen chưa sẵn sàng.');
     }
@@ -4744,20 +4764,24 @@ function sacCountBinMatches(items, targetName) {
   // Move to Autocut — save to output folder (if set) then feed to Autocut pipeline
   async function moveToAutocut(v) {
     if (!v || !v.audioPath) return;
-    var finalPath = v.audioPath;
 
-    // Save to output folder first (same flow as Import button)
-    if (customOutputFolder) {
-      var alreadyInDest = v.audioPath.startsWith(customOutputFolder);
-      if (!alreadyInDest) {
-        try {
-          var moveResp = await postJsonVG('/tts/move', {
-            sourcePath: v.audioPath,
-            targetDir:  customOutputFolder,
-          });
-          if (moveResp.ok) finalPath = moveResp.targetPath;
-        } catch(e) { console.warn('[VG→AC] Move failed:', e.message); }
-      }
+    // Mirror importVariation: if no output folder set, prompt now
+    if (!customOutputFolder) {
+      await pickOutputFolder();
+      if (!customOutputFolder) return; // user cancelled
+    }
+
+    var finalPath = v.audioPath;
+    var alreadyInDest = v.audioPath.startsWith(customOutputFolder);
+    if (!alreadyInDest) {
+      try {
+        var moveResp = await postJsonVG('/tts/move', {
+          sourcePath: v.audioPath,
+          targetDir:  customOutputFolder,
+        });
+        if (moveResp.ok) finalPath = moveResp.targetPath;
+        else console.warn('[VG→AC] Move failed:', moveResp.error);
+      } catch(e) { console.warn('[VG→AC] Move error:', e.message); }
     }
 
     if (typeof window.AutocutPushVoice === 'function') window.AutocutPushVoice(finalPath);
