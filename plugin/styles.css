@@ -2707,38 +2707,84 @@ body {
 .sac-voiceMissing { color: #ef4444; }
 
 /* ── Action bar — single button, centered, half width ── */
-.sac-actionBar {
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 8px 0 8px;
+/* ── Voice panel divider + "Without voice" button ── */
+.sac-vDivider {
+  width: 1px; height: 14px; flex: 0 0 auto;
+  background: rgba(255,255,255,0.15);
+  align-self: center; margin: 0 2px;
 }
-.sac-seqBar {
-  flex: 0 0 auto;
-  display: flex; justify-content: center;
-  padding: 4px 0 0;
+.sac-cutNoVoiceBtn {
+  flex: 0 0 auto; height: 26px; padding: 0 10px;
+  background: transparent; border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.4); border-radius: 13px;
+  font-size: 9.5px; cursor: pointer; white-space: nowrap;
 }
-.sac-seqToggle {
-  display: flex; border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.1);
-  overflow: hidden;
-}
-.sac-seqBtn {
-  flex: 1; height: 22px; padding: 0 10px;
-  background: transparent; border: none;
-  color: rgba(255,255,255,0.35);
-  font-size: 9px; cursor: pointer;
-  white-space: nowrap;
-}
-.sac-seqBtn + .sac-seqBtn { border-left: 1px solid rgba(255,255,255,0.1); }
-.sac-seqBtn.is-active { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
-.sac-seqBtn:hover:not(.is-active) { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.55); }
+.sac-cutNoVoiceBtn:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.7); }
 
-.sac-noVoiceLabel {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 9.5px; color: rgba(255,255,255,0.4);
-  cursor: pointer;
+/* ── Cut panel ── */
+.sac-cutPanel {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 0 4px;
 }
-.sac-noVoiceLabel input { cursor: pointer; width: 11px; height: 11px; }
+.sac-cutStatusRow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 4px;
+}
+.sac-cutLabel {
+  flex: 1; font-size: 10px; color: #10b981;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sac-cutBackBtn {
+  flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%;
+  background: transparent; border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.35); font-size: 9px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.sac-cutBackBtn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
+.sac-cutRow {
+  display: flex; align-items: center; gap: 0;
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+  overflow: hidden; height: 32px;
+}
+.sac-cutBtn {
+  flex: 1; height: 100%; padding: 0 12px; border: none;
+  background: rgba(16,185,129,0.12); color: #10b981;
+  font-size: 10.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.sac-cutBtn:hover { background: rgba(16,185,129,0.22); }
+.sac-cutDivider {
+  width: 1px; height: 18px; flex: 0 0 auto;
+  background: rgba(255,255,255,0.12); align-self: center;
+}
+.sac-cutSettingsBtn {
+  flex: 0 0 32px; height: 100%; border: none;
+  border-left: 1px solid rgba(255,255,255,0.12);
+  background: transparent; color: rgba(255,255,255,0.3);
+  font-size: 11px; cursor: pointer;
+}
+.sac-cutSettingsBtn:hover     { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7); }
+.sac-cutSettingsBtn.is-active { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85); }
+
+/* ── New seq settings form ── */
+.sac-newSeqForm {
+  flex-direction: column; gap: 4px;
+  padding: 8px 4px 4px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.sac-nsfRow {
+  display: flex; align-items: center; gap: 8px;
+}
+.sac-nsfLabel {
+  flex: 0 0 40px; font-size: 9px; color: rgba(255,255,255,0.35);
+  text-align: right;
+}
+.sac-nsfInput, .sac-nsfSelect {
+  flex: 1; height: 22px; padding: 0 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75); font-size: 9.5px;
+}
+.sac-nsfInput:focus, .sac-nsfSelect:focus { outline: none; border-color: rgba(255,255,255,0.25); }
 
 /* ── Success panel ── */
 .sac-successPanel {
