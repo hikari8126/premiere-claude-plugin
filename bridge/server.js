@@ -1721,7 +1721,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.7';
+const BRIDGE_VERSION = '1.5.0';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
