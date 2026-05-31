@@ -2162,15 +2162,41 @@ async function ppMoveToVOBin(item, proj) {
   try {
     var bin = await ppGetOrCreateVOBin(proj);
     if (!bin) return;
-    // API: destinationFolder.createMoveItemAction(item, newParent)
-    // newParent = destination (the bin itself is the new parent)
-    var moveAction = bin.createMoveItemAction(item, bin);
-    var rs = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(moveAction); }, 'Move to VO bin');
-    });
-    if (rs && typeof rs.then === 'function') await rs;
-    console.log('[ppVO] Moved to voice over bin');
-  } catch(e) { console.warn('[ppVO] moveBin failed:', e.message); }
+
+    var moved = false;
+
+    // A: item.moveBin(bin) — ProjectItem method (most common UXP pattern)
+    if (!moved && typeof item.moveBin === 'function') {
+      try {
+        var r = item.moveBin(bin);
+        if (r && typeof r.then === 'function') await r;
+        moved = true; console.log('[ppVO] Moved via item.moveBin');
+      } catch(eA) { console.warn('[ppVO] item.moveBin failed:', eA.message); }
+    }
+
+    // B: bin.createMoveItemAction in transaction
+    if (!moved && typeof bin.createMoveItemAction === 'function') {
+      try {
+        var action = bin.createMoveItemAction(item, bin);
+        var rs = proj.lockedAccess(function() {
+          proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to VO bin');
+        });
+        if (rs && typeof rs.then === 'function') await rs;
+        moved = true; console.log('[ppVO] Moved via createMoveItemAction');
+      } catch(eB) { console.warn('[ppVO] createMoveItemAction failed:', eB.message); }
+    }
+
+    // C: ppro.ProjectItem.moveBin static (some versions)
+    if (!moved && ppro.ProjectItem && typeof ppro.ProjectItem.moveBin === 'function') {
+      try {
+        var rc = ppro.ProjectItem.moveBin(item, bin);
+        if (rc && typeof rc.then === 'function') await rc;
+        moved = true; console.log('[ppVO] Moved via ppro.ProjectItem.moveBin');
+      } catch(eC) {}
+    }
+
+    if (!moved) console.warn('[ppVO] No working moveBin API found');
+  } catch(e) { console.warn('[ppVO] ppMoveToVOBin error:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
