@@ -2512,7 +2512,7 @@ function sacCountBinMatches(items, targetName) {
     // Re-rendering invalidates both gates — must re-validate + re-align.
     sacValidatePassed = false;
     sacVoiceReady = false;
-    sacShowRun(false);
+    sacHideCutPanel();
   }
 
   // ── Source validation (Phase 3) ─────────────────────────────────────────
