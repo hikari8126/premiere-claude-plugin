@@ -2636,6 +2636,22 @@ body {
 }
 .sac-srcOk      { color: #10b981; }
 .sac-srcMissing { color: #ef4444; font-weight: 600; }
+.sac-srcSkipped { color: #6b7280; }
+
+.sac-skipBtn {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 1px 7px;
+  background: transparent;
+  border: 1px solid #7c3535;
+  color: #f87171;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.6;
+  opacity: 0.75;
+}
+.sac-skipBtn:hover { background: rgba(239,68,68,0.12); opacity: 1; }
+.sac-skipBtn.is-active { border-color: #555; color: #9ca3af; }
 
 /* ── Voice panel (Phase 4 / Approach B) ── */
 .sac-voicePanel {
