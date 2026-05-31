@@ -1652,15 +1652,30 @@ app.post('/superautocut/normalize-script', async (req, res) => {
 
   const numberedInput = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
   const prompt =
-`Bạn là công cụ hiệu đính văn bản. Nhiệm vụ:
-- Sửa dấu câu đúng chỗ (dấu chấm, phẩy, hỏi, chấm than, dấu hai chấm)
-- Sửa lỗi chính tả nếu có
-- TUYỆT ĐỐI KHÔNG thay đổi từ ngữ, nội dung hay ý nghĩa của câu
-- Giữ nguyên số dòng, thứ tự và phong cách viết
+`Bạn là chuyên gia hiệu đính script cho TTS (Text-to-Speech) ElevenLabs.
 
-Trả về đúng ${lines.length} dòng đã hiệu đính, không có số thứ tự, không có giải thích.
+Phân tích toàn bộ script để xác định tone/mood tổng thể, sau đó với MỖI DÒNG:
+1. Thêm một tag cảm xúc trong [] ở ĐẦU DÒNG để hướng dẫn giọng đọc ElevenLabs
+2. Thêm hoặc thay dấu ! ? phù hợp với tone và cảm xúc của câu (nếu dấu cũ chưa đúng thì thay)
+3. Sửa lỗi chính tả nếu có
+4. TUYỆT ĐỐI không thay đổi từ ngữ, nội dung hay ý nghĩa
 
-Script:
+Tags gợi ý (chọn tag phù hợp nhất với từng câu, không bắt buộc dùng list này):
+[excited] [energetic] [warm] [friendly] [confident] [dramatic] [urgent]
+[whispering] [conversational] [serious] [calm] [laughing] [curious]
+
+Ví dụ:
+  Input:  "Grab it now"          → Output: "[excited] Grab it now!"
+  Input:  "Chỉ còn 3 ngày"       → Output: "[urgent] Chỉ còn 3 ngày!"
+  Input:  "Bạn có biết không"    → Output: "[curious] Bạn có biết không?"
+  Input:  "Sản phẩm tốt nhất."   → Output: "[confident] Sản phẩm tốt nhất!"
+
+Quy tắc output:
+- Trả về đúng ${lines.length} dòng, giữ nguyên thứ tự
+- Mỗi dòng BẮT BUỘC có tag [] ở đầu
+- Không thêm số thứ tự, gạch đầu dòng, hay bất kỳ text nào ngoài script
+
+Script (${lines.length} dòng):
 ${numberedInput}`;
 
   try {
@@ -1693,7 +1708,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0-beta.5';
+const BRIDGE_VERSION = '1.5.0-beta.6';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
