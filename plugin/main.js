@@ -3246,8 +3246,10 @@ function sacCountBinMatches(items, targetName) {
           if (vDur > srcTotal) cursor = blockStart + vDur;
         }
 
-        cursor += 0.3; // 0.3s gap between blocks
+        cursor += 1.0; // 1s gap on timeline between blocks
         placed++;
+        // 300ms code delay — let Premiere finish processing transactions before next block
+        await new Promise(function(r) { setTimeout(r, 300); });
       }
 
       status.textContent = '✅ Xong! ' + placed + '/' + blocks.length +
