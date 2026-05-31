@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.0-beta.22';
+var PLUGIN_VERSION = 'v4.2.0';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -5598,7 +5598,7 @@ async function ppMoveToVOBin(item, proj) {
   });
 
   // Init — each step in its own try so one failure doesn't stop the rest
-  console.log('[VoiceGen] init v4.1.34, ELEVENLABS_KEY present:', !!ELEVENLABS_KEY,
+  console.log('[VoiceGen] init v4.2.0, ELEVENLABS_KEY present:', !!ELEVENLABS_KEY,
               '| length:', (ELEVENLABS_KEY || '').length);
   try { updateCharCount(); }        catch(e) { console.warn('[VG] updateCharCount:', e.message); }
   try { players.var1 = createPlayer('var1'); } catch(e) { console.error('[VG] createPlayer var1:', e.message); }
