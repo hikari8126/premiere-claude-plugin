@@ -266,6 +266,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
                 // Check for updates silently — only shows alert if newer version exists
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates(silent: true) }
+                // Prompt Whisper install if not found (non-blocking, after bridge is stable)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 5) { self.checkWhisperOnce() }
             }
         } catch {
             setStatus("❌ Lỗi khởi động: \(error.localizedDescription)", running: false)
@@ -432,6 +434,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: ─── Whisper ─────────────────────────────────────────────────────
+    func findWhisper() -> String {
+        // Check PATH first
+        let which = sh("which whisper 2>/dev/null")
+        let p = which.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !p.isEmpty && FileManager.default.fileExists(atPath: p) { return p }
+        // Common Python framework paths (macOS)
+        for ver in ["3.14","3.13","3.12","3.11","3.10","3.9"] {
+            let candidate = "/Library/Frameworks/Python.framework/Versions/\(ver)/bin/whisper"
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        // Homebrew / local
+        for candidate in ["/opt/homebrew/bin/whisper", "/usr/local/bin/whisper",
+                          "\(NSHomeDirectory())/.local/bin/whisper"] {
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        return ""
+    }
+
+    // Called once after bridge starts — shows a one-time prompt if Whisper is missing.
+    func checkWhisperOnce() {
+        guard findWhisper().isEmpty else { return } // already installed
+        let key = "whisper_prompt_shown"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        DispatchQueue.main.async {
+            let a = NSAlert()
+            a.messageText    = "Cài Whisper cho Autocut?"
+            a.informativeText =
+                "Whisper là AI nhận diện giọng nói — cần thiết để align voice với script trong Autocut.\n\n" +
+                "Cài ngay (~500MB, vài phút) hoặc dùng menu 🐍 Cài Whisper sau."
+            a.alertStyle = .informational
+            a.addButton(withTitle: "Cài ngay")
+            a.addButton(withTitle: "Để sau")
+            if a.runModal() == .alertFirstButtonReturn {
+                self.installWhisper()
+            }
+        }
+    }
+
     @objc func installWhisper() {
         let a = NSAlert()
         a.messageText     = "Cài Whisper cho Autocut"

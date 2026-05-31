@@ -89,7 +89,33 @@ else
   echo "  ✅ node_modules — OK"
 fi
 
-# ── 4. Claude authentication ───────────────────────────────────────────────
+# ── 4. Whisper (Speech-to-Text cho Autocut) ──────────────────────────────
+echo ""
+echo "▸ Kiểm tra Whisper (STT cho Autocut)..."
+_whisper() {
+  command -v whisper &>/dev/null || \
+  find /Library/Frameworks/Python.framework/Versions -name "whisper" -type f 2>/dev/null | head -1 | grep -q .
+}
+if _whisper; then
+  echo "  ✅ Whisper — OK"
+else
+  echo "  ⚠️  Whisper chưa được cài (cần cho Autocut voice align)."
+  read -p "  Cài Whisper ngay? Mất ~500MB + vài phút (y/N): " _INST_W
+  if [[ "$_INST_W" =~ ^[Yy]$ ]]; then
+    if command -v pip3 &>/dev/null; then
+      echo "  📦 Đang cài Whisper..."
+      pip3 install -U openai-whisper 2>&1 | grep -E "Successfully|already|error" | head -5 \
+        || pip3 install -U openai-whisper --break-system-packages 2>&1 | grep -E "Successfully|already|error" | head -5
+      _whisper && echo "  ✅ Whisper đã cài xong!" || echo "  ⚠️  Cài xong nhưng chưa tìm thấy — dùng menu 🐍 Bridge app kiểm tra lại."
+    else
+      echo "  ⚠️  pip3 chưa có. Chạy: brew install python3 rồi thử lại."
+    fi
+  else
+    echo "  ℹ️  Bỏ qua. Dùng menu 🐍 trong Bridge app để cài sau."
+  fi
+fi
+
+# ── 5. Claude authentication ───────────────────────────────────────────────
 echo ""
 echo "▸ Kiểm tra đăng nhập Claude..."
 AUTH_TEST=$(echo "hi" | env -i \
@@ -110,7 +136,7 @@ else
   echo "  ✅ Đã đăng nhập — OK"
 fi
 
-# ── 5. Start bridge ────────────────────────────────────────────────────────
+# ── 6. Start bridge ────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════"
 echo "  🚀 Bridge đang chạy tại port 3030"
