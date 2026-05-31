@@ -633,10 +633,13 @@
           <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
         </div>
         <div id="sacBlockList" class="sac-blockList"></div>
-        <div class="sac-voicePanel">
+        <!-- Voice panel — hidden once voice ready or "without voice" clicked -->
+        <div class="sac-voicePanel" id="sacVoicePanel">
           <div class="sac-voiceRow">
             <button id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn">⚡ Gen voice (Voice Gen) →</button>
             <button id="sacVoiceBtn" class="sac-voiceBtn" title="Chọn file voice có sẵn">📂</button>
+            <span class="sac-vDivider"></span>
+            <button id="sacCutNoVoiceBtn" class="sac-cutNoVoiceBtn">✂ Without voice</button>
           </div>
           <div class="sac-voicePlayer" id="sacVoicePlayer" style="display:none">
             <button id="sacVoicePlay" class="sac-voicePlayBtn">▶</button>
@@ -645,19 +648,47 @@
           </div>
           <div id="sacVoiceInfo" class="sac-voiceInfo">Chưa có voice</div>
         </div>
-        <!-- Sequence target toggle -->
-        <div class="sac-seqBar">
-          <div class="sac-seqToggle" id="sacSeqToggle">
-            <button class="sac-seqBtn is-active" data-mode="current">📋 Current seq</button>
-            <button class="sac-seqBtn" data-mode="new">✨ New seq</button>
+
+        <!-- Cut panel — replaces voice panel when ready -->
+        <div id="sacCutPanel" class="sac-cutPanel" style="display:none">
+          <div class="sac-cutStatusRow">
+            <span id="sacCutLabel" class="sac-cutLabel"></span>
+            <button id="sacCutBack" class="sac-cutBackBtn">✕</button>
           </div>
-        </div>
-        <div class="sac-actionBar">
-          <label id="sacNoVoiceLabel" class="sac-noVoiceLabel" style="display:none">
-            <input type="checkbox" id="sacNoVoice">
-            <span>Without voice</span>
-          </label>
-          <button id="sacActionBtn" class="sac-actionBtn is-run" style="display:none">▶ Run AutoCut</button>
+          <div class="sac-cutRow">
+            <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
+            <span class="sac-cutDivider"></span>
+            <button id="sacCutNew" class="sac-cutBtn">▶ New seq</button>
+            <button id="sacCutNewSettings" class="sac-cutSettingsBtn" title="New seq settings">⚙</button>
+          </div>
+          <!-- Inline settings for New seq (toggle on ⚙ click) -->
+          <div id="sacNewSeqForm" class="sac-newSeqForm" style="display:none">
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">Name</span>
+              <input id="sacNewSeqName" class="sac-nsfInput" type="text" placeholder="AutoCut">
+            </div>
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">Ratio</span>
+              <select id="sacNewSeqRatio" class="sac-nsfSelect">
+                <option value="match">Match source clips</option>
+                <option value="1920x1080">1920×1080 — 16:9</option>
+                <option value="3840x2160">3840×2160 — 4K</option>
+                <option value="1080x1920">1080×1920 — 9:16</option>
+                <option value="1080x1080">1080×1080 — 1:1</option>
+              </select>
+            </div>
+            <div class="sac-nsfRow">
+              <span class="sac-nsfLabel">FPS</span>
+              <select id="sacNewSeqFps" class="sac-nsfSelect">
+                <option value="23.976">23.976</option>
+                <option value="24">24</option>
+                <option value="25">25</option>
+                <option value="29.97" selected>29.97</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -2131,20 +2131,37 @@ function sacCountBinMatches(items, targetName) {
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
   var sacVoicePath = null; // native path of the chosen/generated voice file (Phase 4)
 
-  // Run AutoCut shows only when BOTH gates pass: structure+sources validated
-  // AND voice aligned. A hidden button can't be hovered → no UXP styling issues.
   var sacValidatePassed = false;
   var sacVoiceReady     = false;
-  function sacShowRun(show) {
-    var btn = $('sacActionBtn');
-    if (btn) btn.style.display = show ? '' : 'none';
+  var sacNoVoiceMode    = false; // set by "Without voice" button
+
+  // Show the cut panel (hides voice panel), update label
+  function sacShowCutPanel() {
+    $('sacVoicePanel').style.display = 'none';
+    var lbl = $('sacCutLabel');
+    if (lbl) {
+      if (sacNoVoiceMode) {
+        lbl.textContent = '✂ Without voice';
+      } else {
+        var info = $('sacVoiceInfo');
+        lbl.textContent = info ? info.textContent : '✅ Voice ready';
+      }
+    }
+    $('sacCutPanel').style.display = 'flex';
   }
+
+  function sacHideCutPanel() {
+    $('sacCutPanel').style.display = 'none';
+    $('sacNewSeqForm').style.display = 'none';
+    $('sacVoicePanel').style.display = 'flex';
+  }
+
   function sacUpdateRunVisibility() {
-    var noVoice = $('sacNoVoice') && $('sacNoVoice').checked;
-    sacShowRun(sacValidatePassed && (sacVoiceReady || noVoice));
-    // Show "Without voice" label once validate passed
-    var lbl = $('sacNoVoiceLabel');
-    if (lbl) lbl.style.display = sacValidatePassed ? '' : 'none';
+    if (sacValidatePassed && (sacVoiceReady || sacNoVoiceMode)) {
+      sacShowCutPanel();
+    } else {
+      sacHideCutPanel();
+    }
   }
 
   // ── Method switching ────────────────────────────────────────────────────
@@ -3114,32 +3131,67 @@ function sacCountBinMatches(items, targetName) {
     parsedBlocks = [];
   });
 
-  // Run button — only visible after Validate passes (see sacValidateAll).
-  $('sacActionBtn').addEventListener('click', sacRunAutoCut);
+  // ── Cut panel buttons ───────────────────────────────────────────────────
 
-  // Without voice checkbox — re-evaluate Run visibility when toggled
-  var sacNoVoiceCb = $('sacNoVoice');
-  if (sacNoVoiceCb) sacNoVoiceCb.addEventListener('change', sacUpdateRunVisibility);
-
-  // Sequence target toggle — Current seq / New seq
-  document.querySelectorAll('.sac-seqBtn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.sac-seqBtn').forEach(function(b) {
-        b.classList.remove('is-active');
-      });
-      btn.classList.add('is-active');
-    });
+  // "Without voice" button (in voice panel) → enter no-voice cut mode
+  var sacCutNoVoiceBtn = $('sacCutNoVoiceBtn');
+  if (sacCutNoVoiceBtn) sacCutNoVoiceBtn.addEventListener('click', function() {
+    if (!sacValidatePassed) return;
+    sacNoVoiceMode = true;
+    sacUpdateRunVisibility();
   });
 
-  // Success panel buttons
-  var sacBackBtn = $('sacBackToScript');
-  if (sacBackBtn) sacBackBtn.addEventListener('click', function() {
+  // [✕] back — return to voice panel
+  var sacCutBackBtn = $('sacCutBack');
+  if (sacCutBackBtn) sacCutBackBtn.addEventListener('click', function() {
+    sacNoVoiceMode = false;
+    sacHideCutPanel();
+    sacUpdateRunVisibility();
+  });
+
+  // [▶ This seq] — run assembly into current active sequence
+  var sacCutThisBtn = $('sacCutThis');
+  if (sacCutThisBtn) sacCutThisBtn.addEventListener('click', function() {
+    sacRunAutoCut('current');
+  });
+
+  // [▶ New seq] — run assembly into a new sequence (uses form settings)
+  var sacCutNewBtn = $('sacCutNew');
+  if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', function() {
+    sacRunAutoCut('new');
+  });
+
+  // [⚙] — toggle new seq settings form
+  var sacCutNewSettingsBtn = $('sacCutNewSettings');
+  if (sacCutNewSettingsBtn) sacCutNewSettingsBtn.addEventListener('click', function() {
+    var form = $('sacNewSeqForm');
+    if (!form) return;
+    var open = form.style.display !== 'none';
+    form.style.display = open ? 'none' : 'flex';
+    sacCutNewSettingsBtn.classList.toggle('is-active', !open);
+    // Pre-fill name with timestamp default on first open
+    if (!open) {
+      var inp = $('sacNewSeqName');
+      if (inp && !inp.value) inp.value = 'AutoCut';
+    }
+  });
+
+  // Keyboard claim/release for new seq name input
+  var sacNewSeqNameInp = $('sacNewSeqName');
+  if (sacNewSeqNameInp) {
+    sacNewSeqNameInp.addEventListener('focus', function() { if (window.claimKeyboard) window.claimKeyboard(); });
+    sacNewSeqNameInp.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
+  }
+
+  // ── Success panel buttons ────────────────────────────────────────────────
+  var sacBackToScriptBtn = $('sacBackToScript');
+  if (sacBackToScriptBtn) sacBackToScriptBtn.addEventListener('click', function() {
     $('sacSuccessPanel').style.display = 'none';
     $('sacPanelManual').style.display = 'flex';
   });
-  var sacNewBtn = $('sacNewAutocut');
-  if (sacNewBtn) sacNewBtn.addEventListener('click', function() {
-    // Full reset — clear everything
+
+  var sacNewAutocutBtn = $('sacNewAutocut');
+  if (sacNewAutocutBtn) sacNewAutocutBtn.addEventListener('click', function() {
     $('sacSuccessPanel').style.display = 'none';
     parsedBlocks = [];
     sacSourceMap = {};
@@ -3147,17 +3199,17 @@ function sacCountBinMatches(items, targetName) {
     window.sacVoicePath = null;
     sacValidatePassed = false;
     sacVoiceReady = false;
-    sacUpdateRunVisibility();
+    sacNoVoiceMode = false;
     $('sacBlockSection').style.display = 'none';
     $('sacVoicePlayer').style.display = 'none';
     $('sacVoiceInfo').textContent = 'Chưa có voice';
     $('sacStatus').style.display = 'none';
-    var noVoiceCb = $('sacNoVoice');
-    if (noVoiceCb) noVoiceCb.checked = false;
+    $('sacNewSeqForm').style.display = 'none';
     $('sacBody').innerHTML = '';
     rowSeq = 0;
     createRow(); createRow(); createRow();
     $('sacPanelManual').style.display = 'flex';
+    sacUpdateRunVisibility();
   });
 
   // Voice controls (Phase 4a / Approach B)
@@ -3339,7 +3391,8 @@ function sacCountBinMatches(items, targetName) {
     }, 'SAC insert clip');
   }
 
-  async function sacRunAutoCut() {
+  async function sacRunAutoCut(seqMode) {
+    seqMode = seqMode || 'current';
     var status = $('sacStatus');
     status.style.display = 'block';
     status.textContent = '⏳ Đang khởi động assembly...';
@@ -3348,31 +3401,64 @@ function sacCountBinMatches(items, targetName) {
       if (!ppro) throw new Error('Premiere Pro API không khả dụng — chạy trong Premiere');
       if (!ppro.SequenceEditor) throw new Error('ppro.SequenceEditor không có — Premiere 25.x+ required');
 
-      var noVoiceMode = $('sacNoVoice') && $('sacNoVoice').checked;
-
       var blocks = parsedBlocks.filter(function(b) {
-        return (b.sources && b.sources.length > 0) || (!noVoiceMode && b.voiceStart != null);
+        return (b.sources && b.sources.length > 0) || (!sacNoVoiceMode && b.voiceStart != null);
       });
       if (blocks.length === 0) throw new Error('Không có blocks — validate + align voice trước');
 
       var project = await getActiveProject();
-      var activeSeqBtn = document.querySelector('.sac-seqBtn.is-active');
-      var seqMode = activeSeqBtn ? activeSeqBtn.dataset.mode : 'current';
       var seq, cursor;
 
       if (seqMode === 'new') {
         status.textContent = '⏳ Tạo sequence mới...';
-        var seqName = 'AutoCut ' + new Date().toLocaleDateString('vi-VN', {
-          day: '2-digit', month: '2-digit', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        });
-        seq = await project.createSequence(seqName);
+        // Read settings from form (use defaults if form not visible)
+        var nameInp  = $('sacNewSeqName');
+        var ratioSel = $('sacNewSeqRatio');
+        var fpsSel   = $('sacNewSeqFps');
+        var seqName  = (nameInp && nameInp.value.trim()) || 'AutoCut';
+        var ratio    = ratioSel ? ratioSel.value : 'match';
+        var fps      = fpsSel  ? parseFloat(fpsSel.value) : 29.97;
+
+        // Create sequence: "match" = createSequenceFromMedia (matches first source clip)
+        // Other ratios = createSequence then attempt setSettings if API available
+        var firstSrcItem = null;
+        for (var bi = 0; bi < blocks.length && !firstSrcItem; bi++) {
+          for (var si = 0; si < (blocks[bi].sources || []).length; si++) {
+            var sn = blocks[bi].sources[si];
+            if (!sn.skipped) { firstSrcItem = sacSourceMap[sn.name] || window.sacSourceMap[sn.name]; break; }
+          }
+        }
+
+        if (ratio === 'match' && firstSrcItem && typeof project.createSequenceFromMedia === 'function') {
+          seq = await project.createSequenceFromMedia(seqName, [firstSrcItem]);
+        }
+        if (!seq) {
+          seq = await project.createSequence(seqName);
+        }
         if (!seq) throw new Error('Không tạo được sequence mới');
-        // Open + make active so seqEditor and sacGetSequenceEnd work on it
-        if (typeof project.openSequence === 'function') await project.openSequence(seq);
+
+        // Apply fps/ratio settings if API available and ratio is not "match"
+        if (ratio !== 'match') {
+          try {
+            var parts = ratio.split('x');
+            var w = parseInt(parts[0]), h = parseInt(parts[1]);
+            var settings = seq.getSettings && seq.getSettings();
+            if (settings && typeof settings.then === 'function') settings = await settings;
+            if (settings) {
+              if (w && h)  { settings.videoFrameWidth = w; settings.videoFrameHeight = h; }
+              if (fps > 0) { settings.videoFrameRate  = ppro.TickTime.createWithSeconds(1 / fps); }
+              if (typeof seq.setSettings === 'function') {
+                var r = seq.setSettings(settings);
+                if (r && typeof r.then === 'function') await r;
+              }
+            }
+          } catch(es) { console.warn('[SAC] setSettings failed:', es.message); }
+        }
+
+        if (typeof project.openSequence    === 'function') await project.openSequence(seq);
         if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
         cursor = 0;
-        console.log('[SAC] New sequence created:', seqName);
+        console.log('[SAC] New sequence:', seqName, '| ratio:', ratio, '| fps:', fps);
       } else {
         seq    = await getActiveSequence();
         status.textContent = '⏳ Tìm vị trí cuối timeline...';
@@ -3382,11 +3468,11 @@ function sacCountBinMatches(items, targetName) {
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
-        noVoiceMode ? '(without voice)' : '');
+        sacNoVoiceMode ? '(without voice)' : '');
 
       // Import voice file once — skip if Without Voice mode
       var voiceItem = null;
-      if (!noVoiceMode) {
+      if (!sacNoVoiceMode) {
         var voicePath = sacVoicePath || window.sacVoicePath;
         if (voicePath) {
           status.textContent = '⏳ Import voice...';
@@ -3431,7 +3517,7 @@ function sacCountBinMatches(items, targetName) {
         }
 
         // Place voice segment on A1 (skipped in Without Voice mode)
-        if (!noVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
+        if (!sacNoVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
           var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
           var vOut = block.voiceEnd + 0.2;
 
@@ -3452,7 +3538,7 @@ function sacCountBinMatches(items, targetName) {
       var statsEl = $('sacSuccessStats');
       if (statsEl) {
         statsEl.textContent = placed + ' blocks · ' + cursor.toFixed(1) + 's' +
-          (noVoiceMode ? ' · without voice' : '');
+          (sacNoVoiceMode ? ' · without voice' : '');
       }
       status.style.display = 'none';
       $('sacPanelManual').style.display = 'none';
