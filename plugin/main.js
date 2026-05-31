@@ -293,6 +293,30 @@ async function ppExecuteAction(actionObj) {
       return { ok: true, data: { message: 'SFX prompt pushed to Voice Gen tab' } };
     }
 
+    // Push an organized cutsheet into the Autocut tab's spreadsheet.
+    // Accepts SAC-native rows {text, time, src} OR cutlist-style rows
+    // {script, source, sourceIn, sourceOut} (seconds → "m:ss-m:ss").
+    if (action === 'autocut_load') {
+      var fmtSec = function(s) {
+        s = Math.max(0, Math.round(Number(s) || 0));
+        var m = Math.floor(s / 60), sec = s % 60;
+        return m + ':' + (sec < 10 ? '0' + sec : sec);
+      };
+      var rawRows = Array.isArray(actionObj.rows) ? actionObj.rows : [];
+      var rows = rawRows.map(function(r) {
+        var text = r.text != null ? r.text : (r.script || '');
+        var src  = r.src  != null ? r.src  : (r.source || '');
+        var time = r.time || '';
+        if (!time) {
+          if (r.sourceIn != null && r.sourceOut != null) time = fmtSec(r.sourceIn) + '-' + fmtSec(r.sourceOut);
+          else if (r.sourceIn != null) time = fmtSec(r.sourceIn);
+        }
+        return { text: String(text).trim(), time: String(time).trim(), src: String(src).trim() };
+      });
+      if (typeof window.AutocutPushRows === 'function') window.AutocutPushRows(rows);
+      return { ok: true, data: { message: 'Loaded ' + rows.length + ' rows into Autocut tab' } };
+    }
+
     var seq = await getActiveSequence();
 
     if (action === 'cut_clip') {
@@ -503,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.1.39';
+var PLUGIN_VERSION = 'v4.2.0-beta.22';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1327,6 +1351,11 @@ function applySettings(s) {
     EL_PROFILES = [{ id: defId, name: 'Default', key: s.elevenlabsKey }];
     EL_ACTIVE_PROFILE_ID = defId;
   }
+  // Always guarantee at least one profile (uses the built-in default key).
+  if (!EL_PROFILES.length) {
+    EL_PROFILES = [{ id: 'p_default', name: 'Default', key: ELEVENLABS_KEY }];
+    EL_ACTIVE_PROFILE_ID = 'p_default';
+  }
   if (bridgeUrlInput) bridgeUrlInput.value = BRIDGE_URL;
   if (modelSelect)    modelSelect.value = CLAUDE_MODEL;
   if (apiKeyInput)    apiKeyInput.value = ANTHROPIC_KEY;
@@ -1958,11 +1987,1699 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 });
 
+// ── SAC: Project bin traversal (premierepro UXP API) ──────────────────────
+// The modern API uses the cast() pattern (like ClipProjectItem.cast above):
+//   project.getRootItem()        → root FolderItem
+//   ppro.FolderItem.cast(item)   → FolderItem or null (null = not a folder)
+//   folderItem.getItems()        → child ProjectItem[]
+//   item.name / item.getName()   → display name
+
+async function sacGetItemName(item) {
+  if (!item) return '';
+  try { if (item.name) return String(item.name); } catch(e) {}
+  if (typeof item.getName === 'function') {
+    try { var n = item.getName(); if (n && typeof n.then === 'function') n = await n; if (n) return String(n); } catch(e) {}
+  }
+  return '';
+}
+
+// Return child items of a folder, or [] if it's not a folder (clip/sequence).
+async function sacGetFolderChildren(item) {
+  if (!item) return [];
+  var folder = item;
+  // Cast to FolderItem; null means this item has no children to traverse.
+  try {
+    if (ppro && ppro.FolderItem && typeof ppro.FolderItem.cast === 'function') {
+      var f = ppro.FolderItem.cast(item);
+      if (!f) return [];
+      folder = f;
+    }
+  } catch(e) { return []; }
+  try {
+    if (typeof folder.getItems === 'function') {
+      var items = folder.getItems();
+      if (items && typeof items.then === 'function') items = await items;
+      return collectionToArray(items);
+    }
+  } catch(e) { console.warn('[SAC] getItems err:', e.message); }
+  return [];
+}
+
+// Walk the whole project tree (BFS) and return [{name, item, parent}, ...].
+// `parent` is the immediate folder's name ('' for top-level items) — needed to
+// match cutsheet entries like "Senyue 70" = folder "Senyue" + clip "70".
+async function sacCollectBinItems(rootItem) {
+  var out = [];
+  var queue = [{ item: rootItem, name: '' }]; // root parent is '' (no prefix)
+  var guard = 0;
+  while (queue.length && guard < 10000) {
+    guard++;
+    var node = queue.shift();
+    var children = await sacGetFolderChildren(node.item);
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+      var name  = await sacGetItemName(child);
+      out.push({ name: name, item: child, parent: node.name });
+      queue.push({ item: child, name: name }); // [] for clips → no infinite loop
+    }
+  }
+  return out;
+}
+
+// Normalize: lowercase, collapse all whitespace runs to a single space, trim.
+// Collapsing whitespace matters — bin names may have double spaces / NBSP.
+function sacNorm(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Match a target name against collected items.
+// Two passes: (1) exact (ext-tolerant), (2) prefix at a word boundary so a
+// cutsheet name "Sandy 100" matches a bin clip "Sandy 100 S3A4232.MP4".
+function sacMatchBinItem(items, targetName) {
+  var t    = sacNorm(targetName);
+  var tNoX = t.replace(/\.[^.]+$/, '');
+
+  // Pass 1: exact match (with or without file extension)
+  for (var i = 0; i < items.length; i++) {
+    var cn    = sacNorm(items[i].name);
+    var cnNoX = cn.replace(/\.[^.]+$/, '');
+    if (cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX) return items[i].item;
+  }
+  // Pass 2: bin name starts with the target followed by a boundary char
+  for (var k = 0; k < items.length; k++) {
+    var name = sacNorm(items[k].name);
+    if (tNoX && name.indexOf(tNoX) === 0) {
+      var next = name.charAt(tNoX.length);
+      if (next === '' || /[\s._\-]/.test(next)) return items[k].item;
+    }
+  }
+  // Pass 3: folder + clip. Cutsheet "Senyue 62" → a clip named "62" inside a
+  // folder whose name *contains* "Senyue" (e.g. "Studio Senyue/62.MOV").
+  // Try every split: leading tokens = folder hint, trailing tokens = clip name.
+  var toks = t.split(' ').filter(Boolean);
+  if (toks.length >= 2) {
+    for (var s = 1; s < toks.length; s++) {
+      var folderPart = toks.slice(0, s).join(' ');
+      var clipPart   = toks.slice(s).join(' ');
+      if (folderPart.length < 2) continue;
+      for (var m = 0; m < items.length; m++) {
+        if (!items[m].parent) continue;
+        var nameNoX = sacNorm(items[m].name).replace(/\.[^.]+$/, '');
+        var par     = sacNorm(items[m].parent);
+        // clip name: exact, OR ends with " <token>", OR starts with "<token> " / "<token>("
+        var clipOk = (nameNoX === clipPart) ||
+                     (nameNoX.length > clipPart.length &&
+                       nameNoX.slice(-(clipPart.length + 1)) === (' ' + clipPart)) ||
+                     (nameNoX.length > clipPart.length &&
+                       nameNoX.indexOf(clipPart) === 0 &&
+                       /[\s._\-\(]/.test(nameNoX.charAt(clipPart.length)));
+        var folderOk = par.indexOf(folderPart) !== -1;
+        if (clipOk && folderOk) return items[m].item;
+      }
+    }
+  }
+  return null;
+}
+
+// Count how many DISTINCT bin items a plain source name (no folder prefix)
+// matches via Pass 1 + Pass 2 only. Used to detect ambiguous names.
+function sacCountBinMatches(items, targetName) {
+  var t    = sacNorm(targetName);
+  var tNoX = t.replace(/\.[^.]+$/, '');
+  return items.filter(function(b) {
+    var cn   = sacNorm(b.name);
+    var cnNoX = cn.replace(/\.[^.]+$/, '');
+    if (cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX) return true;
+    if (tNoX && cn.indexOf(tNoX) === 0) {
+      var next = cn.charAt(tNoX.length);
+      if (next === '' || /[\s._\-]/.test(next)) return true;
+    }
+    return false;
+  }).length;
+}
+
+// ── Voice-over bin helpers ─────────────────────────────────────────────────
+// Find a bin whose name matches "voice over" / "voiceover" / "vo" near root.
+// Creates it at root if not found.
+async function ppGetOrCreateVOBin(proj) {
+  if (!proj) return null;
+  var root = null;
+  try {
+    root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+  } catch(e) { return null; }
+  if (!root) return null;
+
+  // Search direct children of root (1 level)
+  try {
+    var children = await sacGetFolderChildren(root);
+    for (var i = 0; i < children.length; i++) {
+      var n = await sacGetItemName(children[i]);
+      if (/^(voice\s*over|vo)$/i.test(n.trim())) return children[i];
+    }
+  } catch(e) {}
+
+  // Not found — create "voice over" bin at root via Action + transaction
+  try {
+    var createAction = root.createBinAction('voice over', false);
+    var r = proj.lockedAccess(function() {
+      proj.executeTransaction(function(ca) { ca.addAction(createAction); }, 'Create VO bin');
+    });
+    if (r && typeof r.then === 'function') await r;
+    // Re-scan to find the newly created bin
+    var children2 = await sacGetFolderChildren(root);
+    for (var j = 0; j < children2.length; j++) {
+      var n2 = await sacGetItemName(children2[j]);
+      if (/^(voice\s*over|vo)$/i.test(n2.trim())) return children2[j];
+    }
+  } catch(e) { console.warn('[ppVO] createBin failed:', e.message); }
+  return null;
+}
+
+// Move a ProjectItem to the "voice over" bin (find or create it).
+async function ppMoveToVOBin(item, proj) {
+  if (!item || !proj) return;
+  try {
+    var binRaw = await ppGetOrCreateVOBin(proj);
+    if (!binRaw) return;
+
+    // Must cast to FolderItem — createMoveItemAction only exists on FolderItem, not ProjectItem
+    var bin = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(binRaw) : binRaw;
+    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return; }
+
+    if (typeof bin.createMoveItemAction !== 'function') {
+      console.warn('[ppVO] createMoveItemAction still not found after cast');
+      return;
+    }
+
+    var action = bin.createMoveItemAction(item, bin);
+    var rs = proj.lockedAccess(function() {
+      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to VO bin');
+    });
+    if (rs && typeof rs.then === 'function') await rs;
+    console.log('[ppVO] Moved to voice over bin');
+  } catch(e) { console.warn('[ppVO] ppMoveToVOBin failed:', e.message); }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// AUTOCUT MODULE — removed, placeholder tab only
+// SUPER AUTO CUT MODULE — Phase 1: Spreadsheet UI + Block Parsing
 // ═══════════════════════════════════════════════════════════════════════════
-/* AUTOCUT MODULE REMOVED — placeholder tab only (function body stripped) */
-(function() { /* Autocut removed */ })();
+(function() {
+  'use strict';
+  var $ = function(id) { return document.getElementById(id); };
+
+  var rowSeq = 0;
+  var parsedBlocks = [];
+  var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
+  var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
+  var sacVoicePath = null; // native path of the chosen/generated voice file (Phase 4)
+
+  var sacValidatePassed = false;
+  var sacVoiceReady     = false;
+  var sacNoVoiceMode    = false; // set by "Without voice" button
+
+  // Show the cut panel (hides voice panel), update label
+  function sacShowCutPanel() {
+    $('sacVoicePanel').style.display = 'none';
+    var lbl = $('sacCutLabel');
+    if (lbl) {
+      if (sacNoVoiceMode) {
+        lbl.textContent = '✂ Without voice';
+      } else {
+        var info = $('sacVoiceInfo');
+        lbl.textContent = info ? info.textContent : '✅ Voice ready';
+      }
+    }
+    $('sacCutPanel').style.display = 'flex';
+  }
+
+  function sacHideCutPanel() {
+    $('sacCutPanel').style.display = 'none';
+    $('sacNewSeqForm').style.display = 'none';
+    $('sacVoicePanel').style.display = 'flex';
+  }
+
+  function sacUpdateRunVisibility() {
+    if (sacValidatePassed && (sacVoiceReady || sacNoVoiceMode)) {
+      sacShowCutPanel();
+    } else {
+      sacHideCutPanel();
+    }
+  }
+
+  // ── Method switching ────────────────────────────────────────────────────
+  document.querySelectorAll('.sac-methodBtn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+        b.classList.remove('is-active');
+      });
+      btn.classList.add('is-active');
+      var method = btn.dataset.method;
+      $('sacPanelManual').style.display     = (method === 'manual')     ? 'flex' : 'none';
+      $('sacPanelScreenshot').style.display = (method === 'screenshot') ? 'flex' : 'none';
+    });
+  });
+
+  // ── TSV parser — handles quoted cells with embedded newlines ────────────
+  // Google Sheets wraps cells containing \n or \t in double-quotes.
+  // Standard: tab = col sep, \n = row sep, "" inside quotes = literal "
+  function parseTSV(text) {
+    var rows = [], row = [], cell = '', inQ = false, i = 0, ch, nx;
+    while (i < text.length) {
+      ch = text[i]; nx = text[i + 1];
+      if (inQ) {
+        if (ch === '"' && nx === '"') { cell += '"'; i += 2; }       // escaped quote
+        else if (ch === '"')          { inQ = false; i++; }          // end quote
+        else                          { cell += ch; i++; }
+      } else {
+        if      (ch === '"')                      { inQ = true; i++; }
+        else if (ch === '\t')                     { row.push(cell); cell = ''; i++; }
+        else if (ch === '\n' || ch === '\r') {
+          row.push(cell); cell = '';
+          if (row.some(function(c) { return c !== ''; })) rows.push(row);
+          row = [];
+          if (ch === '\r' && nx === '\n') i++;    // CRLF
+          i++;
+        } else { cell += ch; i++; }
+      }
+    }
+    // flush last cell/row
+    row.push(cell);
+    if (row.some(function(c) { return c !== ''; })) rows.push(row);
+    return rows;
+  }
+
+  // ── Expand multi-line / multi-value cells into separate rows ─────────────
+  // Handles three cases:
+  //   A) text cell has \n  → split text into rows (first keeps time+src)
+  //   B) time cell has \n  → split time values into rows (first keeps text+src)
+  //   C) time cell has space-separated timestamps like "0:04 0:07 0:13"
+  var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
+  function splitTimes(t) {
+    if (!t) return [t];
+    if (t.indexOf('\n') !== -1) return t.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    var parts = t.trim().split(/\s+/);
+    if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
+    return [t];
+  }
+  function expandRows(rows) {
+    var out = [];
+    var i = 0;
+    while (i < rows.length) {
+      var cols = rows[i];
+      var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
+
+      // A: multi-line text cell
+      // Zip with subsequent rows that have EMPTY text — lets Google Sheets layout like:
+      //   Row 1: "Line A\nLine B" | 0:04-0:05 | ClipX       ← multiline text cell
+      //   Row 2: ""               | 0:35-0:37 | ClipY       ← empty text, carries data for Line B
+      // → expand to: ["Line A"|0:04-0:05|ClipX], ["Line B"|0:35-0:37|ClipY]
+      if (text.indexOf('\n') !== -1) {
+        var lines = text.split('\n').filter(function(l) { return l.trim(); });
+        var extra = 0; // number of subsequent rows consumed
+        lines.forEach(function(line, li) {
+          var t = time, s = src;
+          if (li > 0) {
+            var nextIdx = i + li;
+            if (nextIdx < rows.length && !((rows[nextIdx][0] || '').trim())) {
+              // Next row has empty text → zip it with this line
+              t = rows[nextIdx][1] || '';
+              s = rows[nextIdx][2] || '';
+              extra = li; // track how many extra rows we'll skip
+            } else {
+              t = ''; s = ''; // no matching row → empty time/src
+            }
+          }
+          out.push([line.trim(), t, s]);
+        });
+        i += extra + 1;
+        continue;
+      }
+
+      // B+C: multi-value time cell
+      var times = splitTimes(time);
+      if (times.length > 1) {
+        var srcLines = src.indexOf('\n') !== -1
+          ? src.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
+          : [src];
+        var zipSrc = srcLines.length === times.length;
+        times.forEach(function(t, ti) {
+          out.push([ ti === 0 ? text : '', t, zipSrc ? srcLines[ti] : src ]);
+        });
+        i++;
+        continue;
+      }
+
+      out.push(cols);
+      i++;
+    }
+    return out;
+  }
+
+  // ── Row factory ─────────────────────────────────────────────────────────
+  function makeInput(placeholder) {
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'sac-input';
+    inp.placeholder = placeholder;
+    inp.addEventListener('focus', function() {
+      if (window.claimKeyboard) window.claimKeyboard();
+    });
+    inp.addEventListener('blur', function() {
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    });
+    // Multi-row paste from Google Sheets / Excel
+    inp.addEventListener('paste', function(e) {
+      var text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (!text || text.indexOf('\n') === -1) return; // single cell → normal paste
+      e.preventDefault();
+      var rows = expandRows(parseTSV(text));
+      if (rows.length === 0) return;
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      rows.forEach(function(cols) {
+        createRow(
+          cols[0] ? cols[0].trim() : '',
+          cols[1] ? cols[1].trim() : '',
+          cols[2] ? cols[2].trim() : ''
+        );
+      });
+    });
+    return inp;
+  }
+
+  function makeCell(colClass) {
+    var cell = document.createElement('div');
+    cell.className = 'sac-cell ' + colClass;
+    return cell;
+  }
+
+  // afterRow: if provided, insert new row after that element; else append
+  function createRow(text, time, src, afterRow) {
+    var id = ++rowSeq;
+    var row = document.createElement('div');
+    row.className = 'sac-row';
+    row.dataset.rowId = String(id);
+
+    var inpText = makeInput('Script text...');
+    var inpTime = makeInput('0:00-0:10');
+    var inpSrc  = makeInput('Source name');
+    if (text) inpText.value = text;
+    if (time) inpTime.value = time;
+    if (src)  inpSrc.value  = src;
+
+    var delBtn = document.createElement('button');
+    delBtn.className = 'sac-rowBtn sac-delBtn';
+    delBtn.title = 'Xoá dòng này';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', function() { row.remove(); });
+
+    var insBtn = document.createElement('button');
+    insBtn.className = 'sac-rowBtn sac-insBtn';
+    insBtn.title = 'Thêm dòng bên dưới';
+    insBtn.textContent = '+';
+    insBtn.addEventListener('click', function() { createRow('', '', '', row); });
+
+    // Reset validate gate whenever source is edited (hint added or name changed)
+    inpSrc.addEventListener('input', function() {
+      if (sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
+    });
+
+    // Folder hint button — suggests parent folders from the last bin scan
+    var hintBtn = document.createElement('button');
+    hintBtn.className = 'sac-rowBtn sac-hintBtn';
+    hintBtn.title = 'Thêm folder hint';
+    hintBtn.textContent = '📁';
+    hintBtn.addEventListener('click', function() { sacShowFolderHints(inpSrc.value.trim(), inpSrc); });
+
+    var cText = makeCell('sac-col-text'); cText.appendChild(inpText);
+    var cTime = makeCell('sac-col-time'); cTime.appendChild(inpTime);
+    var cSrc  = makeCell('sac-col-src');  cSrc.appendChild(inpSrc); cSrc.appendChild(hintBtn);
+    var cAct  = makeCell('sac-col-act');
+    cAct.appendChild(insBtn);
+    cAct.appendChild(delBtn);
+
+    row.appendChild(cText);
+    row.appendChild(cTime);
+    row.appendChild(cSrc);
+    row.appendChild(cAct);
+
+    var body = $('sacBody');
+    if (afterRow && afterRow.nextSibling) {
+      body.insertBefore(row, afterRow.nextSibling);
+    } else {
+      body.appendChild(row);
+    }
+    return row;
+  }
+
+  // ── Block parsing ───────────────────────────────────────────────────────
+  // Rule:
+  //   • Both text + source non-empty → NEW block
+  //   • Only text non-empty          → add text to current block
+  //   • Only source non-empty        → add source to current block
+  //   • Both empty                   → skip
+  function parseBlocks() {
+    var rows = Array.from($('sacBody').querySelectorAll('.sac-row'));
+    var data = rows.map(function(row) {
+      var inputs = row.querySelectorAll('.sac-input');
+      return {
+        text: inputs[0] ? inputs[0].value.trim() : '',
+        time: inputs[1] ? inputs[1].value.trim() : '',
+        src:  inputs[2] ? inputs[2].value.trim() : '',
+      };
+    });
+
+    var blocks  = [];
+    var current = null;
+
+    data.forEach(function(r) {
+      var hasText = r.text !== '';
+      var hasSrc  = r.src  !== '';
+      if (!hasText && !hasSrc) return; // skip blank rows
+
+      if (hasText && hasSrc) {
+        // Both → start new block
+        current = { texts: [r.text], sources: [{ name: r.src, time: r.time }] };
+        blocks.push(current);
+      } else if (hasText) {
+        // Text only → add to current block
+        if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
+        current.texts.push(r.text);
+      } else {
+        // Source only → add to current block
+        if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
+        current.sources.push({ name: r.src, time: r.time });
+      }
+    });
+
+    return blocks;
+  }
+
+  // ── Block preview ───────────────────────────────────────────────────────
+  var BLOCK_COLORS = ['#a855f7','#f59e0b','#10b981','#3b82f6','#ef4444','#ec4899'];
+  var BLOCK_BG     = ['rgba(168,85,247,0.12)','rgba(245,158,11,0.1)','rgba(16,185,129,0.1)',
+                      'rgba(59,130,246,0.1)','rgba(239,68,68,0.1)','rgba(236,72,153,0.1)'];
+
+  function renderBlocks(blocks) {
+    var list = $('sacBlockList');
+    list.innerHTML = '';
+    $('sacBlockCount').textContent = blocks.length + ' block' + (blocks.length !== 1 ? 's' : '');
+
+    blocks.forEach(function(block, i) {
+      var color = BLOCK_COLORS[i % BLOCK_COLORS.length];
+      var bg    = BLOCK_BG[i % BLOCK_BG.length];
+
+      var card = document.createElement('div');
+      card.className = 'sac-blockCard';
+
+      // Header (click to collapse/expand)
+      var header = document.createElement('div');
+      header.className = 'sac-blockCardHeader';
+      header.style.color = color;
+      header.style.background = bg;
+
+      var chevron = document.createElement('span');
+      chevron.className = 'sac-blockChevron';
+      chevron.textContent = '▾';
+      header.appendChild(chevron);
+
+      var label = document.createElement('span');
+      label.textContent = 'Block ' + (i + 1)
+        + '  ·  ' + block.texts.length + ' text'
+        + (block.texts.length !== 1 ? 's' : '')
+        + '  ·  ' + block.sources.length + ' source'
+        + (block.sources.length !== 1 ? 's' : '');
+      header.appendChild(label);
+
+      // Voice duration badge — filled in by sacAlignVoice() after alignment
+      var voiceBadge = document.createElement('span');
+      voiceBadge.className = 'sac-blockVoiceBadge';
+      voiceBadge.dataset.blockIdx = String(i);
+      header.appendChild(voiceBadge);
+
+      card.appendChild(header);
+
+      // Body
+      var body = document.createElement('div');
+      body.className = 'sac-blockCardBody';
+
+      header.addEventListener('click', function() {
+        var collapsed = body.style.display === 'none';
+        body.style.display = collapsed ? '' : 'none';
+        chevron.textContent = collapsed ? '▾' : '▸';
+      });
+
+      block.texts.forEach(function(t) {
+        var el = document.createElement('div');
+        el.className = 'sac-blockText';
+        el.textContent = '💬 ' + t;
+        body.appendChild(el);
+      });
+
+      if (block.texts.length > 0 && block.sources.length > 0) {
+        var div = document.createElement('div');
+        div.className = 'sac-blockDivider';
+        body.appendChild(div);
+      }
+
+      block.sources.forEach(function(s, si) {
+        var el = document.createElement('div');
+        el.className = 'sac-blockSrc';
+        el.dataset.srcName  = s.name; // for async status update
+        el.dataset.blockIdx = String(i);
+        el.dataset.srcIdx   = String(si);
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'sac-srcName';
+        nameSpan.textContent = '🎬 ' + s.name;
+        el.appendChild(nameSpan);
+        if (s.time) {
+          var badge = document.createElement('span');
+          badge.className = 'sac-blockTimeBadge';
+          badge.textContent = s.time;
+          el.appendChild(badge);
+        }
+        var statusSpan = document.createElement('span');
+        statusSpan.className = 'sac-srcStatus';
+        statusSpan.textContent = '⌛';
+        el.appendChild(statusSpan);
+        body.appendChild(el);
+      });
+
+      card.appendChild(body);
+      list.appendChild(card);
+    });
+
+    parsedBlocks = blocks;
+    $('sacBlockSection').style.display = 'flex';
+    // Re-rendering invalidates both gates — must re-validate + re-align.
+    sacValidatePassed = false;
+    sacVoiceReady = false;
+    sacHideCutPanel();
+  }
+
+  // ── Source validation (Phase 3) ─────────────────────────────────────────
+  // Updates the ✓/✗ icons on each source row. Returns a promise resolving to
+  // { missing: [names], premiereAvailable: bool }.
+  async function sacValidateSources(blocks) {
+    var names = [];
+    blocks.forEach(function(b) {
+      b.sources.forEach(function(s) {
+        if (s.name && names.indexOf(s.name) === -1) names.push(s.name);
+      });
+    });
+    if (names.length === 0) return { missing: [], premiereAvailable: true };
+
+    sacSourceMap = {};
+
+    var rootItem = null;
+    try {
+      var proj = await getActiveProject();
+      if (typeof proj.getRootItem === 'function') {
+        rootItem = proj.getRootItem();
+        if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+      }
+      if (!rootItem) rootItem = proj.rootItem || null; // legacy fallback
+    } catch(e) {
+      // Not running inside Premiere — clear spinners (dev mode, can't verify bin)
+      document.querySelectorAll('.sac-srcStatus').forEach(function(el) { el.textContent = ''; });
+      return { missing: [], premiereAvailable: false };
+    }
+
+    // One full traversal; persist for hint UI; log for debugging.
+    var binItems = rootItem ? (await sacCollectBinItems(rootItem)) : [];
+    sacBinItems = binItems; // persist so 📁 button can suggest folders later
+    console.log('[SAC] Bin items found (' + binItems.length + '):',
+      binItems.map(function(b) { return b.name; }));
+
+    // Detect ambiguous names: same plain name matches 2+ distinct bin clips.
+    // NOTE: only warns for names without a folder hint already (no spaces / single token).
+    var ambiguousNames = {};
+    names.forEach(function(name) {
+      var count = sacCountBinMatches(binItems, name);
+      if (count > 1) ambiguousNames[name] = count;
+    });
+
+    var allRows = document.querySelectorAll('.sac-blockSrc');
+    console.log('[SAC validate] names:', names, '| DOM rows found:', allRows.length);
+    allRows.forEach(function(el) {
+      console.log('[SAC validate] row srcName="' + el.dataset.srcName + '" blockIdx=' + el.dataset.blockIdx);
+    });
+
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      var item = sacMatchBinItem(binItems, name);
+      sacSourceMap[name] = item || null;
+      var isAmbiguous = !!ambiguousNames[name];
+      console.log('[SAC validate] "' + name + '" →', item ? '✓ found' : '✗ missing', '| ambiguous:', isAmbiguous);
+
+      // Update every source row with this name (may appear in multiple blocks)
+      document.querySelectorAll('.sac-blockSrc').forEach(function(el) {
+        if (el.dataset.srcName !== name) return;
+        var statusEl = el.querySelector('.sac-srcStatus');
+        console.log('[SAC validate] updating row "' + name + '" → statusEl:', statusEl ? 'found' : 'NULL');
+        if (!statusEl) return;
+        if (isAmbiguous) {
+          statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
+          statusEl.textContent = '⚠';
+          statusEl.title = ambiguousNames[name] + ' clips trùng tên — thêm folder hint (📁)';
+        } else if (item) {
+          statusEl.className = 'sac-srcStatus sac-srcOk';
+          statusEl.textContent = '✓';
+        } else {
+          statusEl.className = 'sac-srcStatus sac-srcMissing';
+          statusEl.textContent = '✗';
+          // Add Skip button for missing sources
+          sacAddSkipButton(el);
+        }
+      });
+    }
+
+    var missingNames = names.filter(function(n) { return !sacSourceMap[n]; });
+    // Log candidates matching ANY token (incl. folder name), showing
+    // "<folder>/<clip>" so name/structure mismatches are obvious.
+    missingNames.forEach(function(mn) {
+      var toks = sacNorm(mn).split(' ').filter(Boolean);
+      var cands = binItems.filter(function(b) {
+        var hay = sacNorm((b.parent || '') + ' ' + b.name);
+        return toks.some(function(tk) { return hay.indexOf(tk) !== -1; });
+      }).map(function(b) { return (b.parent ? b.parent + '/' : '') + b.name; });
+      console.log('[SAC] "' + mn + '" không khớp. Gần đúng:', cands);
+    });
+
+    var ambiguousNames = names.filter(function(n) {
+      return sacCountBinMatches(binItems, n) > 1;
+    });
+
+    window.sacSourceMap = sacSourceMap; // expose for Phase 5 assembly
+    return { missing: missingNames, ambiguous: ambiguousNames, premiereAvailable: true };
+  }
+
+  // ── Skip source button ──────────────────────────────────────────────────────
+  // Appears on source rows with ✗ validation. Marks the source as skipped so
+  // assembly replaces it with a 1s gap instead of a real clip.
+  function sacAddSkipButton(srcEl) {
+    if (srcEl.querySelector('.sac-skipBtn')) return; // already added
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sac-skipBtn';
+    btn.textContent = 'Skip';
+    btn.addEventListener('click', function() {
+      var bIdx = parseInt(srcEl.dataset.blockIdx, 10);
+      var sIdx = parseInt(srcEl.dataset.srcIdx,   10);
+      var src  = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+      if (!src) return;
+
+      src.skipped = !src.skipped;
+
+      var statusEl = srcEl.querySelector('.sac-srcStatus');
+      var nameSpan = srcEl.querySelector('.sac-srcName');
+      if (src.skipped) {
+        btn.textContent = 'Undo';
+        btn.classList.add('is-active');
+        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; }
+        if (nameSpan)  { nameSpan.style.opacity = '0.4'; nameSpan.style.textDecoration = 'line-through'; }
+      } else {
+        btn.textContent = 'Skip';
+        btn.classList.remove('is-active');
+        if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; }
+        if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+      }
+
+      // Re-check if all missing sources are now skipped → open Run gate
+      sacCheckSkipGate();
+    });
+    srcEl.appendChild(btn);
+  }
+
+  // After each skip toggle: if every missing source is now skipped, pass the
+  // validate gate so the Run button appears (skipped sources → 1s gap in assembly).
+  function sacCheckSkipGate() {
+    if (!parsedBlocks.length) return;
+    var allResolved = parsedBlocks.every(function(block) {
+      return (block.sources || []).every(function(src) {
+        return !!(sacSourceMap[src.name]) || !!src.skipped;
+      });
+    });
+    if (allResolved) {
+      sacValidatePassed = true;
+      var st = $('sacStatus');
+      if (st) {
+        st.textContent = '✅ Tất cả sources đã resolved (validate ✓ hoặc skip ⏭).';
+        st.style.display = 'block';
+      }
+    } else {
+      sacValidatePassed = false;
+    }
+    sacUpdateRunVisibility();
+  }
+
+  // ── Folder hint UI ─────────────────────────────────────────────────────────
+  // Shows folder options (from last bin scan) in the status area so user can
+  // prepend the right folder to disambiguate a source name.
+  function sacShowFolderHints(srcName, inputEl) {
+    var statusEl = $('sacStatus');
+    if (!srcName) {
+      statusEl.textContent = '⚠ Nhập tên source trước khi chọn folder hint.';
+      statusEl.style.display = 'block'; return;
+    }
+    if (!sacBinItems.length) {
+      statusEl.textContent = '⚠ Bấm Validate trước để load danh sách bin — sau đó bấm 📁 lại.';
+      statusEl.style.display = 'block'; return;
+    }
+
+    // Collect all bin items that match this source name (Pass 1+2 only)
+    var t = sacNorm(srcName), tNoX = t.replace(/\.[^.]+$/, '');
+    var matches = sacBinItems.filter(function(b) {
+      var cn = sacNorm(b.name), cnNoX = cn.replace(/\.[^.]+$/, '');
+      if (cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX) return true;
+      if (tNoX && cn.indexOf(tNoX) === 0) {
+        var nx = cn.charAt(tNoX.length);
+        if (nx === '' || /[\s._\-]/.test(nx)) return true;
+      }
+      return false;
+    });
+
+    if (!matches.length) {
+      statusEl.textContent = '⚠ "' + srcName + '" không tìm thấy trong bin. Kiểm tra lại tên.';
+      statusEl.style.display = 'block'; return;
+    }
+
+    // Unique parent folders
+    var folders = [];
+    matches.forEach(function(b) {
+      if (b.parent && folders.indexOf(b.parent) === -1) folders.push(b.parent);
+    });
+
+    if (folders.length === 1) {
+      // Only one folder → apply directly, no need to ask
+      inputEl.value = folders[0] + ' ' + srcName;
+      statusEl.textContent = '✓ Đã thêm hint "' + folders[0] + '". Validate lại để xác nhận.';
+      statusEl.style.display = 'block';
+      sacValidatePassed = false; sacUpdateRunVisibility();
+      return;
+    }
+
+    // Multiple folders → show choice panel
+    statusEl.innerHTML = '';
+    statusEl.style.display = 'block';
+    var msg = document.createElement('div');
+    msg.textContent = '"' + srcName + '" có trong ' + folders.length + ' folder — chọn đúng:';
+    msg.style.cssText = 'font-size:10px;margin-bottom:6px;color:rgba(255,255,255,0.6);';
+    statusEl.appendChild(msg);
+
+    var btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+    folders.forEach(function(folder) {
+      var btn = document.createElement('button');
+      btn.className = 'sac-folderHintBtn';
+      btn.textContent = folder;
+      btn.addEventListener('click', function() {
+        inputEl.value = folder + ' ' + srcName;
+        statusEl.innerHTML = '';
+        statusEl.textContent = '✓ Đã thêm hint "' + folder + '". Validate lại để xác nhận.';
+        sacValidatePassed = false; sacUpdateRunVisibility();
+      });
+      btnWrap.appendChild(btn);
+    });
+    statusEl.appendChild(btnWrap);
+  }
+
+  // ── Populate from AI-parsed data (used by Phase 2 screenshot parser) ────
+  window.sacLoadBlocks = function(blocks) {
+    renderBlocks(blocks);
+  };
+
+  window.sacLoadRows = function(rows) {
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    rows.forEach(function(r) { createRow(r.text, r.time, r.src); });
+  };
+
+  // ── Cross-tab entry point: Claude Chat → Autocut ─────────────────────────
+  // Called from ppExecuteAction (action: 'autocut_load'). Switches to the
+  // Autocut tab + Manual panel, then fills the spreadsheet with {text,time,src}
+  // rows (passed through expandRows so multi-line / multi-timestamp cells split
+  // the same way pasting or the screenshot parser does).
+  window.AutocutPushRows = function(rows) {
+    // 1. Switch to the Autocut tab
+    var tabBtn = document.querySelector('.tab-btn[data-tab="autocut"]');
+    if (tabBtn) tabBtn.click();
+    // 2. Force the Manual panel active
+    document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+      b.classList.toggle('is-active', b.dataset.method === 'manual');
+    });
+    $('sacPanelManual').style.display = 'flex';
+    $('sacPanelScreenshot').style.display = 'none';
+    // 3. Reset block preview/status from any previous run
+    $('sacBlockSection').style.display = 'none';
+    $('sacStatus').style.display = 'none';
+    parsedBlocks = [];
+    // 4. Fill the spreadsheet
+    $('sacBody').innerHTML = ''; rowSeq = 0;
+    var expanded = expandRows((rows || []).map(function(r) {
+      return [ r.text || '', r.time || '', r.src || '' ];
+    }));
+    if (expanded.length === 0) { createRow(); createRow(); createRow(); return; }
+    expanded.forEach(function(cols) { createRow(cols[0], cols[1], cols[2]); });
+  };
+
+  // ── Voice pipeline (Phase 4a) ────────────────────────────────────────────
+  // Pick a single voice file covering the whole cutsheet, transcribe + align it
+  // per block, and attach voiceStart/voiceEnd/voiceDuration to each block.
+  function sacPickVoiceFile() {
+    try {
+      var uxp = require('uxp');
+      uxp.storage.localFileSystem.getFileForOpening({
+        types: ['mp3','wav','m4a','aac','ogg','flac'],
+      }).then(function(file) {
+        if (!file) return;
+        var fp = file.nativePath || file.path || '';
+        if (!fp) { sacSetVoiceInfo('❌ Không lấy được đường dẫn file'); return; }
+        sacAlignVoice(fp);
+      }).catch(function(e) { console.error('[SAC] voice picker:', e); });
+    } catch(e) {
+      sacSetVoiceInfo('❌ File picker không khả dụng: ' + e.message);
+    }
+  }
+
+  function sacSetVoiceInfo(msg) {
+    var el = $('sacVoiceInfo');
+    if (el) el.textContent = msg;
+  }
+
+  // ── Mini audio player (Approach B) ────────────────────────────────────────
+  // UXP can't play audio inline → playback goes through the bridge (/tts/play
+  // = afplay) just like the Voice Gen tab. We only drive the DOM + a timer.
+  var sacVP = { path: null, playing: false, dur: 0, startedAt: 0, ticker: null };
+  function sacVPFmt(s) {
+    if (!isFinite(s) || s < 0) s = 0;
+    var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+  function sacVPTick() {
+    var el = (Date.now() - sacVP.startedAt) / 1000;
+    if (sacVP.dur > 0 && el > sacVP.dur) el = sacVP.dur;
+    $('sacVoiceTime').textContent = sacVPFmt(el) + ' / ' + sacVPFmt(sacVP.dur);
+    $('sacVoiceFill').style.width = sacVP.dur > 0 ? (el / sacVP.dur * 100).toFixed(1) + '%' : '0%';
+  }
+  function sacVPStop() {
+    if (sacVP.ticker) { clearInterval(sacVP.ticker); sacVP.ticker = null; }
+    sacVP.playing = false;
+    var btn = $('sacVoicePlay'); if (btn) btn.textContent = '▶';
+    fetch(BRIDGE_URL + '/tts/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function(){});
+  }
+  function sacVPPlay() {
+    if (!sacVP.path) return;
+    sacVP.playing = true; sacVP.startedAt = Date.now();
+    var btn = $('sacVoicePlay'); if (btn) btn.textContent = '⏸';
+    sacVP.ticker = setInterval(sacVPTick, 200);
+    fetch(BRIDGE_URL + '/tts/play', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: sacVP.path }),
+    }).then(function(r) { return r.json(); }).then(function() {
+      if (sacVP.ticker) { clearInterval(sacVP.ticker); sacVP.ticker = null; }
+      sacVP.playing = false;
+      var b = $('sacVoicePlay'); if (b) b.textContent = '▶';
+      $('sacVoiceFill').style.width = sacVP.dur > 0 ? '100%' : '0%';
+    }).catch(function() {
+      sacVP.playing = false; var b = $('sacVoicePlay'); if (b) b.textContent = '▶';
+    });
+  }
+  function sacVoicePlayerSetSrc(path) {
+    if (sacVP.playing) sacVPStop();
+    sacVP.path = path; sacVP.dur = 0;
+    $('sacVoicePlayer').style.display = 'flex';
+    $('sacVoiceFill').style.width = '0%';
+    $('sacVoiceTime').textContent = '0:00 / ?';
+    fetch(BRIDGE_URL + '/tts/duration', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audioPath: path }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d && d.ok && d.duration > 0) {
+        sacVP.dur = d.duration;
+        $('sacVoiceTime').textContent = '0:00 / ' + sacVPFmt(d.duration);
+      }
+    }).catch(function(){});
+  }
+
+  // ── Gen voice = normalize via Claude → push to Voice Gen tab ───────────────
+  async function sacGenVoice() {
+    var blocks = parseBlocks();
+    if (blocks.length === 0) { sacSetVoiceInfo('⚠ Chưa có script để gen.'); return; }
+
+    // One line per block (join multi-text blocks with space)
+    var lines = blocks.map(function(b) { return b.texts.join(' '); });
+
+    sacSetVoiceInfo('⏳ Chuẩn hóa script qua Claude...');
+    var normalizedLines = lines; // fallback = originals
+    try {
+      var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: lines }),
+      });
+      var d = await resp.json();
+      if (d.ok && Array.isArray(d.lines) && d.lines.length === lines.length) {
+        normalizedLines = d.lines;
+        console.log('[SAC] Script normalized:', normalizedLines);
+      } else {
+        console.warn('[SAC] Normalize skipped:', d.error || d.warning);
+      }
+    } catch(e) {
+      console.warn('[SAC] Normalize bridge error:', e.message, '— dùng script gốc');
+    }
+
+    var text = normalizedLines.join('\n');
+    if (typeof window.VoiceGenPushScript === 'function') {
+      window.VoiceGenPushScript(text, null, false);
+      sacSetVoiceInfo('→ Script đã chuẩn hóa + đẩy sang Voice Gen. Chọn giọng + Generate, rồi bấm "→ Autocut".');
+    } else {
+      sacSetVoiceInfo('❌ Voice Gen chưa sẵn sàng.');
+    }
+  }
+
+  // Transcribe + align the voice file against the current blocks, then update
+  // each block's voice badge and store timing on parsedBlocks. Shared by the
+  // voice picker and the VoiceGen "Move to Autocut" cross-tab entry.
+  async function sacAlignVoice(audioPath) {
+    // Always align against the CURRENT spreadsheet, not the last-validated blocks.
+    // (User may have edited/pasted script without re-validating.)
+    var fresh = parseBlocks();
+    if (fresh.length === 0) {
+      sacSetVoiceInfo('⚠ Chưa có script. Điền/paste script rồi chọn voice lại.');
+      sacVoicePath = audioPath;
+      return;
+    }
+    // Re-render block cards if they're stale vs the spreadsheet, so the voice
+    // badges map onto blocks that actually match the current script.
+    var freshKey = JSON.stringify(fresh.map(function(b) { return b.texts; }));
+    var shownKey = JSON.stringify(parsedBlocks.map(function(b) { return b.texts; }));
+    if (freshKey !== shownKey) renderBlocks(fresh);
+
+    sacVoicePath = audioPath;
+    sacVoicePlayerSetSrc(audioPath); // show mini player for any voice source
+    var shortName = audioPath.split('/').pop();
+    sacSetVoiceInfo('⏳ Align: ' + shortName + '...');
+
+    try {
+      var resp = await fetch(BRIDGE_URL + '/superautocut/voice-align', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioPath: audioPath,
+          blocks: parsedBlocks.map(function(b) { return { texts: b.texts }; }),
+        }),
+      });
+      var d = await resp.json();
+      if (!d.ok) { sacSetVoiceInfo('❌ ' + (d.error || 'align lỗi')); return; }
+
+      // Log what Whisper heard so content mismatches are easy to spot.
+      console.log('[SAC] Voice transcript:', d.fullText || '(rỗng)');
+
+      var matched = 0;
+      (d.alignments || []).forEach(function(a, i) {
+        if (!parsedBlocks[i]) return;
+        parsedBlocks[i].voiceStart    = a.start;
+        parsedBlocks[i].voiceEnd      = a.end;
+        parsedBlocks[i].voiceDuration = a.duration;
+        var ok = (a.duration != null);
+        if (ok) matched++; // count regardless of whether the badge DOM exists
+        // NB: dataset.blockIdx → attribute "data-block-idx" (kebab-case)
+        var badge = document.querySelector('.sac-blockVoiceBadge[data-block-idx="' + i + '"]');
+        if (badge) {
+          if (ok) {
+            badge.textContent = '🎤 ' + a.duration.toFixed(1) + 's';
+            badge.className = 'sac-blockVoiceBadge ' + (a.status === 'matched' ? 'sac-voiceOk' : 'sac-voiceWeak');
+          } else {
+            badge.textContent = '🎤 ?';
+            badge.className = 'sac-blockVoiceBadge sac-voiceMissing';
+          }
+        }
+      });
+      window.sacVoicePath = sacVoicePath; // expose for Phase 5
+      sacVoiceReady = (matched > 0);
+      sacUpdateRunVisibility();
+      if (matched === 0) {
+        sacSetVoiceInfo('⚠ Khớp 0/' + parsedBlocks.length + ' — voice không trùng script (Console)');
+      } else {
+        var hint = sacValidatePassed ? ' — Run đã mở' : ' — Validate để mở Run';
+        sacSetVoiceInfo('✅ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks' + hint);
+      }
+    } catch(e) {
+      sacSetVoiceInfo('❌ Bridge offline: ' + e.message);
+    }
+  }
+
+  // Cross-tab entry: VoiceGen "Move to Autocut" → reuse a generated audio file.
+  window.AutocutPushVoice = function(audioPath) {
+    var tabBtn = document.querySelector('.tab-btn[data-tab="autocut"]');
+    if (tabBtn) tabBtn.click();
+    document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+      b.classList.toggle('is-active', b.dataset.method === 'manual');
+    });
+    $('sacPanelManual').style.display = 'flex';
+    $('sacPanelScreenshot').style.display = 'none';
+    sacAlignVoice(audioPath);
+  };
+
+  // ── Screenshot: UXP file picker ─────────────────────────────────────────
+  var sacImgDataUrl = null;
+
+  function sacLoadImageFile(file) {
+    file.read({ format: require('uxp').storage.formats.binary })
+      .then(function(data) {
+        var bytes = new Uint8Array(data);
+        var bin = '';
+        for (var b = 0; b < bytes.length; b++) bin += String.fromCharCode(bytes[b]);
+        var ext  = file.name.split('.').pop().toLowerCase();
+        var mime = (ext === 'png') ? 'image/png' : 'image/jpeg';
+        sacImgDataUrl = 'data:' + mime + ';base64,' + btoa(bin);
+
+        // Plain <img> preview — reliable in UXP (canvas + new Image() is flaky)
+        var preview = $('sacImgPreview');
+        preview.src = sacImgDataUrl;
+        preview.hidden = false;
+        preview.style.display = 'block';
+        // swap the card into "has image" mode: hide the prompt, show preview
+        $('sacDrop').classList.add('has-image');
+        $('sacDropPrompt').style.display = 'none';
+        $('sacParseImg').disabled = false;
+        $('sacImgStatus').textContent = '';
+        $('sacImgStatus').style.display = 'none';
+      })
+      .catch(function(e) {
+        $('sacImgStatus').textContent = '❌ Không đọc được file: ' + e.message;
+        $('sacImgStatus').style.display = 'block';
+      });
+  }
+
+  function sacOpenImagePicker() {
+    try {
+      var storage = require('uxp').storage;
+      storage.localFileSystem.getFileForOpening({
+        allowMultiple: false,
+        types: storage.fileTypes.images,
+      }).then(function(file) {
+        if (!file) return;
+        sacLoadImageFile(file);
+      }).catch(function(e) {
+        console.error('[SAC] file picker:', e);
+      });
+    } catch(e) {
+      $('sacImgStatus').textContent = '❌ File picker không khả dụng: ' + e.message;
+      $('sacImgStatus').style.display = 'block';
+    }
+  }
+
+  // Clicking anywhere on the big card opens the picker (also re-picks to swap image)
+  var sacDrop = $('sacDrop');
+  if (sacDrop) sacDrop.addEventListener('click', sacOpenImagePicker);
+
+  // ── Event listeners ──────────────────────────────────────────────────────
+  $('sacAddRow').addEventListener('click', function() { createRow(); });
+
+  $('sacClearBoard').addEventListener('click', function() {
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    $('sacBlockSection').style.display = 'none';
+    $('sacStatus').style.display = 'none';
+    parsedBlocks = [];
+    createRow(); createRow(); createRow();
+  });
+
+  // Validate = render blocks + check sources in bin + check structure (1 click).
+  $('sacPreviewBtn').addEventListener('click', sacValidateAll);
+
+  async function sacValidateAll() {
+    var btn = $('sacPreviewBtn');
+    var status = $('sacStatus');
+    var blocks = parseBlocks();
+    if (blocks.length === 0) {
+      status.textContent = 'Chưa có dữ liệu. Điền ít nhất 1 dòng có cả Script và Source.';
+      status.style.display = 'block';
+      return;
+    }
+
+    renderBlocks(blocks); // shows block cards with ⌛ on each source
+    btn.disabled = true;
+    var oldLabel = btn.textContent;
+    btn.textContent = '⏳ Validating...';
+    status.textContent = '⏳ Đang kiểm tra source + cấu trúc...';
+    status.style.display = 'block';
+
+    try {
+      // 1) Source validation against the Premiere bin (updates ✓/✗ icons)
+      var srcResult = await sacValidateSources(blocks);
+
+      // 2) Structure validation via bridge
+      var resp = await fetch(BRIDGE_URL + '/superautocut/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks: blocks }),
+      });
+      var d = await resp.json();
+
+      if (!d.ok) {
+        status.textContent = '❌ ' + (d.errors ? d.errors.join(' | ') : d.error);
+        sacValidatePassed = false;
+      } else if (srcResult.missing.length > 0) {
+        status.textContent = '⚠ Cấu trúc OK nhưng thiếu source trong bin: '
+          + srcResult.missing.join(', ') + ' (xem Console).';
+        sacValidatePassed = false;
+      } else if (srcResult.ambiguous && srcResult.ambiguous.length > 0) {
+        // Ambiguous sources: structure OK + all found, but some names match multiple clips
+        status.textContent = '⚠ Source trùng tên — cần folder hint (bấm 📁): '
+          + srcResult.ambiguous.join(', ');
+        sacValidatePassed = false;
+      } else {
+        var note = srcResult.premiereAvailable ? '' : ' (dev mode — chưa kiểm tra bin)';
+        sacValidatePassed = true;
+        status.textContent = sacVoiceReady
+          ? ('✅ ' + d.blockCount + ' blocks OK + voice sẵn sàng. Bấm "Run AutoCut".' + note)
+          : ('✅ ' + d.blockCount + ' blocks hợp lệ. Thêm voice (⚡ Gen / 📂) để mở Run.' + note);
+        // Auto-collapse script section after successful validate
+        var wrap = $('sacTableWrap'), footer = $('sacTableFooter');
+        if (wrap && wrap.style.display !== 'none') {
+          wrap.style.display = 'none';
+          if (footer) footer.style.display = 'none';
+          var chev = $('sacScriptChevron');
+          if (chev) chev.textContent = '▸';
+          var blockSec = $('sacBlockSection');
+          if (blockSec) blockSec.style.flex = '1 1 0';
+        }
+      }
+      sacUpdateRunVisibility();
+    } catch(e) {
+      status.textContent = '❌ Bridge offline: ' + e.message;
+      sacValidatePassed = false;
+      sacUpdateRunVisibility();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldLabel;
+    }
+  }
+
+  // ── Parse với AI (screenshot → rows) ────────────────────────────────────
+  var sacParseImg = $('sacParseImg');
+  if (sacParseImg) {
+    sacParseImg.addEventListener('click', function() {
+      if (!sacImgDataUrl) return;
+      sacParseImg.disabled = true;
+      sacParseImg.textContent = '⏳ Đang phân tích...';
+      $('sacImgStatus').textContent = '';
+      $('sacImgStatus').style.display = 'none';
+
+      fetch(BRIDGE_URL + '/superautocut/parse-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: sacImgDataUrl }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          sacParseImg.disabled = false;
+          sacParseImg.textContent = 'Parse với AI →';
+          if (!d.ok || !d.rows || d.rows.length === 0) {
+            $('sacImgStatus').textContent = '❌ ' + (d.error || 'Không parse được.');
+            $('sacImgStatus').style.display = 'block';
+            return;
+          }
+          // Switch to manual tab and load rows
+          document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
+            b.classList.toggle('is-active', b.dataset.method === 'manual');
+          });
+          $('sacPanelManual').style.display = 'flex';
+          $('sacPanelScreenshot').style.display = 'none';
+          $('sacBody').innerHTML = ''; rowSeq = 0;
+          var expanded = expandRows(d.rows.map(function(r) {
+            return [ r.text || '', r.time || '', r.source || '' ];
+          }));
+          expanded.forEach(function(cols) {
+            createRow(cols[0], cols[1], cols[2]);
+          });
+        })
+        .catch(function(e) {
+          sacParseImg.disabled = false;
+          sacParseImg.textContent = 'Parse với AI →';
+          $('sacImgStatus').textContent = '❌ Bridge lỗi: ' + e.message;
+          $('sacImgStatus').style.display = 'block';
+        });
+    });
+  }
+
+  $('sacClearBlocks').addEventListener('click', function() {
+    $('sacBlockSection').style.display = 'none';
+    parsedBlocks = [];
+  });
+
+  // ── Cut panel buttons ───────────────────────────────────────────────────
+
+  // "Without voice" button (in voice panel) → enter no-voice cut mode
+  var sacCutNoVoiceBtn = $('sacCutNoVoiceBtn');
+  if (sacCutNoVoiceBtn) sacCutNoVoiceBtn.addEventListener('click', function() {
+    if (!sacValidatePassed) return;
+    sacNoVoiceMode = true;
+    sacUpdateRunVisibility();
+  });
+
+  // [✕] back — return to voice panel
+  var sacCutBackBtn = $('sacCutBack');
+  if (sacCutBackBtn) sacCutBackBtn.addEventListener('click', function() {
+    sacNoVoiceMode = false;
+    sacHideCutPanel();
+    sacUpdateRunVisibility();
+  });
+
+  // [▶ This seq] — run assembly into current active sequence
+  var sacCutThisBtn = $('sacCutThis');
+  if (sacCutThisBtn) sacCutThisBtn.addEventListener('click', function() {
+    sacRunAutoCut('current');
+  });
+
+  // [▶ New seq] — run assembly into a new sequence (uses form settings)
+  var sacCutNewBtn = $('sacCutNew');
+  if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', function() {
+    sacRunAutoCut('new');
+  });
+
+  // [⚙] — toggle new seq settings form
+  var sacCutNewSettingsBtn = $('sacCutNewSettings');
+  if (sacCutNewSettingsBtn) sacCutNewSettingsBtn.addEventListener('click', function() {
+    var form = $('sacNewSeqForm');
+    if (!form) return;
+    var open = form.style.display !== 'none';
+    form.style.display = open ? 'none' : 'flex';
+    sacCutNewSettingsBtn.classList.toggle('is-active', !open);
+    // Pre-fill name with timestamp default on first open
+    if (!open) {
+      var inp = $('sacNewSeqName');
+      if (inp && !inp.value) inp.value = 'AutoCut';
+    }
+  });
+
+  // Keyboard claim/release for new seq name input
+  var sacNewSeqNameInp = $('sacNewSeqName');
+  if (sacNewSeqNameInp) {
+    sacNewSeqNameInp.addEventListener('focus', function() { if (window.claimKeyboard) window.claimKeyboard(); });
+    sacNewSeqNameInp.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
+  }
+
+  // ── Success panel buttons ────────────────────────────────────────────────
+  var sacBackToScriptBtn = $('sacBackToScript');
+  if (sacBackToScriptBtn) sacBackToScriptBtn.addEventListener('click', function() {
+    $('sacSuccessPanel').style.display = 'none';
+    $('sacPanelManual').style.display = 'flex';
+  });
+
+  var sacNewAutocutBtn = $('sacNewAutocut');
+  if (sacNewAutocutBtn) sacNewAutocutBtn.addEventListener('click', function() {
+    $('sacSuccessPanel').style.display = 'none';
+    parsedBlocks = [];
+    sacSourceMap = {};
+    sacVoicePath = null;
+    window.sacVoicePath = null;
+    sacValidatePassed = false;
+    sacVoiceReady = false;
+    sacNoVoiceMode = false;
+    $('sacBlockSection').style.display = 'none';
+    $('sacVoicePlayer').style.display = 'none';
+    $('sacVoiceInfo').textContent = 'Chưa có voice';
+    $('sacStatus').style.display = 'none';
+    $('sacNewSeqForm').style.display = 'none';
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    createRow(); createRow(); createRow();
+    $('sacPanelManual').style.display = 'flex';
+    sacUpdateRunVisibility();
+  });
+
+  // Voice controls (Phase 4a / Approach B)
+  var sacVoiceBtn = $('sacVoiceBtn');
+  if (sacVoiceBtn) sacVoiceBtn.addEventListener('click', sacPickVoiceFile);
+  var sacVoiceGenBtn = $('sacVoiceGenBtn');
+  if (sacVoiceGenBtn) sacVoiceGenBtn.addEventListener('click', sacGenVoice);
+  var sacVoicePlay = $('sacVoicePlay');
+  if (sacVoicePlay) sacVoicePlay.addEventListener('click', function() {
+    if (sacVP.playing) sacVPStop(); else sacVPPlay();
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHASE 5 — Assembly  (UXP API: SequenceEditor + transaction)
+  // Ref: https://developer.adobe.com/premiere-pro/uxp/ppro_reference/classes/sequenceeditor/
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Parse "M:SS" or "M:SS-M:SS" → {inSec, outSec}. Single ts defaults to 3s.
+  function parseSourceTime(str) {
+    if (!str || !str.trim()) return { inSec: 0, outSec: 3 };
+    var s = str.trim();
+    var m = s.match(/^(\d+):(\d+)(?:-(\d+):(\d+))?$/);
+    if (!m) return { inSec: 0, outSec: 3 };
+    var inSec  = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    var outSec = (m[3] != null)
+      ? parseInt(m[3], 10) * 60 + parseInt(m[4], 10)
+      : inSec + 3;
+    return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
+  }
+
+  // TickTime via ppro.TickTime.createWithSeconds (official UXP API).
+  function sacMakeTime(seconds) {
+    if (ppro && ppro.TickTime) {
+      try { return ppro.TickTime.createWithSeconds(seconds); } catch(e) {}
+    }
+    return { seconds: seconds, ticks: secToTicks(seconds) };
+  }
+
+  // Return seconds position of the last clip on V1 (append cursor).
+  // Scan one track for the furthest clip end (seconds).
+  async function sacScanTrackEnd(track, endRef) {
+    if (!track) return;
+    try {
+      var items = await getClipItems(track);
+      for (var i = 0; i < items.length; i++) {
+        try {
+          var e = items[i].getEnd && items[i].getEnd();
+          if (e && typeof e.then === 'function') e = await e;
+          var eSec = getTimeSec(e);
+          if (eSec > endRef.v) endRef.v = eSec;
+        } catch(er) {}
+      }
+    } catch(er) {}
+  }
+
+  // Return the end position (seconds) of the last clip across ALL tracks.
+  // Checks video+audio via multiple API paths so the cursor never resets to 0.
+  async function sacGetSequenceEnd(seq) {
+    var endRef = { v: 0 }; // use object so sacScanTrackEnd can mutate it
+
+    // Path A: trackGroup API (if ppro.Backend exists)
+    try {
+      if (ppro.Backend && seq.trackGroup) {
+        var TYPES = [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO];
+        for (var ti = 0; ti < TYPES.length; ti++) {
+          var grp = seq.trackGroup(TYPES[ti]);
+          if (!grp) continue;
+          for (var gi = 0; gi < grp.numTracks; gi++) {
+            await sacScanTrackEnd(grp.getTrack(gi), endRef);
+          }
+        }
+      }
+    } catch(eA) {}
+
+    // Path B: getVideoTrack / getAudioTrack (async per-track API)
+    if (endRef.v === 0) {
+      var trackGetters = [
+        { cntFn: 'getVideoTrackCount', getFn: 'getVideoTrack' },
+        { cntFn: 'getAudioTrackCount', getFn: 'getAudioTrack' },
+      ];
+      for (var p = 0; p < trackGetters.length; p++) {
+        try {
+          var cnt = seq[trackGetters[p].cntFn] && seq[trackGetters[p].cntFn]();
+          if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+          cnt = Number(cnt) || 0;
+          for (var idx = 0; idx < cnt; idx++) {
+            var tr = seq[trackGetters[p].getFn] && seq[trackGetters[p].getFn](idx);
+            if (tr && typeof tr.then === 'function') tr = await tr;
+            await sacScanTrackEnd(tr, endRef);
+          }
+        } catch(eB) {}
+      }
+    }
+
+    // Path C: sequence duration as last resort
+    if (endRef.v === 0) {
+      try {
+        var dur = seq.getDuration && seq.getDuration();
+        if (dur && typeof dur.then === 'function') dur = await dur;
+        var d = getTimeSec(dur);
+        if (d > 0) endRef.v = d;
+      } catch(eC) {}
+    }
+
+    console.log('[SAC] sacGetSequenceEnd =', endRef.v.toFixed(2) + 's');
+    return endRef.v;
+  }
+
+  // Find or import a file: search bin first, only import if not already in project.
+  // Prevents duplicate imports when Run AutoCut is called multiple times.
+  async function sacFindOrImportFile(filePath) {
+    var proj = await getActiveProject();
+    var rootItem = null;
+    if (typeof proj.getRootItem === 'function') {
+      rootItem = proj.getRootItem();
+      if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+    }
+    if (!rootItem) rootItem = proj.rootItem;
+
+    var fname = filePath.split('/').pop().split('\\').pop();
+    var binItems = rootItem ? (await sacCollectBinItems(rootItem)) : [];
+
+    // Search existing bin first
+    var found = binItems.find(function(b) { return b.name === fname; });
+    if (found) {
+      console.log('[SAC] Voice already in project bin:', fname);
+      return found.item;
+    }
+
+    // Not found — import
+    if (typeof proj.importFiles === 'function') {
+      await proj.importFiles([filePath]);
+    } else if (typeof proj.importFile === 'function') {
+      await proj.importFile(filePath);
+    } else {
+      throw new Error('No importFiles API on project');
+    }
+    // Re-scan bin to find the newly imported item
+    var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
+    var found2 = binItems2.find(function(b) { return b.name === fname; });
+    // Move to "voice over" bin
+    if (found2) await ppMoveToVOBin(found2.item, proj);
+    return found2 ? found2.item : null;
+  }
+
+  // Commit a single lockedAccess/executeTransaction and await if needed.
+  async function sacCommitTx(project, fn, label) {
+    var r = project.lockedAccess(function() {
+      project.executeTransaction(fn, label || 'SAC tx');
+    });
+    if (r && typeof r.then === 'function') await r;
+  }
+
+  // Place a clip on the timeline.
+  // TWO separate committed transactions: (1) set source in/out, (2) insert.
+  // Reason: in a combined transaction, createSetInOutPointsAction on a shared
+  // master clip (e.g. the voice file) takes effect after the transaction commits,
+  // not before the insert action inside the SAME transaction. Splitting into two
+  // separate commits ensures in/out is fully applied before the insert runs.
+  // vIdx = video track (0=V1), 5 = far-away track (effectively skip). aIdx similar.
+  async function sacInsertClipAt(project, seqEditor, item, atSec, inSec, outSec, vIdx, aIdx) {
+    var timeAt = sacMakeTime(atSec);
+    var inPt   = sacMakeTime(inSec);
+    var outPt  = sacMakeTime(outSec);
+
+    var clipItem = null;
+    if (ppro.ClipProjectItem) {
+      try { clipItem = ppro.ClipProjectItem.cast(item); } catch(e) {}
+    }
+
+    // Tx 1: commit in/out change first
+    if (clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
+      await sacCommitTx(project, function(ca) {
+        ca.addAction(clipItem.createSetInOutPointsAction(inPt, outPt));
+      }, 'SAC set in/out');
+    }
+
+    // Tx 2: insert — master clip in/out is now committed, insert uses it
+    await sacCommitTx(project, function(ca) {
+      ca.addAction(seqEditor.createOverwriteItemAction(item, timeAt, vIdx, aIdx));
+    }, 'SAC insert clip');
+  }
+
+  async function sacRunAutoCut(seqMode) {
+    seqMode = seqMode || 'current';
+    var status = $('sacStatus');
+    status.style.display = 'block';
+    status.textContent = '⏳ Đang khởi động assembly...';
+
+    try {
+      if (!ppro) throw new Error('Premiere Pro API không khả dụng — chạy trong Premiere');
+      if (!ppro.SequenceEditor) throw new Error('ppro.SequenceEditor không có — Premiere 25.x+ required');
+
+      var blocks = parsedBlocks.filter(function(b) {
+        return (b.sources && b.sources.length > 0) || (!sacNoVoiceMode && b.voiceStart != null);
+      });
+      if (blocks.length === 0) throw new Error('Không có blocks — validate + align voice trước');
+
+      var project = await getActiveProject();
+      var seq, cursor;
+
+      if (seqMode === 'new') {
+        status.textContent = '⏳ Tạo sequence mới...';
+        // Read settings from form (use defaults if form not visible)
+        var nameInp  = $('sacNewSeqName');
+        var ratioSel = $('sacNewSeqRatio');
+        var fpsSel   = $('sacNewSeqFps');
+        var seqName  = (nameInp && nameInp.value.trim()) || 'AutoCut';
+        var ratio    = ratioSel ? ratioSel.value : 'match';
+        var fps      = fpsSel  ? parseFloat(fpsSel.value) : 29.97;
+
+        // Find first non-skipped source ProjectItem (for createSequenceFromMedia)
+        var firstSrcItem = null;
+        for (var bi = 0; bi < blocks.length && !firstSrcItem; bi++) {
+          for (var si2 = 0; si2 < (blocks[bi].sources || []).length; si2++) {
+            var sn2 = blocks[bi].sources[si2];
+            if (!sn2.skipped) { firstSrcItem = sacSourceMap[sn2.name] || window.sacSourceMap[sn2.name]; break; }
+          }
+        }
+
+        // Sequence timebase is IMMUTABLE after creation — must be baked in at creation time.
+        // Strategy:
+        //   - Always use createSequenceFromMedia when source clips available → fps matches source
+        //   - "Match source clips" mode: also uses source frame size → nothing else needed
+        //   - Custom ratio: use createSequenceFromMedia for fps, then override frame size via setSettings
+        if (firstSrcItem && typeof project.createSequenceFromMedia === 'function') {
+          seq = await project.createSequenceFromMedia(seqName, [firstSrcItem]);
+          console.log('[SAC] Sequence created from media (fps from source clip)');
+        }
+        if (!seq) seq = await project.createSequence(seqName);
+        if (!seq) throw new Error('Không tạo được sequence mới');
+
+        // Apply custom frame size (ratio ≠ match). FPS comes from source via createSequenceFromMedia.
+        if (ratio !== 'match') {
+          try {
+            var parts = ratio.split('x');
+            var w = parseInt(parts[0]), h = parseInt(parts[1]);
+            var settings = await seq.getSettings();
+            if (settings && w && h) {
+              var frameRect = await settings.getVideoFrameRect();
+              frameRect.width  = w;
+              frameRect.height = h;
+              await settings.setVideoFrameRect(frameRect);
+              var rs = project.lockedAccess(function() {
+                project.executeTransaction(function(ca) {
+                  ca.addAction(seq.createSetSettingsAction(settings));
+                }, 'SAC set frame size');
+              });
+              if (rs && typeof rs.then === 'function') await rs;
+              console.log('[SAC] Frame size applied:', w + 'x' + h);
+            }
+          } catch(es) { console.warn('[SAC] Frame size failed:', es.message); }
+        }
+
+        if (typeof project.openSequence    === 'function') await project.openSequence(seq);
+        if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
+        cursor = 0;
+        console.log('[SAC] New sequence:', seqName, '| ratio:', ratio, '| fps:', fps);
+      } else {
+        seq    = await getActiveSequence();
+        status.textContent = '⏳ Tìm vị trí cuối timeline...';
+        cursor = await sacGetSequenceEnd(seq);
+      }
+
+      var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
+      if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
+      console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
+        sacNoVoiceMode ? '(without voice)' : '');
+
+      // Import voice file once — skip if Without Voice mode
+      var voiceItem = null;
+      if (!sacNoVoiceMode) {
+        var voicePath = sacVoicePath || window.sacVoicePath;
+        if (voicePath) {
+          status.textContent = '⏳ Import voice...';
+          try {
+            voiceItem = await sacFindOrImportFile(voicePath);
+            console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
+          } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
+        }
+      }
+
+      var placed = 0;
+      for (var i = 0; i < blocks.length; i++) {
+        var block      = blocks[i];
+        var blockStart = cursor;
+        var srcTotal   = 0;
+        status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
+
+        // Place each source clip on V1 (video only), source audio → A2
+        for (var j = 0; j < (block.sources || []).length; j++) {
+          var src = block.sources[j];
+
+          // Skip check MUST come before srcItem lookup — skipped sources have no item
+          if (src.skipped) {
+            console.log('[SAC] V1 "' + src.name + '" SKIPPED — 1s gap @' + cursor.toFixed(2) + 's');
+            srcTotal += 1.0;
+            cursor   += 1.0;
+            continue;
+          }
+
+          var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
+          if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
+
+          var ts      = parseSourceTime(src.time);
+          var clipDur = ts.outSec - ts.inSec;
+
+          await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
+          console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec +
+            ']s @' + cursor.toFixed(2) + 's');
+
+          srcTotal += clipDur;
+          cursor   += clipDur;
+        }
+
+        // Place voice segment on A1 (skipped in Without Voice mode)
+        if (!sacNoVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
+          var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
+          var vOut = block.voiceEnd + 0.2;
+
+          await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
+                                block.voiceStart, vOut, 5, 0);
+          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' +
+            vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
+
+          if (vDur > srcTotal) cursor = blockStart + vDur;
+        }
+
+        cursor += 1.0; // 1s gap between blocks
+        placed++;
+        await new Promise(function(r) { setTimeout(r, 300); });
+      }
+
+      // ── Show success panel ────────────────────────────────────────────────
+      var statsEl = $('sacSuccessStats');
+      if (statsEl) {
+        statsEl.textContent = placed + ' blocks · ' + cursor.toFixed(1) + 's' +
+          (sacNoVoiceMode ? ' · without voice' : '');
+      }
+      status.style.display = 'none';
+      $('sacPanelManual').style.display = 'none';
+      $('sacSuccessPanel').style.display = 'flex';
+
+    } catch(e) {
+      status.textContent = '❌ ' + e.message;
+      console.error('[SAC] sacRunAutoCut error:', e);
+    }
+  }
+
+  // ── Collapse/expand the script input section ─────────────────────────────
+  var sacScriptToggle = $('sacScriptToggle');
+  if (sacScriptToggle) {
+    sacScriptToggle.addEventListener('click', function() {
+      var wrap = $('sacTableWrap');
+      var footer = $('sacTableFooter');
+      var wasCollapsed = wrap.style.display === 'none';
+      wrap.style.display   = wasCollapsed ? '' : 'none';
+      footer.style.display = wasCollapsed ? '' : 'none';
+      $('sacScriptChevron').textContent = wasCollapsed ? '▾' : '▸';
+      // When script is hidden, let the blocks section grow to fill the panel.
+      // (default is a fixed 220px height — see .sac-blockSection)
+      $('sacBlockSection').style.flex = wasCollapsed ? '' : '1 1 0';
+    });
+  }
+
+  // ── Init: 3 empty rows ───────────────────────────────────────────────────
+  createRow(); createRow(); createRow();
+
+})(); // END Super Auto Cut module
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VOICE GEN MODULE (ElevenLabs)
@@ -2969,9 +4686,16 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
         importB.textContent = 'Import';
         importB.addEventListener('click', function() { importVariation(v); });
 
+        // Move to Autocut — feed this generated voice into the Autocut pipeline
+        var toAutocutB = document.createElement('button');
+        toAutocutB.className = 'ac-secondaryButton vg-actionButton';
+        toAutocutB.textContent = '→ Autocut';
+        toAutocutB.addEventListener('click', function() { moveToAutocut(v); });
+
         var actionsRow = document.createElement('div');
         actionsRow.className = 'vg-resultActions';
         actionsRow.appendChild(importB);
+        actionsRow.appendChild(toAutocutB);
 
         wrap.appendChild(sizeEl);
         wrap.appendChild(playerRow);
@@ -3037,6 +4761,20 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       els.importStatus.className = 'ac-manualStatus is-ok';
       els.importStatus.textContent = '✓ Saved to ' + customOutputFolder +
         ', imported "' + variation.filename + '" → see Project Panel';
+      // Move to "voice over" bin (fire-and-forget, don't block UI)
+      try {
+        var rootItem = null;
+        if (typeof project.getRootItem === 'function') {
+          rootItem = project.getRootItem();
+          if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+        }
+        if (rootItem) {
+          var fname = (variation.filename || finalPath.split('/').pop());
+          var binItems = await sacCollectBinItems(rootItem);
+          var voItem = binItems.find(function(b) { return b.name === fname; });
+          if (voItem) await ppMoveToVOBin(voItem.item, project);
+        }
+      } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
       els.importStatus.textContent = '✗ Import: ' + e.message;
@@ -3078,6 +4816,15 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
   // Wire events
   els.btnRefresh.addEventListener('click', loadVoices);
+
+  // ⚙ settings toggle — show/hide the API profiles + output format panel
+  var vgSettingsBtn = $('vgSettingsBtn'), vgSettingsPanel = $('vgSettingsPanel');
+  if (vgSettingsBtn && vgSettingsPanel) {
+    vgSettingsBtn.addEventListener('click', function() {
+      vgSettingsPanel.hidden = !vgSettingsPanel.hidden;
+      vgSettingsBtn.classList.toggle('is-active', !vgSettingsPanel.hidden);
+    });
+  }
   els.voiceSelect.addEventListener('change', function() {
     els.customVoiceId.hidden = els.voiceSelect.value !== '__custom__';
     if (!els.customVoiceId.hidden) els.customVoiceId.focus();
@@ -3092,6 +4839,35 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   // Variation buttons
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
   if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
+
+  // Move to Autocut — save to output folder (if set) then feed to Autocut pipeline
+  async function moveToAutocut(v) {
+    if (!v || !v.audioPath) return;
+
+    // Mirror importVariation: if no output folder set, prompt now
+    if (!customOutputFolder) {
+      await pickOutputFolder();
+      if (!customOutputFolder) return; // user cancelled
+    }
+
+    var finalPath = v.audioPath;
+    var alreadyInDest = v.audioPath.startsWith(customOutputFolder);
+    if (!alreadyInDest) {
+      try {
+        var moveResp = await postJsonVG('/tts/move', {
+          sourcePath: v.audioPath,
+          targetDir:  customOutputFolder,
+        });
+        if (moveResp.ok) finalPath = moveResp.targetPath;
+        else console.warn('[VG→AC] Move failed:', moveResp.error);
+      } catch(e) { console.warn('[VG→AC] Move error:', e.message); }
+    }
+
+    if (typeof window.AutocutPushVoice === 'function') window.AutocutPushVoice(finalPath);
+  }
+  var vgV1ToAC = $('vgVar1ToAutocut'), vgV2ToAC = $('vgVar2ToAutocut');
+  if (vgV1ToAC) vgV1ToAC.addEventListener('click', function() { moveToAutocut(lastVariations[0]); });
+  if (vgV2ToAC) vgV2ToAC.addEventListener('click', function() { moveToAutocut(lastVariations[1]); });
 
   if (els.script) {
     els.script.addEventListener('input', updateCharCount);
