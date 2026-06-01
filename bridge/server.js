@@ -22,9 +22,33 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || null;
 const USE_CLI = !API_KEY;
 
 // ── Whisper config (configurable via .env) ────────────────────────────────
-const WHISPER_BIN   = process.env.WHISPER_BIN   || '/Library/Frameworks/Python.framework/Versions/3.14/bin/whisper';
 const WHISPER_MODEL = process.env.WHISPER_MODEL || 'base';
 const WHISPER_LANG  = process.env.WHISPER_LANG  || 'en';
+
+// Auto-detect whisper binary: .env override → which → common Python paths
+function findWhisperBin() {
+  if (process.env.WHISPER_BIN) return process.env.WHISPER_BIN;
+  // Try `which whisper` first
+  try {
+    const { execSync } = require('child_process');
+    const p = execSync('which whisper 2>/dev/null', { encoding: 'utf8' }).trim();
+    if (p && require('fs').existsSync(p)) return p;
+  } catch(e) {}
+  // Scan common Python framework versions (newest first)
+  const versions = ['3.14','3.13','3.12','3.11','3.10','3.9'];
+  const fs = require('fs');
+  for (const v of versions) {
+    const p = `/Library/Frameworks/Python.framework/Versions/${v}/bin/whisper`;
+    if (fs.existsSync(p)) return p;
+  }
+  // Homebrew / user local
+  for (const p of ['/opt/homebrew/bin/whisper', '/usr/local/bin/whisper',
+                   `${process.env.HOME}/.local/bin/whisper`]) {
+    if (fs.existsSync(p)) return p;
+  }
+  return 'whisper'; // fallback: hope it's in PATH
+}
+const WHISPER_BIN = findWhisperBin();
 
 if (API_KEY) {
   console.log('✓  Mode: Anthropic API key');
@@ -1721,7 +1745,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.0';
+const BRIDGE_VERSION = '1.5.1';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
