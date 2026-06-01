@@ -10,13 +10,16 @@
 <!-- ── VERSION BAR — always visible, all tabs ── -->
 <div id="versionBar" class="version-bar">
   <span id="versionBarText" class="version-bar-text"></span>
-  <span id="versionBarUpdate" class="version-bar-update" style="display:none">
-    🔔 Có bản mới
-    <button id="versionBarUpdateBtn" class="version-bar-btn">↑ Cập nhật</button>
-  </span>
   <span id="versionBarBridgeWarn" class="version-bar-warn" style="display:none">
     ⚠ Cần update Bridge
   </span>
+</div>
+
+<!-- ── PLUGIN UPDATE BANNER — shown when a newer plugin version is available ── -->
+<div id="pluginUpdateBanner" hidden>
+  <span id="pluginUpdateMsg">Có bản cập nhật mới</span>
+  <button id="pluginUpdateBtn" class="text-btn">↑ Cập nhật</button>
+  <button id="pluginUpdateDismiss" class="text-btn">✕</button>
 </div>
 
 <!-- ── TAB BAR ── -->
@@ -149,8 +152,7 @@
         <label>Plugin version</label>
         <div style="display:flex;align-items:center;gap:8px;">
           <span id="settings-plugin-version" style="opacity:0.6;font-size:12px;"></span>
-          <button class="btn-secondary" id="check-update-btn" style="padding:3px 10px;font-size:11px;">Check for updates</button>
-          <span id="check-update-status" style="font-size:11px;opacity:0.7;"></span>
+          <span style="opacity:0.45;font-size:10px;">Cập nhật tự động hiện ở thanh trên cùng khi có bản mới</span>
         </div>
       </div>
 
@@ -598,6 +600,25 @@
 
     </div><!-- /vg-body -->
   </div><!-- /vg-app -->
+
+  <!-- Save-location modal: filename + remembered folder.
+       UXP getFileForSaving can't open at a chosen folder, so we use this instead. -->
+  <div id="vgSaveModal" class="vg-save-modal" hidden>
+    <div class="vg-save-box">
+      <div class="vg-save-title">&#128190; Lưu audio</div>
+      <label class="vg-save-label">Tên file</label>
+      <input id="vgSaveName" type="text" class="vg-save-input" />
+      <label class="vg-save-label">Thư mục lưu</label>
+      <div class="vg-save-folderRow">
+        <span id="vgSaveFolder" class="vg-save-folder">(chưa chọn)</span>
+        <button id="vgSaveChangeFolder" class="vg-folderBtn">&#128193; Đổi…</button>
+      </div>
+      <div class="vg-save-actions">
+        <button id="vgSaveCancel" class="btn-secondary">Huỷ</button>
+        <button id="vgSaveConfirm" class="btn-primary">Lưu</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->

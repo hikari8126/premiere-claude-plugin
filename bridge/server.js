@@ -1388,16 +1388,78 @@ const UPDATE_MANIFEST_URL = 'https://gist.githubusercontent.com/hikari8126/8fb34
 app.post('/plugin/check-update', async (req, res) => {
   const { currentVersion } = req.body;
   try {
-    const r    = await fetch(UPDATE_MANIFEST_URL + '?t=' + Date.now());
-    const data = await r.json();
+    // AbortController guards against Gist hanging forever (Node fetch has no default timeout).
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    let data;
+    try {
+      const r = await fetch(UPDATE_MANIFEST_URL + '?t=' + Date.now(), { signal: ctrl.signal });
+      data = await r.json();
+    } finally { clearTimeout(t); }
     const latestVersion  = data.pluginVersion    || '';
     const downloadUrl    = data.pluginDownloadUrl || '';
     const hasUpdate = latestVersion && downloadUrl && isNewer(latestVersion, currentVersion);
     res.json({ ok: true, hasUpdate: !!hasUpdate, latestVersion, downloadUrl });
   } catch(e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: e.name === 'AbortError' ? 'timeout fetching manifest' : e.message });
   }
 });
+
+// Streaming download with redirect-following + idle timeout.
+// Node's fetch().arrayBuffer() buffers the whole body with no timeout, so a stalled
+// connection hangs forever — the cause of "đứng ở bước download update". This pipes
+// straight to disk and aborts if no data arrives for `idleMs`.
+function downloadFile(url, destPath, { idleMs = 30000, maxRedirects = 5 } = {}) {
+  return new Promise((resolve, reject) => {
+    const tmpPath = destPath + '.tmp';
+    const file = fs.createWriteStream(tmpPath);
+    let settled = false;
+    function fail(err) {
+      if (settled) return;
+      settled = true;
+      try { file.destroy(); } catch {}
+      try { fs.unlinkSync(tmpPath); } catch {}
+      reject(err);
+    }
+    function get(targetUrl, redirectsLeft) {
+      const lib = targetUrl.startsWith('http://') ? require('http') : require('https');
+      const request = lib.get(targetUrl, { rejectUnauthorized: false }, response => {
+        const sc = response.statusCode;
+        if ([301, 302, 303, 307, 308].includes(sc) && response.headers.location) {
+          response.resume(); // drain
+          if (redirectsLeft <= 0) return fail(new Error('too many redirects'));
+          const next = new URL(response.headers.location, targetUrl).toString();
+          return get(next, redirectsLeft - 1);
+        }
+        if (sc !== 200) {
+          response.resume();
+          return fail(new Error(`Download failed: HTTP ${sc}`));
+        }
+        const total = parseInt(response.headers['content-length'] || '0', 10);
+        let downloaded = 0;
+        response.on('data', chunk => {
+          downloaded += chunk.length;
+          request.setTimeout(idleMs); // reset idle timer on every chunk
+        });
+        response.pipe(file);
+        file.on('finish', () => {
+          if (settled) return;
+          file.close(() => {
+            try { fs.renameSync(tmpPath, destPath); } catch (e) { return fail(e); }
+            settled = true;
+            console.log(`[plugin/update] downloaded ${destPath} (${downloaded}/${total || '?'}B)`);
+            resolve(destPath);
+          });
+        });
+      });
+      request.setTimeout(idleMs, () => {
+        request.destroy(new Error(`download stalled (no data for ${idleMs/1000}s)`));
+      });
+      request.on('error', err => fail(err));
+    }
+    get(url, maxRedirects);
+  });
+}
 
 // ── POST /plugin/update — download CCX and open with Creative Cloud ─────────
 app.post('/plugin/update', async (req, res) => {
@@ -1408,12 +1470,7 @@ app.post('/plugin/update', async (req, res) => {
     ensureDir(tmpDir);
     const ccxPath = path.join(tmpDir, `claude-ai-assistant-v${version || 'latest'}.ccx`);
 
-    // Download CCX
-    const r = await fetch(downloadUrl);
-    if (!r.ok) throw new Error(`Download failed: ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    fs.writeFileSync(ccxPath, buf);
-    console.log('[plugin/update] downloaded', ccxPath, buf.length + 'B');
+    await downloadFile(downloadUrl, ccxPath);
 
     // Open with Creative Cloud (macOS: open triggers CC installer)
     await new Promise((resolve, reject) => {
@@ -1764,7 +1821,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.5';
+const BRIDGE_VERSION = '1.5.6';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
