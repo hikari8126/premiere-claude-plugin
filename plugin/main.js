@@ -3203,6 +3203,18 @@ async function ppMoveToVOBin(item, proj) {
     }
 
     renderBlocks(blocks); // shows block cards with ⌛ on each source
+
+    // Collapse script section immediately on validate
+    var wrap = $('sacTableWrap'), footer = $('sacTableFooter');
+    if (wrap && wrap.style.display !== 'none') {
+      wrap.style.display = 'none';
+      if (footer) footer.style.display = 'none';
+      var chev = $('sacScriptChevron');
+      if (chev) chev.textContent = '▸';
+      var blockSec = $('sacBlockSection');
+      if (blockSec) blockSec.style.flex = '1 1 0';
+    }
+
     btn.disabled = true;
     var oldLabel = btn.textContent;
     btn.textContent = '⏳ Validating...';
