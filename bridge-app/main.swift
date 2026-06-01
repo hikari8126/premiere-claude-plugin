@@ -21,6 +21,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var logTextView:  NSTextView?
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
+    var updateMenuItem: NSMenuItem?          // shown when update available
+    var pendingBridgeDL  = ""
+    var pendingPluginDL  = ""
+    var pendingBridgeVer = ""
+    var pendingPluginVer = ""
 
     let version          = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.x"
     let pluginVersion    = Bundle.main.infoDictionary?["PluginVersion"]              as? String ?? "0"
@@ -52,6 +57,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func rebuildMenu() {
         let menu = NSMenu()
 
+        // ── Update notification (hidden until update found) ───────────────
+        let updItem = NSMenuItem(title: "⬆️  Có bản cập nhật", action: #selector(installAvailableUpdate), keyEquivalent: "")
+        updItem.target = self
+        updItem.isHidden = true
+        menu.addItem(updItem)
+        updateMenuItem = updItem
+
         let titleItem = NSMenuItem(title: "Claude Bridge  v\(version)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
@@ -71,11 +83,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(autoStartItem)
 
         menu.addItem(.separator())
-        menu.addItem(item("🐍  Cài Whisper (Autocut STT)", #selector(installWhisper),    key: ""))
-        menu.addItem(item("🎬  Cài ffmpeg (Voice & Audio)", #selector(installFfmpeg),    key: ""))
-        menu.addItem(item("🔍  Kiểm tra cập nhật",         #selector(checkForUpdateMenu), key: "u"))
+        menu.addItem(item("🐍  Cài Whisper (Autocut STT)",  #selector(installWhisper),     key: ""))
+        menu.addItem(item("🎬  Cài ffmpeg (Voice & Audio)",  #selector(installFfmpeg),      key: ""))
+        menu.addItem(item("🔍  Kiểm tra cập nhật",           #selector(checkForUpdateMenu), key: "u"))
         menu.addItem(.separator())
-        menu.addItem(item("Thoát",                         #selector(quit),               key: "q"))
+        menu.addItem(item("Thoát",                            #selector(quit),               key: "q"))
 
         statusItem.menu = menu
     }
@@ -563,6 +575,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: ─── Auto-update ────────────────────────────────────────────────
     @objc func checkForUpdateMenu() { checkForUpdates(silent: false) }
 
+    @objc func installAvailableUpdate() {
+        // Show simplified alert with just the available updates
+        let a = NSAlert()
+        a.alertStyle = .informational
+        var parts = [String]()
+        if !pendingBridgeDL.isEmpty { parts.append("Bridge v\(pendingBridgeVer)") }
+        if !pendingPluginDL.isEmpty { parts.append("Plugin v\(pendingPluginVer)") }
+        a.messageText = "⬆️  Cập nhật: \(parts.joined(separator: " + "))"
+        if !pendingBridgeDL.isEmpty { a.informativeText = "Bridge: tự động tải + cài, app tự khởi động lại." }
+        if !pendingPluginDL.isEmpty {
+            let pluginNote = "Plugin: tải .ccx → Creative Cloud mở → click Install."
+            a.informativeText = a.informativeText.isEmpty ? pluginNote : a.informativeText + "\n" + pluginNote
+        }
+        if !pendingBridgeDL.isEmpty { a.addButton(withTitle: "Cài Bridge") }
+        if !pendingPluginDL.isEmpty { a.addButton(withTitle: "Cài Plugin CCX") }
+        a.addButton(withTitle: "Để sau")
+        NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true)
+        let result = a.runModal()
+        NSApp.setActivationPolicy(.accessory)
+        let buttons = (!pendingBridgeDL.isEmpty ? 1 : 0) + (!pendingPluginDL.isEmpty ? 1 : 0)
+        if buttons == 2 {
+            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer) }
+            if result == .alertSecondButtonReturn { performPluginUpdate(downloadURL: pendingPluginDL, version: pendingPluginVer) }
+        } else if !pendingBridgeDL.isEmpty && result == .alertFirstButtonReturn {
+            performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer)
+        } else if !pendingPluginDL.isEmpty && result == .alertFirstButtonReturn {
+            performPluginUpdate(downloadURL: pendingPluginDL, version: pendingPluginVer)
+        }
+    }
+
     func checkForUpdates(silent: Bool = true) {
         let bustedURL = updateManifest + "?t=\(Int(Date().timeIntervalSince1970))"
         guard let url = URL(string: bustedURL) else { return }
@@ -590,15 +632,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if bridgeNewer || pluginNewer {
                 DispatchQueue.main.async {
-                    self.showUpdateResults(
-                        bridgeNewer: bridgeNewer, latestBridge: latestBridge,
-                        bridgePage: bridgePage, bridgeDL: bridgeDL,
-                        pluginNewer: pluginNewer, latestPlugin: latestPlugin,
-                        pluginDL: pluginDL, notes: notes
-                    )
+                    // Store for deferred install
+                    self.pendingBridgeDL  = bridgeNewer ? bridgeDL  : ""
+                    self.pendingPluginDL  = pluginNewer ? pluginDL  : ""
+                    self.pendingBridgeVer = latestBridge
+                    self.pendingPluginVer = latestPlugin
+                    // Show update item in menu (no popup alert)
+                    var parts = [String]()
+                    if bridgeNewer { parts.append("Bridge v\(latestBridge)") }
+                    if pluginNewer { parts.append("Plugin v\(latestPlugin)") }
+                    self.updateMenuItem?.title  = "⬆️  Cập nhật \(parts.joined(separator: " + "))"
+                    self.updateMenuItem?.isHidden = false
+                    self.log("Update available: \(parts.joined(separator: ", "))")
                 }
-            } else if !silent {
-                DispatchQueue.main.async { self.showNoUpdateAlert() }
+            } else {
+                DispatchQueue.main.async { self.updateMenuItem?.isHidden = true }
+                if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
             }
         }.resume()
     }
