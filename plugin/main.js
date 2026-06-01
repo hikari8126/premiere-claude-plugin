@@ -2267,7 +2267,8 @@ async function ppMoveToVOBin(item, proj) {
   var parsedBlocks = [];
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
-  var sacVoicePath = null; // native path of the chosen/generated voice file (Phase 4)
+  var sacVoicePath  = null; // native path of the chosen/generated voice file
+  var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
 
   var sacValidatePassed = false;
   var sacVoiceReady     = false;
@@ -3005,6 +3006,7 @@ async function ppMoveToVOBin(item, proj) {
   // Pick a single voice file covering the whole cutsheet, transcribe + align it
   // per block, and attach voiceStart/voiceEnd/voiceDuration to each block.
   function sacPickVoiceFile() {
+    if (sacVoiceBusy) { sacSetVoiceInfo('⏳ Đang xử lý voice, đợi chút...'); return; }
     try {
       var uxp = require('uxp');
       uxp.storage.localFileSystem.getFileForOpening({
@@ -3082,6 +3084,7 @@ async function ppMoveToVOBin(item, proj) {
 
   // ── Gen voice = normalize via Claude → push to Voice Gen tab ───────────────
   async function sacGenVoice() {
+    if (sacVoiceBusy) { sacSetVoiceInfo('⏳ Đang xử lý voice, đợi chút...'); return; }
     var blocks = parseBlocks();
     if (blocks.length === 0) { sacSetVoiceInfo('⚠ Chưa có script để gen.'); return; }
 
@@ -3120,11 +3123,13 @@ async function ppMoveToVOBin(item, proj) {
   // each block's voice badge and store timing on parsedBlocks. Shared by the
   // voice picker and the VoiceGen "Move to Autocut" cross-tab entry.
   async function sacAlignVoice(audioPath) {
+    if (sacVoiceBusy) { sacSetVoiceInfo('⏳ Đang xử lý voice, đợi chút...'); return; }
+    sacVoiceBusy = true;
     // Always align against the CURRENT spreadsheet, not the last-validated blocks.
-    // (User may have edited/pasted script without re-validating.)
     var fresh = parseBlocks();
     if (fresh.length === 0) {
       sacSetVoiceInfo('⚠ Chưa có script. Điền/paste script rồi chọn voice lại.');
+      sacVoiceBusy = false;
       sacVoicePath = audioPath;
       return;
     }
@@ -3176,6 +3181,7 @@ async function ppMoveToVOBin(item, proj) {
       });
       window.sacVoicePath = sacVoicePath; // expose for Phase 5
       sacVoiceReady = (matched > 0);
+      sacVoiceBusy = false;
       sacUpdateRunVisibility();
       if (matched === 0) {
         sacSetVoiceInfo('⚠ Khớp 0/' + parsedBlocks.length + ' — voice không trùng script (Console)');
@@ -3184,6 +3190,7 @@ async function ppMoveToVOBin(item, proj) {
         sacSetVoiceInfo('✅ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks' + hint);
       }
     } catch(e) {
+      sacVoiceBusy = false;
       sacSetVoiceInfo('❌ Bridge offline: ' + e.message);
     }
   }
@@ -3412,9 +3419,27 @@ async function ppMoveToVOBin(item, proj) {
   });
 
   // [✕] back — return to voice panel
+  // Clear all aligned voice state (✕ button — also used for "change voice")
+  function sacClearVoice() {
+    sacVoicePath = null;
+    window.sacVoicePath = null;
+    sacVoiceReady = false;
+    sacNoVoiceMode = false;
+    // Clear per-block timing
+    parsedBlocks.forEach(function(b) {
+      b.voiceStart = null; b.voiceEnd = null; b.voiceDuration = null;
+    });
+    // Reset voice badges on block cards
+    document.querySelectorAll('.sac-blockVoiceBadge').forEach(function(el) {
+      el.textContent = ''; el.className = 'sac-blockVoiceBadge';
+    });
+    $('sacVoicePlayer').style.display = 'none';
+    sacSetVoiceInfo('Chưa có voice');
+  }
+
   var sacCutBackBtn = $('sacCutBack');
   if (sacCutBackBtn) sacCutBackBtn.addEventListener('click', function() {
-    sacNoVoiceMode = false;
+    sacClearVoice();
     sacHideCutPanel();
     sacUpdateRunVisibility();
   });
@@ -3499,10 +3524,11 @@ async function ppMoveToVOBin(item, proj) {
 
   // Parse "M:SS" or "M:SS-M:SS" → {inSec, outSec}. Single ts defaults to 3s.
   function parseSourceTime(str) {
-    if (!str || !str.trim()) return { inSec: 0, outSec: 3 };
+    // Empty/missing → null = use full clip duration, no in/out restriction
+    if (!str || !str.trim()) return { inSec: null, outSec: null };
     var s = str.trim();
     var m = s.match(/^(\d+):(\d+)(?:-(\d+):(\d+))?$/);
-    if (!m) return { inSec: 0, outSec: 3 };
+    if (!m) return { inSec: null, outSec: null };
     var inSec  = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     var outSec = (m[3] != null)
       ? parseInt(m[3], 10) * 60 + parseInt(m[4], 10)
@@ -3554,27 +3580,25 @@ async function ppMoveToVOBin(item, proj) {
       }
     } catch(eA) {}
 
-    // Path B: getVideoTrack / getAudioTrack (async per-track API)
-    if (endRef.v === 0) {
-      var trackGetters = [
-        { cntFn: 'getVideoTrackCount', getFn: 'getVideoTrack' },
-        { cntFn: 'getAudioTrackCount', getFn: 'getAudioTrack' },
-      ];
-      for (var p = 0; p < trackGetters.length; p++) {
-        try {
-          var cnt = seq[trackGetters[p].cntFn] && seq[trackGetters[p].cntFn]();
-          if (cnt && typeof cnt.then === 'function') cnt = await cnt;
-          cnt = Number(cnt) || 0;
-          for (var idx = 0; idx < cnt; idx++) {
-            var tr = seq[trackGetters[p].getFn] && seq[trackGetters[p].getFn](idx);
-            if (tr && typeof tr.then === 'function') tr = await tr;
-            await sacScanTrackEnd(tr, endRef);
-          }
-        } catch(eB) {}
-      }
+    // Path B: getVideoTrack / getAudioTrack — always try regardless of Path A result
+    var trackGetters = [
+      { cntFn: 'getVideoTrackCount', getFn: 'getVideoTrack' },
+      { cntFn: 'getAudioTrackCount', getFn: 'getAudioTrack' },
+    ];
+    for (var p = 0; p < trackGetters.length; p++) {
+      try {
+        var cntRaw = seq[trackGetters[p].cntFn] && seq[trackGetters[p].cntFn]();
+        if (cntRaw && typeof cntRaw.then === 'function') cntRaw = await cntRaw;
+        var cnt = Number(cntRaw) || 0;
+        for (var idx = 0; idx < cnt; idx++) {
+          var tr = seq[trackGetters[p].getFn] && seq[trackGetters[p].getFn](idx);
+          if (tr && typeof tr.then === 'function') tr = await tr;
+          await sacScanTrackEnd(tr, endRef);
+        }
+      } catch(eB) {}
     }
 
-    // Path C: sequence duration as last resort
+    // Path C: sequence duration fallback
     if (endRef.v === 0) {
       try {
         var dur = seq.getDuration && seq.getDuration();
@@ -3642,16 +3666,18 @@ async function ppMoveToVOBin(item, proj) {
   // vIdx = video track (0=V1), 5 = far-away track (effectively skip). aIdx similar.
   async function sacInsertClipAt(project, seqEditor, item, atSec, inSec, outSec, vIdx, aIdx) {
     var timeAt = sacMakeTime(atSec);
-    var inPt   = sacMakeTime(inSec);
-    var outPt  = sacMakeTime(outSec);
+    // inSec/outSec null → full clip (skip setInOutPoints)
+    var hasRange = (inSec !== null && outSec !== null);
+    var inPt  = hasRange ? sacMakeTime(inSec)  : null;
+    var outPt = hasRange ? sacMakeTime(outSec) : null;
 
     var clipItem = null;
     if (ppro.ClipProjectItem) {
       try { clipItem = ppro.ClipProjectItem.cast(item); } catch(e) {}
     }
 
-    // Tx 1: commit in/out change first
-    if (clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
+    // Tx 1: commit in/out only when range is specified (null = full clip)
+    if (hasRange && clipItem && typeof clipItem.createSetInOutPointsAction === 'function') {
       await sacCommitTx(project, function(ca) {
         ca.addAction(clipItem.createSetInOutPointsAction(inPt, outPt));
       }, 'SAC set in/out');
@@ -3785,11 +3811,12 @@ async function ppMoveToVOBin(item, proj) {
           if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
 
           var ts      = parseSourceTime(src.time);
-          var clipDur = ts.outSec - ts.inSec;
+          // null = full clip; use 5s default for cursor advancement (can't get actual duration easily)
+          var clipDur = (ts.inSec !== null && ts.outSec !== null) ? (ts.outSec - ts.inSec) : 5;
 
           await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
-          console.log('[SAC] V1 "' + src.name + '" [' + ts.inSec + '-' + ts.outSec +
-            ']s @' + cursor.toFixed(2) + 's');
+          var tsLabel = ts.inSec !== null ? '[' + ts.inSec + '-' + ts.outSec + ']s' : '[full]';
+          console.log('[SAC] V1 "' + src.name + '" ' + tsLabel + ' @' + cursor.toFixed(2) + 's');
 
           srcTotal += clipDur;
           cursor   += clipDur;
