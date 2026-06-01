@@ -576,32 +576,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func checkForUpdateMenu() { checkForUpdates(silent: false) }
 
     @objc func installAvailableUpdate() {
-        // Show simplified alert with just the available updates
+        guard !pendingBridgeDL.isEmpty else { return }
         let a = NSAlert()
-        a.alertStyle = .informational
-        var parts = [String]()
-        if !pendingBridgeDL.isEmpty { parts.append("Bridge v\(pendingBridgeVer)") }
-        if !pendingPluginDL.isEmpty { parts.append("Plugin v\(pendingPluginVer)") }
-        a.messageText = "⬆️  Cập nhật: \(parts.joined(separator: " + "))"
-        if !pendingBridgeDL.isEmpty { a.informativeText = "Bridge: tự động tải + cài, app tự khởi động lại." }
-        if !pendingPluginDL.isEmpty {
-            let pluginNote = "Plugin: tải .ccx → Creative Cloud mở → click Install."
-            a.informativeText = a.informativeText.isEmpty ? pluginNote : a.informativeText + "\n" + pluginNote
-        }
-        if !pendingBridgeDL.isEmpty { a.addButton(withTitle: "Cài Bridge") }
-        if !pendingPluginDL.isEmpty { a.addButton(withTitle: "Cài Plugin CCX") }
+        a.alertStyle     = .informational
+        a.messageText    = "⬆️  Bridge v\(pendingBridgeVer) sẵn sàng cài"
+        a.informativeText = "Tự động tải + cài đặt, app sẽ tự khởi động lại."
+        a.addButton(withTitle: "Cài ngay")
         a.addButton(withTitle: "Để sau")
         NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true)
         let result = a.runModal()
         NSApp.setActivationPolicy(.accessory)
-        let buttons = (!pendingBridgeDL.isEmpty ? 1 : 0) + (!pendingPluginDL.isEmpty ? 1 : 0)
-        if buttons == 2 {
-            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer) }
-            if result == .alertSecondButtonReturn { performPluginUpdate(downloadURL: pendingPluginDL, version: pendingPluginVer) }
-        } else if !pendingBridgeDL.isEmpty && result == .alertFirstButtonReturn {
+        if result == .alertFirstButtonReturn {
             performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer)
-        } else if !pendingPluginDL.isEmpty && result == .alertFirstButtonReturn {
-            performPluginUpdate(downloadURL: pendingPluginDL, version: pendingPluginVer)
         }
     }
 
@@ -624,26 +610,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let latestPlugin = json["pluginVersion"]     as? String ?? ""
             let pluginDL     = json["pluginDownloadUrl"] as? String ?? ""
 
+            // Bridge app only manages Bridge updates — plugin updates via plugin UI
             let bridgeNewer = !latestBridge.isEmpty && self.isNewer(latestBridge, than: self.version)
-            let pluginNewer = !latestPlugin.isEmpty && !pluginDL.isEmpty && self.isNewer(latestPlugin, than: self.pluginVersion)
-
             self.log("Bridge: v\(self.version) → v\(latestBridge) (\(bridgeNewer ? "UPDATE" : "up-to-date"))")
-            self.log("Plugin: v\(self.pluginVersion) → v\(latestPlugin) (\(pluginNewer ? "UPDATE" : "up-to-date"))")
 
-            if bridgeNewer || pluginNewer {
+            if bridgeNewer {
                 DispatchQueue.main.async {
-                    // Store for deferred install
-                    self.pendingBridgeDL  = bridgeNewer ? bridgeDL  : ""
-                    self.pendingPluginDL  = pluginNewer ? pluginDL  : ""
+                    self.pendingBridgeDL  = bridgeDL
                     self.pendingBridgeVer = latestBridge
-                    self.pendingPluginVer = latestPlugin
-                    // Show update item in menu (no popup alert)
-                    var parts = [String]()
-                    if bridgeNewer { parts.append("Bridge v\(latestBridge)") }
-                    if pluginNewer { parts.append("Plugin v\(latestPlugin)") }
-                    self.updateMenuItem?.title  = "⬆️  Cập nhật \(parts.joined(separator: " + "))"
+                    self.updateMenuItem?.title   = "⬆️  Bridge v\(latestBridge) — Cập nhật"
                     self.updateMenuItem?.isHidden = false
-                    self.log("Update available: \(parts.joined(separator: ", "))")
+                    self.log("Bridge update available: v\(latestBridge)")
                 }
             } else {
                 DispatchQueue.main.async { self.updateMenuItem?.isHidden = true }

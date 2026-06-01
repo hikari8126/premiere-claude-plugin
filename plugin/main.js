@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.5.1';
+var PLUGIN_VERSION = 'v4.2.6';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -673,25 +673,29 @@ var _pluginUpdateDismissed = false;
 
 function checkPluginUpdate() {
   var current = PLUGIN_VERSION.replace(/^v/, '');
+  console.log('[Update] Checking — current:', current);
   var xhr = new XMLHttpRequest();
-  xhr.timeout = 10000;
+  xhr.timeout = 20000; // 20s — bridge fetches Gist externally, may be slow
   xhr.open('POST', BRIDGE_URL + '/plugin/check-update', true);
   xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.onload = function() {
     try {
       var data = JSON.parse(xhr.responseText);
+      console.log('[Update] Response:', JSON.stringify(data));
       if (data.ok && data.hasUpdate) {
-        // Show in version bar (primary) and legacy banner (fallback)
+        console.log('[Update] New version available:', data.latestVersion);
         if (_vbUpdate) {
           _vbUpdate.style.display = '';
-          if (_vbBtn) _vbBtn.dataset.url = data.pluginDownloadUrl || data.downloadUrl || '';
+          if (_vbBtn) _vbBtn.dataset.url = data.downloadUrl || '';
         }
         showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+      } else {
+        console.log('[Update] Up to date or check failed:', data);
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[Update] Parse error:', e.message, xhr.responseText); }
   };
-  xhr.onerror = function() {};
-  xhr.ontimeout = function() {};
+  xhr.onerror   = function() { console.warn('[Update] Network error'); };
+  xhr.ontimeout = function() { console.warn('[Update] Timeout after 20s'); };
   xhr.send(JSON.stringify({ currentVersion: current }));
 }
 
@@ -4925,7 +4929,10 @@ async function ppMoveToVOBin(item, proj) {
       var uxp = window.require && window.require('uxp');
       if (uxp && uxp.storage) {
         var suggestedName = variation.filename || 'voice.mp3';
-        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedName);
+        // Pass full path suggestion so dialog opens in the last-used folder
+        var lastFolder = customOutputFolder || localStorage.getItem('vg_last_save_folder') || '';
+        var suggestedPath = lastFolder ? (lastFolder + '/' + suggestedName) : suggestedName;
+        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedPath);
         if (!file) {
           els.importStatus.className = 'ac-manualStatus is-err';
           els.importStatus.textContent = '✗ Cancelled';
@@ -4935,6 +4942,8 @@ async function ppMoveToVOBin(item, proj) {
         var lastSlash  = nativePath.lastIndexOf('/');
         saveDir  = lastSlash >= 0 ? nativePath.substring(0, lastSlash) : customOutputFolder;
         saveName = lastSlash >= 0 ? nativePath.substring(lastSlash + 1) : suggestedName;
+        // Remember folder for next time
+        if (saveDir) localStorage.setItem('vg_last_save_folder', saveDir);
       }
     } catch(e) {
       // Fallback: use existing folder if set
@@ -5076,12 +5085,15 @@ async function ppMoveToVOBin(item, proj) {
       var uxp2 = window.require && window.require('uxp');
       if (uxp2 && uxp2.storage) {
         var suggested = v.filename || v.audioPath.split('/').pop() || 'voice.mp3';
-        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggested);
+        var lastFolder2 = customOutputFolder || localStorage.getItem('vg_last_save_folder') || '';
+        var suggestedPath2 = lastFolder2 ? (lastFolder2 + '/' + suggested) : suggested;
+        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggestedPath2);
         if (!f) return; // cancelled
         var np = f.nativePath || f.path || '';
         var ls = np.lastIndexOf('/');
         saveDir  = ls >= 0 ? np.substring(0, ls) : customOutputFolder;
         saveName = ls >= 0 ? np.substring(ls + 1) : suggested;
+        if (saveDir) localStorage.setItem('vg_last_save_folder', saveDir);
       }
     } catch(e) {}
     if (!saveDir) {
