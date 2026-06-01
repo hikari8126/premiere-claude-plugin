@@ -603,7 +603,8 @@ refreshTimeline();
 registerTimelineEvents();        // primary: event-driven
 setInterval(checkBridge, 15000); // health check every 15s
 setInterval(pollTimeline, 5000); // fallback poll every 5s (skips if unchanged)
-setTimeout(checkPluginUpdate, 4000); // version check after bridge has time to connect
+setTimeout(checkPluginUpdate, 6000);  // first check at 6s (bridge may take time to start)
+setTimeout(checkPluginUpdate, 30000); // retry at 30s in case bridge wasn't ready
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
@@ -4918,30 +4919,48 @@ async function ppMoveToVOBin(item, proj) {
     if (!variation) return;
     els.importStatus.className = 'ac-manualStatus';
 
-    // If no output folder set yet, prompt now before proceeding
-    if (!customOutputFolder) {
-      els.importStatus.textContent = 'Pick an output folder first…';
-      await pickOutputFolder();
+    // Show save dialog — user picks folder + sets filename
+    var saveDir = null, saveName = null;
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (uxp && uxp.storage) {
+        var suggestedName = variation.filename || 'voice.mp3';
+        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedName);
+        if (!file) {
+          els.importStatus.className = 'ac-manualStatus is-err';
+          els.importStatus.textContent = '✗ Cancelled';
+          return;
+        }
+        var nativePath = file.nativePath || file.path || '';
+        var lastSlash  = nativePath.lastIndexOf('/');
+        saveDir  = lastSlash >= 0 ? nativePath.substring(0, lastSlash) : customOutputFolder;
+        saveName = lastSlash >= 0 ? nativePath.substring(lastSlash + 1) : suggestedName;
+      }
+    } catch(e) {
+      // Fallback: use existing folder if set
+    }
+    if (!saveDir) {
       if (!customOutputFolder) {
         els.importStatus.className = 'ac-manualStatus is-err';
-        els.importStatus.textContent = '✗ No output folder selected — import cancelled';
+        els.importStatus.textContent = '✗ No save location selected';
         return;
       }
+      saveDir = customOutputFolder;
     }
+    // Update customOutputFolder so future imports remember the folder
+    customOutputFolder = saveDir;
+    if (els.outputFolder) els.outputFolder.value = saveDir;
 
     var finalPath = variation.audioPath;
-
-    // File was already saved to output folder at generation time — skip move
-    var alreadyInDest = customOutputFolder && variation.audioPath &&
-      variation.audioPath.startsWith(customOutputFolder);
+    var alreadyInDest = variation.audioPath && variation.audioPath.startsWith(saveDir) &&
+                        (!saveName || variation.audioPath.endsWith('/' + saveName));
 
     if (!alreadyInDest) {
-      els.importStatus.textContent = 'Moving to ' + customOutputFolder + '...';
+      els.importStatus.textContent = 'Moving file...';
       try {
-        var moveResp = await postJsonVG('/tts/move', {
-          sourcePath: variation.audioPath,
-          targetDir:  customOutputFolder,
-        });
+        var movePayload = { sourcePath: variation.audioPath, targetDir: saveDir };
+        if (saveName) movePayload.targetName = saveName;
+        var moveResp = await postJsonVG('/tts/move', movePayload);
         if (!moveResp.ok) throw new Error(moveResp.error || 'move failed');
         finalPath = moveResp.targetPath;
       } catch(e) {
@@ -4962,23 +4981,26 @@ async function ppMoveToVOBin(item, proj) {
       } else {
         throw new Error('No importFiles API on project');
       }
+      var importedName = saveName || variation.filename;
       els.importStatus.className = 'ac-manualStatus is-ok';
-      els.importStatus.textContent = '✓ Saved to ' + customOutputFolder +
-        ', imported "' + variation.filename + '" → see Project Panel';
-      // Move to "voice over" bin (fire-and-forget, don't block UI)
-      try {
-        var rootItem = null;
-        if (typeof project.getRootItem === 'function') {
-          rootItem = project.getRootItem();
-          if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
-        }
-        if (rootItem) {
-          var fname = (variation.filename || finalPath.split('/').pop());
-          var binItems = await sacCollectBinItems(rootItem);
-          var voItem = binItems.find(function(b) { return b.name === fname; });
-          if (voItem) await ppMoveToVOBin(voItem.item, project);
-        }
-      } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
+      els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
+      // Move to "Voice Over" bin only if checkbox is checked
+      var moveToVO = $('vgMoveToVOBin') && $('vgMoveToVOBin').checked;
+      if (moveToVO) {
+        try {
+          var rootItem = null;
+          if (typeof project.getRootItem === 'function') {
+            rootItem = project.getRootItem();
+            if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+          }
+          if (rootItem) {
+            var fname2 = importedName || finalPath.split('/').pop();
+            var binItems2 = await sacCollectBinItems(rootItem);
+            var voItem2 = binItems2.find(function(b) { return b.name === fname2; });
+            if (voItem2) await ppMoveToVOBin(voItem2.item, project);
+          }
+        } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
+      }
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
       els.importStatus.textContent = '✗ Import: ' + e.message;
@@ -5044,26 +5066,40 @@ async function ppMoveToVOBin(item, proj) {
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
   if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
 
-  // Move to Autocut — save to output folder (if set) then feed to Autocut pipeline
+  // Move to Autocut — pick save location (folder + filename) then push to Autocut
   async function moveToAutocut(v) {
     if (!v || !v.audioPath) return;
 
-    // Mirror importVariation: if no output folder set, prompt now
-    if (!customOutputFolder) {
-      await pickOutputFolder();
-      if (!customOutputFolder) return; // user cancelled
+    // Show save dialog — folder + filename
+    var saveDir = null, saveName = null;
+    try {
+      var uxp2 = window.require && window.require('uxp');
+      if (uxp2 && uxp2.storage) {
+        var suggested = v.filename || v.audioPath.split('/').pop() || 'voice.mp3';
+        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggested);
+        if (!f) return; // cancelled
+        var np = f.nativePath || f.path || '';
+        var ls = np.lastIndexOf('/');
+        saveDir  = ls >= 0 ? np.substring(0, ls) : customOutputFolder;
+        saveName = ls >= 0 ? np.substring(ls + 1) : suggested;
+      }
+    } catch(e) {}
+    if (!saveDir) {
+      if (!customOutputFolder) { await pickOutputFolder(); if (!customOutputFolder) return; }
+      saveDir = customOutputFolder;
     }
+    customOutputFolder = saveDir;
+    if (els.outputFolder) els.outputFolder.value = saveDir;
 
     var finalPath = v.audioPath;
-    var alreadyInDest = v.audioPath.startsWith(customOutputFolder);
+    var alreadyInDest = v.audioPath.startsWith(saveDir) &&
+                        (!saveName || v.audioPath.endsWith('/' + saveName));
     if (!alreadyInDest) {
       try {
-        var moveResp = await postJsonVG('/tts/move', {
-          sourcePath: v.audioPath,
-          targetDir:  customOutputFolder,
-        });
-        if (moveResp.ok) finalPath = moveResp.targetPath;
-        else console.warn('[VG→AC] Move failed:', moveResp.error);
+        var mp = { sourcePath: v.audioPath, targetDir: saveDir };
+        if (saveName) mp.targetName = saveName;
+        var mr = await postJsonVG('/tts/move', mp);
+        if (mr.ok) finalPath = mr.targetPath;
       } catch(e) { console.warn('[VG→AC] Move error:', e.message); }
     }
 
