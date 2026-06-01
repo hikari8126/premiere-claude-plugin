@@ -2639,17 +2639,20 @@ async function ppMoveToVOBin(item, proj) {
         console.log('[SAC validate] updating row "' + name + '" → statusEl:', statusEl ? 'found' : 'NULL');
         if (!statusEl) return;
         // Show/hide 📁 hint button on the block card
+        // Priority: item found → ✓ (even if Pass1+2 ambiguous, Pass3 resolved it)
+        //           not found + ambiguous → ⚠ (need folder hint to disambiguate)
+        //           not found → ✗
         var hintBtn = el.querySelector('.sac-blockHintBtn');
-        if (isAmbiguous) {
-          statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
-          statusEl.textContent = '⚠';
-          statusEl.title = ambiguousNames[name] + ' clips trùng tên';
-          if (hintBtn) hintBtn.style.display = '';
-          sacAddSkipButton(el); // ⚠ cũng cần Skip
-        } else if (item) {
+        if (item) {
           statusEl.className = 'sac-srcStatus sac-srcOk';
           statusEl.textContent = '✓';
           if (hintBtn) hintBtn.style.display = 'none';
+        } else if (isAmbiguous) {
+          statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
+          statusEl.textContent = '⚠';
+          statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
+          if (hintBtn) hintBtn.style.display = '';
+          sacAddSkipButton(el);
         } else {
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
