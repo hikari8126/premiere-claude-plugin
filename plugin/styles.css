@@ -2278,6 +2278,11 @@ body {
 
 /* Folder picker */
 .vg-folderRow { display: flex; gap: 4px; align-items: center; }
+.vg-checkbox-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; color: rgba(255,255,255,0.5); cursor: pointer;
+}
+.vg-checkbox-row input { cursor: pointer; width: 12px; height: 12px; }
 .vg-folderInput {
   flex: 1 1 auto; height: 24px; min-width: 0;
   background: rgba(0,0,0,0.3);

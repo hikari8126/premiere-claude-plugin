@@ -34,16 +34,22 @@ function findWhisperBin() {
     const p = execSync('which whisper 2>/dev/null', { encoding: 'utf8' }).trim();
     if (p && require('fs').existsSync(p)) return p;
   } catch(e) {}
-  // Scan common Python framework versions (newest first)
-  const versions = ['3.14','3.13','3.12','3.11','3.10','3.9'];
   const fs = require('fs');
+  const versions = ['3.14','3.13','3.12','3.11','3.10','3.9'];
+  // Scan Python.framework (installed from python.org)
   for (const v of versions) {
     const p = `/Library/Frameworks/Python.framework/Versions/${v}/bin/whisper`;
     if (fs.existsSync(p)) return p;
   }
+  // Scan /Library/Python (system Python / Command Line Tools pip installs here)
+  for (const v of versions) {
+    const p = `/Library/Python/${v}/bin/whisper`;
+    if (fs.existsSync(p)) return p;
+  }
   // Homebrew / user local
   for (const p of ['/opt/homebrew/bin/whisper', '/usr/local/bin/whisper',
-                   `${process.env.HOME}/.local/bin/whisper`]) {
+                   `${process.env.HOME}/.local/bin/whisper`,
+                   `${process.env.HOME}/Library/Python/3.9/bin/whisper`]) {
     if (fs.existsSync(p)) return p;
   }
   return ''; // not found — caller must check and show clear error
@@ -1241,12 +1247,12 @@ app.post('/tts/voice-preview', async (req, res) => {
 // Move a file from temp dir to user's chosen output folder (called on Import)
 app.post('/tts/move', async (req, res) => {
   try {
-    const { sourcePath, targetDir } = req.body;
+    const { sourcePath, targetDir, targetName } = req.body;
     if (!sourcePath) throw new Error('sourcePath required');
     if (!targetDir)  throw new Error('targetDir required');
     if (!fs.existsSync(sourcePath)) throw new Error('Source file missing: ' + sourcePath);
     ensureDir(targetDir);
-    const filename = path.basename(sourcePath);
+    const filename = targetName || path.basename(sourcePath); // allow custom filename
     const targetPath = path.join(targetDir, filename);
     fs.copyFileSync(sourcePath, targetPath);
     // Keep temp file for now — user might use the other variation. Cleanup later.
@@ -1758,7 +1764,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.4';
+const BRIDGE_VERSION = '1.5.5';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
