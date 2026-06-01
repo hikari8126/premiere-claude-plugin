@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusMenuItem: NSMenuItem!
     var autoStartItem:  NSMenuItem!
     var updateMenuItem: NSMenuItem?          // shown when update available
+    var updateTimer: Timer?                  // periodic auto-check so the notice appears on its own
     var pendingBridgeDL  = ""
     var pendingPluginDL  = ""
     var pendingBridgeVer = ""
@@ -36,6 +37,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         setupMenuBar()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
+        // Auto-check for updates so the "⬆️ Có bản cập nhật" item appears on its own —
+        // no need to open the menu and click "Kiểm tra cập nhật". Runs independently of
+        // whether the bundled bridge process managed to start.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.checkForUpdates(silent: true) }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
+            self?.checkForUpdates(silent: true)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -577,18 +585,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func installAvailableUpdate() {
         guard !pendingBridgeDL.isEmpty else { return }
-        let a = NSAlert()
-        a.alertStyle     = .informational
-        a.messageText    = "⬆️  Bridge v\(pendingBridgeVer) sẵn sàng cài"
-        a.informativeText = "Tự động tải + cài đặt, app sẽ tự khởi động lại."
-        a.addButton(withTitle: "Cài ngay")
-        a.addButton(withTitle: "Để sau")
-        NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true)
-        let result = a.runModal()
-        NSApp.setActivationPolicy(.accessory)
-        if result == .alertFirstButtonReturn {
-            performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer)
-        }
+        // No confirmation dialog — clicking the update item installs straight away.
+        // Progress is shown in the menu status line ("⬇️ Đang tải...").
+        performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer)
     }
 
     func checkForUpdates(silent: Bool = true) {

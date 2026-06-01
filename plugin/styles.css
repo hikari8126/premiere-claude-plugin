@@ -623,9 +623,10 @@ body {
 #settings-modal {
   display: none;
   position: absolute;  /* UXP: fixed is unsupported; absolute relative to #tab-claude */
-  top: 36px;           /* just below the header bar */
+  top: 36px;           /* just below the header bar (overridden by JS at open time) */
+  left: 4px;
   right: 4px;
-  width: calc(100% - 8px);
+  bottom: 6px;         /* anchor to panel bottom so the box height is bounded → scrolls */
 }
 
 #settings-box {
@@ -636,7 +637,7 @@ body {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 0;
-  max-height: min(80vh, 560px);
+  max-height: 100%;  /* fill the bounded modal; content scrolls inside */
   overflow-y: auto;
   box-shadow: 0 10px 40px rgba(0,0,0,0.8);
   scrollbar-width: thin;
@@ -715,6 +716,52 @@ body {
 .settings-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
 .btn-primary  { background: var(--accent); border: none; border-radius: 5px; color: white; padding: 6px 14px; cursor: pointer; font-size: 12px; }
 .btn-secondary{ background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--text-dim); padding: 6px 14px; cursor: pointer; font-size: 12px; }
+
+/* ── VoiceGen save-location modal ───────────────────── */
+.vg-save-modal {
+  position: absolute;           /* covers #tab-voicegen (position:relative) */
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.vg-save-modal[hidden] { display: none; }  /* higher specificity than .vg-save-modal */
+.vg-save-box {
+  width: 100%;
+  max-width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+}
+.vg-save-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+.vg-save-label { display: block; font-size: 11px; font-weight: 600; color: var(--text); margin: 8px 0 4px; }
+.vg-save-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.vg-save-input:focus { outline: none; border-color: var(--accent); }
+.vg-save-folderRow { display: flex; align-items: center; gap: 6px; }
+.vg-save-folder {
+  flex: 1 1 0; min-width: 0;
+  font-size: 11px; color: var(--text-dim);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, monospace;
+}
+.vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 
 /* ═══════════════════════════════════════════════════════ */
 /* AUTOCUT STYLES  (all prefixed ac- to avoid conflicts)  */

@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.7';
+var PLUGIN_VERSION = 'v4.2.8.6';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -564,38 +564,16 @@ console.log('[Claude AI Plugin] Loaded', PLUGIN_VERSION);
 
 // ── Version bar (top of UI, always visible) ────────────────────────────────
 var _vbText   = document.getElementById('versionBarText');
-var _vbUpdate = document.getElementById('versionBarUpdate');
 var _vbWarn   = document.getElementById('versionBarBridgeWarn');
-var _vbBtn    = document.getElementById('versionBarUpdateBtn');
 
 function versionBarSetText(bridgeVer) {
   if (_vbText) _vbText.textContent = PLUGIN_VERSION + ' · Bridge ' + (bridgeVer || '...');
 }
 versionBarSetText(); // initial — bridge version filled in when health check returns
 
-// Update button wired after checkPluginUpdate finds a new version
-if (_vbBtn) {
-  _vbBtn.addEventListener('click', function() {
-    _vbBtn.disabled = true;
-    _vbBtn.textContent = '⏳';
-    var xhr = new XMLHttpRequest();
-    xhr.timeout = 60000;
-    xhr.open('POST', BRIDGE_URL + '/plugin/update', true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.onload = function() {
-      try {
-        var d = JSON.parse(xhr.responseText);
-        if (d.ok) {
-          if (_vbUpdate) _vbUpdate.innerHTML = '✅ Creative Cloud đang mở — Reload plugin sau khi cài';
-        } else {
-          _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật';
-        }
-      } catch(e) { _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật'; }
-    };
-    xhr.onerror = function() { _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật'; };
-    xhr.send(JSON.stringify({ downloadUrl: _vbBtn.dataset.url }));
-  });
-}
+// Plugin update is surfaced via a single notification: the #pluginUpdateBanner
+// (see showPluginUpdateBanner). The old version-bar update indicator was removed
+// to avoid showing two notifications for the same update.
 
 loadSettings();
 checkBridge();
@@ -605,6 +583,7 @@ setInterval(checkBridge, 15000); // health check every 15s
 setInterval(pollTimeline, 5000); // fallback poll every 5s (skips if unchanged)
 setTimeout(checkPluginUpdate, 6000);  // first check at 6s (bridge may take time to start)
 setTimeout(checkPluginUpdate, 30000); // retry at 30s in case bridge wasn't ready
+setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — banner appears without reload
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
@@ -684,11 +663,8 @@ function checkPluginUpdate() {
       console.log('[Update] Response:', JSON.stringify(data));
       if (data.ok && data.hasUpdate) {
         console.log('[Update] New version available:', data.latestVersion);
-        if (_vbUpdate) {
-          _vbUpdate.style.display = '';
-          if (_vbBtn) _vbBtn.dataset.url = data.downloadUrl || '';
-        }
-        showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+        // Don't re-pop the banner if the user already dismissed it this session.
+        if (!_pluginUpdateDismissed) showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
       } else {
         console.log('[Update] Up to date or check failed:', data);
       }
@@ -1533,14 +1509,18 @@ function openSettingsPanel() {
   var topPx      = Math.max(headerH, statusH) + 2;
   settingsModal.style.top = topPx + 'px';
   settingsModal.style.display = 'block';
+  // Hide chat+input while settings is open. UXP renders native <textarea> above
+  // other content regardless of DOM order, so it would otherwise overlap the panel.
+  var cc = document.getElementById('claude-content');
+  if (cc) cc.style.display = 'none';
   populateBridgeInfo();
   var spv = document.getElementById('settings-plugin-version');
   if (spv) spv.textContent = PLUGIN_VERSION;
-  var cuStatus = document.getElementById('check-update-status');
-  if (cuStatus) cuStatus.textContent = '';
 }
 function closeSettingsPanel() {
   settingsModal.style.display = 'none';
+  var cc = document.getElementById('claude-content');
+  if (cc) cc.style.display = '';
 }
 
 document.getElementById('settings-btn').addEventListener('click', function(e) {
@@ -1549,36 +1529,6 @@ document.getElementById('settings-btn').addEventListener('click', function(e) {
   else openSettingsPanel();
 });
 document.getElementById('close-settings').addEventListener('click', closeSettingsPanel);
-
-document.getElementById('check-update-btn').addEventListener('click', function() {
-  var btn      = document.getElementById('check-update-btn');
-  var cuStatus = document.getElementById('check-update-status');
-  btn.disabled = true;
-  if (cuStatus) cuStatus.textContent = 'Checking…';
-  var current = PLUGIN_VERSION.replace(/^v/, '');
-  var xhr = new XMLHttpRequest();
-  xhr.timeout = 10000;
-  xhr.open('POST', BRIDGE_URL + '/plugin/check-update', true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.onload = function() {
-    btn.disabled = false;
-    try {
-      var data = JSON.parse(xhr.responseText);
-      if (data.ok && data.hasUpdate) {
-        if (cuStatus) cuStatus.textContent = 'v' + data.latestVersion + ' available!';
-        _pluginUpdateDismissed = false;
-        showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
-      } else if (data.ok) {
-        if (cuStatus) cuStatus.textContent = 'Up to date ✓';
-      } else {
-        if (cuStatus) cuStatus.textContent = 'Check failed';
-      }
-    } catch(e) { if (cuStatus) cuStatus.textContent = 'Error'; }
-  };
-  xhr.onerror   = function() { btn.disabled = false; if (cuStatus) cuStatus.textContent = 'Bridge offline'; };
-  xhr.ontimeout = function() { btn.disabled = false; if (cuStatus) cuStatus.textContent = 'Timeout'; };
-  xhr.send(JSON.stringify({ currentVersion: current }));
-});
 
 // Click outside to close (check via DOM containment)
 document.addEventListener('click', function(e) {
@@ -3922,7 +3872,9 @@ async function ppMoveToVOBin(item, proj) {
   };
 
   var voicesLoaded = false;
-  var customOutputFolder = ''; // empty = use bridge default
+  // Restore the last save folder so imports remember it across sessions (see importVariation).
+  var customOutputFolder = localStorage.getItem('vg_last_save_folder') || '';
+  if (customOutputFolder && els.outputFolder) els.outputFolder.value = customOutputFolder;
   var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
   var currentMode = 'tts'; // 'tts' | 'sfx' | 'music'
   var players = {}; // { var1: {audio, isPlaying}, var2: {...} }
@@ -4923,40 +4875,18 @@ async function ppMoveToVOBin(item, proj) {
     if (!variation) return;
     els.importStatus.className = 'ac-manualStatus';
 
-    // Show save dialog — user picks folder + sets filename
-    var saveDir = null, saveName = null;
-    try {
-      var uxp = window.require && window.require('uxp');
-      if (uxp && uxp.storage) {
-        var suggestedName = variation.filename || 'voice.mp3';
-        // Pass filename only — macOS native save dialog remembers last folder automatically.
-        // Passing a full path breaks this: UXP may strip or reject the directory portion.
-        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedName);
-        if (!file) {
-          els.importStatus.className = 'ac-manualStatus is-err';
-          els.importStatus.textContent = '✗ Cancelled';
-          return;
-        }
-        var nativePath = file.nativePath || file.path || '';
-        var lastSlash  = nativePath.lastIndexOf('/');
-        saveDir  = lastSlash >= 0 ? nativePath.substring(0, lastSlash) : customOutputFolder;
-        saveName = lastSlash >= 0 ? nativePath.substring(lastSlash + 1) : suggestedName;
-        // Remember folder for next time
-        if (saveDir) localStorage.setItem('vg_last_save_folder', saveDir);
-      }
-    } catch(e) {
-      // Fallback: use existing folder if set
+    // Ask for filename + folder via a custom modal. UXP's native getFileForSaving
+    // cannot pre-set its initial folder, so we use our own modal that remembers the
+    // last-used folder: from the 2nd import on, the folder is already filled in and
+    // you only type the name. promptSaveLocation persists the folder.
+    var picked = await promptSaveLocation(variation.filename || 'voice.mp3');
+    if (!picked) {
+      els.importStatus.className = 'ac-manualStatus is-err';
+      els.importStatus.textContent = '✗ Cancelled';
+      return;
     }
-    if (!saveDir) {
-      if (!customOutputFolder) {
-        els.importStatus.className = 'ac-manualStatus is-err';
-        els.importStatus.textContent = '✗ No save location selected';
-        return;
-      }
-      saveDir = customOutputFolder;
-    }
-    // Update customOutputFolder so future imports remember the folder
-    customOutputFolder = saveDir;
+    var saveDir  = picked.dir;
+    var saveName = picked.name;
     if (els.outputFolder) els.outputFolder.value = saveDir;
 
     var finalPath = variation.audioPath;
@@ -5025,6 +4955,68 @@ async function ppMoveToVOBin(item, proj) {
     }
   }
 
+  // Custom save modal: lets the user type a filename while showing (and remembering)
+  // the destination folder. Resolves to { dir, name } or null if cancelled.
+  // Needed because UXP's native getFileForSaving cannot open at a remembered folder.
+  function promptSaveLocation(suggestedName) {
+    return new Promise(function(resolve) {
+      var modal    = $('vgSaveModal');
+      var nameInp  = $('vgSaveName');
+      var folderEl = $('vgSaveFolder');
+      var changeB  = $('vgSaveChangeFolder');
+      var cancelB  = $('vgSaveCancel');
+      var okB      = $('vgSaveConfirm');
+      if (!modal || !nameInp || !okB) { resolve(null); return; }
+
+      suggestedName = suggestedName || 'voice.mp3';
+      nameInp.value = suggestedName;
+      var dot = suggestedName.lastIndexOf('.');
+      var ext = dot >= 0 ? suggestedName.substring(dot) : '';
+
+      // Hide the rest of the VoiceGen UI while the modal is open. UXP renders native
+      // <input>/<textarea> on top of everything regardless of DOM order, so the
+      // background textboxes would otherwise punch through the modal. The modal is a
+      // sibling of .vg-app, so hiding .vg-app leaves the modal (and its own input) visible.
+      var vgApp = document.querySelector('#tab-voicegen .vg-app');
+
+      function renderFolder() {
+        folderEl.textContent = customOutputFolder || '(chưa chọn — bấm 📁 Đổi…)';
+      }
+      renderFolder();
+      if (vgApp) vgApp.style.display = 'none';
+      modal.hidden = false;
+      try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch(e) {}
+      if (window.claimKeyboard) window.claimKeyboard();
+
+      function cleanup() {
+        modal.hidden = true;
+        if (vgApp) vgApp.style.display = '';
+        if (window.releaseKeyboard) window.releaseKeyboard();
+        changeB.onclick = null; cancelB.onclick = null; okB.onclick = null;
+        nameInp.onkeydown = null;
+      }
+      changeB.onclick = async function() {
+        await pickOutputFolder(); // updates + persists customOutputFolder
+        renderFolder();
+        try { nameInp.focus(); } catch(e) {}
+      };
+      cancelB.onclick = function() { cleanup(); resolve(null); };
+      okB.onclick = function() {
+        var name = (nameInp.value || '').trim();
+        if (!name) { try { nameInp.focus(); } catch(e) {} return; }
+        if (!customOutputFolder) { changeB.onclick(); return; } // must pick a folder first
+        if (ext && name.toLowerCase().slice(-ext.length) !== ext.toLowerCase()) name += ext;
+        var dir = customOutputFolder;
+        cleanup();
+        resolve({ dir: dir, name: name });
+      };
+      nameInp.onkeydown = function(e) {
+        if (e.key === 'Enter')      { e.preventDefault(); okB.onclick(); }
+        else if (e.key === 'Escape'){ e.preventDefault(); cancelB.onclick(); }
+      };
+    });
+  }
+
   async function pickOutputFolder() {
     try {
       var uxp = window.require && window.require('uxp');
@@ -5037,6 +5029,7 @@ async function ppMoveToVOBin(item, proj) {
       if (!folder) return; // cancelled
       customOutputFolder = folder.nativePath || folder.path || '';
       els.outputFolder.value = customOutputFolder;
+      if (customOutputFolder) localStorage.setItem('vg_last_save_folder', customOutputFolder);
       console.log('[VoiceGen] output folder picked:', customOutputFolder);
     } catch(e) {
       alert('Cannot pick folder: ' + e.message);
@@ -5046,6 +5039,7 @@ async function ppMoveToVOBin(item, proj) {
   function resetOutputFolder() {
     customOutputFolder = '';
     els.outputFolder.value = '';
+    localStorage.removeItem('vg_last_save_folder');
   }
 
   // Wire events
@@ -5078,26 +5072,12 @@ async function ppMoveToVOBin(item, proj) {
   async function moveToAutocut(v) {
     if (!v || !v.audioPath) return;
 
-    // Show save dialog — folder + filename
-    var saveDir = null, saveName = null;
-    try {
-      var uxp2 = window.require && window.require('uxp');
-      if (uxp2 && uxp2.storage) {
-        var suggested = v.filename || v.audioPath.split('/').pop() || 'voice.mp3';
-        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggested);
-        if (!f) return; // cancelled
-        var np = f.nativePath || f.path || '';
-        var ls = np.lastIndexOf('/');
-        saveDir  = ls >= 0 ? np.substring(0, ls) : customOutputFolder;
-        saveName = ls >= 0 ? np.substring(ls + 1) : suggested;
-        if (saveDir) localStorage.setItem('vg_last_save_folder', saveDir);
-      }
-    } catch(e) {}
-    if (!saveDir) {
-      if (!customOutputFolder) { await pickOutputFolder(); if (!customOutputFolder) return; }
-      saveDir = customOutputFolder;
-    }
-    customOutputFolder = saveDir;
+    // Same custom save modal as Import (remembers the folder; just type the name).
+    var suggested = v.filename || v.audioPath.split('/').pop() || 'voice.mp3';
+    var picked = await promptSaveLocation(suggested);
+    if (!picked) return; // cancelled
+    var saveDir  = picked.dir;
+    var saveName = picked.name;
     if (els.outputFolder) els.outputFolder.value = saveDir;
 
     var finalPath = v.audioPath;
