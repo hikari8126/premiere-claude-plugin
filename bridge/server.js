@@ -752,7 +752,10 @@ function alignScriptToWords(words, scriptLines) {
       }
     }
 
-    if (bestStart < 0 || bestScore < lineWords.length * 0.3) {
+    // Require ≥50% of script words to be found in transcript window,
+    // AND at least 2 words matched (prevents single-word false positives).
+    const minScore = Math.max(2, lineWords.length * 0.5);
+    if (bestStart < 0 || bestScore < minScore) {
       out.push({ start: null, end: null, matched: 0, text: lineRaw, status: 'unmatched' });
     } else {
       out.push({
@@ -1755,7 +1758,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.2';
+const BRIDGE_VERSION = '1.5.3';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
