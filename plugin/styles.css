@@ -2638,6 +2638,20 @@ body {
 .sac-srcMissing { color: #ef4444; font-weight: 600; }
 .sac-srcSkipped { color: #6b7280; }
 
+.sac-blockHintBtn {
+  flex: 0 0 auto; background: transparent; border: none;
+  font-size: 9px; cursor: pointer; opacity: 0.5; padding: 0 2px;
+  line-height: 1;
+}
+.sac-blockHintBtn:hover { opacity: 1; }
+.sac-hintChip {
+  display: inline-block; margin: 2px 3px 2px 0;
+  padding: 1px 7px; border-radius: 10px; font-size: 9px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.7); cursor: pointer;
+}
+.sac-hintChip:hover { background: rgba(255,255,255,0.13); color: white; }
+
 .sac-skipBtn {
   flex: 0 0 auto;
   font-size: 6.5px;

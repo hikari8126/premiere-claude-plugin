@@ -2007,14 +2007,15 @@ async function sacGetItemName(item) {
 async function sacGetFolderChildren(item) {
   if (!item) return [];
   var folder = item;
-  // Cast to FolderItem; null means this item has no children to traverse.
+  // Cast to FolderItem if possible; if cast fails, still try getItems() on the raw item
+  // (some Premiere versions return null from cast but the item still has getItems).
   try {
     if (ppro && ppro.FolderItem && typeof ppro.FolderItem.cast === 'function') {
       var f = ppro.FolderItem.cast(item);
-      if (!f) return [];
-      folder = f;
+      if (f) folder = f;
+      // do NOT return [] when cast is null — fall through to getItems()
     }
-  } catch(e) { return []; }
+  } catch(e) {}
   try {
     if (typeof folder.getItems === 'function') {
       var items = folder.getItems();
@@ -2530,7 +2531,7 @@ async function ppMoveToVOBin(item, proj) {
       block.sources.forEach(function(s, si) {
         var el = document.createElement('div');
         el.className = 'sac-blockSrc';
-        el.dataset.srcName  = s.name; // for async status update
+        el.dataset.srcName  = s.name;
         el.dataset.blockIdx = String(i);
         el.dataset.srcIdx   = String(si);
         var nameSpan = document.createElement('span');
@@ -2543,6 +2544,20 @@ async function ppMoveToVOBin(item, proj) {
           badge.textContent = s.time;
           el.appendChild(badge);
         }
+        // 📁 folder hint button — lets user fix source name from block card
+        (function(srcEl, bIdx, sIdx) {
+          var hintBtn = document.createElement('button');
+          hintBtn.type = 'button';
+          hintBtn.className = 'sac-blockHintBtn';
+          hintBtn.textContent = '📁';
+          hintBtn.title = 'Gợi ý folder hint';
+          hintBtn.style.display = 'none'; // shown after validate (✗ or ⚠)
+          hintBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sacShowBlockFolderHints(srcEl, bIdx, sIdx);
+          });
+          srcEl.appendChild(hintBtn);
+        })(el, i, si);
         var statusSpan = document.createElement('span');
         statusSpan.className = 'sac-srcStatus';
         statusSpan.textContent = '⌛';
@@ -2623,17 +2638,22 @@ async function ppMoveToVOBin(item, proj) {
         var statusEl = el.querySelector('.sac-srcStatus');
         console.log('[SAC validate] updating row "' + name + '" → statusEl:', statusEl ? 'found' : 'NULL');
         if (!statusEl) return;
+        // Show/hide 📁 hint button on the block card
+        var hintBtn = el.querySelector('.sac-blockHintBtn');
         if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
           statusEl.textContent = '⚠';
-          statusEl.title = ambiguousNames[name] + ' clips trùng tên — thêm folder hint (📁)';
+          statusEl.title = ambiguousNames[name] + ' clips trùng tên';
+          if (hintBtn) hintBtn.style.display = '';
+          sacAddSkipButton(el); // ⚠ cũng cần Skip
         } else if (item) {
           statusEl.className = 'sac-srcStatus sac-srcOk';
           statusEl.textContent = '✓';
+          if (hintBtn) hintBtn.style.display = 'none';
         } else {
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
-          // Add Skip button for missing sources
+          if (hintBtn) hintBtn.style.display = '';
           sacAddSkipButton(el);
         }
       });
@@ -2656,6 +2676,81 @@ async function ppMoveToVOBin(item, proj) {
 
     window.sacSourceMap = sacSourceMap; // expose for Phase 5 assembly
     return { missing: missingNames, ambiguous: ambiguousArray, premiereAvailable: true };
+  }
+
+  // ── Block card folder hint ───────────────────────────────────────────────────
+  // Shows candidate folder-prefixed names for a ✗/⚠ source row.
+  // Clicking a candidate: updates parsedBlocks source name + re-validates that source.
+  function sacShowBlockFolderHints(srcEl, bIdx, sIdx) {
+    if (!sacBinItems.length) {
+      $('sacStatus').textContent = '⚠ Bấm Validate trước để load danh sách bin.';
+      $('sacStatus').style.display = 'block';
+      return;
+    }
+    var src = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+    if (!src) return;
+    var curName = src.name;
+    var toks = sacNorm(curName).split(' ').filter(Boolean);
+    // Collect candidates: any item whose folder+name contains any token
+    var seen = {};
+    var cands = [];
+    sacBinItems.forEach(function(b) {
+      var hay = sacNorm((b.parent || '') + ' ' + b.name);
+      if (toks.some(function(tk) { return hay.indexOf(tk) !== -1; })) {
+        var label = b.parent ? (b.parent + ' ' + b.name.replace(/\.[^.]+$/, '')) : b.name.replace(/\.[^.]+$/, '');
+        if (!seen[label]) { seen[label] = 1; cands.push({ label: label, item: b.item }); }
+      }
+    });
+    if (!cands.length) {
+      $('sacStatus').textContent = '⚠ Không tìm thấy gợi ý cho "' + curName + '"';
+      $('sacStatus').style.display = 'block';
+      return;
+    }
+    // Show chips in sacStatus
+    var status = $('sacStatus');
+    status.style.display = 'block';
+    status.innerHTML = '';
+    var label = document.createElement('span');
+    label.textContent = 'Chọn: ';
+    label.style.cssText = 'font-size:10px;color:rgba(255,255,255,.4);margin-right:4px;';
+    status.appendChild(label);
+    cands.slice(0, 8).forEach(function(c) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.textContent = c.label;
+      chip.className = 'sac-hintChip';
+      chip.addEventListener('click', function() {
+        // Update parsedBlocks source name
+        parsedBlocks[bIdx].sources[sIdx].name = c.label;
+        parsedBlocks[bIdx].sources[sIdx].skipped = false;
+        // Update DOM
+        srcEl.dataset.srcName = c.label;
+        var nameSpan = srcEl.querySelector('.sac-srcName');
+        if (nameSpan) { nameSpan.textContent = '🎬 ' + c.label; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+        var skipBtn2 = srcEl.querySelector('.sac-skipBtn');
+        if (skipBtn2) skipBtn2.parentNode.removeChild(skipBtn2);
+        // Re-validate this source
+        var item = sacMatchBinItem(sacBinItems, c.label);
+        sacSourceMap[c.label] = item || null;
+        window.sacSourceMap = sacSourceMap;
+        var statusEl = srcEl.querySelector('.sac-srcStatus');
+        if (statusEl) {
+          if (item) {
+            statusEl.className = 'sac-srcStatus sac-srcOk';
+            statusEl.textContent = '✓';
+          } else {
+            statusEl.className = 'sac-srcStatus sac-srcMissing';
+            statusEl.textContent = '✗';
+            sacAddSkipButton(srcEl);
+          }
+        }
+        var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
+        if (hintBtn2) hintBtn2.style.display = item ? 'none' : '';
+        sacCheckSkipGate();
+        status.style.display = 'none';
+      });
+      status.appendChild(chip);
+    });
   }
 
   // ── Skip source button ──────────────────────────────────────────────────────
