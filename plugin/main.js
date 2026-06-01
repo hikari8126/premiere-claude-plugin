@@ -3165,14 +3165,18 @@ async function ppMoveToVOBin(item, proj) {
         parsedBlocks[i].voiceStart    = a.start;
         parsedBlocks[i].voiceEnd      = a.end;
         parsedBlocks[i].voiceDuration = a.duration;
-        var ok = (a.duration != null);
-        if (ok) matched++; // count regardless of whether the badge DOM exists
-        // NB: dataset.blockIdx → attribute "data-block-idx" (kebab-case)
+        // Only count blocks that Whisper TRULY matched (not gap-filled interpolations)
+        var trulyMatched = (a.status === 'matched' && a.duration != null);
+        if (trulyMatched) matched++;
         var badge = document.querySelector('.sac-blockVoiceBadge[data-block-idx="' + i + '"]');
         if (badge) {
-          if (ok) {
+          if (trulyMatched) {
             badge.textContent = '🎤 ' + a.duration.toFixed(1) + 's';
-            badge.className = 'sac-blockVoiceBadge ' + (a.status === 'matched' ? 'sac-voiceOk' : 'sac-voiceWeak');
+            badge.className = 'sac-blockVoiceBadge sac-voiceOk';
+          } else if (a.duration != null) {
+            // Gap-filled — has timing but not confirmed match
+            badge.textContent = '🎤 ~' + a.duration.toFixed(1) + 's';
+            badge.className = 'sac-blockVoiceBadge sac-voiceWeak';
           } else {
             badge.textContent = '🎤 ?';
             badge.className = 'sac-blockVoiceBadge sac-voiceMissing';
@@ -3180,11 +3184,15 @@ async function ppMoveToVOBin(item, proj) {
         }
       });
       window.sacVoicePath = sacVoicePath; // expose for Phase 5
-      sacVoiceReady = (matched > 0);
+      // sacVoiceReady = true only when majority of blocks are truly matched
+      var minMatch = Math.max(1, Math.ceil(parsedBlocks.length * 0.5));
+      sacVoiceReady = (matched >= minMatch);
       sacVoiceBusy = false;
       sacUpdateRunVisibility();
       if (matched === 0) {
-        sacSetVoiceInfo('⚠ Khớp 0/' + parsedBlocks.length + ' — voice không trùng script (Console)');
+        sacSetVoiceInfo('⚠ Khớp 0/' + parsedBlocks.length + ' — voice không trùng script');
+      } else if (!sacVoiceReady) {
+        sacSetVoiceInfo('⚠ Chỉ khớp ' + matched + '/' + parsedBlocks.length + ' blocks — voice có thể sai');
       } else {
         var hint = sacValidatePassed ? ' — Run đã mở' : ' — Validate để mở Run';
         sacSetVoiceInfo('✅ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks' + hint);
