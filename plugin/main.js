@@ -2105,11 +2105,23 @@ function sacMatchBinItem(items, targetName) {
   return null;
 }
 
-// Count how many DISTINCT bin items a plain source name (no folder prefix)
-// matches via Pass 1 + Pass 2 only. Used to detect ambiguous names.
+// Count how many DISTINCT bin items match a source name.
+// Ambiguous = multiple EXACT (Pass 1) matches, OR zero exact + multiple Pass 2.
+// If exactly 1 exact match exists, it's NOT ambiguous even if Pass 2 finds more.
 function sacCountBinMatches(items, targetName) {
   var t    = sacNorm(targetName);
   var tNoX = t.replace(/\.[^.]+$/, '');
+
+  // Count Pass 1 exact matches first
+  var exactCount = items.filter(function(b) {
+    var cn   = sacNorm(b.name);
+    var cnNoX = cn.replace(/\.[^.]+$/, '');
+    return cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX;
+  }).length;
+
+  // 1 exact match → unambiguous (even if Pass 2 finds more prefix matches)
+  if (exactCount === 1) return 1;
+  // 0+ exact matches → also count Pass 2 prefix matches for full picture
   return items.filter(function(b) {
     var cn   = sacNorm(b.name);
     var cnNoX = cn.replace(/\.[^.]+$/, '');
