@@ -4929,10 +4929,9 @@ async function ppMoveToVOBin(item, proj) {
       var uxp = window.require && window.require('uxp');
       if (uxp && uxp.storage) {
         var suggestedName = variation.filename || 'voice.mp3';
-        // Pass full path suggestion so dialog opens in the last-used folder
-        var lastFolder = customOutputFolder || localStorage.getItem('vg_last_save_folder') || '';
-        var suggestedPath = lastFolder ? (lastFolder + '/' + suggestedName) : suggestedName;
-        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedPath);
+        // Pass filename only — macOS native save dialog remembers last folder automatically.
+        // Passing a full path breaks this: UXP may strip or reject the directory portion.
+        var file = await uxp.storage.localFileSystem.getFileForSaving(suggestedName);
         if (!file) {
           els.importStatus.className = 'ac-manualStatus is-err';
           els.importStatus.textContent = '✗ Cancelled';
@@ -5085,9 +5084,7 @@ async function ppMoveToVOBin(item, proj) {
       var uxp2 = window.require && window.require('uxp');
       if (uxp2 && uxp2.storage) {
         var suggested = v.filename || v.audioPath.split('/').pop() || 'voice.mp3';
-        var lastFolder2 = customOutputFolder || localStorage.getItem('vg_last_save_folder') || '';
-        var suggestedPath2 = lastFolder2 ? (lastFolder2 + '/' + suggested) : suggested;
-        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggestedPath2);
+        var f = await uxp2.storage.localFileSystem.getFileForSaving(suggested);
         if (!f) return; // cancelled
         var np = f.nativePath || f.path || '';
         var ls = np.lastIndexOf('/');
