@@ -18,12 +18,14 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
     var progressView: NSView?
     var doneView:     NSView?
 
-    // Progress labels (5 steps)
+    // Progress labels (7 steps)
     var step1Label:  NSTextField?
     var step2Label:  NSTextField?
     var step3Label:  NSTextField?
     var step4Label:  NSTextField?
     var step5Label:  NSTextField?
+    var step6Label:  NSTextField?
+    var step7Label:  NSTextField?
     var progressBar: NSProgressIndicator?
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -69,10 +71,11 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         body.addSubview(sub)
 
         let checks = [
-            "🍺  Kiểm tra & cài Homebrew (package manager cho macOS)",
-            "🔧  Kiểm tra & cài Node.js (môi trường chạy Bridge)",
-            "🎬  Kiểm tra & cài ffmpeg (xử lý audio Voice Gen)",
-            "⚡  Cài Claude Bridge vào Applications (quản lý AI server)",
+            "🍺  Kiểm tra & cài Homebrew + Node.js",
+            "🐍  Kiểm tra & cài Python 3 (cần cho Whisper)",
+            "🎙  Kiểm tra & cài Whisper AI (nhận diện giọng nói cho Autocut)",
+            "🎬  Kiểm tra & cài ffmpeg (xử lý audio)",
+            "⚡  Cài Claude Bridge vào Applications",
             "🔌  Cài plugin CCX vào Adobe Premiere Pro",
             "🚀  Khởi động Bridge ngay sau khi cài xong",
         ]
@@ -98,7 +101,7 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         welcomeView = container
     }
 
-    // MARK: ─── Progress Screen (5 steps) ─────────────────────────────────
+    // MARK: ─── Progress Screen (7 steps) ─────────────────────────────────
     func showProgress() {
         clearContent()
 
@@ -108,40 +111,40 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         let header = makeHeader()
         container.addSubview(header)
 
-        let title = makeLabel("Đang cài đặt...", size: 18, bold: true, color: .white)
-        title.frame = NSRect(x: 40, y: 335, width: 440, height: 26)
+        let title = makeLabel("Đang cài đặt...", size: 17, bold: true, color: .white)
+        title.frame = NSRect(x: 40, y: 348, width: 440, height: 24)
         container.addSubview(title)
 
-        // 5 steps, evenly spaced
-        let stepYs = [305, 275, 245, 215, 185]
+        // 7 steps, evenly spaced
+        let stepYs = [320, 294, 268, 242, 216, 190, 164]
         let stepTexts = [
-            "⏳  Kiểm tra & cài Homebrew + Node.js...",
-            "⏳  Kiểm tra & cài ffmpeg...",
+            "⏳  Homebrew + Node.js...",
+            "⏳  Python 3...",
+            "⏳  Whisper AI (STT)...",
+            "⏳  ffmpeg...",
             "⏳  Claude Bridge.app → /Applications...",
-            "⏳  Plugin CCX → Premiere Pro (Creative Cloud)...",
+            "⏳  Plugin CCX → Premiere Pro...",
             "⏳  Khởi động Claude Bridge...",
         ]
         var lblRefs: [NSTextField] = []
         for (i, text) in stepTexts.enumerated() {
-            let lbl = makeLabel(text, size: 13, bold: false, color: NSColor(white: 0.75, alpha: 1))
-            lbl.frame = NSRect(x: 40, y: CGFloat(stepYs[i]), width: 440, height: 22)
+            let lbl = makeLabel(text, size: 12.5, bold: false, color: NSColor(white: 0.60, alpha: 1))
+            lbl.frame = NSRect(x: 40, y: CGFloat(stepYs[i]), width: 440, height: 20)
             container.addSubview(lbl)
             lblRefs.append(lbl)
         }
-        step1Label = lblRefs[0]
-        step2Label = lblRefs[1]
-        step3Label = lblRefs[2]
-        step4Label = lblRefs[3]
-        step5Label = lblRefs[4]
+        step1Label = lblRefs[0]; step2Label = lblRefs[1]; step3Label = lblRefs[2]
+        step4Label = lblRefs[3]; step5Label = lblRefs[4]; step6Label = lblRefs[5]
+        step7Label = lblRefs[6]
 
         // Progress bar
-        let pb = NSProgressIndicator(frame: NSRect(x: 40, y: 155, width: 440, height: 14))
-        pb.style          = .bar
+        let pb = NSProgressIndicator(frame: NSRect(x: 40, y: 140, width: 440, height: 14))
+        pb.style           = .bar
         pb.isIndeterminate = false
-        pb.minValue       = 0
-        pb.maxValue       = 5
-        pb.doubleValue    = 0
-        pb.wantsLayer     = true
+        pb.minValue        = 0
+        pb.maxValue        = 7
+        pb.doubleValue     = 0
+        pb.wantsLayer      = true
         container.addSubview(pb)
         progressBar = pb
 
@@ -229,9 +232,8 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            // ── Step 1: Check / install Node.js ───────────────────────────
+            // ── Step 1: Homebrew + Node.js ────────────────────────────────
             DispatchQueue.main.async { self.setStep(1, status: .running) }
-
             let nodeOK = self.ensureNode()
             if !nodeOK {
                 DispatchQueue.main.async {
@@ -241,23 +243,28 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
+            DispatchQueue.main.async { self.setStep(1, status: .done); self.progressBar?.doubleValue = 1 }
 
-            DispatchQueue.main.async {
-                self.setStep(1, status: .done)
-                self.progressBar?.doubleValue = 1
-            }
-
-            // ── Step 2: Check / install ffmpeg ────────────────────────────
+            // ── Step 2: Python 3 ──────────────────────────────────────────
             DispatchQueue.main.async { self.setStep(2, status: .running) }
-            self.ensureFfmpeg()
+            let pythonOK = self.ensurePython()
             DispatchQueue.main.async {
-                self.setStep(2, status: .done)
+                self.setStep(2, status: pythonOK ? .done : .failed)
                 self.progressBar?.doubleValue = 2
             }
 
-            // ── Step 3: Copy Claude Bridge.app → /Applications ────────────
+            // ── Step 3: Whisper AI ────────────────────────────────────────
             DispatchQueue.main.async { self.setStep(3, status: .running) }
+            self.ensureWhisper()
+            DispatchQueue.main.async { self.setStep(3, status: .done); self.progressBar?.doubleValue = 3 }
 
+            // ── Step 4: ffmpeg ────────────────────────────────────────────
+            DispatchQueue.main.async { self.setStep(4, status: .running) }
+            self.ensureFfmpeg()
+            DispatchQueue.main.async { self.setStep(4, status: .done); self.progressBar?.doubleValue = 4 }
+
+            // ── Step 5: Copy Claude Bridge.app → /Applications ────────────
+            DispatchQueue.main.async { self.setStep(5, status: .running) }
             let dest = "/Applications/Claude Bridge.app"
             do {
                 if FileManager.default.fileExists(atPath: dest) {
@@ -267,39 +274,29 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
                 _ = self.sh("xattr -dr com.apple.quarantine '\(dest)' 2>/dev/null || true")
             } catch {
                 DispatchQueue.main.async {
-                    self.setStep(3, status: .failed)
+                    self.setStep(5, status: .failed)
                     self.showDone(success: false,
-                                  errorMsg: "Không thể copy Claude Bridge.app:\n\(error.localizedDescription)\n\nThử chạy installer bằng right-click → Open.")
+                                  errorMsg: "Không thể copy Claude Bridge.app:\n\(error.localizedDescription)\n\nThử right-click → Open.")
                 }
                 return
             }
+            DispatchQueue.main.async { self.setStep(5, status: .done); self.progressBar?.doubleValue = 5 }
 
-            DispatchQueue.main.async {
-                self.setStep(3, status: .done)
-                self.progressBar?.doubleValue = 3
-            }
-
-            // ── Step 4: Install CCX plugin ────────────────────────────────
-            DispatchQueue.main.async { self.setStep(4, status: .running) }
-
+            // ── Step 6: Install CCX plugin ────────────────────────────────
+            DispatchQueue.main.async { self.setStep(6, status: .running) }
             if FileManager.default.fileExists(atPath: ccxPath) {
-                NSWorkspace.shared.open(URL(fileURLWithPath: ccxPath))
+                DispatchQueue.main.async { NSWorkspace.shared.open(URL(fileURLWithPath: ccxPath)) }
                 Thread.sleep(forTimeInterval: 1.5)
             }
+            DispatchQueue.main.async { self.setStep(6, status: .done); self.progressBar?.doubleValue = 6 }
 
-            DispatchQueue.main.async {
-                self.setStep(4, status: .done)
-                self.progressBar?.doubleValue = 4
-            }
-
-            // ── Step 5: Launch Claude Bridge ──────────────────────────────
-            DispatchQueue.main.async { self.setStep(5, status: .running) }
+            // ── Step 7: Launch Claude Bridge ──────────────────────────────
+            DispatchQueue.main.async { self.setStep(7, status: .running) }
             Thread.sleep(forTimeInterval: 0.5)
-
             DispatchQueue.main.async {
                 NSWorkspace.shared.open(URL(fileURLWithPath: dest))
-                self.setStep(5, status: .done)
-                self.progressBar?.doubleValue = 5
+                self.setStep(7, status: .done)
+                self.progressBar?.doubleValue = 7
             }
 
             Thread.sleep(forTimeInterval: 1.0)
@@ -384,6 +381,65 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    // MARK: ─── Python Prerequisite ───────────────────────────────────────
+    func findPython() -> String {
+        let candidates = [
+            "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3",
+        ]
+        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            return found
+        }
+        let r = sh("/usr/bin/which python3 2>/dev/null")
+        return r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func findPip3() -> String {
+        let candidates = [
+            "/opt/homebrew/bin/pip3", "/usr/local/bin/pip3", "/usr/bin/pip3",
+        ]
+        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            return found
+        }
+        let r = sh("/usr/bin/which pip3 2>/dev/null")
+        return r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Installs Python 3 via Homebrew if missing. Returns true if available.
+    func ensurePython() -> Bool {
+        if !findPython().isEmpty { return true }
+        let brew = findBrew()
+        guard !brew.isEmpty else { return false }
+        _ = sh("'\(brew)' install python3 2>&1 || true")
+        return !findPython().isEmpty
+    }
+
+    // MARK: ─── Whisper Prerequisite ──────────────────────────────────────
+    func findWhisper() -> String {
+        let r = sh("/usr/bin/which whisper 2>/dev/null")
+        let p = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !p.isEmpty && FileManager.default.fileExists(atPath: p) { return p }
+        for ver in ["3.14","3.13","3.12","3.11","3.10","3.9"] {
+            let candidate = "/Library/Frameworks/Python.framework/Versions/\(ver)/bin/whisper"
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        for candidate in ["/opt/homebrew/bin/whisper", "/usr/local/bin/whisper"] {
+            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        }
+        return ""
+    }
+
+    // Installs Whisper via pip3. Runs silently (no Terminal window).
+    func ensureWhisper() {
+        guard findWhisper().isEmpty else { return } // already installed
+        let pip = findPip3()
+        guard !pip.isEmpty else { return }
+        // Try normal install first, then --break-system-packages if needed
+        let r = sh("'\(pip)' install -U openai-whisper 2>&1")
+        if r.out.contains("error:") || r.status != 0 {
+            _ = sh("'\(pip)' install -U openai-whisper --break-system-packages 2>&1")
+        }
+    }
+
     // MARK: ─── ffmpeg Prerequisite ───────────────────────────────────────
     func findFfmpeg() -> String {
         let candidates = [
@@ -412,14 +468,16 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
     enum StepStatus { case running, done, failed }
 
     func setStep(_ step: Int, status: StepStatus) {
-        let labels = [step1Label, step2Label, step3Label, step4Label, step5Label]
-        guard step >= 1, step <= 5, let lbl = labels[step - 1] else { return }
+        let labels = [step1Label, step2Label, step3Label, step4Label, step5Label, step6Label, step7Label]
+        guard step >= 1, step <= 7, let lbl = labels[step - 1] else { return }
 
         let baseTexts = [
-            "Homebrew + Node.js (môi trường chạy Bridge)",
-            "ffmpeg (xử lý audio Voice Gen)",
+            "Homebrew + Node.js",
+            "Python 3",
+            "Whisper AI (nhận diện giọng nói)",
+            "ffmpeg (xử lý audio)",
             "Claude Bridge.app → /Applications",
-            "Plugin CCX → Premiere Pro (Creative Cloud)",
+            "Plugin CCX → Premiere Pro",
             "Khởi động Claude Bridge",
         ]
 
@@ -446,9 +504,8 @@ class InstallerDelegate: NSObject, NSApplicationDelegate {
     func clearContent() {
         window.contentView?.subviews.forEach { $0.removeFromSuperview() }
         welcomeView = nil; progressView = nil; doneView = nil
-        step1Label  = nil; step2Label   = nil
-        step3Label  = nil; step4Label   = nil
-        step5Label  = nil; progressBar  = nil
+        step1Label = nil; step2Label = nil; step3Label = nil; step4Label = nil
+        step5Label = nil; step6Label = nil; step7Label = nil; progressBar = nil
     }
 
     // MARK: ─── UI Helpers ─────────────────────────────────────────────────
