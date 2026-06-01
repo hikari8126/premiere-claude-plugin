@@ -2290,32 +2290,32 @@ async function ppMoveToVOBin(item, proj) {
       var cols = rows[i];
       var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
 
-      // A: multi-line text cell → flatten thành 1 dòng (join bằng space)
+      // Text col: ALWAYS flatten to 1 line (join \n with space)
       if (text.indexOf('\n') !== -1) {
-        var flatText = text.split('\n')
-          .map(function(l) { return l.trim(); })
-          .filter(Boolean)
-          .join(' ');
-        out.push([flatText, time, src]);
+        text = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean).join(' ');
+      }
+
+      // Split time and source into arrays
+      var times   = splitTimes(time); // handles \n and space-separated timestamps
+      var srcArr  = src.indexOf('\n') !== -1
+        ? src.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
+        : [src];
+
+      var rowCount = Math.max(times.length, srcArr.length);
+
+      if (rowCount > 1) {
+        // Zip time + source, expanding to rowCount rows
+        for (var r = 0; r < rowCount; r++) {
+          var rText = r === 0 ? text : '';
+          var rTime = times.length > 1 ? (times[r] || '') : time;
+          var rSrc  = srcArr.length > 1 ? (srcArr[r]  || '') : src;
+          out.push([rText, rTime, rSrc]);
+        }
         i++;
         continue;
       }
 
-      // B+C: multi-value time cell
-      var times = splitTimes(time);
-      if (times.length > 1) {
-        var srcLines = src.indexOf('\n') !== -1
-          ? src.split('\n').map(function(s){ return s.trim(); }).filter(Boolean)
-          : [src];
-        var zipSrc = srcLines.length === times.length;
-        times.forEach(function(t, ti) {
-          out.push([ ti === 0 ? text : '', t, zipSrc ? srcLines[ti] : src ]);
-        });
-        i++;
-        continue;
-      }
-
-      out.push(cols);
+      out.push([text, time, src]);
       i++;
     }
     return out;
@@ -2638,16 +2638,11 @@ async function ppMoveToVOBin(item, proj) {
         var statusEl = el.querySelector('.sac-srcStatus');
         console.log('[SAC validate] updating row "' + name + '" → statusEl:', statusEl ? 'found' : 'NULL');
         if (!statusEl) return;
-        // Show/hide 📁 hint button on the block card
-        // Priority: item found → ✓ (even if Pass1+2 ambiguous, Pass3 resolved it)
-        //           not found + ambiguous → ⚠ (need folder hint to disambiguate)
-        //           not found → ✗
+        // Priority: ⚠ ambiguous > ✓ found > ✗ missing
+        // Even if item was found, if ambiguous we must warn — Pass1+2 found multiple
+        // matches so the resolved item might be wrong. User must add folder hint.
         var hintBtn = el.querySelector('.sac-blockHintBtn');
-        if (item) {
-          statusEl.className = 'sac-srcStatus sac-srcOk';
-          statusEl.textContent = '✓';
-          if (hintBtn) hintBtn.style.display = 'none';
-        } else if (isAmbiguous) {
+        if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
           statusEl.textContent = '⚠';
           statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';

@@ -46,7 +46,7 @@ function findWhisperBin() {
                    `${process.env.HOME}/.local/bin/whisper`]) {
     if (fs.existsSync(p)) return p;
   }
-  return 'whisper'; // fallback: hope it's in PATH
+  return ''; // not found — caller must check and show clear error
 }
 const WHISPER_BIN = findWhisperBin();
 
@@ -607,6 +607,11 @@ async function transcribeWhisper(audioPath, language) {
       '--fp16',            'False',
     ];
 
+    if (!WHISPER_BIN) {
+      return reject(new Error(
+        'Whisper chưa được cài. Mở Claude Bridge app → menu 🐍 Cài Whisper để cài tự động.'
+      ));
+    }
     console.log('[whisper]', WHISPER_BIN, args.join(' '));
     const env = cleanEnv();
     env.PYTHONHTTPSVERIFY = '0';
@@ -1716,8 +1721,13 @@ ${numberedInput}`;
     } else {
       // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
       const { spawnSync } = require('child_process');
+      // Use cleanEnv() so PATH includes Homebrew + npm-global (same as /chat endpoint)
+      const claudeEnv = cleanEnv();
+      // Add common claude install locations to PATH
+      const npmGlobal = (claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin';
+      claudeEnv.PATH = npmGlobal + ':' + claudeEnv.PATH;
       const result = spawnSync('claude', ['--print'], {
-        input: prompt, encoding: 'utf8', timeout: 30000,
+        input: prompt, encoding: 'utf8', timeout: 60000, env: claudeEnv,
       });
       if (result.error) throw result.error;
       output = (result.stdout || '').trim();
@@ -1745,7 +1755,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.1';
+const BRIDGE_VERSION = '1.5.2';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
