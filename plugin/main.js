@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.1';
+var PLUGIN_VERSION = 'v4.2.2';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
