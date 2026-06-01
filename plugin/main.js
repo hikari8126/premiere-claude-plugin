@@ -2007,15 +2007,18 @@ async function sacGetItemName(item) {
 async function sacGetFolderChildren(item) {
   if (!item) return [];
   var folder = item;
-  // Cast to FolderItem if possible; if cast fails, still try getItems() on the raw item
-  // (some Premiere versions return null from cast but the item still has getItems).
+  // Cast to FolderItem. Null = clip/sequence → return [] immediately (not a folder).
+  // Only if cast throws (broken cast API) do we fall through and try getItems() anyway.
   try {
     if (ppro && ppro.FolderItem && typeof ppro.FolderItem.cast === 'function') {
       var f = ppro.FolderItem.cast(item);
-      if (f) folder = f;
-      // do NOT return [] when cast is null — fall through to getItems()
+      if (!f) return []; // Not a folder — no children
+      folder = f;
     }
-  } catch(e) {}
+  } catch(e) {
+    // cast threw (shouldn't happen but might in some Premiere versions)
+    // fall through to try getItems() on the raw item
+  }
   try {
     if (typeof folder.getItems === 'function') {
       var items = folder.getItems();
