@@ -1557,7 +1557,7 @@ app.post('/superautocut/validate', (req, res) => {
     } else {
       block.sources.forEach((s, j) => {
         if (!s.name || !s.name.trim()) errors.push(`${label} source ${j + 1}: thiếu tên`);
-        if (!s.time || !s.time.trim()) errors.push(`${label} source ${j + 1}: thiếu timestamp`);
+        // timestamp có thể rỗng → full clip (không cần báo lỗi)
       });
     }
   });
@@ -1758,7 +1758,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.3';
+const BRIDGE_VERSION = '1.5.4';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
