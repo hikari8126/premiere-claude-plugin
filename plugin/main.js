@@ -2289,30 +2289,14 @@ async function ppMoveToVOBin(item, proj) {
       var cols = rows[i];
       var text = cols[0] || '', time = cols[1] || '', src = cols[2] || '';
 
-      // A: multi-line text cell
-      // Zip with subsequent rows that have EMPTY text — lets Google Sheets layout like:
-      //   Row 1: "Line A\nLine B" | 0:04-0:05 | ClipX       ← multiline text cell
-      //   Row 2: ""               | 0:35-0:37 | ClipY       ← empty text, carries data for Line B
-      // → expand to: ["Line A"|0:04-0:05|ClipX], ["Line B"|0:35-0:37|ClipY]
+      // A: multi-line text cell → flatten thành 1 dòng (join bằng space)
       if (text.indexOf('\n') !== -1) {
-        var lines = text.split('\n').filter(function(l) { return l.trim(); });
-        var extra = 0; // number of subsequent rows consumed
-        lines.forEach(function(line, li) {
-          var t = time, s = src;
-          if (li > 0) {
-            var nextIdx = i + li;
-            if (nextIdx < rows.length && !((rows[nextIdx][0] || '').trim())) {
-              // Next row has empty text → zip it with this line
-              t = rows[nextIdx][1] || '';
-              s = rows[nextIdx][2] || '';
-              extra = li; // track how many extra rows we'll skip
-            } else {
-              t = ''; s = ''; // no matching row → empty time/src
-            }
-          }
-          out.push([line.trim(), t, s]);
-        });
-        i += extra + 1;
+        var flatText = text.split('\n')
+          .map(function(l) { return l.trim(); })
+          .filter(Boolean)
+          .join(' ');
+        out.push([flatText, time, src]);
+        i++;
         continue;
       }
 
@@ -2667,12 +2651,11 @@ async function ppMoveToVOBin(item, proj) {
       console.log('[SAC] "' + mn + '" không khớp. Gần đúng:', cands);
     });
 
-    var ambiguousNames = names.filter(function(n) {
-      return sacCountBinMatches(binItems, n) > 1;
-    });
+    // ambiguousNames đã là object {name→count} từ đầu hàm, chuyển sang array để return
+    var ambiguousArray = Object.keys(ambiguousNames);
 
     window.sacSourceMap = sacSourceMap; // expose for Phase 5 assembly
-    return { missing: missingNames, ambiguous: ambiguousNames, premiereAvailable: true };
+    return { missing: missingNames, ambiguous: ambiguousArray, premiereAvailable: true };
   }
 
   // ── Skip source button ──────────────────────────────────────────────────────
