@@ -105,7 +105,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { self.promptLogin(claudePath: claudePath) }
                 return
             }
-            DispatchQueue.main.async { self.startBridge() }
+            // Check Whisper before starting bridge (required for Autocut)
+            if self.findWhisper().isEmpty {
+                DispatchQueue.main.async { self.promptInstallWhisperBlocking() }
+            } else {
+                DispatchQueue.main.async { self.startBridge() }
+            }
+        }
+    }
+
+    // Blocking prompt for Whisper during first-run setup.
+    // Unlike checkWhisperOnce (fire-and-forget), this pauses the startup flow.
+    func promptInstallWhisperBlocking() {
+        let a = NSAlert()
+        a.messageText    = "Cài Whisper cho Autocut?"
+        a.informativeText =
+            "Whisper (AI nhận diện giọng nói) cần thiết để align voice trong Autocut.\n\n" +
+            "Cài ngay (~500MB, 2–5 phút) hoặc bỏ qua và cài sau."
+        a.alertStyle = .informational
+        a.addButton(withTitle: "Cài ngay")
+        a.addButton(withTitle: "Bỏ qua")
+        if a.runModal() == .alertFirstButtonReturn {
+            installWhisper()
+            // Poll until whisper is installed then start bridge
+            pollUntil(check: { !self.findWhisper().isEmpty }, interval: 5, timeout: 600) {
+                self.startBridge()
+            }
+        } else {
+            startBridge()
         }
     }
 
