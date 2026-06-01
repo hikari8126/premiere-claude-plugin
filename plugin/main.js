@@ -2081,7 +2081,7 @@ function sacMatchBinItem(items, targetName) {
     for (var s = 1; s < toks.length; s++) {
       var folderPart = toks.slice(0, s).join(' ');
       var clipPart   = toks.slice(s).join(' ');
-      if (folderPart.length < 2) continue;
+      if (!folderPart) continue; // allow single-char folder names like "A"
       for (var m = 0; m < items.length; m++) {
         if (!items[m].parent) continue;
         var nameNoX = sacNorm(items[m].name).replace(/\.[^.]+$/, '');
