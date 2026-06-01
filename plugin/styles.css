@@ -28,7 +28,29 @@ body {
   overflow: hidden;
 }
 
-/* ── Tab Bar ────────────────────────────────────────── */
+/* ── Version Bar ───────────────────────────────────── */
+.version-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  background: rgba(0,0,0,0.25);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 9px;
+  color: rgba(255,255,255,0.25);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.version-bar-text { flex: 0 0 auto; }
+.version-bar-update { flex: 0 0 auto; color: #f59e0b; display: flex; align-items: center; gap: 5px; }
+.version-bar-warn  { flex: 0 0 auto; color: #ef4444; }
+.version-bar-btn {
+  font-size: 8.5px; padding: 1px 6px;
+  background: #10b981; border: none; color: white;
+  border-radius: 3px; cursor: pointer; font-weight: 600;
+}
+.version-bar-btn:hover { background: #059669; }
+
+/* ── Tab Bar ───────────────────────────────────────── */
 .tab-bar {
   display: flex;
   flex-shrink: 0;

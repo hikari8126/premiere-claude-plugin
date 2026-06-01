@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.2';
+var PLUGIN_VERSION = 'v4.2.3';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -562,6 +562,41 @@ var bridgeUrlInput = document.getElementById('bridge-url-input');
 document.getElementById('plugin-version').textContent = PLUGIN_VERSION;
 console.log('[Claude AI Plugin] Loaded', PLUGIN_VERSION);
 
+// ── Version bar (top of UI, always visible) ────────────────────────────────
+var _vbText   = document.getElementById('versionBarText');
+var _vbUpdate = document.getElementById('versionBarUpdate');
+var _vbWarn   = document.getElementById('versionBarBridgeWarn');
+var _vbBtn    = document.getElementById('versionBarUpdateBtn');
+
+function versionBarSetText(bridgeVer) {
+  if (_vbText) _vbText.textContent = PLUGIN_VERSION + ' · Bridge ' + (bridgeVer || '...');
+}
+versionBarSetText(); // initial — bridge version filled in when health check returns
+
+// Update button wired after checkPluginUpdate finds a new version
+if (_vbBtn) {
+  _vbBtn.addEventListener('click', function() {
+    _vbBtn.disabled = true;
+    _vbBtn.textContent = '⏳';
+    var xhr = new XMLHttpRequest();
+    xhr.timeout = 60000;
+    xhr.open('POST', BRIDGE_URL + '/plugin/update', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = function() {
+      try {
+        var d = JSON.parse(xhr.responseText);
+        if (d.ok) {
+          if (_vbUpdate) _vbUpdate.innerHTML = '✅ Creative Cloud đang mở — Reload plugin sau khi cài';
+        } else {
+          _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật';
+        }
+      } catch(e) { _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật'; }
+    };
+    xhr.onerror = function() { _vbBtn.disabled = false; _vbBtn.textContent = '↑ Cập nhật'; };
+    xhr.send(JSON.stringify({ downloadUrl: _vbBtn.dataset.url }));
+  });
+}
+
 loadSettings();
 checkBridge();
 refreshTimeline();
@@ -572,7 +607,18 @@ setTimeout(checkPluginUpdate, 4000); // version check after bridge has time to c
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.2.0'; // Plugin v1.4.5+ requires bridge ≥1.2.0
+var REQUIRED_BRIDGE = '1.5.2'; // Plugin v4.2.3+ requires bridge ≥1.5.2
+
+// Compare semver strings: returns -1/0/1
+function compareVersions(a, b) {
+  var pa = (a || '0').split('.').map(Number);
+  var pb = (b || '0').split('.').map(Number);
+  for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+    var diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
 var bridgeHealth = null;
 
 function checkBridge() {
@@ -584,14 +630,21 @@ function checkBridge() {
     if (xhr.status === 200) {
       try {
         bridgeHealth = JSON.parse(xhr.responseText);
-        // Check version — warn if too old (multimodal capability missing)
+        var bVer = bridgeHealth.version || '?';
+
+        // Update version bar
+        versionBarSetText(bVer);
+
+        // Check if bridge is too old for this plugin
         var caps = bridgeHealth.capabilities || {};
-        if (!caps.multimodal) {
-          setStatus('warn', 'Bridge v' + (bridgeHealth.version || '?') +
-            ' too old — restart server.js (need ≥' + REQUIRED_BRIDGE + ')');
+        var bridgeTooOld = !caps.multimodal || compareVersions(bVer, REQUIRED_BRIDGE) < 0;
+        if (_vbWarn) _vbWarn.style.display = bridgeTooOld ? '' : 'none';
+
+        if (bridgeTooOld) {
+          setStatus('warn', 'Bridge v' + bVer + ' too old — update Bridge app (need ≥' + REQUIRED_BRIDGE + ')');
           return;
         }
-        setStatus('connected', 'Bridge v' + bridgeHealth.version +
+        setStatus('connected', 'Bridge v' + bVer +
           ' · ' + (bridgeHealth.mode === 'api-key' ? 'API' : 'CLI'));
       } catch(e) {
         setStatus('connected', 'Bridge connected');
@@ -618,7 +671,6 @@ function setStatus(state, text) {
 var _pluginUpdateDismissed = false;
 
 function checkPluginUpdate() {
-  if (_pluginUpdateDismissed) return;
   var current = PLUGIN_VERSION.replace(/^v/, '');
   var xhr = new XMLHttpRequest();
   xhr.timeout = 10000;
@@ -627,7 +679,14 @@ function checkPluginUpdate() {
   xhr.onload = function() {
     try {
       var data = JSON.parse(xhr.responseText);
-      if (data.ok && data.hasUpdate) showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+      if (data.ok && data.hasUpdate) {
+        // Show in version bar (primary) and legacy banner (fallback)
+        if (_vbUpdate) {
+          _vbUpdate.style.display = '';
+          if (_vbBtn) _vbBtn.dataset.url = data.pluginDownloadUrl || data.downloadUrl || '';
+        }
+        showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+      }
     } catch(e) {}
   };
   xhr.onerror = function() {};

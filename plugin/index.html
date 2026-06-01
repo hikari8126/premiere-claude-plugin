@@ -7,18 +7,23 @@
 </head>
 <body>
 
+<!-- ── VERSION BAR — always visible, all tabs ── -->
+<div id="versionBar" class="version-bar">
+  <span id="versionBarText" class="version-bar-text"></span>
+  <span id="versionBarUpdate" class="version-bar-update" style="display:none">
+    🔔 Có bản mới
+    <button id="versionBarUpdateBtn" class="version-bar-btn">↑ Cập nhật</button>
+  </span>
+  <span id="versionBarBridgeWarn" class="version-bar-warn" style="display:none">
+    ⚠ Cần update Bridge
+  </span>
+</div>
+
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
   <button class="tab-btn active" data-tab="claude">&#10022; CLAUDE</button>
   <button class="tab-btn" data-tab="voicegen">&#127908; VOICE GEN</button>
   <button class="tab-btn" data-tab="autocut">&#9986; AUTOCUT</button>
-</div>
-
-<!-- Plugin auto-update banner — hidden until update available -->
-<div id="pluginUpdateBanner" hidden>
-  <span id="pluginUpdateMsg"></span>
-  <button id="pluginUpdateBtn" class="text-btn">Update</button>
-  <button id="pluginUpdateDismiss" class="text-btn" style="opacity:0.5;">✕</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
