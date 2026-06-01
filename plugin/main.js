@@ -2656,6 +2656,8 @@ async function ppMoveToVOBin(item, proj) {
         // Priority: ⚠ ambiguous > ✓ found > ✗ missing
         // Even if item was found, if ambiguous we must warn — Pass1+2 found multiple
         // matches so the resolved item might be wrong. User must add folder hint.
+        // Remove stale Skip button if source is now found/resolved
+        var existingSkip = el.querySelector('.sac-skipBtn');
         var hintBtn = el.querySelector('.sac-blockHintBtn');
         if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
@@ -2663,7 +2665,12 @@ async function ppMoveToVOBin(item, proj) {
           statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
           sacAddSkipButton(el);
-        } else {
+        } else if (sacSourceMap[name]) {  // found ✓
+          statusEl.className = 'sac-srcStatus sac-srcOk';
+          statusEl.textContent = '✓';
+          if (hintBtn) hintBtn.style.display = 'none';
+          if (existingSkip) existingSkip.parentNode.removeChild(existingSkip);
+        } else {  // missing ✗
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
           if (hintBtn) hintBtn.style.display = '';
