@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.9.6';
+var PLUGIN_VERSION = 'v4.2.9.7';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -3787,15 +3787,25 @@ async function ppMoveToVOBin(item, proj) {
 
   // Parse "M:SS" or "M:SS-M:SS" → {inSec, outSec}. Single ts defaults to 3s.
   function parseSourceTime(str) {
-    // Empty/missing → null = use full clip duration, no in/out restriction
+    // Empty/missing → null = use full clip duration, no in/out restriction.
     if (!str || !str.trim()) return { inSec: null, outSec: null };
-    var s = str.trim();
-    var m = s.match(/^(\d+):(\d+)(?:-(\d+):(\d+))?$/);
-    if (!m) return { inSec: null, outSec: null };
-    var inSec  = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    var outSec = (m[3] != null)
-      ? parseInt(m[3], 10) * 60 + parseInt(m[4], 10)
-      : inSec + 3;
+    // Tolerant: accepts "0:01-0:05", "0:01 – 0:05" (any dash + spaces),
+    // "00:00:01-00:00:05" (H:MM:SS), "1-5" (seconds), or a single "0:01".
+    var parts = String(str).trim().split(/\s*[-–—]\s*/);
+    function toSec(t) {
+      t = (t || '').trim();
+      if (!t) return null;
+      var seg = t.split(':').map(function(x) { return parseFloat(x); });
+      if (seg.some(function(n) { return isNaN(n); })) return null;
+      if (seg.length === 1) return seg[0];
+      if (seg.length === 2) return seg[0] * 60 + seg[1];
+      if (seg.length === 3) return seg[0] * 3600 + seg[1] * 60 + seg[2];
+      return null;
+    }
+    var inSec = toSec(parts[0]);
+    if (inSec === null) return { inSec: null, outSec: null };
+    var outSec = parts.length > 1 ? toSec(parts[1]) : null;
+    if (outSec === null) outSec = inSec + 3; // single time → default 3s window
     return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
   }
 
@@ -4056,6 +4066,38 @@ async function ppMoveToVOBin(item, proj) {
         }
       }
 
+      // Pre-fetch real durations for full-clip sources (no timecode) so each is placed
+      // at its ACTUAL length — not all clamped to one default window — and the cursor
+      // advances correctly (no overlap, no bleed). Falls back to 5s if path/ffprobe fail.
+      status.textContent = '⏳ Đọc độ dài clip...';
+      var sacFullDur = {};
+      for (var pbi = 0; pbi < blocks.length; pbi++) {
+        var pbsrcs = blocks[pbi].sources || [];
+        for (var psj = 0; psj < pbsrcs.length; psj++) {
+          var pbs = pbsrcs[psj];
+          if (pbs.skipped) continue;
+          if (parseSourceTime(pbs.time).inSec !== null) continue; // has timecode
+          if (sacFullDur[pbs.name] !== undefined) continue;        // already fetched
+          var pit = (sacSourceMap[pbs.name] || window.sacSourceMap[pbs.name]);
+          if (!pit) { sacFullDur[pbs.name] = 0; continue; }
+          var mp = null;
+          try {
+            var pci = (ppro.ClipProjectItem && ppro.ClipProjectItem.cast) ? ppro.ClipProjectItem.cast(pit) : pit;
+            mp = (pci || pit).getMediaFilePath && (pci || pit).getMediaFilePath();
+            if (mp && typeof mp.then === 'function') mp = await mp;
+          } catch(e) {}
+          if (!mp || typeof mp !== 'string') { sacFullDur[pbs.name] = 0; continue; }
+          try {
+            var dr = await fetch(BRIDGE_URL + '/tts/duration', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioPath: mp }),
+            });
+            var dj = await dr.json();
+            sacFullDur[pbs.name] = (dj && dj.ok && dj.duration > 0) ? dj.duration : 0;
+          } catch(e) { sacFullDur[pbs.name] = 0; }
+        }
+      }
+
       var placed = 0;
       for (var i = 0; i < blocks.length; i++) {
         var block      = blocks[i];
@@ -4086,18 +4128,25 @@ async function ppMoveToVOBin(item, proj) {
           }
 
           var ts = parseSourceTime(src.time);
-          // Always place with an explicit in/out so the PLACED length == cursor advance.
-          // Full-clip (no timecode) is bounded to a default window; otherwise
-          // createOverwriteItemAction places the clip's full length and bleeds over the
-          // next slot — e.g. overwriting a following skipped gap (bug #5).
-          var inSec  = (ts.inSec  !== null) ? ts.inSec  : 0;
-          var outSec = (ts.outSec !== null) ? ts.outSec : 5;
+          var inSec, outSec, label;
+          if (ts.inSec !== null && ts.outSec !== null) {
+            // Explicit timecode range from the cutsheet.
+            inSec = ts.inSec; outSec = ts.outSec;
+            label = '[' + inSec + '-' + outSec + ']s';
+          } else {
+            // No timecode → place the WHOLE clip at its real length (pre-fetched).
+            // (Previously this clamped every clip to 5s — the "all same range" bug.)
+            inSec = 0;
+            var full = sacFullDur[src.name];
+            outSec = (full && full > 0.15) ? (full - 0.05) : 5; // tiny margin to stay in media
+            label = (full && full > 0) ? ('[full ' + outSec.toFixed(1) + 's]') : '[full ~5s]';
+          }
           if (outSec <= inSec) outSec = inSec + 0.5; // guard inverted/zero range
           var clipDur = outSec - inSec;
 
           try {
             await sacInsertClipAt(project, seqEditor, srcItem, cursor, inSec, outSec, 0, 1);
-            console.log('[SAC] V1 "' + src.name + '" [' + inSec + '-' + outSec + ']s @' + cursor.toFixed(2) + 's');
+            console.log('[SAC] V1 "' + src.name + '" ' + label + ' @' + cursor.toFixed(2) + 's');
           } catch (eClip) {
             // One bad clip must not abort the whole assembly (crash-hardening, #4).
             console.error('[SAC] insert failed for "' + src.name + '":', eClip && eClip.message);
