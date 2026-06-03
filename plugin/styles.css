@@ -763,6 +763,83 @@ body {
 }
 .vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 
+/* ── SAC bind-source modal (2 columns: 📁 Folder | 🎬 Source) ── */
+.sac-bind-modal {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+}
+.sac-bind-modal[hidden] { display: none; }
+.sac-bind-box {
+  width: 100%; max-width: 340px; max-height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+}
+.sac-bind-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sac-bind-title { flex: 1 1 0; min-width: 0; font-size: 12px; font-weight: 700; color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sac-bind-close { flex: 0 0 auto; background: none; border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-dim); padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.sac-bind-close:hover { border-color: var(--accent); color: var(--accent); }
+.sac-bind-filter { width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 12px; font-family: inherit; margin-bottom: 8px; }
+.sac-bind-filter:focus { outline: none; border-color: var(--accent); }
+.sac-bind-cols { display: flex; gap: 8px; }
+.sac-bind-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.sac-bind-colHead { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55);
+  padding: 5px 7px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border); }
+/* Fixed height — UXP collapses flex:1 children to 0 here, hiding the rows. */
+.sac-bind-list { height: 210px; overflow-y: auto; scrollbar-width: thin; }
+.sac-bind-row { padding: 6px 8px; font-size: 11px; color: rgba(255,255,255,0.8); cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sac-bind-row:hover { background: rgba(168,85,247,0.15); color: #fff; }
+.sac-bind-row.is-active { background: rgba(168,85,247,0.25); color: #fff; }
+.sac-bind-none { padding: 10px 8px; font-size: 10px; color: rgba(255,255,255,0.35); text-align: center; }
+
+/* Gen-voice button: highlighted once the script is prepared (auto on validate) */
+.sac-voiceGenBtn.is-ready { background: rgba(16,185,129,0.25); color: #10b981;
+  box-shadow: inset 0 0 0 1px rgba(16,185,129,0.55); }
+
+/* Small clear button in the (always-visible) script header */
+.sac-scriptClearBtn {
+  margin-left: auto; flex: 0 0 auto;
+  background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4);
+  color: #f87171; border-radius: 5px; padding: 2px 8px; font-size: 10px; cursor: pointer;
+}
+.sac-scriptClearBtn:hover { background: rgba(239,68,68,0.22); color: #fff; }
+
+/* Validate → gen-voice confirm popup */
+.sac-confirm-modal {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.sac-confirm-modal[hidden] { display: none; }
+.sac-confirm-box {
+  width: 100%; max-width: 300px;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+}
+.sac-confirm-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sac-confirm-title { flex: 1 1 0; min-width: 0; font-size: 13px; font-weight: 700; color: var(--accent); }
+.sac-confirm-x { flex: 0 0 auto; background: none; border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text-dim); padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.sac-confirm-x:hover { border-color: var(--accent); color: var(--accent); }
+.sac-confirm-msg { font-size: 11px; color: rgba(255,255,255,0.7); line-height: 1.5; margin-bottom: 10px; }
+.sac-confirm-skip { display: flex; align-items: center; gap: 6px; font-size: 10.5px;
+  color: rgba(255,255,255,0.6); margin-bottom: 14px; cursor: pointer; }
+.sac-confirm-skip input { cursor: pointer; }
+/* Buttons split the row evenly so they never overflow the narrow panel. */
+.sac-confirm-actions { display: flex; gap: 8px; }
+.sac-confirm-actions button {
+  flex: 1 1 0; min-width: 0; white-space: nowrap;
+  padding: 8px 6px; font-size: 11px; text-align: center;
+}
+
 /* ═══════════════════════════════════════════════════════ */
 /* AUTOCUT STYLES  (all prefixed ac- to avoid conflicts)  */
 /* ═══════════════════════════════════════════════════════ */
@@ -2718,6 +2795,12 @@ body {
   line-height: 1;
 }
 .sac-blockHintBtn:hover { opacity: 1; }
+.sac-blockUnbindBtn {
+  flex: 0 0 auto; background: transparent; border: none;
+  font-size: 11px; cursor: pointer; opacity: 0.55; padding: 0 2px;
+  line-height: 1; color: #f59e0b;
+}
+.sac-blockUnbindBtn:hover { opacity: 1; }
 .sac-hintChip {
   display: inline-block; margin: 2px 3px 2px 0;
   padding: 1px 7px; border-radius: 10px; font-size: 9px;

@@ -641,6 +641,7 @@
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
         <span>📝 Script input</span>
+        <button id="sacScriptClear" class="sac-scriptClearBtn" title="Clear toàn bộ script + huỷ tác vụ đang chạy">🗑 Clear</button>
       </div>
       <div class="sac-tableWrap" id="sacTableWrap">
         <div class="sac-thead">
@@ -662,6 +663,7 @@
         <div class="sac-blockHeader">
           <span class="sac-blockTitle">✂️ Blocks</span>
           <span id="sacBlockCount" class="sac-blockMeta"></span>
+          <button id="sacRefreshBlocks" class="sac-clearBtn" title="Validate lại (sau khi import source)">🔄</button>
           <button id="sacClearBlocks" class="sac-clearBtn">✕</button>
         </div>
         <div id="sacBlockList" class="sac-blockList"></div>
@@ -691,9 +693,8 @@
             <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
             <span class="sac-cutDivider"></span>
             <button id="sacCutNew" class="sac-cutBtn">▶ New seq</button>
-            <button id="sacCutNewSettings" class="sac-cutSettingsBtn" title="New seq settings">⚙</button>
           </div>
-          <!-- Inline settings for New seq (toggle on ⚙ click) -->
+          <!-- Settings for New seq — revealed on first "New seq" click, run on second -->
           <div id="sacNewSeqForm" class="sac-newSeqForm" style="display:none">
             <div class="sac-nsfRow">
               <span class="sac-nsfLabel">Name</span>
@@ -901,6 +902,45 @@
     </div>
 
   </div><!-- /ac-app (hidden) -->
+
+  <!-- Validate → "gen voice?" confirm popup -->
+  <div id="sacGenConfirm" class="sac-confirm-modal" hidden>
+    <div class="sac-confirm-box">
+      <div class="sac-confirm-head">
+        <span class="sac-confirm-title">Chuẩn hoá &amp; gen voice?</span>
+        <button id="sacGenConfirmCancel" class="sac-confirm-x" title="Huỷ">✕</button>
+      </div>
+      <div class="sac-confirm-msg">Bấm "Có" để chuẩn hoá script + đẩy sang Voice Gen luôn. Bấm "Không" nếu bạn còn muốn sửa script.</div>
+      <label class="sac-confirm-skip"><input type="checkbox" id="sacGenConfirmSkip" /> Lần sau không hỏi nữa (nhớ lựa chọn)</label>
+      <div class="sac-confirm-actions">
+        <button id="sacGenConfirmNo" class="btn-secondary">Không, chỉ validate</button>
+        <button id="sacGenConfirmYes" class="btn-primary">Có, gen voice</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bind-source modal: 2 columns (📁 Folder | 🎬 Source). Sibling of .sac-app so
+       hiding .sac-app while open keeps native textboxes from punching through. -->
+  <div id="sacBindModal" class="sac-bind-modal" hidden>
+    <div class="sac-bind-box">
+      <div class="sac-bind-head">
+        <span id="sacBindTitle" class="sac-bind-title">Chọn source</span>
+        <button id="sacBindClose" class="sac-bind-close">✕</button>
+      </div>
+      <input id="sacBindFilter" type="text" class="sac-bind-filter" placeholder="🔍 Lọc theo tên..." />
+      <div class="sac-bind-cols">
+        <div class="sac-bind-col">
+          <div class="sac-bind-colHead">📁 Folder</div>
+          <div id="sacBindFolders" class="sac-bind-list"></div>
+        </div>
+        <div class="sac-bind-col">
+          <div class="sac-bind-colHead">🎬 Source</div>
+          <div id="sacBindSources" class="sac-bind-list"></div>
+        </div>
+      </div>
+      <div id="sacBindEmpty" class="sac-bind-empty" style="display:none"></div>
+    </div>
+  </div>
 
 </div><!-- /tab-autocut -->
 
