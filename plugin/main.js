@@ -527,16 +527,30 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.9.9';
+var PLUGIN_VERSION = 'v4.3.0';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
 var BRIDGE_URL      = 'http://localhost:3030';
 var CLAUDE_MODEL    = 'claude-sonnet-4-6';
 var ANTHROPIC_KEY   = ''; // user-provided API key (optional)
-var ELEVENLABS_KEY  = '03dcac8c36d58c119bbc3f070afb142de39d019444ac20311682eb2b42e6c900'; // default key — overridden by user Settings
+var OPENAI_KEY      = ''; // user-provided OpenAI key for Organize (optional; bridge .env is fallback)
+var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || 'claude-sonnet-4-6'; // model for script Organize
+var ELEVENLABS_KEY  = ''; // no hardcoded key — user enters in Settings, or bridge .env (ELEVENLABS_API_KEY) provides the shared default
 var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
 var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
+
+// Resolve the provider/model/key for script "Organize" from the selected model.
+// gpt* → OpenAI (key = OPENAI_KEY or bridge .env); else Anthropic (key = ANTHROPIC_KEY or bridge).
+window.sacOrganizeConfig = function() {
+  var m = ORGANIZE_MODEL || 'claude-sonnet-4-6';
+  var isGpt = /^(gpt|o\d|chatgpt)/i.test(m);
+  return {
+    provider: isGpt ? 'openai' : 'anthropic',
+    model: m,
+    apiKey: isGpt ? OPENAI_KEY : ANTHROPIC_KEY, // empty → bridge falls back to its .env / CLI
+  };
+};
 var RATE_LIMIT_UNTIL = 0; // epoch ms — until when we shouldn't retry CLI
 var messages        = [];
 var timelineContext = null;
@@ -1379,6 +1393,7 @@ function applySettings(s) {
   if (s.bridgeUrl)     BRIDGE_URL    = s.bridgeUrl;
   if (s.claudeModel)   CLAUDE_MODEL  = s.claudeModel;
   if (s.anthropicKey)  ANTHROPIC_KEY = s.anthropicKey;
+  if (s.openaiKey)     OPENAI_KEY    = s.openaiKey;
   if (s.elevenlabsKey) ELEVENLABS_KEY = s.elevenlabsKey;
   // Load profiles; migrate legacy single-key to a Default profile
   if (Array.isArray(s.elevenlabsProfiles) && s.elevenlabsProfiles.length) {
@@ -1399,6 +1414,8 @@ function applySettings(s) {
   if (bridgeUrlInput) bridgeUrlInput.value = BRIDGE_URL;
   if (modelSelect)    modelSelect.value = CLAUDE_MODEL;
   if (apiKeyInput)    apiKeyInput.value = ANTHROPIC_KEY;
+  var oaInput = document.getElementById('openai-key-input');
+  if (oaInput)        oaInput.value = OPENAI_KEY;
   if (elKeyInput)     elKeyInput.value  = ELEVENLABS_KEY;
   updateApiKeyStatus();
   updateElStatus();
@@ -1551,12 +1568,14 @@ document.getElementById('save-settings').addEventListener('click', function() {
   BRIDGE_URL     = readInput(bridgeUrlInput) || 'http://localhost:3030';
   CLAUDE_MODEL   = (modelSelect && modelSelect.value) || CLAUDE_MODEL;
   ANTHROPIC_KEY  = readInput(apiKeyInput);
+  OPENAI_KEY     = readInput(document.getElementById('openai-key-input'));
   // ElevenLabs key is managed in Voice Gen tab — don't overwrite it here
-  console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | elevenlabs managed in VoiceGen tab');
+  console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | openai:', OPENAI_KEY.length, 'chars');
   var settingsObj = {
     bridgeUrl:                  BRIDGE_URL,
     claudeModel:                CLAUDE_MODEL,
     anthropicKey:               ANTHROPIC_KEY,
+    openaiKey:                  OPENAI_KEY,
     elevenlabsKey:              ELEVENLABS_KEY,
     elevenlabsProfiles:         EL_PROFILES,
     elevenlabsActiveProfileId:  EL_ACTIVE_PROFILE_ID,
@@ -3268,13 +3287,14 @@ async function ppMoveToVOBin(item, proj) {
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     sacNormAbort = ctrl;
 
-    sacSetVoiceInfo('⏳ Chuẩn hóa script qua Claude...');
+    var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider: 'anthropic', model: null, apiKey: '' };
+    sacSetVoiceInfo('⏳ Chuẩn hóa script (' + cfg.model + ')...');
     var normalizedLines = lines; // fallback = originals
     try {
       var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines: lines }),
+        body: JSON.stringify({ lines: lines, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
         signal: ctrl ? ctrl.signal : undefined,
       });
       if (myToken !== sacNormToken) return; // cancelled/superseded while fetching
@@ -5488,6 +5508,47 @@ async function ppMoveToVOBin(item, proj) {
   els.btnGenerate.addEventListener('click', generate);
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
+
+  // ── Organize script (normalize + emotion tags) — Claude or GPT ─────────────
+  var vgOrgModel = $('vgOrganizeModel');
+  if (vgOrgModel) {
+    vgOrgModel.value = ORGANIZE_MODEL;
+    if (vgOrgModel.value !== ORGANIZE_MODEL) vgOrgModel.selectedIndex = 0; // unknown saved value
+    vgOrgModel.addEventListener('change', function() {
+      ORGANIZE_MODEL = vgOrgModel.value;
+      localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
+    });
+  }
+  var vgOrgBtn = $('vgOrganizeBtn');
+  if (vgOrgBtn) vgOrgBtn.addEventListener('click', async function() {
+    var ta = els.script;
+    if (!ta) return;
+    var lines = String(ta.value || '').split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+    if (!lines.length) { vgOrgBtn.textContent = '✨ Organize'; return; }
+    var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider:'anthropic', model:null, apiKey:'' };
+    var oldT = vgOrgBtn.textContent;
+    vgOrgBtn.disabled = true; vgOrgBtn.textContent = '⏳ Organizing…';
+    try {
+      var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: lines, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
+      });
+      var d = await resp.json();
+      if (d.ok && Array.isArray(d.lines) && d.lines.length) {
+        ta.value = d.lines.join('\n');
+        if (typeof updateCharCount === 'function') updateCharCount();
+        vgAutoResize(ta);
+        if (d.warning === 'count_mismatch') vgOrgBtn.textContent = '⚠ Lệch số dòng — kiểm tra lại';
+      } else {
+        alert('Organize lỗi: ' + (d.error || 'không rõ'));
+      }
+    } catch(e) {
+      alert('Organize lỗi: ' + e.message);
+    } finally {
+      vgOrgBtn.disabled = false;
+      setTimeout(function(){ vgOrgBtn.textContent = oldT || '✨ Organize'; }, 1500);
+    }
+  });
 
   // Variation buttons
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });

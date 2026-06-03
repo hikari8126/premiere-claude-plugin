@@ -126,6 +126,16 @@
       </div>
 
       <div class="setting-row">
+        <label>OpenAI / ChatGPT API Key
+          <span class="setting-pill">Organize</span>
+        </label>
+        <input id="openai-key-input" type="password" placeholder="sk-proj-... (cho Organize script bằng GPT)" autocomplete="off" />
+        <div class="setting-hint-inline">
+          Chỉ dùng khi chọn model GPT ở Organize. Để trống = dùng OPENAI_API_KEY trong bridge .env.
+        </div>
+      </div>
+
+      <div class="setting-row">
         <label>Claude Model</label>
         <select id="model-select">
           <option value="claude-opus-4-7">Opus 4.7 — best quality (slow + expensive)</option>
@@ -246,6 +256,16 @@
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
+              <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
+                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                <option value="claude-opus-4-7">Claude Opus 4.7</option>
+                <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-4o-mini">GPT-4o mini</option>
+                <option value="gpt-4.1">GPT-4.1</option>
+                <option value="gpt-4.1-mini">GPT-4.1 mini</option>
+              </select>
+              <button id="vgOrganizeBtn" class="vg-organizeBtn" title="Chuẩn hoá script + thêm tag cảm xúc">✨ Organize</button>
             </div>
           </div>
         </div>

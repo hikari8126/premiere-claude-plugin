@@ -824,9 +824,13 @@ function fillGaps(alignments) {
 // ELEVENLABS — shared helpers + TTS + Voice Creation
 // ═══════════════════════════════════════════════════════════════════════════
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io';
+// Shared default key — set in bridge/.env (gitignored, NOT committed to public repo).
+// Used only when the plugin request doesn't carry a user key.
+const ELEVENLABS_DEFAULT_KEY = process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_KEY || '';
 
 // Multipart/form-data POST (for voice cloning — no extra deps needed)
 function elevenLabsMultipart(apiKey, urlPath, fields, files) {
+  apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
   return new Promise((resolve, reject) => {
     const boundary = '----ELBoundary' + Date.now().toString(16);
     const parts    = [];
@@ -885,6 +889,7 @@ function elevenLabsMultipart(apiKey, urlPath, fields, files) {
 
 // Binary POST — returns { buffer, generationId } (used for voice design preview)
 function elevenLabsBinaryPost(apiKey, urlPath, body) {
+  apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
   return new Promise((resolve, reject) => {
     const bodyStr = JSON.stringify(body);
     const url     = new URL(ELEVENLABS_BASE + urlPath);
@@ -918,6 +923,7 @@ function elevenLabsBinaryPost(apiKey, urlPath, body) {
 }
 
 function elevenLabsRequest(apiKey, method, urlPath, body, expectBinary) {
+  apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
   return new Promise((resolve, reject) => {
     const https = require('https');
     const url = new URL(ELEVENLABS_BASE + urlPath);
@@ -1741,7 +1747,7 @@ Return ONLY a JSON array, no markdown, no explanation:
 // Input:  { lines: string[] }   — mảng string, 1 phần tử / block
 // Output: { ok, lines: string[] }
 app.post('/superautocut/normalize-script', async (req, res) => {
-  const { lines } = req.body;
+  const { lines, provider, model, apiKey } = req.body;
   if (!Array.isArray(lines) || lines.length === 0)
     return res.status(400).json({ ok: false, error: 'No lines provided' });
 
@@ -1775,28 +1781,46 @@ ${numberedInput}`;
 
   try {
     let output = '';
-    if (API_KEY) {
-      const Anthropic = require('@anthropic-ai/sdk');
-      const client = new Anthropic({ apiKey: API_KEY });
-      const resp = await client.messages.create({
-        model: DEFAULT_MODEL,
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }],
+    if (provider === 'openai') {
+      // OpenAI / ChatGPT via REST (no extra npm dep). Key: request → bridge .env.
+      const oaKey = apiKey || process.env.OPENAI_API_KEY || '';
+      if (!oaKey) throw new Error('Chưa có OpenAI API key (nhập trong Settings hoặc đặt OPENAI_API_KEY trong bridge .env)');
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + oaKey },
+        body: JSON.stringify({
+          model: model || 'gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.4,
+        }),
       });
-      output = resp.content[0].text.trim();
+      const dj = await r.json();
+      if (!r.ok) throw new Error('OpenAI: ' + ((dj.error && dj.error.message) || ('HTTP ' + r.status)));
+      output = ((dj.choices && dj.choices[0] && dj.choices[0].message && dj.choices[0].message.content) || '').trim();
     } else {
-      // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
-      const { spawnSync } = require('child_process');
-      // Use cleanEnv() so PATH includes Homebrew + npm-global (same as /chat endpoint)
-      const claudeEnv = cleanEnv();
-      // Add common claude install locations to PATH
-      const npmGlobal = (claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin';
-      claudeEnv.PATH = npmGlobal + ':' + claudeEnv.PATH;
-      const result = spawnSync('claude', ['--print'], {
-        input: prompt, encoding: 'utf8', timeout: 60000, env: claudeEnv,
-      });
-      if (result.error) throw result.error;
-      output = (result.stdout || '').trim();
+      // Anthropic: request key → bridge API_KEY (env) → claude CLI fallback.
+      const anthKey = apiKey || API_KEY;
+      if (anthKey) {
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: anthKey });
+        const resp = await client.messages.create({
+          model: model || DEFAULT_MODEL,
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        output = resp.content[0].text.trim();
+      } else {
+        // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
+        const { spawnSync } = require('child_process');
+        const claudeEnv = cleanEnv();
+        const npmGlobal = (claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin';
+        claudeEnv.PATH = npmGlobal + ':' + claudeEnv.PATH;
+        const result = spawnSync('claude', ['--print'], {
+          input: prompt, encoding: 'utf8', timeout: 60000, env: claudeEnv,
+        });
+        if (result.error) throw result.error;
+        output = (result.stdout || '').trim();
+      }
     }
 
     // Parse output: strip leading numbers if Claude added them, drop blank lines
@@ -1821,7 +1845,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.6';
+const BRIDGE_VERSION = '1.5.7';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
