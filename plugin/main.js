@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.9.7';
+var PLUGIN_VERSION = 'v4.2.9.8';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -3788,23 +3788,25 @@ async function ppMoveToVOBin(item, proj) {
   // Parse "M:SS" or "M:SS-M:SS" → {inSec, outSec}. Single ts defaults to 3s.
   function parseSourceTime(str) {
     // Empty/missing → null = use full clip duration, no in/out restriction.
-    if (!str || !str.trim()) return { inSec: null, outSec: null };
-    // Tolerant: accepts "0:01-0:05", "0:01 – 0:05" (any dash + spaces),
-    // "00:00:01-00:00:05" (H:MM:SS), "1-5" (seconds), or a single "0:01".
-    var parts = String(str).trim().split(/\s*[-–—]\s*/);
+    if (str == null) return { inSec: null, outSec: null };
+    var s = String(str).trim();
+    if (!s) return { inSec: null, outSec: null };
+    // Separator-agnostic: pull out the time-like tokens (H:MM:SS / M:SS / bare
+    // seconds, optional decimals) no matter what joins them — hyphen, en/em/figure
+    // dash, minus sign, "to", spaces, etc. This is why a cutsheet whose dash got
+    // auto-converted to "–" was failing to parse and every clip fell back to a gap.
+    var tokens = s.match(/\d+(?::\d+){0,2}(?:\.\d+)?/g);
+    if (!tokens || !tokens.length) return { inSec: null, outSec: null };
     function toSec(t) {
-      t = (t || '').trim();
-      if (!t) return null;
       var seg = t.split(':').map(function(x) { return parseFloat(x); });
       if (seg.some(function(n) { return isNaN(n); })) return null;
       if (seg.length === 1) return seg[0];
       if (seg.length === 2) return seg[0] * 60 + seg[1];
-      if (seg.length === 3) return seg[0] * 3600 + seg[1] * 60 + seg[2];
-      return null;
+      return seg[0] * 3600 + seg[1] * 60 + seg[2];
     }
-    var inSec = toSec(parts[0]);
+    var inSec = toSec(tokens[0]);
     if (inSec === null) return { inSec: null, outSec: null };
-    var outSec = parts.length > 1 ? toSec(parts[1]) : null;
+    var outSec = tokens.length > 1 ? toSec(tokens[1]) : null;
     if (outSec === null) outSec = inSec + 3; // single time → default 3s window
     return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
   }
@@ -4134,8 +4136,9 @@ async function ppMoveToVOBin(item, proj) {
             inSec = ts.inSec; outSec = ts.outSec;
             label = '[' + inSec + '-' + outSec + ']s';
           } else {
-            // No timecode → place the WHOLE clip at its real length (pre-fetched).
-            // (Previously this clamped every clip to 5s — the "all same range" bug.)
+            // No timecode parsed → place the WHOLE clip at its real length (pre-fetched).
+            // Log the raw value so a still-unparsed timecode format is easy to spot.
+            console.warn('[SAC] timecode KHÔNG parse được cho "' + src.name + '" — time thô = ' + JSON.stringify(src.time) + ' → dùng full clip');
             inSec = 0;
             var full = sacFullDur[src.name];
             outSec = (full && full > 0.15) ? (full - 0.05) : 5; // tiny margin to stay in media
