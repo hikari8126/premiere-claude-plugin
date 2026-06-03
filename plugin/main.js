@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.9.8';
+var PLUGIN_VERSION = 'v4.2.9.9';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2523,6 +2523,15 @@ async function ppMoveToVOBin(item, proj) {
     var blocks  = [];
     var current = null;
 
+    // Split a time cell on "&" → one clip per segment from the SAME source, placed
+    // consecutively. "3 - 4 & 5 - 6" → [{src,"3 - 4"},{src,"5 - 6"}]. Bare numbers
+    // are seconds (handled by parseSourceTime). Empty/no-"&" → a single entry.
+    function srcEntries(name, time) {
+      var segs = String(time || '').split('&').map(function(s) { return s.trim(); }).filter(Boolean);
+      if (segs.length <= 1) return [{ name: name, time: time }];
+      return segs.map(function(seg) { return { name: name, time: seg }; });
+    }
+
     data.forEach(function(r) {
       var hasText = r.text !== '';
       var hasSrc  = r.src  !== '';
@@ -2530,16 +2539,17 @@ async function ppMoveToVOBin(item, proj) {
 
       if (hasText && hasSrc) {
         // Both → start new block
-        current = { texts: [r.text], sources: [{ name: r.src, time: r.time }] };
+        current = { texts: [r.text], sources: srcEntries(r.src, r.time) };
         blocks.push(current);
       } else if (hasText) {
-        // Text only → add to current block
+        // Text only → add to current block (e.g. "Try it now!" / "Chạy variant":
+        // no source → contributes voice only, no video).
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
         current.texts.push(r.text);
       } else {
-        // Source only → add to current block
+        // Source only → add to current block (each "&" segment becomes its own clip)
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
-        current.sources.push({ name: r.src, time: r.time });
+        srcEntries(r.src, r.time).forEach(function(e) { current.sources.push(e); });
       }
     });
 
