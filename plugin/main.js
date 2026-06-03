@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.2.8.6';
+var PLUGIN_VERSION = 'v4.2.9.6';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2057,34 +2057,66 @@ async function sacCollectBinItems(rootItem) {
     for (var i = 0; i < children.length; i++) {
       var child = children[i];
       var name  = await sacGetItemName(child);
-      out.push({ name: name, item: child, parent: node.name });
+      // Tag folders so they are NOT matched as a source (a folder can't be placed
+      // on the timeline). Without this, a cutsheet name like "irena" wrongly
+      // "matched" the folder named irena and passed validation.
+      var isFolder = false;
+      try { if (ppro && ppro.FolderItem && ppro.FolderItem.cast) isFolder = !!ppro.FolderItem.cast(child); } catch(e) {}
+      out.push({ name: name, item: child, parent: node.name, isFolder: isFolder });
       queue.push({ item: child, name: name }); // [] for clips → no infinite loop
     }
   }
   return out;
 }
 
-// Normalize: lowercase, collapse all whitespace runs to a single space, trim.
-// Collapsing whitespace matters — bin names may have double spaces / NBSP.
+// Normalize for name matching: lowercase, strip a trailing file extension, then
+// treat separators ( - _ . ( ) [ ] / \ ) as spaces and collapse whitespace.
+// This makes "K2 v4 - op1.mp4" == "K2 v4 op1" and "Frame v4 1-4x5" == "Frame v4 1 4x5",
+// fixing matches that failed before because hyphens/dashes were kept literally.
 function sacNorm(s) {
-  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,4}$/, '')      // strip trailing extension (.mp4/.mov/.png/...)
+    .replace(/[-_.()\[\]/\\]+/g, ' ')     // separators → space
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-// Match a target name against collected items.
-// Two passes: (1) exact (ext-tolerant), (2) prefix at a word boundary so a
-// cutsheet name "Sandy 100" matches a bin clip "Sandy 100 S3A4232.MP4".
+// Levenshtein edit distance (for small-typo fuzzy matching).
+function sacLev(a, b) {
+  a = a || ''; b = b || '';
+  var m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  var prev = [], cur = [], i, j;
+  for (j = 0; j <= n; j++) prev[j] = j;
+  for (i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (j = 1; j <= n; j++) {
+      var cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    for (j = 0; j <= n; j++) prev[j] = cur[j];
+  }
+  return prev[n];
+}
+
+// Match a target name against collected items. Folders are NEVER matched (a folder
+// can't be placed on the timeline). Passes: (1) exact (ext-tolerant), (2) prefix at
+// a word boundary, (3) folder-hint + clip, (4) fuzzy (small typo, unique + tight).
 function sacMatchBinItem(items, targetName) {
   var t    = sacNorm(targetName);
   var tNoX = t.replace(/\.[^.]+$/, '');
 
   // Pass 1: exact match (with or without file extension)
   for (var i = 0; i < items.length; i++) {
+    if (items[i].isFolder) continue;
     var cn    = sacNorm(items[i].name);
     var cnNoX = cn.replace(/\.[^.]+$/, '');
     if (cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX) return items[i].item;
   }
   // Pass 2: bin name starts with the target followed by a boundary char
   for (var k = 0; k < items.length; k++) {
+    if (items[k].isFolder) continue;
     var name = sacNorm(items[k].name);
     if (tNoX && name.indexOf(tNoX) === 0) {
       var next = name.charAt(tNoX.length);
@@ -2093,18 +2125,16 @@ function sacMatchBinItem(items, targetName) {
   }
   // Pass 3: folder + clip. Cutsheet "Senyue 62" → a clip named "62" inside a
   // folder whose name *contains* "Senyue" (e.g. "Studio Senyue/62.MOV").
-  // Try every split: leading tokens = folder hint, trailing tokens = clip name.
   var toks = t.split(' ').filter(Boolean);
   if (toks.length >= 2) {
     for (var s = 1; s < toks.length; s++) {
       var folderPart = toks.slice(0, s).join(' ');
       var clipPart   = toks.slice(s).join(' ');
-      if (!folderPart) continue; // allow single-char folder names like "A"
+      if (!folderPart) continue;
       for (var m = 0; m < items.length; m++) {
-        if (!items[m].parent) continue;
+        if (items[m].isFolder || !items[m].parent) continue;
         var nameNoX = sacNorm(items[m].name).replace(/\.[^.]+$/, '');
         var par     = sacNorm(items[m].parent);
-        // clip name: exact, OR ends with " <token>", OR starts with "<token> " / "<token>("
         var clipOk = (nameNoX === clipPart) ||
                      (nameNoX.length > clipPart.length &&
                        nameNoX.slice(-(clipPart.length + 1)) === (' ' + clipPart)) ||
@@ -2116,6 +2146,21 @@ function sacMatchBinItem(items, targetName) {
       }
     }
   }
+  // Pass 4: fuzzy typo tolerance, e.g. "K10 opt1" ↔ "K10 op1". Only over clips,
+  // only the UNIQUE closest within a tight threshold, so we never silently bind
+  // the wrong clip when several are equally close.
+  var best = null, bestD = Infinity, tie = false;
+  for (var f = 0; f < items.length; f++) {
+    if (items[f].isFolder) continue;
+    var cand = sacNorm(items[f].name).replace(/\.[^.]+$/, '');
+    var d = sacLev(tNoX, cand);
+    if (d < bestD) { bestD = d; best = items[f].item; tie = false; }
+    else if (d === bestD) { tie = true; }
+  }
+  // Accept only a very close unique match: ≤20% of the name length, capped at 2.
+  // (Tight enough that "intro" won't match "outro", loose enough for "K10 opt1"↔"K10 op1".)
+  var fuzzMax = Math.min(2, Math.max(1, Math.floor(tNoX.length * 0.2)));
+  if (best && !tie && bestD <= fuzzMax) return best;
   return null;
 }
 
@@ -2126,8 +2171,9 @@ function sacCountBinMatches(items, targetName) {
   var t    = sacNorm(targetName);
   var tNoX = t.replace(/\.[^.]+$/, '');
 
-  // Count Pass 1 exact matches first
+  // Count Pass 1 exact matches first (folders excluded — not placeable sources)
   var exactCount = items.filter(function(b) {
+    if (b.isFolder) return false;
     var cn   = sacNorm(b.name);
     var cnNoX = cn.replace(/\.[^.]+$/, '');
     return cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX;
@@ -2137,6 +2183,7 @@ function sacCountBinMatches(items, targetName) {
   if (exactCount === 1) return 1;
   // 0+ exact matches → also count Pass 2 prefix matches for full picture
   return items.filter(function(b) {
+    if (b.isFolder) return false;
     var cn   = sacNorm(b.name);
     var cnNoX = cn.replace(/\.[^.]+$/, '');
     if (cn === t || cnNoX === t || cn === tNoX || cnNoX === tNoX) return true;
@@ -2222,11 +2269,18 @@ async function ppMoveToVOBin(item, proj) {
   var parsedBlocks = [];
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
+  var sacBindOverrides = {}; // sacNorm(originalCutsheetName) → bound display name (survives re-parse)
   var sacVoicePath  = null; // native path of the chosen/generated voice file
   var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
 
   var sacValidatePassed = false;
   var sacVoiceReady     = false;
+  var sacScriptPrepared = false; // normalized script already pushed to Voice Gen (auto on validate)
+  var sacNormToken      = 0;     // bumped to invalidate an in-flight normalize (cancel)
+  var sacNormAbort      = null;  // AbortController for the in-flight normalize fetch
+  var sacValidateToken  = 0;     // bumped to invalidate an in-flight validate
+  var sacGenVoiceAsk    = true;  // show the "gen voice?" popup on Validate
+  var sacGenVoicePref   = true;  // remembered answer when the popup is skipped
   var sacNoVoiceMode    = false; // set by "Without voice" button
 
   // Show the cut panel (hides voice panel), update label
@@ -2247,6 +2301,7 @@ async function ppMoveToVOBin(item, proj) {
   function sacHideCutPanel() {
     $('sacCutPanel').style.display = 'none';
     $('sacNewSeqForm').style.display = 'none';
+    var nb = $('sacCutNew'); if (nb) nb.textContent = '▶ New seq'; // reset 2-click label
     $('sacVoicePanel').style.display = 'flex';
   }
 
@@ -2488,6 +2543,16 @@ async function ppMoveToVOBin(item, proj) {
       }
     });
 
+    // Re-apply manual bind overrides (from the bind-source modal) so a chosen clip
+    // survives a re-parse (validate / refresh / voice-align rebuild from the sheet).
+    blocks.forEach(function(b) {
+      (b.sources || []).forEach(function(s) {
+        s._orig = s.name; // keep the true sheet name as the override key
+        var ov = sacBindOverrides[sacNorm(s.name)];
+        if (ov) s.name = ov;
+      });
+    });
+
     return blocks;
   }
 
@@ -2500,6 +2565,20 @@ async function ppMoveToVOBin(item, proj) {
     var list = $('sacBlockList');
     list.innerHTML = '';
     $('sacBlockCount').textContent = blocks.length + ' block' + (blocks.length !== 1 ? 's' : '');
+
+    // Carry over per-source UI state (skip flag) from the previously rendered
+    // blocks, matched by position + name. Without this, a re-render (e.g. when
+    // aligning voice after the user marked some sources Skip) would reset the
+    // flags → a skipped source would get cut with a clip instead of a gap (bug #5).
+    var _prevBlocks = parsedBlocks || [];
+    blocks.forEach(function(nb, bi) {
+      var pb = _prevBlocks[bi];
+      if (!pb || !pb.sources) return;
+      (nb.sources || []).forEach(function(ns, si) {
+        var ps = pb.sources[si];
+        if (ps && ps.skipped && sacNorm(ps.name) === sacNorm(ns.name)) ns.skipped = true;
+      });
+    });
 
     blocks.forEach(function(block, i) {
       var color = BLOCK_COLORS[i % BLOCK_COLORS.length];
@@ -2587,6 +2666,18 @@ async function ppMoveToVOBin(item, proj) {
             sacShowBlockFolderHints(srcEl, bIdx, sIdx);
           });
           srcEl.appendChild(hintBtn);
+          // ↩ unbind — revert an accidental bind back to the original sheet name.
+          var unbindBtn = document.createElement('button');
+          unbindBtn.type = 'button';
+          unbindBtn.className = 'sac-blockUnbindBtn';
+          unbindBtn.textContent = '↩';
+          unbindBtn.title = 'Bỏ bind (về tên gốc trong script)';
+          unbindBtn.style.display = sacBindOverrides[sacNorm(s._orig || s.name)] ? '' : 'none';
+          unbindBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            sacUnbindSource(srcEl, bIdx, sIdx);
+          });
+          srcEl.appendChild(unbindBtn);
         })(el, i, si);
         var statusSpan = document.createElement('span');
         statusSpan.className = 'sac-srcStatus';
@@ -2716,7 +2807,63 @@ async function ppMoveToVOBin(item, proj) {
   // ── Block card folder hint ───────────────────────────────────────────────────
   // Shows candidate folder-prefixed names for a ✗/⚠ source row.
   // Clicking a candidate: updates parsedBlocks source name + re-validates that source.
+  // Revert an accidental bind: drop the override, restore the original sheet name,
+  // re-match against the bin, and refresh the row's status / buttons.
+  function sacUnbindSource(srcEl, bIdx, sIdx) {
+    var src = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+    if (!src) return;
+    var orig = src._orig || src.name;
+    delete sacBindOverrides[sacNorm(orig)];
+    src.name = orig;
+    src.skipped = false;
+
+    // Replicate validate's per-row status exactly (⚠ ambiguous > ✓ found > ✗ missing),
+    // so unbinding truly restores the original state — not a false ✓ from the first match.
+    var count = sacCountBinMatches(sacBinItems, orig);
+    var item  = sacMatchBinItem(sacBinItems, orig);
+    var isAmbiguous = count > 1;
+    sacSourceMap[orig] = item || null;
+    window.sacSourceMap = sacSourceMap;
+
+    srcEl.dataset.srcName = orig;
+    var nameSpan = srcEl.querySelector('.sac-srcName');
+    if (nameSpan) { nameSpan.textContent = '🎬 ' + orig; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+
+    var statusEl = srcEl.querySelector('.sac-srcStatus');
+    var hintBtn  = srcEl.querySelector('.sac-blockHintBtn');
+    var oldSkip  = srcEl.querySelector('.sac-skipBtn');
+    if (oldSkip) oldSkip.parentNode.removeChild(oldSkip);
+    if (statusEl) {
+      if (isAmbiguous) {
+        statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
+        statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
+        if (hintBtn) hintBtn.style.display = '';
+        sacAddSkipButton(srcEl);
+      } else if (item) {
+        statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; statusEl.title = '';
+        if (hintBtn) hintBtn.style.display = 'none';
+      } else {
+        statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
+        if (hintBtn) hintBtn.style.display = '';
+        sacAddSkipButton(srcEl);
+      }
+    }
+    var ub = srcEl.querySelector('.sac-blockUnbindBtn');
+    if (ub) ub.style.display = 'none';
+    // No longer fully resolved → require a re-validate before Run.
+    if (isAmbiguous || !item) { sacValidatePassed = false; if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility(); }
+    sacCheckSkipGate();
+  }
+
+  // Open the 2-column bind-source modal (📁 Folder | 🎬 Source) for one source row.
   function sacShowBlockFolderHints(srcEl, bIdx, sIdx) {
+    var modal     = $('sacBindModal');
+    var foldersEl = $('sacBindFolders');
+    var sourcesEl = $('sacBindSources');
+    var filterEl  = $('sacBindFilter');
+    var titleEl   = $('sacBindTitle');
+    if (!modal || !foldersEl || !sourcesEl) return;
+
     if (!sacBinItems.length) {
       $('sacStatus').textContent = '⚠ Bấm Validate trước để load danh sách bin.';
       $('sacStatus').style.display = 'block';
@@ -2724,68 +2871,108 @@ async function ppMoveToVOBin(item, proj) {
     }
     var src = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
     if (!src) return;
-    var curName = src.name;
-    var toks = sacNorm(curName).split(' ').filter(Boolean);
-    // Collect candidates: any item whose folder+name contains any token
-    var seen = {};
-    var cands = [];
-    sacBinItems.forEach(function(b) {
-      var hay = sacNorm((b.parent || '') + ' ' + b.name);
-      if (toks.some(function(tk) { return hay.indexOf(tk) !== -1; })) {
-        var label = b.parent ? (b.parent + ' ' + b.name.replace(/\.[^.]+$/, '')) : b.name.replace(/\.[^.]+$/, '');
-        if (!seen[label]) { seen[label] = 1; cands.push({ label: label, item: b.item }); }
-      }
-    });
-    if (!cands.length) {
-      $('sacStatus').textContent = '⚠ Không tìm thấy gợi ý cho "' + curName + '"';
-      $('sacStatus').style.display = 'block';
-      return;
+    titleEl.textContent = 'Chọn source cho "' + src.name + '"';
+
+    // Candidates: bin clips sharing any token with the source name; if none, show all.
+    var toks = sacNorm(src.name).split(' ').filter(Boolean);
+    function toCand(b) {
+      return { folder: b.parent || '', clip: b.name, clipNoX: b.name.replace(/\.[^.]+$/, ''), item: b.item };
     }
-    // Show chips in sacStatus
-    var status = $('sacStatus');
-    status.style.display = 'block';
-    status.innerHTML = '';
-    var label = document.createElement('span');
-    label.textContent = 'Chọn: ';
-    label.style.cssText = 'font-size:10px;color:rgba(255,255,255,.4);margin-right:4px;';
-    status.appendChild(label);
-    cands.slice(0, 8).forEach(function(c) {
-      var chip = document.createElement('button');
-      chip.type = 'button';
-      chip.textContent = c.label;
-      chip.className = 'sac-hintChip';
-      chip.addEventListener('click', function() {
-        // Update parsedBlocks source name
-        parsedBlocks[bIdx].sources[sIdx].name = c.label;
-        parsedBlocks[bIdx].sources[sIdx].skipped = false;
-        // Update DOM
-        srcEl.dataset.srcName = c.label;
-        var nameSpan = srcEl.querySelector('.sac-srcName');
-        if (nameSpan) { nameSpan.textContent = '🎬 ' + c.label; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
-        var skipBtn2 = srcEl.querySelector('.sac-skipBtn');
-        if (skipBtn2) skipBtn2.parentNode.removeChild(skipBtn2);
-        // Re-validate this source
-        var item = sacMatchBinItem(sacBinItems, c.label);
-        sacSourceMap[c.label] = item || null;
-        window.sacSourceMap = sacSourceMap;
-        var statusEl = srcEl.querySelector('.sac-srcStatus');
-        if (statusEl) {
-          if (item) {
-            statusEl.className = 'sac-srcStatus sac-srcOk';
-            statusEl.textContent = '✓';
-          } else {
-            statusEl.className = 'sac-srcStatus sac-srcMissing';
-            statusEl.textContent = '✗';
-            sacAddSkipButton(srcEl);
-          }
-        }
-        var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
-        if (hintBtn2) hintBtn2.style.display = item ? 'none' : '';
-        sacCheckSkipGate();
-        status.style.display = 'none';
+    var clipsOnly = sacBinItems.filter(function(b) { return !b.isFolder; }); // folders aren't sources
+    var cands = clipsOnly.filter(function(b) {
+      var hay = sacNorm((b.parent || '') + ' ' + b.name);
+      return !toks.length || toks.some(function(tk) { return hay.indexOf(tk) !== -1; });
+    }).map(toCand);
+    if (!cands.length) cands = clipsOnly.map(toCand);
+
+    var selectedFolder = '__all__';
+
+    function mkRow(text, active) {
+      var d = document.createElement('div');
+      d.className = 'sac-bind-row' + (active ? ' is-active' : '');
+      d.textContent = text;
+      return d;
+    }
+    function renderFolders() {
+      foldersEl.innerHTML = '';
+      var folders = [];
+      cands.forEach(function(c) { if (folders.indexOf(c.folder) === -1) folders.push(c.folder); });
+      var all = mkRow('📁 Tất cả', selectedFolder === '__all__');
+      all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
+      foldersEl.appendChild(all);
+      folders.forEach(function(f) {
+        var row = mkRow('📁 ' + (f || '(gốc)'), selectedFolder === f);
+        row.addEventListener('click', function() { selectedFolder = f; renderFolders(); renderSources(); });
+        foldersEl.appendChild(row);
       });
-      status.appendChild(chip);
-    });
+    }
+    function renderSources() {
+      sourcesEl.innerHTML = '';
+      var q = sacNorm(filterEl.value || '');
+      var rows = cands.filter(function(c) {
+        if (selectedFolder !== '__all__' && c.folder !== selectedFolder) return false;
+        if (q && sacNorm(c.folder + ' ' + c.clip).indexOf(q) === -1) return false;
+        return true;
+      });
+      if (!rows.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— trống —'; sourcesEl.appendChild(n); return; }
+      rows.forEach(function(c) {
+        var row = mkRow('🎬 ' + c.clipNoX, false);
+        if (c.folder) row.title = c.folder + ' / ' + c.clip;
+        row.addEventListener('click', function() { bindTo(c); });
+        sourcesEl.appendChild(row);
+      });
+    }
+    function bindTo(c) {
+      var label = c.folder ? (c.folder + ' ' + c.clipNoX) : c.clipNoX;
+      var theSrc = parsedBlocks[bIdx].sources[sIdx];
+      // Record override keyed by the ORIGINAL sheet name so it survives re-parse.
+      sacBindOverrides[sacNorm(theSrc._orig || theSrc.name)] = label;
+      theSrc.name = label;
+      theSrc.skipped = false;
+      srcEl.dataset.srcName = label;
+      var nameSpan = srcEl.querySelector('.sac-srcName');
+      if (nameSpan) { nameSpan.textContent = '🎬 ' + label; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+      var skipBtn2 = srcEl.querySelector('.sac-skipBtn');
+      if (skipBtn2) skipBtn2.parentNode.removeChild(skipBtn2);
+      // Bind directly to the chosen clip — no name re-matching needed (robust).
+      sacSourceMap[label] = c.item || null;
+      window.sacSourceMap = sacSourceMap;
+      var statusEl = srcEl.querySelector('.sac-srcStatus');
+      if (statusEl) {
+        if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; }
+        else { statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; sacAddSkipButton(srcEl); }
+      }
+      var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
+      if (hintBtn2) hintBtn2.style.display = c.item ? 'none' : '';
+      var ub = srcEl.querySelector('.sac-blockUnbindBtn');
+      if (ub) ub.style.display = ''; // now bound → allow undo
+      sacCheckSkipGate();
+      closeModal();
+    }
+    function onFilter() { renderSources(); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); closeModal(); } }
+    function closeModal() {
+      modal.hidden = true;
+      var app = document.querySelector('#tab-autocut .sac-app');
+      if (app) app.style.display = '';
+      if (window.releaseKeyboard) window.releaseKeyboard();
+      filterEl.removeEventListener('input', onFilter);
+      filterEl.removeEventListener('keydown', onKey);
+      var cb = $('sacBindClose'); if (cb) cb.onclick = null;
+    }
+
+    // Open
+    filterEl.value = '';
+    renderFolders();
+    renderSources();
+    var app = document.querySelector('#tab-autocut .sac-app');
+    if (app) app.style.display = 'none'; // hide background (UXP native inputs paint on top)
+    modal.hidden = false;
+    var cb = $('sacBindClose'); if (cb) cb.onclick = closeModal;
+    filterEl.addEventListener('input', onFilter);
+    filterEl.addEventListener('keydown', onKey);
+    try { filterEl.focus(); } catch(e) {}
+    if (window.claimKeyboard) window.claimKeyboard();
   }
 
   // ── Skip source button ──────────────────────────────────────────────────────
@@ -3037,14 +3224,39 @@ async function ppMoveToVOBin(item, proj) {
     }).catch(function(){});
   }
 
+  // Mark the gen-voice button as "ready" (script normalized + pushed to Voice Gen).
+  function sacMarkScriptPrepared(ready) {
+    sacScriptPrepared = ready;
+    var b = $('sacVoiceGenBtn');
+    if (!b) return;
+    if (ready) { b.textContent = '🎙 Gen voice ngay →'; b.classList.add('is-ready'); }
+    else       { b.textContent = '⚡ Gen voice (Voice Gen) →'; b.classList.remove('is-ready'); }
+  }
+
   // ── Gen voice = normalize via Claude → push to Voice Gen tab ───────────────
-  async function sacGenVoice() {
-    if (sacVoiceBusy) { sacSetVoiceInfo('⏳ Đang xử lý voice, đợi chút...'); return; }
+  // opts.switchTab === false → prepare in the background (stay on Autocut); used
+  // automatically right after Validate. opts.silent → don't show "nothing to gen".
+  // Cancel an in-flight normalize (e.g. user edits/clears the script after Validate).
+  function sacCancelNorm() {
+    sacNormToken++; // any in-flight run sees a stale token and bails out
+    if (sacNormAbort) { try { sacNormAbort.abort(); } catch(e) {} sacNormAbort = null; }
+  }
+
+  async function sacGenVoice(opts) {
+    opts = opts || {};
+    if (sacVoiceBusy) { if (!opts.silent) sacSetVoiceInfo('⏳ Đang xử lý voice, đợi chút...'); return; }
     var blocks = parseBlocks();
-    if (blocks.length === 0) { sacSetVoiceInfo('⚠ Chưa có script để gen.'); return; }
+    if (blocks.length === 0) { if (!opts.silent) sacSetVoiceInfo('⚠ Chưa có script để gen.'); return; }
 
     // One line per block (join multi-text blocks with space)
     var lines = blocks.map(function(b) { return b.texts.join(' '); });
+
+    // Cancellable: a newer normalize / a Clear / a script edit bumps the token so
+    // this run's result is ignored (and the fetch is aborted) instead of clobbering
+    // the UI with a stale normalized script.
+    var myToken = ++sacNormToken;
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    sacNormAbort = ctrl;
 
     sacSetVoiceInfo('⏳ Chuẩn hóa script qua Claude...');
     var normalizedLines = lines; // fallback = originals
@@ -3053,8 +3265,11 @@ async function ppMoveToVOBin(item, proj) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lines: lines }),
+        signal: ctrl ? ctrl.signal : undefined,
       });
+      if (myToken !== sacNormToken) return; // cancelled/superseded while fetching
       var d = await resp.json();
+      if (myToken !== sacNormToken) return;
       if (d.ok && Array.isArray(d.lines) && d.lines.length === lines.length) {
         normalizedLines = d.lines;
         console.log('[SAC] Script normalized:', normalizedLines);
@@ -3062,16 +3277,68 @@ async function ppMoveToVOBin(item, proj) {
         console.warn('[SAC] Normalize skipped:', d.error || d.warning);
       }
     } catch(e) {
+      if (myToken !== sacNormToken) return; // aborted — stay quiet
       console.warn('[SAC] Normalize bridge error:', e.message, '— dùng script gốc');
     }
+    if (myToken !== sacNormToken) return; // final guard before touching the UI
+    sacNormAbort = null;
 
     var text = normalizedLines.join('\n');
     if (typeof window.VoiceGenPushScript === 'function') {
-      window.VoiceGenPushScript(text, null, false);
-      sacSetVoiceInfo('→ Script đã chuẩn hóa + đẩy sang Voice Gen. Chọn giọng + Generate, rồi bấm "→ Autocut".');
+      // switchTab=false → keep the user on Autocut while preparing in the background
+      window.VoiceGenPushScript(text, null, false, opts.switchTab !== false);
+      sacMarkScriptPrepared(true);
+      sacSetVoiceInfo(opts.switchTab !== false
+        ? '→ Script đã đẩy sang Voice Gen. Chọn giọng + Generate, rồi bấm "→ Autocut".'
+        : '✅ Script đã chuẩn hoá — voice sẵn sàng để gen. Bấm "🎙 Gen voice ngay".');
     } else {
-      sacSetVoiceInfo('❌ Voice Gen chưa sẵn sàng.');
+      if (!opts.silent) sacSetVoiceInfo('❌ Voice Gen chưa sẵn sàng.');
     }
+  }
+
+  // Show the "gen voice?" confirm popup → resolves true (gen) / false (validate only)
+  // / 'cancel' (abort validate). Hides .sac-app while open so UXP native inputs don't
+  // punch through the popup. Honors the "don't ask again" skip preference.
+  function sacAskGenVoice() {
+    return new Promise(function(resolve) {
+      if (!sacGenVoiceAsk) { resolve(sacGenVoicePref); return; } // skip popup, use remembered choice
+      var modal  = $('sacGenConfirm');
+      var yes    = $('sacGenConfirmYes');
+      var no     = $('sacGenConfirmNo');
+      var cancel = $('sacGenConfirmCancel');
+      var skip   = $('sacGenConfirmSkip');
+      if (!modal || !yes || !no) { resolve(true); return; } // fail-open
+      var app = document.querySelector('#tab-autocut .sac-app');
+      if (skip) skip.checked = false;
+      function done(val) {
+        modal.hidden = true;
+        if (app) app.style.display = '';
+        if (window.releaseKeyboard) window.releaseKeyboard();
+        yes.onclick = null; no.onclick = null; if (cancel) cancel.onclick = null;
+        // Remember the choice + skip future popups (only for a real Có/Không, not cancel)
+        if (val !== 'cancel' && skip && skip.checked) { sacGenVoiceAsk = false; sacGenVoicePref = (val === true); }
+        resolve(val);
+      }
+      yes.onclick = function() { done(true); };
+      no.onclick  = function() { done(false); };
+      if (cancel) cancel.onclick = function() { done('cancel'); };
+      if (app) app.style.display = 'none'; // hide native textboxes behind the popup
+      modal.hidden = false;
+      if (window.claimKeyboard) window.claimKeyboard();
+    });
+  }
+
+  // Gen-voice button: if the script was already prepared (auto on validate), just
+  // bring the user to the Voice Gen tab; otherwise normalize + push + switch.
+  function sacGoToVoiceGen() {
+    if (sacScriptPrepared) {
+      var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
+      if (vgBtn) vgBtn.click();
+      var genBtn = document.getElementById('vgGenerate');
+      if (genBtn) setTimeout(function() { try { genBtn.focus(); } catch(e) {} }, 120);
+      return;
+    }
+    sacGenVoice({ switchTab: true });
   }
 
   // Transcribe + align the voice file against the current blocks, then update
@@ -3236,9 +3503,10 @@ async function ppMoveToVOBin(item, proj) {
   });
 
   // Validate = render blocks + check sources in bin + check structure (1 click).
-  $('sacPreviewBtn').addEventListener('click', sacValidateAll);
+  $('sacPreviewBtn').addEventListener('click', function() { sacValidateAll(); });
 
-  async function sacValidateAll() {
+  async function sacValidateAll(opts) {
+    opts = opts || {};
     var btn = $('sacPreviewBtn');
     var status = $('sacStatus');
     var blocks = parseBlocks();
@@ -3248,7 +3516,19 @@ async function ppMoveToVOBin(item, proj) {
       return;
     }
 
+    // Ask FIRST — before touching any UI — so Cancel leaves everything as-is.
+    // Skipped for 🔄 re-validate and "Without voice" mode.
+    var wantVoice = false;
+    if (!opts.skipVoiceAsk && !sacNoVoiceMode) {
+      var ans = await sacAskGenVoice();
+      if (ans === 'cancel') return;     // abort validate, nothing changed
+      wantVoice = (ans === true);
+    }
+
     renderBlocks(blocks); // shows block cards with ⌛ on each source
+    sacMarkScriptPrepared(false); // fresh validate → script may have changed
+    sacCancelNorm();              // drop any earlier in-flight normalize
+    if (wantVoice) sacGenVoice({ switchTab: false, silent: true });
 
     // Collapse script section immediately on validate
     var wrap = $('sacTableWrap'), footer = $('sacTableFooter');
@@ -3266,10 +3546,12 @@ async function ppMoveToVOBin(item, proj) {
     btn.textContent = '⏳ Validating...';
     status.textContent = '⏳ Đang kiểm tra source + cấu trúc...';
     status.style.display = 'block';
+    var myVTok = ++sacValidateToken; // a Clear (or newer validate) invalidates this run
 
     try {
       // 1) Source validation against the Premiere bin (updates ✓/✗ icons)
       var srcResult = await sacValidateSources(blocks);
+      if (myVTok !== sacValidateToken) return; // cancelled mid-flight (e.g. Clear)
 
       // 2) Structure validation via bridge
       var resp = await fetch(BRIDGE_URL + '/superautocut/validate', {
@@ -3278,6 +3560,7 @@ async function ppMoveToVOBin(item, proj) {
         body: JSON.stringify({ blocks: blocks }),
       });
       var d = await resp.json();
+      if (myVTok !== sacValidateToken) return; // cancelled mid-flight
 
       if (!d.ok) {
         status.textContent = '❌ ' + (d.errors ? d.errors.join(' | ') : d.error);
@@ -3371,6 +3654,14 @@ async function ppMoveToVOBin(item, proj) {
     parsedBlocks = [];
   });
 
+  // 🔄 Re-validate — lets the user re-run validation after importing a missing
+  // source, without reopening the (now-collapsed) script + Validate button.
+  var sacRefreshBtn = $('sacRefreshBlocks');
+  if (sacRefreshBtn) sacRefreshBtn.addEventListener('click', function() {
+    if (parseBlocks().length === 0) return;
+    sacValidateAll({ skipVoiceAsk: true }); // re-check sources only — don't re-ask voice
+  });
+
   // ── Cut panel buttons ───────────────────────────────────────────────────
 
   // "Without voice" button (in voice panel) → enter no-voice cut mode
@@ -3413,25 +3704,19 @@ async function ppMoveToVOBin(item, proj) {
     sacRunAutoCut('current');
   });
 
-  // [▶ New seq] — run assembly into a new sequence (uses form settings)
+  // [▶ New seq] — first click reveals the settings form; second click runs.
   var sacCutNewBtn = $('sacCutNew');
   if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', function() {
-    sacRunAutoCut('new');
-  });
-
-  // [⚙] — toggle new seq settings form
-  var sacCutNewSettingsBtn = $('sacCutNewSettings');
-  if (sacCutNewSettingsBtn) sacCutNewSettingsBtn.addEventListener('click', function() {
     var form = $('sacNewSeqForm');
-    if (!form) return;
-    var open = form.style.display !== 'none';
-    form.style.display = open ? 'none' : 'flex';
-    sacCutNewSettingsBtn.classList.toggle('is-active', !open);
-    // Pre-fill name with timestamp default on first open
-    if (!open) {
+    if (form && form.style.display === 'none') {
+      form.style.display = 'flex';
       var inp = $('sacNewSeqName');
       if (inp && !inp.value) inp.value = 'AutoCut';
+      if (inp) setTimeout(function() { try { inp.focus(); } catch(e) {} }, 80);
+      sacCutNewBtn.textContent = '▶ Tạo sequence';
+      return; // don't run yet — let the user adjust settings first
     }
+    sacRunAutoCut('new');
   });
 
   // Keyboard claim/release for new seq name input
@@ -3446,6 +3731,11 @@ async function ppMoveToVOBin(item, proj) {
   if (sacBackToScriptBtn) sacBackToScriptBtn.addEventListener('click', function() {
     $('sacSuccessPanel').style.display = 'none';
     $('sacPanelManual').style.display = 'flex';
+    // Re-open the script editor (it was collapsed at validate time).
+    $('sacTableWrap').style.display = '';
+    $('sacTableFooter').style.display = '';
+    $('sacScriptChevron').textContent = '▾';
+    $('sacBlockSection').style.flex = '';
   });
 
   var sacNewAutocutBtn = $('sacNewAutocut');
@@ -3463,10 +3753,20 @@ async function ppMoveToVOBin(item, proj) {
     $('sacVoiceInfo').textContent = 'Chưa có voice';
     $('sacStatus').style.display = 'none';
     $('sacNewSeqForm').style.display = 'none';
+    var _nb = $('sacCutNew'); if (_nb) _nb.textContent = '▶ New seq';
+    sacBindOverrides = {}; // forget manual binds on full reset
+    sacMarkScriptPrepared(false);
+    sacCancelNorm();
+    sacGenVoiceAsk = true; // re-enable the gen-voice prompt for the new cut
     $('sacBody').innerHTML = '';
     rowSeq = 0;
     createRow(); createRow(); createRow();
     $('sacPanelManual').style.display = 'flex';
+    // Re-open the script editor so it's ready to fill in immediately.
+    $('sacTableWrap').style.display = '';
+    $('sacTableFooter').style.display = '';
+    $('sacScriptChevron').textContent = '▾';
+    $('sacBlockSection').style.flex = '';
     sacUpdateRunVisibility();
   });
 
@@ -3474,7 +3774,7 @@ async function ppMoveToVOBin(item, proj) {
   var sacVoiceBtn = $('sacVoiceBtn');
   if (sacVoiceBtn) sacVoiceBtn.addEventListener('click', sacPickVoiceFile);
   var sacVoiceGenBtn = $('sacVoiceGenBtn');
-  if (sacVoiceGenBtn) sacVoiceGenBtn.addEventListener('click', sacGenVoice);
+  if (sacVoiceGenBtn) sacVoiceGenBtn.addEventListener('click', sacGoToVoiceGen);
   var sacVoicePlay = $('sacVoicePlay');
   if (sacVoicePlay) sacVoicePlay.addEventListener('click', function() {
     if (sacVP.playing) sacVPStop(); else sacVPPlay();
@@ -3614,10 +3914,15 @@ async function ppMoveToVOBin(item, proj) {
 
   // Commit a single lockedAccess/executeTransaction and await if needed.
   async function sacCommitTx(project, fn, label) {
+    // Catch inside lockedAccess so a throwing transaction never escapes the lock
+    // (an uncaught throw here can wedge/crash Premiere). Surface it to the caller.
+    var err = null;
     var r = project.lockedAccess(function() {
-      project.executeTransaction(fn, label || 'SAC tx');
+      try { project.executeTransaction(fn, label || 'SAC tx'); }
+      catch (e) { err = e; }
     });
     if (r && typeof r.then === 'function') await r;
+    if (err) throw err;
   }
 
   // Place a clip on the timeline.
@@ -3771,15 +4076,32 @@ async function ppMoveToVOBin(item, proj) {
           }
 
           var srcItem = (sacSourceMap[src.name] || window.sacSourceMap[src.name]);
-          if (!srcItem) { console.warn('[SAC] Missing source:', src.name); continue; }
+          if (!srcItem) {
+            // Missing & not skipped: leave a 1s gap rather than silently collapsing
+            // (so the timeline still lines up with the script/voice).
+            console.warn('[SAC] Missing source (gap):', src.name);
+            srcTotal += 1.0;
+            cursor   += 1.0;
+            continue;
+          }
 
-          var ts      = parseSourceTime(src.time);
-          // null = full clip; use 5s default for cursor advancement (can't get actual duration easily)
-          var clipDur = (ts.inSec !== null && ts.outSec !== null) ? (ts.outSec - ts.inSec) : 5;
+          var ts = parseSourceTime(src.time);
+          // Always place with an explicit in/out so the PLACED length == cursor advance.
+          // Full-clip (no timecode) is bounded to a default window; otherwise
+          // createOverwriteItemAction places the clip's full length and bleeds over the
+          // next slot — e.g. overwriting a following skipped gap (bug #5).
+          var inSec  = (ts.inSec  !== null) ? ts.inSec  : 0;
+          var outSec = (ts.outSec !== null) ? ts.outSec : 5;
+          if (outSec <= inSec) outSec = inSec + 0.5; // guard inverted/zero range
+          var clipDur = outSec - inSec;
 
-          await sacInsertClipAt(project, seqEditor, srcItem, cursor, ts.inSec, ts.outSec, 0, 1);
-          var tsLabel = ts.inSec !== null ? '[' + ts.inSec + '-' + ts.outSec + ']s' : '[full]';
-          console.log('[SAC] V1 "' + src.name + '" ' + tsLabel + ' @' + cursor.toFixed(2) + 's');
+          try {
+            await sacInsertClipAt(project, seqEditor, srcItem, cursor, inSec, outSec, 0, 1);
+            console.log('[SAC] V1 "' + src.name + '" [' + inSec + '-' + outSec + ']s @' + cursor.toFixed(2) + 's');
+          } catch (eClip) {
+            // One bad clip must not abort the whole assembly (crash-hardening, #4).
+            console.error('[SAC] insert failed for "' + src.name + '":', eClip && eClip.message);
+          }
 
           srcTotal += clipDur;
           cursor   += clipDur;
@@ -3787,15 +4109,21 @@ async function ppMoveToVOBin(item, proj) {
 
         // Place voice segment on A1 (skipped in Without Voice mode)
         if (!sacNoVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
-          var vDur = block.voiceDuration || (block.voiceEnd - block.voiceStart);
-          var vOut = block.voiceEnd + 0.2;
-
-          await sacInsertClipAt(project, seqEditor, voiceItem, blockStart,
-                                block.voiceStart, vOut, 5, 0);
-          console.log('[SAC] A1 voice [' + block.voiceStart.toFixed(2) + '-' +
-            vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
-
-          if (vDur > srcTotal) cursor = blockStart + vDur;
+          var vStart = Math.max(0, Number(block.voiceStart));
+          var vOut   = Number(block.voiceEnd) + 0.2;
+          var vDur   = block.voiceDuration || (block.voiceEnd - block.voiceStart);
+          // Guard against NaN / negative / inverted times that would crash TickTime.
+          if (isFinite(vStart) && isFinite(vOut) && vOut > vStart) {
+            try {
+              await sacInsertClipAt(project, seqEditor, voiceItem, blockStart, vStart, vOut, 5, 0);
+              console.log('[SAC] A1 voice [' + vStart.toFixed(2) + '-' + vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
+              if (vDur > srcTotal) cursor = blockStart + vDur;
+            } catch (eVoice) {
+              console.error('[SAC] voice insert failed @block ' + (i + 1) + ':', eVoice && eVoice.message);
+            }
+          } else {
+            console.warn('[SAC] skip voice @block ' + (i + 1) + ' — bad times', vStart, vOut);
+          }
         }
 
         cursor += 1.0; // 1s gap between blocks
@@ -3834,6 +4162,41 @@ async function ppMoveToVOBin(item, proj) {
       $('sacBlockSection').style.flex = wasCollapsed ? '' : '1 1 0';
     });
   }
+
+  // 🗑 Clear (in the script header, visible even when collapsed): wipe the whole
+  // script AND cancel any running normalize / validate, then re-open the editor.
+  var sacScriptClearBtn = $('sacScriptClear');
+  if (sacScriptClearBtn) sacScriptClearBtn.addEventListener('click', function(e) {
+    e.stopPropagation(); // don't toggle collapse
+    sacCancelNorm();           // abort in-flight normalize
+    sacValidateToken++;        // invalidate in-flight validate
+    try { sacVPStop(); } catch(err) {}
+    // Wipe the board
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    createRow(); createRow(); createRow();
+    // Reset derived state
+    parsedBlocks = [];
+    sacBindOverrides = {};
+    sacValidatePassed = false;
+    sacVoiceReady = false;
+    sacNoVoiceMode = false;
+    sacVoicePath = null;
+    sacGenVoiceAsk = true; // bring back the gen-voice prompt
+    sacMarkScriptPrepared(false);
+    // Hide blocks + cut panel, reset voice
+    $('sacBlockSection').style.display = 'none';
+    sacHideCutPanel();
+    var vi = $('sacVoiceInfo'); if (vi) vi.textContent = 'Chưa có voice';
+    var vp = $('sacVoicePlayer'); if (vp) vp.style.display = 'none';
+    // Re-open the script editor
+    $('sacTableWrap').style.display = '';
+    $('sacTableFooter').style.display = '';
+    $('sacScriptChevron').textContent = '▾';
+    $('sacBlockSection').style.flex = '';
+    var st = $('sacStatus'); if (st) { st.textContent = '🗑 Đã clear script + huỷ tác vụ đang chạy.'; st.style.display = 'block'; }
+    if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
+  });
 
   // ── Init: 3 empty rows ───────────────────────────────────────────────────
   createRow(); createRow(); createRow();
@@ -5631,10 +5994,12 @@ async function ppMoveToVOBin(item, proj) {
   };
 
   // ── Cross-tab: Claude chat can push script/SFX to Voice Gen ───────────────
-  window.VoiceGenPushScript = function(text, voiceId, autoGenerate) {
-    // Switch to Voice Gen tab
-    var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
-    if (vgBtn) vgBtn.click();
+  window.VoiceGenPushScript = function(text, voiceId, autoGenerate, switchTab) {
+    // Switch to Voice Gen tab (unless switchTab === false → background prepare)
+    if (switchTab !== false) {
+      var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
+      if (vgBtn) vgBtn.click();
+    }
     // Switch to TTS mode
     switchMode('tts');
     // Set script text
