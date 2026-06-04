@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.2';
+var PLUGIN_VERSION = 'v4.3.3';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2320,8 +2320,6 @@ async function ppMoveToVOBin(item, proj) {
 
   function sacHideCutPanel() {
     $('sacCutPanel').style.display = 'none';
-    $('sacNewSeqForm').style.display = 'none';
-    var nb = $('sacCutNew'); if (nb) nb.textContent = '▶ New seq'; // reset 2-click label
     $('sacVoicePanel').style.display = 'flex';
   }
 
@@ -3806,19 +3804,79 @@ async function ppMoveToVOBin(item, proj) {
     sacRunAutoCut('current');
   });
 
-  // [▶ New seq] — first click reveals the settings form; second click runs.
+  // ── New-sequence settings popup + name presets ──────────────────────────
+  var SEQ_PRESET_KEY = 'sac_seq_name_presets';
+  function sacLoadSeqPresets() {
+    try { return JSON.parse(localStorage.getItem(SEQ_PRESET_KEY) || '[]') || []; } catch(e) { return []; }
+  }
+  function sacRenderSeqPresets() {
+    var sel = $('sacSeqNamePreset');
+    if (!sel) return;
+    var presets = sacLoadSeqPresets();
+    sel.innerHTML = '<option value="">— Preset tên đã lưu —</option>';
+    presets.forEach(function(p) {
+      var o = document.createElement('option'); o.value = p; o.textContent = p; sel.appendChild(o);
+    });
+  }
+  function sacOpenNewSeqModal() {
+    var modal = $('sacNewSeqModal');
+    if (!modal) { sacRunAutoCut('new'); return; }
+    var nameInp = $('sacNewSeqName');
+    if (nameInp && !nameInp.value.trim()) nameInp.value = 'AutoCut';
+    sacRenderSeqPresets();
+    var app = document.querySelector('#tab-autocut .sac-app');
+    if (app) app.style.display = 'none'; // hide native inputs behind the modal
+    modal.hidden = false;
+    if (window.claimKeyboard) window.claimKeyboard();
+    if (nameInp) setTimeout(function() { try { nameInp.focus(); } catch(e) {} }, 80);
+  }
+  function sacCloseNewSeqModal() {
+    var modal = $('sacNewSeqModal');
+    if (modal) modal.hidden = true;
+    var app = document.querySelector('#tab-autocut .sac-app');
+    if (app) app.style.display = '';
+    if (window.releaseKeyboard) window.releaseKeyboard();
+  }
+
   var sacCutNewBtn = $('sacCutNew');
-  if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', function() {
-    var form = $('sacNewSeqForm');
-    if (form && form.style.display === 'none') {
-      form.style.display = 'flex';
-      var inp = $('sacNewSeqName');
-      if (inp && !inp.value) inp.value = 'AutoCut';
-      if (inp) setTimeout(function() { try { inp.focus(); } catch(e) {} }, 80);
-      sacCutNewBtn.textContent = '▶ Tạo sequence';
-      return; // don't run yet — let the user adjust settings first
-    }
-    sacRunAutoCut('new');
+  if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', sacOpenNewSeqModal);
+
+  var sacNewSeqCancel = $('sacNewSeqCancel');
+  if (sacNewSeqCancel) sacNewSeqCancel.addEventListener('click', sacCloseNewSeqModal);
+  var sacNewSeqCancelX = $('sacNewSeqCancelX');
+  if (sacNewSeqCancelX) sacNewSeqCancelX.addEventListener('click', sacCloseNewSeqModal);
+
+  var sacNewSeqRun = $('sacNewSeqRun');
+  if (sacNewSeqRun) sacNewSeqRun.addEventListener('click', function() {
+    sacCloseNewSeqModal();
+    sacRunAutoCut('new'); // reads #sacNewSeqName / #sacNewSeqRatio from the modal
+  });
+
+  // Name presets: select fills the name; 💾 saves current name; 🗑 deletes selected.
+  var sacSeqNamePreset = $('sacSeqNamePreset');
+  if (sacSeqNamePreset) sacSeqNamePreset.addEventListener('change', function() {
+    var v = sacSeqNamePreset.value;
+    var nameInp = $('sacNewSeqName');
+    if (v && nameInp) nameInp.value = v;
+  });
+  var sacSeqNameSave = $('sacSeqNameSave');
+  if (sacSeqNameSave) sacSeqNameSave.addEventListener('click', function() {
+    var nameInp = $('sacNewSeqName');
+    var v = nameInp ? nameInp.value.trim() : '';
+    if (!v) return;
+    var presets = sacLoadSeqPresets();
+    if (presets.indexOf(v) === -1) { presets.unshift(v); presets = presets.slice(0, 20); }
+    localStorage.setItem(SEQ_PRESET_KEY, JSON.stringify(presets));
+    sacRenderSeqPresets();
+    if (sacSeqNamePreset) sacSeqNamePreset.value = v;
+  });
+  var sacSeqNameDel = $('sacSeqNameDel');
+  if (sacSeqNameDel) sacSeqNameDel.addEventListener('click', function() {
+    var v = sacSeqNamePreset ? sacSeqNamePreset.value : '';
+    if (!v) return;
+    var presets = sacLoadSeqPresets().filter(function(p) { return p !== v; });
+    localStorage.setItem(SEQ_PRESET_KEY, JSON.stringify(presets));
+    sacRenderSeqPresets();
   });
 
   // Keyboard claim/release for new seq name input
@@ -3854,8 +3912,6 @@ async function ppMoveToVOBin(item, proj) {
     $('sacVoicePlayer').style.display = 'none';
     $('sacVoiceInfo').textContent = 'Chưa có voice';
     $('sacStatus').style.display = 'none';
-    $('sacNewSeqForm').style.display = 'none';
-    var _nb = $('sacCutNew'); if (_nb) _nb.textContent = '▶ New seq';
     sacBindOverrides = {}; // forget manual binds on full reset
     sacMarkScriptPrepared(false);
     sacCancelNorm();
@@ -4113,12 +4169,25 @@ async function ppMoveToVOBin(item, proj) {
         //   - Always use createSequenceFromMedia when source clips available → fps matches source
         //   - "Match source clips" mode: also uses source frame size → nothing else needed
         //   - Custom ratio: use createSequenceFromMedia for fps, then override frame size via setSettings
-        if (firstSrcItem && typeof project.createSequenceFromMedia === 'function') {
-          seq = await project.createSequenceFromMedia(seqName, [firstSrcItem]);
-          console.log('[SAC] Sequence created from media (fps from source clip)');
+        // Only feed a real clip item to createSequenceFromMedia (a folder/invalid
+        // item can crash Premiere). Wrap in try/catch + fall back to createSequence.
+        var firstClip = null;
+        if (firstSrcItem && ppro.ClipProjectItem && ppro.ClipProjectItem.cast) {
+          try { firstClip = ppro.ClipProjectItem.cast(firstSrcItem) ? firstSrcItem : null; } catch(e) { firstClip = null; }
+        } else { firstClip = firstSrcItem; }
+        if (firstClip && typeof project.createSequenceFromMedia === 'function') {
+          try {
+            seq = await project.createSequenceFromMedia(seqName, [firstClip]);
+            console.log('[SAC] Sequence created from media (fps from source clip)');
+          } catch (eCsm) {
+            console.warn('[SAC] createSequenceFromMedia failed → fallback createSequence:', eCsm && eCsm.message);
+            seq = null;
+          }
         }
         if (!seq) seq = await project.createSequence(seqName);
         if (!seq) throw new Error('Không tạo được sequence mới');
+        // Let Premiere finish registering the new sequence before touching it.
+        await new Promise(function(r) { setTimeout(r, 250); });
 
         // Apply custom frame size (ratio ≠ match). FPS comes from source via createSequenceFromMedia.
         if (ratio !== 'match') {
@@ -4131,19 +4200,22 @@ async function ppMoveToVOBin(item, proj) {
               frameRect.width  = w;
               frameRect.height = h;
               await settings.setVideoFrameRect(frameRect);
-              var rs = project.lockedAccess(function() {
-                project.executeTransaction(function(ca) {
-                  ca.addAction(seq.createSetSettingsAction(settings));
-                }, 'SAC set frame size');
-              });
-              if (rs && typeof rs.then === 'function') await rs;
+              // Use sacCommitTx so a throw is caught INSIDE lockedAccess (a raw throw
+              // here can wedge/crash Premiere).
+              await sacCommitTx(project, function(ca) {
+                ca.addAction(seq.createSetSettingsAction(settings));
+              }, 'SAC set frame size');
               console.log('[SAC] Frame size applied:', w + 'x' + h);
             }
           } catch(es) { console.warn('[SAC] Frame size failed:', es.message); }
         }
 
-        if (typeof project.openSequence    === 'function') await project.openSequence(seq);
-        if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
+        try {
+          if (typeof project.openSequence    === 'function') await project.openSequence(seq);
+          if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
+        } catch (eOpen) { console.warn('[SAC] open/activate sequence:', eOpen && eOpen.message); }
+        // Settle again after activation before the editor + assembly run.
+        await new Promise(function(r) { setTimeout(r, 250); });
         cursor = 0;
         console.log('[SAC] New sequence:', seqName, '| ratio:', ratio, '| fps:', fps);
       } else {

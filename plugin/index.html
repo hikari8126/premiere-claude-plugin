@@ -713,29 +713,7 @@
           <div class="sac-cutRow">
             <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
             <span class="sac-cutDivider"></span>
-            <button id="sacCutNew" class="sac-cutBtn">▶ New seq</button>
-          </div>
-          <!-- Settings for New seq — revealed on first "New seq" click, run on second -->
-          <div id="sacNewSeqForm" class="sac-newSeqForm" style="display:none">
-            <div class="sac-nsfRow">
-              <span class="sac-nsfLabel">Name</span>
-              <input id="sacNewSeqName" class="sac-nsfInput" type="text" placeholder="AutoCut">
-            </div>
-            <div class="sac-nsfRow">
-              <span class="sac-nsfLabel">Ratio</span>
-              <select id="sacNewSeqRatio" class="sac-nsfSelect">
-                <option value="match">Match source clips</option>
-                <option value="1920x1080">1920×1080 — 16:9</option>
-                <option value="3840x2160">3840×2160 — 4K</option>
-                <option value="1080x1920" selected>1080×1920 — 9:16</option>
-                <option value="1080x1350">1080×1350 — 4:5</option>
-                <option value="1080x1080">1080×1080 — 1:1</option>
-              </select>
-            </div>
-            <div class="sac-nsfRow">
-              <span class="sac-nsfLabel">FPS</span>
-              <span class="sac-nsfNote">từ source clip</span>
-            </div>
+            <button id="sacCutNew" class="sac-cutBtn">▶ New seq…</button>
           </div>
         </div>
       </div>
@@ -923,6 +901,44 @@
     </div>
 
   </div><!-- /ac-app (hidden) -->
+
+  <!-- Cut to New Sequence — settings popup -->
+  <div id="sacNewSeqModal" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <div class="sac-confirm-head">
+        <span class="sac-confirm-title">✂ Cut to New Sequence</span>
+        <button id="sacNewSeqCancelX" class="sac-confirm-x" title="Huỷ">✕</button>
+      </div>
+
+      <label class="sac-nsf2-label">Tên sequence</label>
+      <div class="sac-nsf2-nameRow">
+        <input id="sacNewSeqName" class="sac-nsf2-input" type="text" placeholder="AutoCut" />
+        <button id="sacSeqNameSave" class="sac-nsf2-iconBtn" title="Lưu tên này thành preset">💾</button>
+      </div>
+      <div class="sac-nsf2-presetRow">
+        <select id="sacSeqNamePreset" class="sac-nsf2-select">
+          <option value="">— Preset tên đã lưu —</option>
+        </select>
+        <button id="sacSeqNameDel" class="sac-nsf2-iconBtn" title="Xoá preset đang chọn">🗑</button>
+      </div>
+
+      <label class="sac-nsf2-label">Tỉ lệ khung (Ratio)</label>
+      <select id="sacNewSeqRatio" class="sac-nsf2-select">
+        <option value="match">Match source clips</option>
+        <option value="1920x1080">1920×1080 — 16:9</option>
+        <option value="3840x2160">3840×2160 — 4K</option>
+        <option value="1080x1920" selected>1080×1920 — 9:16</option>
+        <option value="1080x1350">1080×1350 — 4:5</option>
+        <option value="1080x1080">1080×1080 — 1:1</option>
+      </select>
+      <div class="sac-nsf2-note">FPS lấy theo source clip đầu tiên.</div>
+
+      <div class="sac-confirm-actions">
+        <button id="sacNewSeqCancel" class="btn-secondary">Cancel</button>
+        <button id="sacNewSeqRun" class="btn-primary">✂ Autocut</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Validate → "gen voice?" confirm popup -->
   <div id="sacGenConfirm" class="sac-confirm-modal" hidden>
