@@ -1742,6 +1742,77 @@ Return ONLY a JSON array, no markdown, no explanation:
   }
 });
 
+// Shared LLM call: provider 'openai' → OpenAI REST; else Anthropic SDK (request key
+// → bridge API_KEY) → claude CLI fallback. Returns the model's text output.
+async function callLLM(prompt, opts) {
+  opts = opts || {};
+  var provider = opts.provider, model = opts.model, apiKey = opts.apiKey;
+  var maxTokens = opts.maxTokens || 2048;
+  if (provider === 'openai') {
+    const oaKey = apiKey || process.env.OPENAI_API_KEY || '';
+    if (!oaKey) throw new Error('Chưa có OpenAI API key (Settings hoặc OPENAI_API_KEY trong bridge .env)');
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + oaKey },
+      body: JSON.stringify({ model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.2 }),
+    });
+    const dj = await r.json();
+    if (!r.ok) throw new Error('OpenAI: ' + ((dj.error && dj.error.message) || ('HTTP ' + r.status)));
+    return ((dj.choices && dj.choices[0] && dj.choices[0].message && dj.choices[0].message.content) || '').trim();
+  }
+  const anthKey = apiKey || API_KEY;
+  if (anthKey) {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: anthKey });
+    const resp = await client.messages.create({ model: model || DEFAULT_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] });
+    return resp.content[0].text.trim();
+  }
+  const { spawnSync } = require('child_process');
+  const claudeEnv = cleanEnv();
+  claudeEnv.PATH = ((claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + claudeEnv.PATH;
+  const result = spawnSync('claude', ['--print'], { input: prompt, encoding: 'utf8', timeout: 90000, env: claudeEnv });
+  if (result.error) throw result.error;
+  return (result.stdout || '').trim();
+}
+
+// ── POST /superautocut/parse-cutsheet ───────────────────────────────────────
+// AI parse a messy pasted cutsheet (TSV from Google Sheets) → normalized rows.
+app.post('/superautocut/parse-cutsheet', async (req, res) => {
+  const { text, provider, model, apiKey } = req.body;
+  if (!text || !String(text).trim()) return res.status(400).json({ ok: false, error: 'No text' });
+  const prompt =
+`Bạn là trợ lý phân tích "cutsheet" (bảng dựng video) dán từ Google Sheets — định dạng lộn xộn do người làm tay.
+Cột thường có: LỜI THOẠI (voice/script), TIMECODE (in→out), SOURCE (tên clip/footage). Thứ tự cột có thể khác; có ô gộp nên vài ô trống.
+
+Chuyển thành MẢNG JSON, mỗi phần tử = một SOURCE cần cắt:
+{ "text": "<lời thoại của block, '' nếu không có>", "time": "<timecode in-out>", "source": "<tên source/clip>" }
+
+Quy tắc:
+- Mỗi source = 1 phần tử. Nếu một ô chứa nhiều source/timecode (ngăn bởi xuống dòng, "/", "&", "và") → tách thành nhiều phần tử, ghép timecode↔source theo đúng thứ tự.
+- time: bỏ tiền tố "Giây/giây/s"; giữ dạng "in-out" (vd "0-3", "1:09-1:10"); bỏ ghi chú "(speed up)", "tua nhanh", "(kéo cọ...)". Nếu timecode nằm CHUNG trong ô source (vd "Borrow trượt nước 0-3", "K6 + K15 (2s đầu)") thì tách ra, để lại tên source.
+- text: lấy từ cột thoại; không có thì "". Các dòng thoại liên tiếp của cùng 1 cảnh có thể gộp.
+- KHÔNG bịa; giữ nguyên tên source (kể cả .mp4, mã như K10/K14opt4, số như 22).
+- CHỈ trả JSON mảng, KHÔNG markdown, KHÔNG giải thích.
+
+Cutsheet:
+<<<
+${text}
+>>>`;
+  try {
+    const out = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
+    var jsonStr = out;
+    var m = out.match(/\[[\s\S]*\]/); // strip any prose/markdown around the array
+    if (m) jsonStr = m[0];
+    var rows;
+    try { rows = JSON.parse(jsonStr); }
+    catch (e) { return res.json({ ok: false, error: 'AI trả về không phải JSON hợp lệ', raw: out.slice(0, 600) }); }
+    if (!Array.isArray(rows)) return res.json({ ok: false, error: 'AI không trả mảng JSON' });
+    rows = rows.map(function (r) {
+      return { text: String((r && r.text) || ''), time: String((r && r.time) || ''), source: String((r && r.source) || '') };
+    }).filter(function (r) { return r.text || r.time || r.source; });
+    res.json({ ok: true, rows: rows });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── POST /superautocut/normalize-script ────────────────────────────────────
 // Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
 // Input:  { lines: string[] }   — mảng string, 1 phần tử / block
@@ -1780,48 +1851,7 @@ Script (${lines.length} dòng):
 ${numberedInput}`;
 
   try {
-    let output = '';
-    if (provider === 'openai') {
-      // OpenAI / ChatGPT via REST (no extra npm dep). Key: request → bridge .env.
-      const oaKey = apiKey || process.env.OPENAI_API_KEY || '';
-      if (!oaKey) throw new Error('Chưa có OpenAI API key (nhập trong Settings hoặc đặt OPENAI_API_KEY trong bridge .env)');
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + oaKey },
-        body: JSON.stringify({
-          model: model || 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.4,
-        }),
-      });
-      const dj = await r.json();
-      if (!r.ok) throw new Error('OpenAI: ' + ((dj.error && dj.error.message) || ('HTTP ' + r.status)));
-      output = ((dj.choices && dj.choices[0] && dj.choices[0].message && dj.choices[0].message.content) || '').trim();
-    } else {
-      // Anthropic: request key → bridge API_KEY (env) → claude CLI fallback.
-      const anthKey = apiKey || API_KEY;
-      if (anthKey) {
-        const Anthropic = require('@anthropic-ai/sdk');
-        const client = new Anthropic({ apiKey: anthKey });
-        const resp = await client.messages.create({
-          model: model || DEFAULT_MODEL,
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }],
-        });
-        output = resp.content[0].text.trim();
-      } else {
-        // Use spawnSync with stdin (preserves newlines — echo JSON.stringify mangles them)
-        const { spawnSync } = require('child_process');
-        const claudeEnv = cleanEnv();
-        const npmGlobal = (claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin';
-        claudeEnv.PATH = npmGlobal + ':' + claudeEnv.PATH;
-        const result = spawnSync('claude', ['--print'], {
-          input: prompt, encoding: 'utf8', timeout: 60000, env: claudeEnv,
-        });
-        if (result.error) throw result.error;
-        output = (result.stdout || '').trim();
-      }
-    }
+    const output = await callLLM(prompt, { provider: provider, model: model, apiKey: apiKey, maxTokens: 2048 });
 
     // Parse output: strip leading numbers if Claude added them, drop blank lines
     const allLines = output.split('\n')
@@ -1845,7 +1875,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.7';
+const BRIDGE_VERSION = '1.5.8';
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
