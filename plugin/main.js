@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.8';
+var PLUGIN_VERSION = 'v4.3.9';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2933,8 +2933,10 @@ async function ppMoveToVOBin(item, proj) {
     var TOP_N = 25; // default visible count when not filtering
     function toCand(b) {
       var clipNoX = b.name.replace(/\.[^.]+$/, '');
-      var hay = sacNorm((b.path || '') + ' ' + b.name);
-      var hits = toks.filter(function(tk) { return hay.indexOf(tk) !== -1; }).length;
+      // WHOLE-TOKEN match (not substring): token "12" matches a clip token "12",
+      // NOT "123" or "12abcd". Cuts down noise + false duplicates when binding.
+      var hayToks = sacNorm((b.path || '') + ' ' + b.name).split(' ').filter(Boolean);
+      var hits = toks.filter(function(tk) { return hayToks.indexOf(tk) !== -1; }).length;
       var lev = sacLev(tNoX, sacNorm(clipNoX));
       return { folder: b.parent || '', folderPath: b.path || '', clip: b.name, clipNoX: clipNoX,
                item: b.item, score: hits * 1000 - lev, hits: hits };
