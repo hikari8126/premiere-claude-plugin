@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.4.1';
+var PLUGIN_VERSION = 'v4.4.1.1';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2549,29 +2549,34 @@ async function ppMoveToVOBin(item, proj) {
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
 
+    // A voice line that carries a SOURCE or a real TIMECODE starts a NEW block:
+    //   • text + source             → new block
+    //   • text + real timecode only → new block, inherit the previous source (merged source cell)
+    //   • text only (no time/src)   → voice continuation of the current block
+    //   • source/time only (no text)→ add a clip to the current block (inherit source if only a time)
+    // "Real timecode" = parseSourceTime parses it, so notes like "Chạy variant" stay voice-only.
+    var lastSrcName = '';
     data.forEach(function(r) {
-      var hasText = r.text !== '';
-      var hasSrc  = r.src  !== '';
-      if (!hasText && !hasSrc) return; // skip blank rows
+      var hasText  = r.text !== '';
+      var hasSrc   = r.src  !== '';
+      var realTime = r.time !== '' && parseSourceTime(r.time).inSec !== null;
+      if (!hasText && !hasSrc && r.time === '') return; // truly blank row
 
-      if (hasText && hasSrc) {
-        // Both → start new block
-        current = { texts: [r.text], sources: srcEntries(r.src, r.time) };
+      if (hasText && (hasSrc || realTime)) {
+        var name = hasSrc ? r.src : lastSrcName; // empty source + timecode → inherit (merged cell)
+        if (hasSrc) lastSrcName = r.src;
+        current = { texts: [r.text], sources: name ? srcEntries(name, r.time) : [] };
         blocks.push(current);
       } else if (hasText) {
+        // Voice-only continuation (no source, no real timecode) → same block.
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
         current.texts.push(r.text);
-        // Merged-source row: has a timecode but the source cell is empty (Sheets merge
-        // cell only fills the first row). Reuse the block's source at this timecode so
-        // the clip is placed at both times. No timecode → voice-only (e.g. "Try it now!").
-        if (r.time && current.sources.length) {
-          var inheritName = current.sources[current.sources.length - 1].name;
-          srcEntries(inheritName, r.time).forEach(function(e) { current.sources.push(e); });
-        }
       } else {
-        // Source only → add to current block (each "&" segment becomes its own clip)
+        // Source/time-only row (no text) → add a clip to the current block.
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
-        srcEntries(r.src, r.time).forEach(function(e) { current.sources.push(e); });
+        var sname = hasSrc ? r.src : (realTime ? lastSrcName : '');
+        if (hasSrc) lastSrcName = r.src;
+        if (sname) srcEntries(sname, r.time).forEach(function(e) { current.sources.push(e); });
       }
     });
 
