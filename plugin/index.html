@@ -657,6 +657,25 @@
     <!-- ── MANUAL PANEL ── -->
     <div class="sac-panel" id="sacPanelManual">
 
+      <!-- ✨ AI parse: paste a messy cutsheet → AI normalizes → preview/edit → fill -->
+      <div class="sac-aiParse">
+        <div class="sac-sectionToggle" id="sacAiToggle">
+          <span class="sac-blockChevron" id="sacAiChevron">▸</span>
+          <span>✨ Parse cutsheet rối bằng AI</span>
+        </div>
+        <div id="sacAiBody" style="display:none">
+          <textarea id="sacAiRaw" class="sac-aiRaw" spellcheck="false"
+            placeholder="Dán NGUYÊN cutsheet copy từ Google Sheets (gồm cả cột lời thoại)…"></textarea>
+          <div class="sac-aiRow">
+            <button id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary">✨ Parse AI</button>
+            <span id="sacAiStatus" class="sac-aiStatus"></span>
+          </div>
+          <textarea id="sacAiPreview" class="sac-aiPreview" spellcheck="false" style="display:none"
+            placeholder="Kết quả (Thoại ⇥ Time ⇥ Source) — sửa nếu cần rồi Đổ vào bảng"></textarea>
+          <button id="sacAiFill" class="sac-aiBtn sac-aiPrimary" style="display:none">⬇ Đổ vào bảng script</button>
+        </div>
+      </div>
+
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span class="sac-blockChevron" id="sacScriptChevron">▾</span>

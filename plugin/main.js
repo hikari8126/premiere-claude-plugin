@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.10';
+var PLUGIN_VERSION = 'v4.4.0';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4422,6 +4422,63 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   // ── Collapse/expand the script input section ─────────────────────────────
+  // ── ✨ AI cutsheet parse (paste raw → AI → preview/edit → fill spreadsheet) ──
+  var sacAiToggle = $('sacAiToggle');
+  if (sacAiToggle) sacAiToggle.addEventListener('click', function() {
+    var body = $('sacAiBody');
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    $('sacAiChevron').textContent = open ? '▸' : '▾';
+  });
+  ['sacAiRaw', 'sacAiPreview'].forEach(function(id) {
+    var ta = $(id);
+    if (!ta) return;
+    ta.addEventListener('focus', function() { if (window.claimKeyboard) window.claimKeyboard(); });
+    ta.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
+  });
+  var sacAiParseBtn = $('sacAiParseBtn');
+  if (sacAiParseBtn) sacAiParseBtn.addEventListener('click', async function() {
+    var raw = ($('sacAiRaw').value || '').trim();
+    var st  = $('sacAiStatus');
+    if (!raw) { if (st) st.textContent = 'Dán cutsheet vào đã.'; return; }
+    var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider: 'anthropic', model: null, apiKey: '' };
+    sacAiParseBtn.disabled = true;
+    if (st) st.textContent = '⏳ AI đang phân tích (' + cfg.model + ')...';
+    try {
+      var resp = await fetch(BRIDGE_URL + '/superautocut/parse-cutsheet', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: raw, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
+      });
+      var d = await resp.json();
+      if (d.ok && Array.isArray(d.rows) && d.rows.length) {
+        var pv = $('sacAiPreview');
+        pv.value = d.rows.map(function(r) { return [r.text || '', r.time || '', r.source || ''].join('\t'); }).join('\n');
+        pv.style.display = ''; $('sacAiFill').style.display = '';
+        if (st) st.textContent = '✓ ' + d.rows.length + ' dòng — kiểm tra/sửa (Thoại ⇥ Time ⇥ Source) rồi "Đổ vào bảng".';
+      } else {
+        if (st) st.textContent = '✗ ' + (d.error || 'AI không trả được dòng nào');
+      }
+    } catch(e) { if (st) st.textContent = '✗ Bridge lỗi: ' + e.message; }
+    finally { sacAiParseBtn.disabled = false; }
+  });
+  var sacAiFill = $('sacAiFill');
+  if (sacAiFill) sacAiFill.addEventListener('click', function() {
+    var pv = $('sacAiPreview');
+    var lines = (pv.value || '').split('\n').map(function(l) { return l.replace(/\r$/, ''); }).filter(function(l) { return l.trim(); });
+    if (!lines.length) return;
+    $('sacBody').innerHTML = ''; rowSeq = 0;
+    lines.forEach(function(l) {
+      var cols = l.split('\t');
+      createRow((cols[0] || '').trim(), (cols[1] || '').trim(), (cols[2] || '').trim());
+    });
+    parsedBlocks = [];
+    // Collapse the AI section, open the script editor so the user sees the result.
+    $('sacAiBody').style.display = 'none'; $('sacAiChevron').textContent = '▸';
+    $('sacTableWrap').style.display = ''; $('sacTableFooter').style.display = '';
+    $('sacScriptChevron').textContent = '▾';
+    var st = $('sacAiStatus'); if (st) st.textContent = '✓ Đã đổ ' + lines.length + ' dòng vào bảng — bấm Validate.';
+  });
+
   var sacScriptToggle = $('sacScriptToggle');
   if (sacScriptToggle) {
     sacScriptToggle.addEventListener('click', function() {

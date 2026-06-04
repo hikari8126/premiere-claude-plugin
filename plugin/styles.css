@@ -804,6 +804,23 @@ body {
 .sac-voiceGenBtn.is-ready { background: rgba(16,185,129,0.25); color: #10b981;
   box-shadow: inset 0 0 0 1px rgba(16,185,129,0.55); }
 
+/* ✨ AI cutsheet parse section */
+.sac-aiParse { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.sac-aiRaw, .sac-aiPreview {
+  width: 100%; min-height: 64px; resize: vertical;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 7px 8px; font-size: 11px; font-family: ui-monospace, monospace;
+  margin: 6px 0;
+}
+.sac-aiRaw:focus, .sac-aiPreview:focus { outline: none; border-color: var(--accent); }
+.sac-aiRow { display: flex; align-items: center; gap: 8px; }
+.sac-aiBtn { background: rgba(168,85,247,0.18); border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--accent); font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; }
+.sac-aiBtn:hover { background: rgba(168,85,247,0.3); color: #fff; }
+.sac-aiBtn:disabled { opacity: 0.6; cursor: default; }
+#sacAiFill { width: 100%; margin-top: 4px; }
+.sac-aiStatus { font-size: 10px; color: var(--text-dim); }
+
 /* Small clear button in the (always-visible) script header */
 .sac-scriptClearBtn {
   margin-left: auto; flex: 0 0 auto;
