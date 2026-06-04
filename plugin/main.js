@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.6';
+var PLUGIN_VERSION = 'v4.3.7';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2935,10 +2935,14 @@ async function ppMoveToVOBin(item, proj) {
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
-    // Folder branches of the top-ranked candidates (limit noise), sorted as a tree.
-    var topFolders = [];
-    cands.slice(0, 80).forEach(function(c) { if (topFolders.indexOf(c.folderPath) === -1) topFolders.push(c.folderPath); });
-    topFolders.sort();
+    // Build the folder TREE: every folder that holds a candidate clip + all its
+    // ancestors, so the hierarchy is complete. Sorted so parents precede children.
+    var folderSet = {};
+    cands.forEach(function(c) {
+      var segs = c.folderPath ? c.folderPath.split(' / ') : [];
+      for (var d = 1; d <= segs.length; d++) folderSet[segs.slice(0, d).join(' / ')] = true;
+    });
+    var topFolders = Object.keys(folderSet).sort();
 
     var selectedFolder = '__all__'; // holds a folderPath, or '__all__'
 
@@ -2948,17 +2952,21 @@ async function ppMoveToVOBin(item, proj) {
       d.textContent = text;
       return d;
     }
+    // Strip only real media extensions for display (NOT arbitrary dots in the name).
+    function dispName(n) { return String(n).replace(/\.(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|png|jpg|jpeg|tif|tiff|psd|prproj)$/i, ''); }
+
     function renderFolders() {
       foldersEl.innerHTML = '';
       var all = mkRow('📁 Tất cả', selectedFolder === '__all__');
+      all.style.paddingLeft = '8px';
       all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
       foldersEl.appendChild(all);
       topFolders.forEach(function(fp) {
-        var segs = fp ? fp.split(' / ') : [];
-        var leaf = segs.length ? segs[segs.length - 1] : '(gốc)';
-        var indent = segs.length > 1 ? '   '.repeat(segs.length - 1) : ''; // tree indent by depth
-        var row = mkRow('📁 ' + indent + leaf, selectedFolder === fp);
-        if (fp) row.title = fp; // full branch on hover
+        var segs = fp.split(' / ');
+        var leaf = segs[segs.length - 1];
+        var row = mkRow('📁 ' + leaf, selectedFolder === fp);
+        row.style.paddingLeft = (8 + (segs.length - 1) * 16) + 'px'; // REAL indent by depth
+        row.title = fp; // full branch on hover
         row.addEventListener('click', function() { selectedFolder = fp; renderFolders(); renderSources(); });
         foldersEl.appendChild(row);
       });
@@ -2967,7 +2975,9 @@ async function ppMoveToVOBin(item, proj) {
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
       var base = cands.filter(function(c) {
-        if (selectedFolder !== '__all__' && c.folderPath !== selectedFolder) return false;
+        // Selecting a branch shows clips in it AND in its sub-folders.
+        if (selectedFolder !== '__all__' &&
+            !(c.folderPath === selectedFolder || c.folderPath.indexOf(selectedFolder + ' / ') === 0)) return false;
         if (q && sacNorm(c.folderPath + ' ' + c.clip).indexOf(q) === -1) return false;
         return true;
       });
@@ -2976,7 +2986,7 @@ async function ppMoveToVOBin(item, proj) {
       var showAll = !!q || selectedFolder !== '__all__';
       var rows = showAll ? base : base.slice(0, TOP_N);
       rows.forEach(function(c) {
-        var row = mkRow('🎬 ' + c.clipNoX, false);
+        var row = mkRow('🎬 ' + dispName(c.clip), false); // full name (no arbitrary-dot truncation)
         row.title = (c.folderPath ? c.folderPath + ' / ' : '') + c.clip;
         row.addEventListener('click', function() { bindTo(c); });
         sourcesEl.appendChild(row);
@@ -2989,7 +2999,10 @@ async function ppMoveToVOBin(item, proj) {
       }
     }
     function bindTo(c) {
-      var label = c.folder ? (c.folder + ' ' + c.clipNoX) : c.clipNoX;
+      // Use the full display name (media ext stripped only) so the bound name isn't
+      // truncated at an arbitrary dot. Folder leaf prefix keeps Pass-3 re-match working.
+      var clipDisp = dispName(c.clip);
+      var label = c.folder ? (c.folder + ' ' + clipDisp) : clipDisp;
       var theSrc = parsedBlocks[bIdx].sources[sIdx];
       // Record override keyed by the ORIGINAL sheet name so it survives re-parse.
       sacBindOverrides[sacNorm(theSrc._orig || theSrc.name)] = label;
