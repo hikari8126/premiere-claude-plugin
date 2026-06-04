@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.9';
+var PLUGIN_VERSION = 'v4.3.10';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2934,19 +2934,25 @@ async function ppMoveToVOBin(item, proj) {
     function toCand(b) {
       var clipNoX = b.name.replace(/\.[^.]+$/, '');
       // WHOLE-TOKEN match (not substring): token "12" matches a clip token "12",
-      // NOT "123" or "12abcd". Cuts down noise + false duplicates when binding.
-      var hayToks = sacNorm((b.path || '') + ' ' + b.name).split(' ').filter(Boolean);
-      var hits = toks.filter(function(tk) { return hayToks.indexOf(tk) !== -1; }).length;
+      // NOT "123" / "12abcd". hits also counts folder-path tokens (folder hints).
+      var hayToks  = sacNorm((b.path || '') + ' ' + b.name).split(' ').filter(Boolean);
+      var nameToks = sacNorm(b.name).split(' ').filter(Boolean);
+      var hits     = toks.filter(function(tk) { return hayToks.indexOf(tk)  !== -1; }).length;
+      var nameHits = toks.filter(function(tk) { return nameToks.indexOf(tk) !== -1; }).length;
+      // coverage = how much of the CLIP NAME the matched tokens explain. Low coverage
+      // = incidental match (e.g. "12" inside "ElevenLabs_2025-12-09_..." → ~0.05).
+      var coverage = nameHits / Math.max(1, nameToks.length);
       var lev = sacLev(tNoX, sacNorm(clipNoX));
       return { folder: b.parent || '', folderPath: b.path || '', clip: b.name, clipNoX: clipNoX,
-               item: b.item, score: hits * 1000 - lev, hits: hits };
+               item: b.item, coverage: coverage, score: hits * 1000 + Math.round(coverage * 100) - lev, hits: hits };
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
-    // Relevant = clips that share a token with the source name. The folder tree +
-    // default list use ONLY these (so we don't dump every project folder); the filter
-    // box still searches ALL clips. Fall back to all if nothing shares a token.
-    var relevant = cands.filter(function(c) { return c.hits > 0; });
+    // Relevant = clips that share a whole token AND where that match covers a real
+    // part of the clip name (coverage ≥ 0.34) — so a short token like "12" doesn't
+    // pull in long unrelated names where it appears incidentally (dates, comp #s).
+    var relevant = cands.filter(function(c) { return c.hits > 0 && c.coverage >= 0.34; });
+    if (!relevant.length) relevant = cands.filter(function(c) { return c.hits > 0; }); // softer fallback
     if (!relevant.length) relevant = cands;
     // Build the folder TREE from relevant clips + their ancestors (parents precede children).
     var folderSet = {};
