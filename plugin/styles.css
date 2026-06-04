@@ -767,11 +767,11 @@ body {
 .sac-bind-modal {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.6);
-  display: flex; align-items: center; justify-content: center; padding: 8px;
+  display: flex; align-items: stretch; justify-content: stretch; padding: 6px;
 }
 .sac-bind-modal[hidden] { display: none; }
 .sac-bind-box {
-  width: 100%; max-width: 460px;
+  flex: 1 1 0; min-height: 0; width: 100%;  /* fill the tab — no max-width/height so long names show */
   display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--accent);
   border-radius: var(--radius); padding: 12px;
@@ -786,15 +786,16 @@ body {
 .sac-bind-filter { width: 100%; background: var(--surface2); border: 1px solid var(--border);
   border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 12px; font-family: inherit; margin-bottom: 8px; }
 .sac-bind-filter:focus { outline: none; border-color: var(--accent); }
-.sac-bind-cols { display: flex; gap: 8px; }
+.sac-bind-cols { display: flex; gap: 8px; flex: 1 1 0; min-height: 0; }
 .sac-bind-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .sac-bind-colHead { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55);
   padding: 5px 7px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border); }
-/* Fixed (taller) height — UXP collapses flex:1 children to 0 here, hiding rows. */
-.sac-bind-list { height: 340px; overflow-y: auto; scrollbar-width: thin; }
+/* Fill remaining height; min-height keeps it visible even if UXP flex collapses. */
+.sac-bind-list { flex: 1 1 0; min-height: 140px; overflow-y: auto; scrollbar-width: thin; }
+/* Wrap long names so they show fully (no ellipsis truncation). */
 .sac-bind-row { padding: 6px 8px; font-size: 11px; color: rgba(255,255,255,0.8); cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.04); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  border-bottom: 1px solid rgba(255,255,255,0.04); white-space: normal; word-break: break-word; }
 .sac-bind-row:hover { background: rgba(168,85,247,0.15); color: #fff; }
 .sac-bind-row.is-active { background: rgba(168,85,247,0.25); color: #fff; }
 .sac-bind-none { padding: 10px 8px; font-size: 10px; color: rgba(255,255,255,0.35); text-align: center; }

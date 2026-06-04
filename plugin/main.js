@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.4';
+var PLUGIN_VERSION = 'v4.3.5';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2067,7 +2067,8 @@ async function sacGetFolderChildren(item) {
 // match cutsheet entries like "Senyue 70" = folder "Senyue" + clip "70".
 async function sacCollectBinItems(rootItem) {
   var out = [];
-  var queue = [{ item: rootItem, name: '' }]; // root parent is '' (no prefix)
+  // path = full folder path of the node (branch); name = its leaf name.
+  var queue = [{ item: rootItem, name: '', path: '' }];
   var guard = 0;
   while (queue.length && guard < 10000) {
     guard++;
@@ -2076,13 +2077,11 @@ async function sacCollectBinItems(rootItem) {
     for (var i = 0; i < children.length; i++) {
       var child = children[i];
       var name  = await sacGetItemName(child);
-      // Tag folders so they are NOT matched as a source (a folder can't be placed
-      // on the timeline). Without this, a cutsheet name like "irena" wrongly
-      // "matched" the folder named irena and passed validation.
       var isFolder = false;
       try { if (ppro && ppro.FolderItem && ppro.FolderItem.cast) isFolder = !!ppro.FolderItem.cast(child); } catch(e) {}
-      out.push({ name: name, item: child, parent: node.name, isFolder: isFolder });
-      queue.push({ item: child, name: name }); // [] for clips → no infinite loop
+      // parent = immediate folder leaf (for "Senyue 70" matching); path = full branch.
+      out.push({ name: name, item: child, parent: node.name, path: node.path || '', isFolder: isFolder });
+      queue.push({ item: child, name: name, path: node.path ? (node.path + ' / ' + name) : name });
     }
   }
   return out;
@@ -2928,18 +2927,20 @@ async function ppMoveToVOBin(item, proj) {
     var TOP_N = 25; // default visible count when not filtering
     function toCand(b) {
       var clipNoX = b.name.replace(/\.[^.]+$/, '');
-      var hay = sacNorm((b.parent || '') + ' ' + b.name);
+      var hay = sacNorm((b.path || '') + ' ' + b.name);
       var hits = toks.filter(function(tk) { return hay.indexOf(tk) !== -1; }).length;
       var lev = sacLev(tNoX, sacNorm(clipNoX));
-      return { folder: b.parent || '', clip: b.name, clipNoX: clipNoX, item: b.item, score: hits * 1000 - lev, hits: hits };
+      return { folder: b.parent || '', folderPath: b.path || '', clip: b.name, clipNoX: clipNoX,
+               item: b.item, score: hits * 1000 - lev, hits: hits };
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
-    // Folders shown = only those of the top-ranked candidates (limit noise).
+    // Folder branches of the top-ranked candidates (limit noise), sorted as a tree.
     var topFolders = [];
-    cands.slice(0, 60).forEach(function(c) { if (topFolders.indexOf(c.folder) === -1) topFolders.push(c.folder); });
+    cands.slice(0, 80).forEach(function(c) { if (topFolders.indexOf(c.folderPath) === -1) topFolders.push(c.folderPath); });
+    topFolders.sort();
 
-    var selectedFolder = '__all__';
+    var selectedFolder = '__all__'; // holds a folderPath, or '__all__'
 
     function mkRow(text, active) {
       var d = document.createElement('div');
@@ -2952,9 +2953,13 @@ async function ppMoveToVOBin(item, proj) {
       var all = mkRow('📁 Tất cả', selectedFolder === '__all__');
       all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
       foldersEl.appendChild(all);
-      topFolders.forEach(function(f) {
-        var row = mkRow('📁 ' + (f || '(gốc)'), selectedFolder === f);
-        row.addEventListener('click', function() { selectedFolder = f; renderFolders(); renderSources(); });
+      topFolders.forEach(function(fp) {
+        var segs = fp ? fp.split(' / ') : [];
+        var leaf = segs.length ? segs[segs.length - 1] : '(gốc)';
+        var indent = segs.length > 1 ? '   '.repeat(segs.length - 1) : ''; // tree indent by depth
+        var row = mkRow('📁 ' + indent + leaf, selectedFolder === fp);
+        if (fp) row.title = fp; // full branch on hover
+        row.addEventListener('click', function() { selectedFolder = fp; renderFolders(); renderSources(); });
         foldersEl.appendChild(row);
       });
     }
@@ -2962,8 +2967,8 @@ async function ppMoveToVOBin(item, proj) {
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
       var base = cands.filter(function(c) {
-        if (selectedFolder !== '__all__' && c.folder !== selectedFolder) return false;
-        if (q && sacNorm(c.folder + ' ' + c.clip).indexOf(q) === -1) return false;
+        if (selectedFolder !== '__all__' && c.folderPath !== selectedFolder) return false;
+        if (q && sacNorm(c.folderPath + ' ' + c.clip).indexOf(q) === -1) return false;
         return true;
       });
       if (!base.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— không có —'; sourcesEl.appendChild(n); return; }
@@ -2972,7 +2977,7 @@ async function ppMoveToVOBin(item, proj) {
       var rows = showAll ? base : base.slice(0, TOP_N);
       rows.forEach(function(c) {
         var row = mkRow('🎬 ' + c.clipNoX, false);
-        if (c.folder) row.title = c.folder + ' / ' + c.clip;
+        row.title = (c.folderPath ? c.folderPath + ' / ' : '') + c.clip;
         row.addEventListener('click', function() { bindTo(c); });
         sourcesEl.appendChild(row);
       });
@@ -3014,10 +3019,15 @@ async function ppMoveToVOBin(item, proj) {
     }
     function onFilter() { renderSources(); }
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); closeModal(); } }
+    // Remember the block list's scroll so binding doesn't jump it to the top
+    // (hiding/showing .sac-app resets the inner scroll container).
+    var blockList = $('sacBlockList');
+    var savedScroll = blockList ? blockList.scrollTop : 0;
     function closeModal() {
       modal.hidden = true;
       var app = document.querySelector('#tab-autocut .sac-app');
       if (app) app.style.display = '';
+      if (blockList) setTimeout(function() { try { blockList.scrollTop = savedScroll; } catch(e) {} }, 0);
       if (window.releaseKeyboard) window.releaseKeyboard();
       filterEl.removeEventListener('input', onFilter);
       filterEl.removeEventListener('keydown', onKey);
@@ -4095,6 +4105,34 @@ async function ppMoveToVOBin(item, proj) {
     if (err) throw err;
   }
 
+  // Remove every clip from a sequence (used to clear the sample clip that
+  // createSequenceFromMedia auto-drops on the new timeline).
+  async function sacClearSequence(project, seq, seqEditor) {
+    try {
+      var items = [];
+      var TYPES = [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO];
+      for (var t = 0; t < TYPES.length; t++) {
+        var grp = seq.trackGroup && seq.trackGroup(TYPES[t]);
+        if (!grp) continue;
+        var n = grp.numTracks || 0;
+        for (var gi = 0; gi < n; gi++) {
+          var its = await getClipItems(grp.getTrack(gi));
+          if (its && its.length) items = items.concat(its);
+        }
+      }
+      if (!items.length) return;
+      if (typeof seqEditor.createRemoveItemAction !== 'function') {
+        console.warn('[SAC] no createRemoveItemAction — sample clip may remain'); return;
+      }
+      await sacCommitTx(project, function(ca) {
+        items.forEach(function(it) {
+          try { ca.addAction(seqEditor.createRemoveItemAction(it, false, false)); } catch(e) {}
+        });
+      }, 'SAC clear sample clip');
+      console.log('[SAC] Cleared', items.length, 'sample item(s) from new sequence');
+    } catch(e) { console.warn('[SAC] clear sequence failed:', e && e.message); }
+  }
+
   // Place a clip on the timeline.
   // TWO separate committed transactions: (1) set source in/out, (2) insert.
   // Reason: in a combined transaction, createSetInOutPointsAction on a shared
@@ -4244,6 +4282,14 @@ async function ppMoveToVOBin(item, proj) {
 
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
+
+      // createSequenceFromMedia drops the first clip onto the new timeline — remove it
+      // so assembly starts from an empty sequence (the clip was only used for its fps).
+      if (seqMode === 'new') {
+        status.textContent = '⏳ Dọn clip mẫu...';
+        await sacClearSequence(project, seq, seqEditor);
+      }
+
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
         sacNoVoiceMode ? '(without voice)' : '');
 
