@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.4.0';
+var PLUGIN_VERSION = 'v4.4.1';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4436,6 +4436,18 @@ async function ppMoveToVOBin(item, proj) {
     ta.addEventListener('focus', function() { if (window.claimKeyboard) window.claimKeyboard(); });
     ta.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
   });
+  // Model picker (shared with VoiceGen Organize via ORGANIZE_MODEL). Claude → runs
+  // via CLI (no key needed); GPT → needs an OpenAI key.
+  var sacAiModel = $('sacAiModel');
+  if (sacAiModel) {
+    sacAiModel.value = ORGANIZE_MODEL;
+    if (sacAiModel.value !== ORGANIZE_MODEL) sacAiModel.selectedIndex = 0; // unknown → Claude Sonnet
+    sacAiModel.addEventListener('change', function() {
+      ORGANIZE_MODEL = sacAiModel.value;
+      localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
+      var vg = document.getElementById('vgOrganizeModel'); if (vg) vg.value = ORGANIZE_MODEL; // keep in sync
+    });
+  }
   var sacAiParseBtn = $('sacAiParseBtn');
   if (sacAiParseBtn) sacAiParseBtn.addEventListener('click', async function() {
     var raw = ($('sacAiRaw').value || '').trim();
