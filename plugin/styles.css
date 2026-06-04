@@ -2791,6 +2791,13 @@ body {
 .sac-srcMsg:empty { display: none; }
 .sac-srcMsg.is-err  { color: #f87171; }
 .sac-srcMsg.is-warn { color: #f59e0b; }
+.sac-srcMsg.is-skip { color: #fbbf24; font-weight: 600; }
+/* Skipped source row — clearly greyed out with a dashed "gap" look + left bar. */
+.sac-blockSrc.is-skipped {
+  opacity: 0.7;
+  background: repeating-linear-gradient(45deg, rgba(251,191,36,0.06), rgba(251,191,36,0.06) 6px, transparent 6px, transparent 12px);
+  border-left: 3px solid #fbbf24;
+}
 
 /* "Run anyway" button (shown when voice partially matched) */
 .sac-runAnywayBtn {
