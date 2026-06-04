@@ -767,11 +767,11 @@ body {
 .sac-bind-modal {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.6);
-  display: flex; align-items: center; justify-content: center; padding: 12px;
+  display: flex; align-items: center; justify-content: center; padding: 8px;
 }
 .sac-bind-modal[hidden] { display: none; }
 .sac-bind-box {
-  width: 100%; max-width: 340px; max-height: 100%;
+  width: 100%; max-width: 460px;
   display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid var(--accent);
   border-radius: var(--radius); padding: 12px;
@@ -791,8 +791,8 @@ body {
   border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .sac-bind-colHead { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55);
   padding: 5px 7px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border); }
-/* Fixed height — UXP collapses flex:1 children to 0 here, hiding the rows. */
-.sac-bind-list { height: 210px; overflow-y: auto; scrollbar-width: thin; }
+/* Fixed (taller) height — UXP collapses flex:1 children to 0 here, hiding rows. */
+.sac-bind-list { height: 340px; overflow-y: auto; scrollbar-width: thin; }
 .sac-bind-row { padding: 6px 8px; font-size: 11px; color: rgba(255,255,255,0.8); cursor: pointer;
   border-bottom: 1px solid rgba(255,255,255,0.04); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sac-bind-row:hover { background: rgba(168,85,247,0.15); color: #fff; }
@@ -2781,11 +2781,25 @@ body {
 }
 .sac-blockSrc {
   padding: 2px 10px;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 10.5px;
   color: rgba(255,255,255,0.45);
   line-height: 1.5;
 }
+/* Per-source inline problem message (sits on its own sub-line under the source). */
+.sac-srcMsg { flex-basis: 100%; font-size: 9px; color: rgba(255,255,255,0.4); padding-left: 2px; }
+.sac-srcMsg:empty { display: none; }
+.sac-srcMsg.is-err  { color: #f87171; }
+.sac-srcMsg.is-warn { color: #f59e0b; }
+
+/* "Run anyway" button (shown when voice partially matched) */
+.sac-runAnywayBtn {
+  width: 100%; margin-top: 6px;
+  background: rgba(245,158,11,0.16); border: 1px solid rgba(245,158,11,0.5);
+  color: #f59e0b; border-radius: 8px; padding: 7px 10px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.sac-runAnywayBtn:hover { background: rgba(245,158,11,0.28); color: #fff; }
 .sac-blockTimeBadge {
   flex: 0 0 auto;
   font-size: 9px;

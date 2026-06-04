@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.0';
+var PLUGIN_VERSION = 'v4.3.1';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2304,6 +2304,7 @@ async function ppMoveToVOBin(item, proj) {
 
   // Show the cut panel (hides voice panel), update label
   function sacShowCutPanel() {
+    var _ra = $('sacRunAnywayBtn'); if (_ra) _ra.style.display = 'none';
     $('sacVoicePanel').style.display = 'none';
     var lbl = $('sacCutLabel');
     if (lbl) {
@@ -2561,10 +2562,15 @@ async function ppMoveToVOBin(item, proj) {
         current = { texts: [r.text], sources: srcEntries(r.src, r.time) };
         blocks.push(current);
       } else if (hasText) {
-        // Text only → add to current block (e.g. "Try it now!" / "Chạy variant":
-        // no source → contributes voice only, no video).
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
         current.texts.push(r.text);
+        // Merged-source row: has a timecode but the source cell is empty (Sheets merge
+        // cell only fills the first row). Reuse the block's source at this timecode so
+        // the clip is placed at both times. No timecode → voice-only (e.g. "Try it now!").
+        if (r.time && current.sources.length) {
+          var inheritName = current.sources[current.sources.length - 1].name;
+          srcEntries(inheritName, r.time).forEach(function(e) { current.sources.push(e); });
+        }
       } else {
         // Source only → add to current block (each "&" segment becomes its own clip)
         if (!current) { current = { texts: [], sources: [] }; blocks.push(current); }
@@ -2712,6 +2718,11 @@ async function ppMoveToVOBin(item, proj) {
         statusSpan.className = 'sac-srcStatus';
         statusSpan.textContent = '⌛';
         el.appendChild(statusSpan);
+        // Inline per-source problem message (shown next to this source, not in the
+        // global status line).
+        var msgSpan = document.createElement('span');
+        msgSpan.className = 'sac-srcMsg';
+        el.appendChild(msgSpan);
         body.appendChild(el);
       });
 
@@ -2794,21 +2805,25 @@ async function ppMoveToVOBin(item, proj) {
         // Remove stale Skip button if source is now found/resolved
         var existingSkip = el.querySelector('.sac-skipBtn');
         var hintBtn = el.querySelector('.sac-blockHintBtn');
+        var msgEl  = el.querySelector('.sac-srcMsg');
         if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
           statusEl.textContent = '⚠';
           statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
+          if (msgEl) { msgEl.textContent = '⚠ trùng ' + ambiguousNames[name] + ' clip — bấm 📁'; msgEl.className = 'sac-srcMsg is-warn'; }
           sacAddSkipButton(el);
         } else if (sacSourceMap[name]) {  // found ✓
           statusEl.className = 'sac-srcStatus sac-srcOk';
           statusEl.textContent = '✓';
           if (hintBtn) hintBtn.style.display = 'none';
+          if (msgEl) { msgEl.textContent = ''; msgEl.className = 'sac-srcMsg'; }
           if (existingSkip) existingSkip.parentNode.removeChild(existingSkip);
         } else {  // missing ✗
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
           if (hintBtn) hintBtn.style.display = '';
+          if (msgEl) { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
           sacAddSkipButton(el);
         }
       });
@@ -2861,19 +2876,23 @@ async function ppMoveToVOBin(item, proj) {
     var statusEl = srcEl.querySelector('.sac-srcStatus');
     var hintBtn  = srcEl.querySelector('.sac-blockHintBtn');
     var oldSkip  = srcEl.querySelector('.sac-skipBtn');
+    var uMsg     = srcEl.querySelector('.sac-srcMsg');
     if (oldSkip) oldSkip.parentNode.removeChild(oldSkip);
     if (statusEl) {
       if (isAmbiguous) {
         statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
         statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
         if (hintBtn) hintBtn.style.display = '';
+        if (uMsg) { uMsg.textContent = '⚠ trùng ' + count + ' clip — bấm 📁'; uMsg.className = 'sac-srcMsg is-warn'; }
         sacAddSkipButton(srcEl);
       } else if (item) {
         statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; statusEl.title = '';
         if (hintBtn) hintBtn.style.display = 'none';
+        if (uMsg) { uMsg.textContent = ''; uMsg.className = 'sac-srcMsg'; }
       } else {
         statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
         if (hintBtn) hintBtn.style.display = '';
+        if (uMsg) { uMsg.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
         sacAddSkipButton(srcEl);
       }
     }
@@ -2902,17 +2921,23 @@ async function ppMoveToVOBin(item, proj) {
     if (!src) return;
     titleEl.textContent = 'Chọn source cho "' + src.name + '"';
 
-    // Candidates: bin clips sharing any token with the source name; if none, show all.
-    var toks = sacNorm(src.name).split(' ').filter(Boolean);
+    // Rank ALL clips by closeness to the source name (token hits, then edit distance),
+    // so the right clip is near the top instead of dumping every loose token match.
+    var tNoX = sacNorm(src.name);
+    var toks = tNoX.split(' ').filter(function(t) { return t.length >= 2; });
+    var TOP_N = 25; // default visible count when not filtering
     function toCand(b) {
-      return { folder: b.parent || '', clip: b.name, clipNoX: b.name.replace(/\.[^.]+$/, ''), item: b.item };
-    }
-    var clipsOnly = sacBinItems.filter(function(b) { return !b.isFolder; }); // folders aren't sources
-    var cands = clipsOnly.filter(function(b) {
+      var clipNoX = b.name.replace(/\.[^.]+$/, '');
       var hay = sacNorm((b.parent || '') + ' ' + b.name);
-      return !toks.length || toks.some(function(tk) { return hay.indexOf(tk) !== -1; });
-    }).map(toCand);
-    if (!cands.length) cands = clipsOnly.map(toCand);
+      var hits = toks.filter(function(tk) { return hay.indexOf(tk) !== -1; }).length;
+      var lev = sacLev(tNoX, sacNorm(clipNoX));
+      return { folder: b.parent || '', clip: b.name, clipNoX: clipNoX, item: b.item, score: hits * 1000 - lev, hits: hits };
+    }
+    var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
+      .sort(function(a, b) { return b.score - a.score; });
+    // Folders shown = only those of the top-ranked candidates (limit noise).
+    var topFolders = [];
+    cands.slice(0, 60).forEach(function(c) { if (topFolders.indexOf(c.folder) === -1) topFolders.push(c.folder); });
 
     var selectedFolder = '__all__';
 
@@ -2924,12 +2949,10 @@ async function ppMoveToVOBin(item, proj) {
     }
     function renderFolders() {
       foldersEl.innerHTML = '';
-      var folders = [];
-      cands.forEach(function(c) { if (folders.indexOf(c.folder) === -1) folders.push(c.folder); });
       var all = mkRow('📁 Tất cả', selectedFolder === '__all__');
       all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
       foldersEl.appendChild(all);
-      folders.forEach(function(f) {
+      topFolders.forEach(function(f) {
         var row = mkRow('📁 ' + (f || '(gốc)'), selectedFolder === f);
         row.addEventListener('click', function() { selectedFolder = f; renderFolders(); renderSources(); });
         foldersEl.appendChild(row);
@@ -2938,18 +2961,27 @@ async function ppMoveToVOBin(item, proj) {
     function renderSources() {
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
-      var rows = cands.filter(function(c) {
+      var base = cands.filter(function(c) {
         if (selectedFolder !== '__all__' && c.folder !== selectedFolder) return false;
         if (q && sacNorm(c.folder + ' ' + c.clip).indexOf(q) === -1) return false;
         return true;
       });
-      if (!rows.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— trống —'; sourcesEl.appendChild(n); return; }
+      if (!base.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— không có —'; sourcesEl.appendChild(n); return; }
+      // When not filtering, show only the closest TOP_N so the list isn't overwhelming.
+      var showAll = !!q || selectedFolder !== '__all__';
+      var rows = showAll ? base : base.slice(0, TOP_N);
       rows.forEach(function(c) {
         var row = mkRow('🎬 ' + c.clipNoX, false);
         if (c.folder) row.title = c.folder + ' / ' + c.clip;
         row.addEventListener('click', function() { bindTo(c); });
         sourcesEl.appendChild(row);
       });
+      if (!showAll && base.length > TOP_N) {
+        var more = document.createElement('div');
+        more.className = 'sac-bind-none';
+        more.textContent = '+ ' + (base.length - TOP_N) + ' nữa — gõ để lọc';
+        sourcesEl.appendChild(more);
+      }
     }
     function bindTo(c) {
       var label = c.folder ? (c.folder + ' ' + c.clipNoX) : c.clipNoX;
@@ -2966,6 +2998,8 @@ async function ppMoveToVOBin(item, proj) {
       // Bind directly to the chosen clip — no name re-matching needed (robust).
       sacSourceMap[label] = c.item || null;
       window.sacSourceMap = sacSourceMap;
+      var bMsg = srcEl.querySelector('.sac-srcMsg');
+      if (bMsg) { bMsg.textContent = c.item ? '' : '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg' + (c.item ? '' : ' is-err'); }
       var statusEl = srcEl.querySelector('.sac-srcStatus');
       if (statusEl) {
         if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; }
@@ -3414,12 +3448,18 @@ async function ppMoveToVOBin(item, proj) {
       var matched = 0;
       (d.alignments || []).forEach(function(a, i) {
         if (!parsedBlocks[i]) return;
-        parsedBlocks[i].voiceStart    = a.start;
-        parsedBlocks[i].voiceEnd      = a.end;
         parsedBlocks[i].voiceDuration = a.duration;
         // Only count blocks that Whisper TRULY matched (not gap-filled interpolations)
         var trulyMatched = (a.status === 'matched' && a.duration != null);
-        if (trulyMatched) matched++;
+        if (trulyMatched) {
+          parsedBlocks[i].voiceStart = a.start;
+          parsedBlocks[i].voiceEnd   = a.end;
+          matched++;
+        } else {
+          // Chưa khớp → bỏ voice cho block này (assembly chỉ đặt video, không voice).
+          parsedBlocks[i].voiceStart = null;
+          parsedBlocks[i].voiceEnd   = null;
+        }
         var badge = document.querySelector('.sac-blockVoiceBadge[data-block-idx="' + i + '"]');
         if (badge) {
           if (trulyMatched) {
@@ -3440,15 +3480,23 @@ async function ppMoveToVOBin(item, proj) {
       var minMatch = Math.max(1, Math.ceil(parsedBlocks.length * 0.5));
       sacVoiceReady = (matched >= minMatch);
       sacVoiceBusy = false;
+      // Which blocks have NO voice (chưa khớp) — show them so the user knows.
+      var unmatchedNums = [];
+      parsedBlocks.forEach(function(b, idx) { if (b.voiceStart == null) unmatchedNums.push(idx + 1); });
       sacUpdateRunVisibility();
       if (matched === 0) {
         sacSetVoiceInfo('⚠ Khớp 0/' + parsedBlocks.length + ' — voice không trùng script');
       } else if (!sacVoiceReady) {
-        sacSetVoiceInfo('⚠ Chỉ khớp ' + matched + '/' + parsedBlocks.length + ' blocks — voice có thể sai');
+        sacSetVoiceInfo('⚠ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks. Block chưa khớp: ' + unmatchedNums.join(', ') + ' (sẽ chỉ có video).');
       } else {
+        var miss = unmatchedNums.length ? (' — block ' + unmatchedNums.join(', ') + ' chỉ có video') : '';
         var hint = sacValidatePassed ? ' — Run đã mở' : ' — Validate để mở Run';
-        sacSetVoiceInfo('✅ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks' + hint);
+        sacSetVoiceInfo('✅ Khớp ' + matched + '/' + parsedBlocks.length + ' blocks' + miss + hint);
       }
+      // "Run anyway" — validate passed but voice gate not met → let the user run
+      // (matched blocks get voice; unmatched get video only).
+      var raBtn = $('sacRunAnywayBtn');
+      if (raBtn) raBtn.style.display = (sacValidatePassed && !sacVoiceReady && matched >= 0) ? 'block' : 'none';
     } catch(e) {
       sacVoiceBusy = false;
       sacSetVoiceInfo('❌ Bridge offline: ' + e.message);
@@ -3702,6 +3750,15 @@ async function ppMoveToVOBin(item, proj) {
     sacUpdateRunVisibility();
   });
 
+  // "Run anyway" — bypass the voice-match gate. Matched blocks keep their voice;
+  // unmatched blocks (voiceStart=null) place video only. Sources must be validated.
+  var sacRunAnywayBtn = $('sacRunAnywayBtn');
+  if (sacRunAnywayBtn) sacRunAnywayBtn.addEventListener('click', function() {
+    if (!sacValidatePassed) { sacSetVoiceInfo('⚠ Validate source trước đã.'); return; }
+    sacRunAnywayBtn.style.display = 'none';
+    sacShowCutPanel(); // reveal This seq / New seq buttons
+  });
+
   // [✕] back — return to voice panel
   // Clear all aligned voice state (✕ button — also used for "change voice")
   function sacClearVoice() {
@@ -3709,6 +3766,7 @@ async function ppMoveToVOBin(item, proj) {
     window.sacVoicePath = null;
     sacVoiceReady = false;
     sacNoVoiceMode = false;
+    var _ra = $('sacRunAnywayBtn'); if (_ra) _ra.style.display = 'none';
     // Clear per-block timing
     parsedBlocks.forEach(function(b) {
       b.voiceStart = null; b.voiceEnd = null; b.voiceDuration = null;
