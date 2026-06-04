@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.1';
+var PLUGIN_VERSION = 'v4.3.2';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2830,15 +2830,17 @@ async function ppMoveToVOBin(item, proj) {
     }
 
     var missingNames = names.filter(function(n) { return !sacSourceMap[n]; });
-    // Log candidates matching ANY token (incl. folder name), showing
-    // "<folder>/<clip>" so name/structure mismatches are obvious.
+    console.log('[SAC] Bin scan: ' + binItems.length + ' item (clip+folder).');
+    // For each missing source, show the normalized target + the closest items
+    // actually in the scan (name + normalized + edit distance), so it's obvious
+    // whether the clip is even in the scan and why it didn't match.
     missingNames.forEach(function(mn) {
-      var toks = sacNorm(mn).split(' ').filter(Boolean);
-      var cands = binItems.filter(function(b) {
-        var hay = sacNorm((b.parent || '') + ' ' + b.name);
-        return toks.some(function(tk) { return hay.indexOf(tk) !== -1; });
-      }).map(function(b) { return (b.parent ? b.parent + '/' : '') + b.name; });
-      console.log('[SAC] "' + mn + '" không khớp. Gần đúng:', cands);
+      var tN = sacNorm(mn);
+      var ranked = binItems.filter(function(b) { return !b.isFolder; }).map(function(b) {
+        return { full: (b.parent ? b.parent + '/' : '') + b.name, norm: sacNorm(b.name), d: sacLev(tN, sacNorm(b.name.replace(/\.[^.]+$/, ''))) };
+      }).sort(function(a, b) { return a.d - b.d; }).slice(0, 6);
+      console.log('[SAC] "' + mn + '" (norm="' + tN + '") KHÔNG khớp. 6 clip gần nhất trong bin:',
+        ranked.map(function(r) { return r.full + ' [norm="' + r.norm + '", d=' + r.d + ']'; }));
     });
 
     // ambiguousNames đã là object {name→count} từ đầu hàm, chuyển sang array để return
@@ -3046,33 +3048,45 @@ async function ppMoveToVOBin(item, proj) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'sac-skipBtn';
-    btn.textContent = 'Skip';
+
+    // Paint the row to reflect the current skipped state (so a re-render of an
+    // already-skipped source shows the right state, not a stale "Skip").
+    function applyState() {
+      var bIdx = parseInt(srcEl.dataset.blockIdx, 10);
+      var sIdx = parseInt(srcEl.dataset.srcIdx,   10);
+      var src  = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+      var skipped = !!(src && src.skipped);
+      var statusEl = srcEl.querySelector('.sac-srcStatus');
+      var nameSpan = srcEl.querySelector('.sac-srcName');
+      var msgEl    = srcEl.querySelector('.sac-srcMsg');
+      if (skipped) {
+        btn.textContent = '↩ Bỏ skip';
+        btn.classList.add('is-active');
+        srcEl.classList.add('is-skipped');
+        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; statusEl.title = 'Đã bỏ qua — chèn gap'; }
+        if (nameSpan)  { nameSpan.style.opacity = '0.4'; nameSpan.style.textDecoration = 'line-through'; }
+        if (msgEl)     { msgEl.textContent = '⏭ ĐÃ BỎ QUA — chèn 1s gap, không cắt source này'; msgEl.className = 'sac-srcMsg is-skip'; }
+      } else {
+        btn.textContent = 'Skip';
+        btn.classList.remove('is-active');
+        srcEl.classList.remove('is-skipped');
+        if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.title = ''; }
+        if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+        if (msgEl)     { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
+      }
+    }
+
     btn.addEventListener('click', function() {
       var bIdx = parseInt(srcEl.dataset.blockIdx, 10);
       var sIdx = parseInt(srcEl.dataset.srcIdx,   10);
       var src  = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
       if (!src) return;
-
       src.skipped = !src.skipped;
-
-      var statusEl = srcEl.querySelector('.sac-srcStatus');
-      var nameSpan = srcEl.querySelector('.sac-srcName');
-      if (src.skipped) {
-        btn.textContent = 'Undo';
-        btn.classList.add('is-active');
-        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; }
-        if (nameSpan)  { nameSpan.style.opacity = '0.4'; nameSpan.style.textDecoration = 'line-through'; }
-      } else {
-        btn.textContent = 'Skip';
-        btn.classList.remove('is-active');
-        if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; }
-        if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
-      }
-
-      // Re-check if all missing sources are now skipped → open Run gate
-      sacCheckSkipGate();
+      applyState();
+      sacCheckSkipGate(); // all missing now skipped → open Run gate
     });
     srcEl.appendChild(btn);
+    applyState(); // reflect current state on creation (handles carried-over skip)
   }
 
   // After each skip toggle: if every missing source is now skipped, pass the
