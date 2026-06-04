@@ -840,6 +840,35 @@ body {
   padding: 8px 6px; font-size: 11px; text-align: center;
 }
 
+/* Cut to New Sequence modal */
+.sac-newseq-modal {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+}
+.sac-newseq-modal[hidden] { display: none; }
+.sac-newseq-box {
+  width: 100%; max-width: 320px;
+  background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+}
+.sac-nsf2-label { display: block; font-size: 11px; font-weight: 600; color: var(--text); margin: 10px 0 4px; }
+.sac-nsf2-nameRow, .sac-nsf2-presetRow { display: flex; gap: 6px; align-items: center; }
+.sac-nsf2-presetRow { margin-top: 6px; }
+.sac-nsf2-input, .sac-nsf2-select {
+  flex: 1 1 0; min-width: 0;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); padding: 7px 8px; font-size: 12px; font-family: inherit;
+}
+.sac-nsf2-input:focus, .sac-nsf2-select:focus { outline: none; border-color: var(--accent); }
+.sac-nsf2-iconBtn {
+  flex: 0 0 auto; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-dim); padding: 6px 9px; cursor: pointer; font-size: 12px;
+}
+.sac-nsf2-iconBtn:hover { border-color: var(--accent); color: var(--accent); }
+.sac-nsf2-note { font-size: 10px; color: var(--text-dim); font-style: italic; margin: 6px 0 0; }
+
 /* ═══════════════════════════════════════════════════════ */
 /* AUTOCUT STYLES  (all prefixed ac- to avoid conflicts)  */
 /* ═══════════════════════════════════════════════════════ */
