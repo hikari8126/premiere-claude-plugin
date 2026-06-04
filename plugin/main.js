@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.5';
+var PLUGIN_VERSION = 'v4.3.6';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4105,34 +4105,6 @@ async function ppMoveToVOBin(item, proj) {
     if (err) throw err;
   }
 
-  // Remove every clip from a sequence (used to clear the sample clip that
-  // createSequenceFromMedia auto-drops on the new timeline).
-  async function sacClearSequence(project, seq, seqEditor) {
-    try {
-      var items = [];
-      var TYPES = [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO];
-      for (var t = 0; t < TYPES.length; t++) {
-        var grp = seq.trackGroup && seq.trackGroup(TYPES[t]);
-        if (!grp) continue;
-        var n = grp.numTracks || 0;
-        for (var gi = 0; gi < n; gi++) {
-          var its = await getClipItems(grp.getTrack(gi));
-          if (its && its.length) items = items.concat(its);
-        }
-      }
-      if (!items.length) return;
-      if (typeof seqEditor.createRemoveItemAction !== 'function') {
-        console.warn('[SAC] no createRemoveItemAction — sample clip may remain'); return;
-      }
-      await sacCommitTx(project, function(ca) {
-        items.forEach(function(it) {
-          try { ca.addAction(seqEditor.createRemoveItemAction(it, false, false)); } catch(e) {}
-        });
-      }, 'SAC clear sample clip');
-      console.log('[SAC] Cleared', items.length, 'sample item(s) from new sequence');
-    } catch(e) { console.warn('[SAC] clear sequence failed:', e && e.message); }
-  }
-
   // Place a clip on the timeline.
   // TWO separate committed transactions: (1) set source in/out, (2) insert.
   // Reason: in a combined transaction, createSetInOutPointsAction on a shared
@@ -4185,51 +4157,26 @@ async function ppMoveToVOBin(item, proj) {
 
       if (seqMode === 'new') {
         status.textContent = '⏳ Tạo sequence mới...';
-        // Read settings from form (use defaults if form not visible)
+        // Read settings from the popup.
         var nameInp  = $('sacNewSeqName');
         var ratioSel = $('sacNewSeqRatio');
-        var fpsSel   = $('sacNewSeqFps');
         var seqName  = (nameInp && nameInp.value.trim()) || 'AutoCut';
         var ratio    = ratioSel ? ratioSel.value : 'match';
-        var fps      = fpsSel  ? parseFloat(fpsSel.value) : 29.97;
 
-        // Find first non-skipped source ProjectItem (for createSequenceFromMedia)
-        var firstSrcItem = null;
-        for (var bi = 0; bi < blocks.length && !firstSrcItem; bi++) {
-          for (var si2 = 0; si2 < (blocks[bi].sources || []).length; si2++) {
-            var sn2 = blocks[bi].sources[si2];
-            if (!sn2.skipped) { firstSrcItem = sacSourceMap[sn2.name] || window.sacSourceMap[sn2.name]; break; }
-          }
+        // Create an EMPTY sequence. We deliberately do NOT use createSequenceFromMedia:
+        // it drops the first source clip onto the timeline (the user found that
+        // crash-prone). Trade-off: fps = project's default sequence fps (timebase is
+        // immutable after creation), not the source clip's fps. Frame size is still
+        // overridden below for a custom ratio.
+        if (typeof project.createSequence === 'function') {
+          seq = await project.createSequence(seqName);
         }
-
-        // Sequence timebase is IMMUTABLE after creation — must be baked in at creation time.
-        // Strategy:
-        //   - Always use createSequenceFromMedia when source clips available → fps matches source
-        //   - "Match source clips" mode: also uses source frame size → nothing else needed
-        //   - Custom ratio: use createSequenceFromMedia for fps, then override frame size via setSettings
-        // Only feed a real clip item to createSequenceFromMedia (a folder/invalid
-        // item can crash Premiere). Wrap in try/catch + fall back to createSequence.
-        var firstClip = null;
-        if (firstSrcItem && ppro.ClipProjectItem && ppro.ClipProjectItem.cast) {
-          try { firstClip = ppro.ClipProjectItem.cast(firstSrcItem) ? firstSrcItem : null; } catch(e) { firstClip = null; }
-        } else { firstClip = firstSrcItem; }
-        if (firstClip && typeof project.createSequenceFromMedia === 'function') {
-          try {
-            seq = await project.createSequenceFromMedia(seqName, [firstClip]);
-            console.log('[SAC] Sequence created from media (fps from source clip)');
-          } catch (eCsm) {
-            console.warn('[SAC] createSequenceFromMedia failed → fallback createSequence:', eCsm && eCsm.message);
-            seq = null;
-          }
-        }
-        if (!seq) seq = await project.createSequence(seqName);
-        if (!seq) throw new Error('Không tạo được sequence mới');
+        if (!seq) throw new Error('Không tạo được sequence mới (createSequence)');
         // Let Premiere finish registering the new sequence before touching it.
         await new Promise(function(r) { setTimeout(r, 700); });
 
-        // createSequenceFromMedia treats the name like a filename and strips the part
-        // after the LAST "." (e.g. "...[hoang.vietnguyen]" → "...[hoang"). Rename the
-        // sequence explicitly to the full name (createSetNameAction sets it literally).
+        // Rename explicitly to the full literal name — guards against any name
+        // mangling (e.g. trailing ".xxx" being treated as an extension).
         try {
           var pit = (seq.getProjectItem && seq.getProjectItem()) || seq.projectItem || null;
           if (pit && typeof pit.then === 'function') pit = await pit;
@@ -4243,7 +4190,8 @@ async function ppMoveToVOBin(item, proj) {
           }
         } catch (eRn) { console.warn('[SAC] rename seq failed:', eRn && eRn.message); }
 
-        // Apply custom frame size (ratio ≠ match). FPS comes from source via createSequenceFromMedia.
+        // Apply custom frame size (ratio ≠ match). FPS stays at the project default
+        // (immutable after creation; we no longer create from media).
         if (ratio !== 'match') {
           try {
             var parts = ratio.split('x');
@@ -4273,7 +4221,7 @@ async function ppMoveToVOBin(item, proj) {
         status.textContent = '⏳ Chờ sequence sẵn sàng...';
         await new Promise(function(r) { setTimeout(r, 900); });
         cursor = 0;
-        console.log('[SAC] New sequence:', seqName, '| ratio:', ratio, '| fps:', fps);
+        console.log('[SAC] New sequence (empty):', seqName, '| ratio:', ratio);
       } else {
         seq    = await getActiveSequence();
         status.textContent = '⏳ Tìm vị trí cuối timeline...';
@@ -4282,13 +4230,6 @@ async function ppMoveToVOBin(item, proj) {
 
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
-
-      // createSequenceFromMedia drops the first clip onto the new timeline — remove it
-      // so assembly starts from an empty sequence (the clip was only used for its fps).
-      if (seqMode === 'new') {
-        status.textContent = '⏳ Dọn clip mẫu...';
-        await sacClearSequence(project, seq, seqEditor);
-      }
 
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
         sacNoVoiceMode ? '(without voice)' : '');
