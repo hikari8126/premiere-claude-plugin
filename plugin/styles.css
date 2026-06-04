@@ -814,6 +814,9 @@ body {
 }
 .sac-aiRaw:focus, .sac-aiPreview:focus { outline: none; border-color: var(--accent); }
 .sac-aiRow { display: flex; align-items: center; gap: 8px; }
+.sac-aiModel { flex: 1 1 0; min-width: 0; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 11px; padding: 5px 8px; cursor: pointer; }
+.sac-aiModel:focus { outline: none; border-color: var(--accent); }
 .sac-aiBtn { background: rgba(168,85,247,0.18); border: 1px solid var(--accent); border-radius: 6px;
   color: var(--accent); font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; }
 .sac-aiBtn:hover { background: rgba(168,85,247,0.3); color: #fff; }

@@ -667,9 +667,18 @@
           <textarea id="sacAiRaw" class="sac-aiRaw" spellcheck="false"
             placeholder="Dán NGUYÊN cutsheet copy từ Google Sheets (gồm cả cột lời thoại)…"></textarea>
           <div class="sac-aiRow">
+            <select id="sacAiModel" class="sac-aiModel" title="Model dùng để parse (Claude = chạy CLI, không cần key)">
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+              <option value="claude-opus-4-7">Claude Opus 4.7</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o mini</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-4.1-mini">GPT-4.1 mini</option>
+            </select>
             <button id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary">✨ Parse AI</button>
-            <span id="sacAiStatus" class="sac-aiStatus"></span>
           </div>
+          <div id="sacAiStatus" class="sac-aiStatus"></div>
           <textarea id="sacAiPreview" class="sac-aiPreview" spellcheck="false" style="display:none"
             placeholder="Kết quả (Thoại ⇥ Time ⇥ Source) — sửa nếu cần rồi Đổ vào bảng"></textarea>
           <button id="sacAiFill" class="sac-aiBtn sac-aiPrimary" style="display:none">⬇ Đổ vào bảng script</button>
