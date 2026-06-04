@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.7';
+var PLUGIN_VERSION = 'v4.3.8';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2804,19 +2804,23 @@ async function ppMoveToVOBin(item, proj) {
         var hintBtn = el.querySelector('.sac-blockHintBtn');
         var msgEl  = el.querySelector('.sac-srcMsg');
         if (isAmbiguous) {
+          el.dataset.srcBaseKind = 'ambiguous';            // base state for skip/undo restore
+          el.dataset.srcBaseCount = String(ambiguousNames[name]);
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
           statusEl.textContent = '⚠';
           statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
-          if (msgEl) { msgEl.textContent = '⚠ trùng ' + ambiguousNames[name] + ' clip — bấm 📁'; msgEl.className = 'sac-srcMsg is-warn'; }
+          if (msgEl) { msgEl.textContent = '⚠ trùng ' + ambiguousNames[name] + ' clip — bấm 📁 để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
           sacAddSkipButton(el);
         } else if (sacSourceMap[name]) {  // found ✓
+          el.dataset.srcBaseKind = 'found';
           statusEl.className = 'sac-srcStatus sac-srcOk';
           statusEl.textContent = '✓';
           if (hintBtn) hintBtn.style.display = 'none';
           if (msgEl) { msgEl.textContent = ''; msgEl.className = 'sac-srcMsg'; }
           if (existingSkip) existingSkip.parentNode.removeChild(existingSkip);
         } else {  // missing ✗
+          el.dataset.srcBaseKind = 'missing';
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
           if (hintBtn) hintBtn.style.display = '';
@@ -2877,12 +2881,14 @@ async function ppMoveToVOBin(item, proj) {
     var oldSkip  = srcEl.querySelector('.sac-skipBtn');
     var uMsg     = srcEl.querySelector('.sac-srcMsg');
     if (oldSkip) oldSkip.parentNode.removeChild(oldSkip);
+    srcEl.dataset.srcBaseKind = isAmbiguous ? 'ambiguous' : (item ? 'found' : 'missing');
+    if (isAmbiguous) srcEl.dataset.srcBaseCount = String(count);
     if (statusEl) {
       if (isAmbiguous) {
         statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
         statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
         if (hintBtn) hintBtn.style.display = '';
-        if (uMsg) { uMsg.textContent = '⚠ trùng ' + count + ' clip — bấm 📁'; uMsg.className = 'sac-srcMsg is-warn'; }
+        if (uMsg) { uMsg.textContent = '⚠ trùng ' + count + ' clip — bấm 📁 để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
         sacAddSkipButton(srcEl);
       } else if (item) {
         statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; statusEl.title = '';
@@ -2935,10 +2941,14 @@ async function ppMoveToVOBin(item, proj) {
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
-    // Build the folder TREE: every folder that holds a candidate clip + all its
-    // ancestors, so the hierarchy is complete. Sorted so parents precede children.
+    // Relevant = clips that share a token with the source name. The folder tree +
+    // default list use ONLY these (so we don't dump every project folder); the filter
+    // box still searches ALL clips. Fall back to all if nothing shares a token.
+    var relevant = cands.filter(function(c) { return c.hits > 0; });
+    if (!relevant.length) relevant = cands;
+    // Build the folder TREE from relevant clips + their ancestors (parents precede children).
     var folderSet = {};
-    cands.forEach(function(c) {
+    relevant.forEach(function(c) {
       var segs = c.folderPath ? c.folderPath.split(' / ') : [];
       for (var d = 1; d <= segs.length; d++) folderSet[segs.slice(0, d).join(' / ')] = true;
     });
@@ -2974,7 +2984,9 @@ async function ppMoveToVOBin(item, proj) {
     function renderSources() {
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
-      var base = cands.filter(function(c) {
+      // Default pool = relevant (token-matching) clips; typing searches ALL clips.
+      var pool = q ? cands : relevant;
+      var base = pool.filter(function(c) {
         // Selecting a branch shows clips in it AND in its sub-folders.
         if (selectedFolder !== '__all__' &&
             !(c.folderPath === selectedFolder || c.folderPath.indexOf(selectedFolder + ' / ') === 0)) return false;
@@ -3016,6 +3028,7 @@ async function ppMoveToVOBin(item, proj) {
       // Bind directly to the chosen clip — no name re-matching needed (robust).
       sacSourceMap[label] = c.item || null;
       window.sacSourceMap = sacSourceMap;
+      srcEl.dataset.srcBaseKind = c.item ? 'found' : 'missing'; // bound to a specific clip
       var bMsg = srcEl.querySelector('.sac-srcMsg');
       if (bMsg) { bMsg.textContent = c.item ? '' : '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg' + (c.item ? '' : ' is-err'); }
       var statusEl = srcEl.querySelector('.sac-srcStatus');
@@ -3091,9 +3104,18 @@ async function ppMoveToVOBin(item, proj) {
         btn.textContent = 'Skip';
         btn.classList.remove('is-active');
         srcEl.classList.remove('is-skipped');
-        if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.title = ''; }
         if (nameSpan)  { nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
-        if (msgEl)     { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
+        // Restore the underlying status — ambiguous (⚠) vs missing (✗) — instead of
+        // always showing "không thấy" (which wrongly clobbered ⚠ duplicate-name rows).
+        var kind = srcEl.dataset.srcBaseKind || 'missing';
+        if (kind === 'ambiguous') {
+          var cnt = srcEl.dataset.srcBaseCount || '';
+          if (statusEl) { statusEl.textContent = '⚠'; statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.title = cnt + ' clip trùng tên — bấm 📁'; }
+          if (msgEl)    { msgEl.textContent = '⚠ trùng ' + cnt + ' clip — bấm 📁 để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
+        } else {
+          if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.title = ''; }
+          if (msgEl)    { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
+        }
       }
     }
 
