@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.3.3';
+var PLUGIN_VERSION = 'v4.3.4';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4187,7 +4187,23 @@ async function ppMoveToVOBin(item, proj) {
         if (!seq) seq = await project.createSequence(seqName);
         if (!seq) throw new Error('Không tạo được sequence mới');
         // Let Premiere finish registering the new sequence before touching it.
-        await new Promise(function(r) { setTimeout(r, 250); });
+        await new Promise(function(r) { setTimeout(r, 700); });
+
+        // createSequenceFromMedia treats the name like a filename and strips the part
+        // after the LAST "." (e.g. "...[hoang.vietnguyen]" → "...[hoang"). Rename the
+        // sequence explicitly to the full name (createSetNameAction sets it literally).
+        try {
+          var pit = (seq.getProjectItem && seq.getProjectItem()) || seq.projectItem || null;
+          if (pit && typeof pit.then === 'function') pit = await pit;
+          var renameTarget = (pit && typeof pit.createSetNameAction === 'function') ? pit
+                           : (typeof seq.createSetNameAction === 'function' ? seq : null);
+          if (renameTarget) {
+            await sacCommitTx(project, function(ca) { ca.addAction(renameTarget.createSetNameAction(seqName)); }, 'SAC rename seq');
+            console.log('[SAC] Sequence renamed →', seqName);
+          } else {
+            console.warn('[SAC] No rename API — sequence name may be truncated by Premiere');
+          }
+        } catch (eRn) { console.warn('[SAC] rename seq failed:', eRn && eRn.message); }
 
         // Apply custom frame size (ratio ≠ match). FPS comes from source via createSequenceFromMedia.
         if (ratio !== 'match') {
@@ -4214,8 +4230,10 @@ async function ppMoveToVOBin(item, proj) {
           if (typeof project.openSequence    === 'function') await project.openSequence(seq);
           if (typeof project.setActiveSequence === 'function') await project.setActiveSequence(seq);
         } catch (eOpen) { console.warn('[SAC] open/activate sequence:', eOpen && eOpen.message); }
-        // Settle again after activation before the editor + assembly run.
-        await new Promise(function(r) { setTimeout(r, 250); });
+        // Settle generously after activation before the editor + assembly run — a
+        // freshly-created sequence that's touched too soon is a common crash cause.
+        status.textContent = '⏳ Chờ sequence sẵn sàng...';
+        await new Promise(function(r) { setTimeout(r, 900); });
         cursor = 0;
         console.log('[SAC] New sequence:', seqName, '| ratio:', ratio, '| fps:', fps);
       } else {
