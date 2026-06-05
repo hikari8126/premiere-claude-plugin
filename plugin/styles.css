@@ -2999,6 +2999,11 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .sac-cutBackBtn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
+.sac-cutNoVoiceToggle {
+  display: flex; align-items: center; gap: 6px; padding: 0 4px;
+  font-size: 10px; color: rgba(255,255,255,0.55); cursor: pointer;
+}
+.sac-cutNoVoiceToggle input { cursor: pointer; }
 .sac-cutRow {
   display: flex; align-items: center; gap: 0;
   border: 1px solid rgba(255,255,255,0.12); border-radius: 20px;
