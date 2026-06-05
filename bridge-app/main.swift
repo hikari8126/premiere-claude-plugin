@@ -24,12 +24,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var updateMenuItem: NSMenuItem?          // shown when update available
     var updateTimer: Timer?                  // periodic auto-check so the notice appears on its own
     var pendingBridgeDL  = ""
-    var pendingPluginDL  = ""
     var pendingBridgeVer = ""
-    var pendingPluginVer = ""
 
     let version          = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.x"
-    let pluginVersion    = Bundle.main.infoDictionary?["PluginVersion"]              as? String ?? "0"
     let bridgePort       = 3030
     let updateManifest   = "https://gist.githubusercontent.com/hikari8126/8fb346e839dedd559dfc60317b1456cf/raw/version.json"
 
@@ -37,12 +34,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         setupMenuBar()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
-        // Auto-check for updates so the "⬆️ Có bản cập nhật" item appears on its own —
-        // no need to open the menu and click "Kiểm tra cập nhật". Runs independently of
-        // whether the bundled bridge process managed to start.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.checkForUpdates(silent: true) }
+        // Auto-check for updates so the "⬆️ Có bản cập nhật" item appears on its own.
+        // Runs independently of whether the bundled bridge process managed to start.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.checkForUpdates() }
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
-            self?.checkForUpdates(silent: true)
+            self?.checkForUpdates()
         }
     }
 
@@ -93,7 +89,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(item("🐍  Cài Whisper (Autocut STT)",  #selector(installWhisper),     key: ""))
         menu.addItem(item("🎬  Cài ffmpeg (Voice & Audio)",  #selector(installFfmpeg),      key: ""))
-        menu.addItem(item("🔍  Kiểm tra cập nhật",           #selector(checkForUpdateMenu), key: "u"))
         menu.addItem(.separator())
         menu.addItem(item("Thoát",                            #selector(quit),               key: "q"))
 
@@ -311,8 +306,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.restartCount = 0
                 self.updateStatusWithBridgeVersion()
                 self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
-                // Check for updates silently — only shows alert if newer version exists
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates(silent: true) }
+                // Check for a newer Bridge app — surfaces the "⬆️ Có bản cập nhật" item if found
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates() }
                 // Prompt Whisper install if not found (non-blocking, after bridge is stable)
                 DispatchQueue.global().asyncAfter(deadline: .now() + 5) { self.checkWhisperOnce() }
             }
@@ -503,20 +498,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: ─── Whisper ─────────────────────────────────────────────────────
+    // Mirror the Node bridge's findWhisperBin() exactly so that whenever the bridge
+    // can run whisper, this app also detects it — otherwise the install prompt kept
+    // reappearing for users whose whisper lives in a path the app didn't scan
+    // (system pip / --break-system-packages → /Library/Python, or user-site pip).
     func findWhisper() -> String {
-        // Check PATH first
+        let fm = FileManager.default
+        // 1) PATH
         let which = sh("which whisper 2>/dev/null")
         let p = which.out.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !p.isEmpty && FileManager.default.fileExists(atPath: p) { return p }
-        // Common Python framework paths (macOS)
-        for ver in ["3.14","3.13","3.12","3.11","3.10","3.9"] {
-            let candidate = "/Library/Frameworks/Python.framework/Versions/\(ver)/bin/whisper"
-            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        if !p.isEmpty && fm.fileExists(atPath: p) { return p }
+
+        let versions = ["3.14","3.13","3.12","3.11","3.10","3.9"]
+        // 2) python.org framework installs
+        for v in versions {
+            let c = "/Library/Frameworks/Python.framework/Versions/\(v)/bin/whisper"
+            if fm.fileExists(atPath: c) { return c }
         }
-        // Homebrew / local
-        for candidate in ["/opt/homebrew/bin/whisper", "/usr/local/bin/whisper",
-                          "\(NSHomeDirectory())/.local/bin/whisper"] {
-            if FileManager.default.fileExists(atPath: candidate) { return candidate }
+        // 3) system Python / Command Line Tools (pip3 --break-system-packages lands here)
+        for v in versions {
+            let c = "/Library/Python/\(v)/bin/whisper"
+            if fm.fileExists(atPath: c) { return c }
+        }
+        // 4) user-site pip installs (~/Library/Python/3.x/bin)
+        for v in versions {
+            let c = "\(NSHomeDirectory())/Library/Python/\(v)/bin/whisper"
+            if fm.fileExists(atPath: c) { return c }
+        }
+        // 5) Homebrew / local
+        for c in ["/opt/homebrew/bin/whisper", "/usr/local/bin/whisper",
+                  "\(NSHomeDirectory())/.local/bin/whisper"] {
+            if fm.fileExists(atPath: c) { return c }
         }
         return ""
     }
@@ -581,8 +593,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: ─── Auto-update ────────────────────────────────────────────────
-    @objc func checkForUpdateMenu() { checkForUpdates(silent: false) }
-
     @objc func installAvailableUpdate() {
         guard !pendingBridgeDL.isEmpty else { return }
         // No confirmation dialog — clicking the update item installs straight away.
@@ -590,40 +600,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         performUpdate(downloadURL: pendingBridgeDL, newVersion: pendingBridgeVer)
     }
 
-    func checkForUpdates(silent: Bool = true) {
+    // Bridge app only manages Bridge-app updates now — plugin updates are handled by
+    // the plugin's own in-app updater. Runs silently on a timer; the
+    // "⬆️ Có bản cập nhật" menu item appears on its own when a newer Bridge is out.
+    func checkForUpdates() {
         let bustedURL = updateManifest + "?t=\(Int(Date().timeIntervalSince1970))"
         guard let url = URL(string: bustedURL) else { return }
-        log("Checking for updates (Bridge v\(version), Plugin v\(pluginVersion))...")
+        log("Checking for Bridge updates (v\(version))...")
         URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
             guard let self else { return }
             guard let data, error == nil,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 self.log("Update check failed: \(error?.localizedDescription ?? "bad response")")
-                if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
                 return
             }
-            let latestBridge = json["version"]           as? String ?? ""
-            let bridgePage   = json["url"]               as? String ?? ""
-            let bridgeDL     = json["downloadUrl"]       as? String ?? ""
-            let notes        = json["notes"]             as? String ?? ""
-            let latestPlugin = json["pluginVersion"]     as? String ?? ""
-            let pluginDL     = json["pluginDownloadUrl"] as? String ?? ""
+            let latestBridge = json["version"]     as? String ?? ""
+            let bridgeDL     = json["downloadUrl"]  as? String ?? ""
 
-            // Bridge app only manages Bridge updates — plugin updates via plugin UI
             let bridgeNewer = !latestBridge.isEmpty && self.isNewer(latestBridge, than: self.version)
             self.log("Bridge: v\(self.version) → v\(latestBridge) (\(bridgeNewer ? "UPDATE" : "up-to-date"))")
 
-            if bridgeNewer {
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                if bridgeNewer {
                     self.pendingBridgeDL  = bridgeDL
                     self.pendingBridgeVer = latestBridge
-                    self.updateMenuItem?.title   = "⬆️  Bridge v\(latestBridge) — Cập nhật"
+                    self.updateMenuItem?.title    = "⬆️  Bridge v\(latestBridge) — Cập nhật"
                     self.updateMenuItem?.isHidden = false
                     self.log("Bridge update available: v\(latestBridge)")
+                } else {
+                    self.updateMenuItem?.isHidden = true
                 }
-            } else {
-                DispatchQueue.main.async { self.updateMenuItem?.isHidden = true }
-                if !silent { DispatchQueue.main.async { self.showNoUpdateAlert() } }
             }
         }.resume()
     }
@@ -637,94 +643,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if x != y { return x > y }
         }
         return false
-    }
-
-    func showUpdateResults(bridgeNewer: Bool, latestBridge: String,
-                           bridgePage: String,  bridgeDL: String,
-                           pluginNewer: Bool,   latestPlugin: String,
-                           pluginDL: String,    notes: String) {
-        let a = NSAlert()
-        a.alertStyle = .informational
-
-        var titleParts = [String]()
-        if bridgeNewer { titleParts.append("Bridge v\(latestBridge)") }
-        if pluginNewer { titleParts.append("Plugin v\(latestPlugin)") }
-        a.messageText = "⬆️  Bản cập nhật: \(titleParts.joined(separator: " + "))"
-
-        var infoLines = [String]()
-        if !notes.isEmpty { infoLines.append(notes) }
-        if bridgeNewer { infoLines.append("• Bridge: tự động tải + cài đặt, app tự khởi động lại") }
-        if pluginNewer { infoLines.append("• Plugin: tải .ccx → Creative Cloud mở → click Install") }
-        a.informativeText = infoLines.joined(separator: "\n")
-
-        if bridgeNewer && pluginNewer {
-            a.addButton(withTitle: "Cài Bridge")
-            a.addButton(withTitle: "Cài Plugin")
-        } else if bridgeNewer {
-            a.addButton(withTitle: "Cài ngay")
-        } else {
-            a.addButton(withTitle: "Cài Plugin")
-        }
-        a.addButton(withTitle: "Để sau")
-
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        let result = a.runModal()
-        NSApp.setActivationPolicy(.accessory)
-
-        if bridgeNewer && pluginNewer {
-            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: bridgeDL, newVersion: latestBridge) }
-            else if result == .alertSecondButtonReturn { performPluginUpdate(downloadURL: pluginDL, version: latestPlugin) }
-        } else if bridgeNewer {
-            if result == .alertFirstButtonReturn  { performUpdate(downloadURL: bridgeDL, newVersion: latestBridge) }
-        } else {
-            if result == .alertFirstButtonReturn  { performPluginUpdate(downloadURL: pluginDL, version: latestPlugin) }
-        }
-    }
-
-    func performPluginUpdate(downloadURL: String, version: String) {
-        guard let url = URL(string: downloadURL) else {
-            log("Plugin update: invalid URL — \(downloadURL)"); return
-        }
-        let isRunning = bridgeTask?.isRunning ?? false
-        log("Downloading Plugin v\(version) from: \(downloadURL)")
-        setStatus("⬇️ Đang tải Plugin v\(version)...", running: isRunning)
-
-        let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForResource = 120
-        URLSession(configuration: cfg).downloadTask(with: url) { [weak self] tempURL, _, error in
-            guard let self else { return }
-            if let error {
-                DispatchQueue.main.async {
-                    self.log("Plugin download failed: \(error.localizedDescription)")
-                    self.setStatus(isRunning ? "✅ Bridge đang chạy  —  :\(self.bridgePort)" : "❌ Bridge dừng",
-                                   running: isRunning)
-                }
-                return
-            }
-            guard let tempURL else { return }
-            let ccxName = "claude-ai-assistant-v\(version).ccx"
-            let ccxURL  = URL(fileURLWithPath: (NSTemporaryDirectory() as NSString).appendingPathComponent(ccxName))
-            try? FileManager.default.removeItem(at: ccxURL)
-            try? FileManager.default.moveItem(at: tempURL, to: ccxURL)
-
-            DispatchQueue.main.async {
-                self.log("Plugin downloaded → \(ccxURL.path)")
-                self.setStatus(isRunning ? "✅ Bridge đang chạy  —  :\(self.bridgePort)" : "❌ Bridge dừng",
-                               running: isRunning)
-                NSWorkspace.shared.open(ccxURL)
-
-                let a = NSAlert()
-                a.messageText     = "🎉 Plugin v\(version) đã tải về"
-                a.informativeText = "Creative Cloud đang mở để cài đặt.\n\n1. Click \"Install\" trong cửa sổ Creative Cloud\n2. Mở Premiere Pro → plugin sẽ được cập nhật tự động"
-                a.alertStyle      = .informational
-                a.addButton(withTitle: "OK")
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-                a.runModal()
-                NSApp.setActivationPolicy(.accessory)
-            }
-        }.resume()
     }
 
     // MARK: ─── Self-Update: download → install → relaunch ────────────────────
@@ -830,18 +748,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         log("Relaunch script detached — quitting current instance...")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { NSApp.terminate(nil) }
-    }
-
-    func showNoUpdateAlert() {
-        let a = NSAlert()
-        a.messageText     = "✅  Đang dùng bản mới nhất"
-        a.informativeText = "Bridge v\(version) + Plugin v\(pluginVersion) đều là bản mới nhất."
-        a.alertStyle      = .informational
-        a.addButton(withTitle: "OK")
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        a.runModal()
-        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: ─── Quit ────────────────────────────────────────────────────────
