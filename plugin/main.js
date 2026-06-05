@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.4.1.1';
+var PLUGIN_VERSION = 'v4.4.2';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2314,6 +2314,15 @@ async function ppMoveToVOBin(item, proj) {
         lbl.textContent = info ? info.textContent : '✅ Voice ready';
       }
     }
+    // "Chỉ video (bỏ voice)" toggle — only meaningful when voice was actually
+    // aligned. Lets the user cut video-only without discarding the gen'd voice
+    // (the ✕ button clears it). Hidden on the pure no-voice path (sacVoiceReady=false).
+    var nvWrap = $('sacCutNoVoiceToggleWrap');
+    if (nvWrap) {
+      nvWrap.style.display = sacVoiceReady ? 'flex' : 'none';
+      var nvChk = $('sacCutNoVoiceChk');
+      if (nvChk) nvChk.checked = sacNoVoiceMode;
+    }
     $('sacCutPanel').style.display = 'flex';
   }
 
@@ -2380,7 +2389,14 @@ async function ppMoveToVOBin(item, proj) {
   var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
   function splitTimes(t) {
     if (!t) return [t];
-    if (t.indexOf('\n') !== -1) return t.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+    if (t.indexOf('\n') !== -1) {
+      // Multi-line time cell: keep only lines that START with a digit (a real
+      // timecode). Descriptive lines like "lặp liên tục với 3 màu" — even though
+      // they contain a number — are dropped so they don't become a garbage clip.
+      var tcLines = t.split('\n').map(function(s){ return s.trim(); })
+        .filter(Boolean).filter(function(s){ return /^\d/.test(s); });
+      return tcLines.length ? tcLines : [t];
+    }
     var parts = t.trim().split(/\s+/);
     if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
     return [t];
@@ -2409,7 +2425,9 @@ async function ppMoveToVOBin(item, proj) {
         // Zip time + source, expanding to rowCount rows
         for (var r = 0; r < rowCount; r++) {
           var rText = r === 0 ? text : '';
-          var rTime = times.length > 1 ? (times[r] || '') : time;
+          // When there's a single timecode but multiple sources, every row shares
+          // that one cleaned timecode (times[0]) — not the raw multi-line blob.
+          var rTime = times.length > 1 ? (times[r] || '') : (times[0] || '');
           var rSrc  = srcArr.length > 1 ? (srcArr[r]  || '') : src;
           out.push([rText, rTime, rSrc]);
         }
@@ -2540,11 +2558,12 @@ async function ppMoveToVOBin(item, proj) {
     var blocks  = [];
     var current = null;
 
-    // Split a time cell on "&" → one clip per segment from the SAME source, placed
-    // consecutively. "3 - 4 & 5 - 6" → [{src,"3 - 4"},{src,"5 - 6"}]. Bare numbers
-    // are seconds (handled by parseSourceTime). Empty/no-"&" → a single entry.
+    // Split a time cell on "&", "+" or "," → one clip per segment from the SAME
+    // source, placed consecutively. "3-4 & 5-6", "1-2 + 2-3 + 3-4" → multiple clips.
+    // Bare numbers are seconds; decimals use a DOT ("1.5"), so splitting on comma is
+    // safe in this convention. Empty / no separator → a single entry.
     function srcEntries(name, time) {
-      var segs = String(time || '').split('&').map(function(s) { return s.trim(); }).filter(Boolean);
+      var segs = String(time || '').split(/[&+,]/).map(function(s) { return s.trim(); }).filter(Boolean);
       if (segs.length <= 1) return [{ name: name, time: time }];
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
@@ -3818,6 +3837,14 @@ async function ppMoveToVOBin(item, proj) {
     if (!sacValidatePassed) return;
     sacNoVoiceMode = true;
     sacUpdateRunVisibility();
+  });
+
+  // "Chỉ video (bỏ voice)" checkbox in the cut panel — toggle no-voice mode
+  // while keeping the aligned voice intact (voice ready, panel stays open).
+  var sacCutNoVoiceChk = $('sacCutNoVoiceChk');
+  if (sacCutNoVoiceChk) sacCutNoVoiceChk.addEventListener('change', function() {
+    sacNoVoiceMode = sacCutNoVoiceChk.checked;
+    sacShowCutPanel(); // refresh label; sacVoiceReady stays true so panel persists
   });
 
   // "Run anyway" — bypass the voice-match gate. Matched blocks keep their voice;

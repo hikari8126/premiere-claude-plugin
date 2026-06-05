@@ -738,6 +738,11 @@
             <span id="sacCutLabel" class="sac-cutLabel"></span>
             <button id="sacCutBack" class="sac-cutBackBtn">✕</button>
           </div>
+          <!-- Only shown when voice is aligned: lets the user cut video-only
+               WITHOUT discarding the generated voice (unlike ✕ which clears it). -->
+          <label class="sac-cutNoVoiceToggle" id="sacCutNoVoiceToggleWrap" style="display:none">
+            <input type="checkbox" id="sacCutNoVoiceChk" /> Chỉ video (bỏ voice đã gen)
+          </label>
           <div class="sac-cutRow">
             <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
             <span class="sac-cutDivider"></span>
