@@ -2021,7 +2021,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.5.8';
+const BRIDGE_VERSION = '1.6.0';  // branch feat/subtext-srt — test build (adds /superautocut/subtext)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

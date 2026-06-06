@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.4.2';
+var PLUGIN_VERSION = 'v4.5.0-subtext-srt';  // branch feat/subtext-srt — test build
 
 // ── State ──────────────────────────────────────────────────────────────────
 
