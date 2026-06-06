@@ -1793,10 +1793,15 @@ async function subtextConcatClips(clips) {
       const { filePath, inPoint, outPoint } = clips[i] || {};
       if (!filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
       if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: không thấy file ${filePath}`);
+      // Clamp + fixed-decimal: in/out can be a tiny negative float (e.g. -3.9e-12)
+      // which ffmpeg rejects ("Invalid duration for option ss").
+      const inS  = Math.max(0, Number(inPoint)  || 0);
+      let   outS = Math.max(0, Number(outPoint) || 0);
+      if (outS <= inS) outS = inS + 0.05;
       const segPath = path.join(tmpDir, `sub_seg_${ts}_${i}.wav`);
       await new Promise((resolve, reject) => {
-        const proc = spawn('ffmpeg', ['-y', '-i', filePath, '-ss', String(inPoint || 0),
-          '-to', String(outPoint || 0), '-vn', '-acodec', 'pcm_s16le', segPath], { stdio: 'pipe' });
+        const proc = spawn('ffmpeg', ['-y', '-i', filePath, '-ss', inS.toFixed(3),
+          '-to', outS.toFixed(3), '-vn', '-acodec', 'pcm_s16le', segPath], { stdio: 'pipe' });
         let err = ''; proc.stderr.on('data', d => { err += d.toString(); });
         proc.on('close', c => c === 0 ? resolve() : reject(new Error(`ffmpeg seg ${i + 1}: ${err.slice(-200)}`)));
         proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
@@ -2081,7 +2086,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.1';  // branch feat/subtext-srt — subtext accepts timeline clips + script-optional
+const BRIDGE_VERSION = '1.6.2';  // branch — subtext concat clamps ffmpeg -ss
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
