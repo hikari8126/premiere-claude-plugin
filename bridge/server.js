@@ -1673,6 +1673,152 @@ app.post('/superautocut/voice-align', async (req, res) => {
   }
 });
 
+// ── POST /superautocut/subtext — word-synced .srt from voice + script ───────
+// Whisper word-level timestamps on the voice file, then map the USER'S SCRIPT
+// text onto those timings (script = source of truth for spelling/diacritics;
+// whisper only supplies WHEN each word is spoken). Chunk into short social cues.
+// Body: { audioPath, scriptLines:[...], language?, outputPath?, maxWords?, maxChars?, maxDur? }
+// Returns: { ok, path, cues:[{index,start,end,text}], srt }
+
+// Flatten script lines → word tokens, keeping raw text + normalized form + line index.
+function subtextFlattenScript(scriptLines) {
+  const out = [];
+  scriptLines.forEach((line, li) => {
+    String(line || '').trim().split(/\s+/).filter(Boolean).forEach(raw => {
+      out.push({ raw, n: norm(raw), line: li, start: null, end: null });
+    });
+  });
+  return out;
+}
+
+// Assign a start/end to each script word by matching it forward against whisper
+// words (tolerant of whisper mis-hears / extra script words via a lookahead),
+// then interpolating timing for any words that didn't match.
+function subtextAssignTimes(sw, whisper) {
+  const wnorm = whisper.map(w => norm(w.text));
+  let wi = 0;
+  const LOOK = 10;
+  for (const s of sw) {
+    let found = -1;
+    const stop = Math.min(whisper.length, wi + LOOK);
+    for (let j = wi; j < stop; j++) {
+      if (wnorm[j] && wnorm[j] === s.n) { found = j; break; }
+    }
+    if (found >= 0) { s.start = whisper[found].start; s.end = whisper[found].end; wi = found + 1; }
+  }
+  subtextInterpolate(sw, whisper);
+}
+
+function subtextInterpolate(sw, whisper) {
+  const n = sw.length;
+  const audioEnd = whisper.length ? whisper[whisper.length - 1].end : n;
+  const firstKnown = sw.findIndex(s => s.start != null);
+  if (firstKnown < 0) { // nothing matched → spread evenly across the audio
+    for (let i = 0; i < n; i++) { sw[i].start = audioEnd * i / n; sw[i].end = audioEnd * (i + 1) / n; }
+    return;
+  }
+  for (let i = 0; i < firstKnown; i++) { sw[i].start = 0; sw[i].end = sw[firstKnown].start; }
+  let i = firstKnown;
+  while (i < n) {
+    if (sw[i].start != null) { i++; continue; }
+    let j = i; while (j < n && sw[j].start == null) j++;
+    const leftEnd    = sw[i - 1].end;
+    const rightStart = (j < n) ? sw[j].start : audioEnd;
+    const span = Math.max(0, rightStart - leftEnd), cnt = j - i;
+    for (let k = 0; k < cnt; k++) {
+      sw[i + k].start = leftEnd + span * k / cnt;
+      sw[i + k].end   = leftEnd + span * (k + 1) / cnt;
+    }
+    i = j;
+  }
+}
+
+// Group timed words into short caption cues. Break on: block/line change, hard
+// sentence end (.!?…), or when adding the next word would exceed word/char/dur caps.
+function subtextChunk(sw, opts) {
+  const maxWords = opts.maxWords || 7;
+  const maxChars = opts.maxChars || 42;
+  const maxDur   = opts.maxDur   || 3.0;
+  const cues = [];
+  let cur = null;
+  const flush = () => { if (cur && cur.words.length) cues.push(cur); cur = null; };
+  for (const s of sw) {
+    if (cur) {
+      const merged = cur.text + ' ' + s.raw;
+      const dur    = (s.end != null ? s.end : cur.end) - cur.start;
+      if (s.line !== cur.line || cur.words.length >= maxWords || merged.length > maxChars || dur > maxDur) flush();
+    }
+    if (!cur) cur = { words: [], text: '', line: s.line, start: s.start, end: s.end };
+    cur.words.push(s);
+    cur.text = cur.text ? cur.text + ' ' + s.raw : s.raw;
+    cur.end  = s.end;
+    if (/[.!?…]$/.test(s.raw)) flush();
+  }
+  flush();
+  // Merge tiny trailing fragments (≤2 words, e.g. an orphan "phí.") back into the
+  // previous cue when same line and the result stays readable.
+  for (let k = cues.length - 1; k > 0; k--) {
+    const c = cues[k], p = cues[k - 1];
+    if (c.words.length <= 2 && c.line === p.line && (p.text.length + 1 + c.text.length) <= maxChars + 12) {
+      p.text += ' ' + c.text; p.end = c.end; p.words = p.words.concat(c.words);
+      cues.splice(k, 1);
+    }
+  }
+  // Clean timing: ensure positive duration + no overlap with the next cue.
+  for (let k = 0; k < cues.length; k++) {
+    if (cues[k].end <= cues[k].start) cues[k].end = cues[k].start + 0.4;
+    if (k + 1 < cues.length && cues[k].end > cues[k + 1].start)
+      cues[k].end = Math.max(cues[k].start + 0.1, cues[k + 1].start - 0.02);
+  }
+  return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: c.text }));
+}
+
+function subtextSecToSrt(sec) {
+  if (sec < 0) sec = 0;
+  const ms = Math.round((sec % 1) * 1000), total = Math.floor(sec);
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)},${pad(ms, 3)}`;
+}
+
+function subtextToSrt(cues) {
+  return cues.map(c => `${c.index}\n${subtextSecToSrt(c.start)} --> ${subtextSecToSrt(c.end)}\n${c.text}\n`).join('\n');
+}
+
+app.post('/superautocut/subtext', async (req, res) => {
+  try {
+    const { audioPath, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur } = req.body || {};
+    if (!audioPath) throw new Error('audioPath is required');
+    if (!fs.existsSync(audioPath)) throw new Error('audioPath not found: ' + audioPath);
+    if (!Array.isArray(scriptLines) || scriptLines.length === 0) throw new Error('scriptLines is required');
+
+    const { words } = await transcribeWhisper(audioPath, language);
+    if (!words || !words.length) throw new Error('Whisper không nhận được từ nào từ voice');
+
+    const sw = subtextFlattenScript(scriptLines);
+    if (!sw.length) throw new Error('Script rỗng');
+    subtextAssignTimes(sw, words);
+    const cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
+    const srt  = subtextToSrt(cues);
+    console.log(`[subtext] ${words.length} whisper words → ${sw.length} script words → ${cues.length} cues`);
+
+    let savedPath;
+    if (outputPath) {
+      ensureDir(path.dirname(outputPath));
+      fs.writeFileSync(outputPath, srt, 'utf8');
+      savedPath = outputPath;
+    } else {
+      const tmp = path.join(getTempDir(), 'subtext_' + Date.now() + '.srt');
+      ensureDir(path.dirname(tmp));
+      fs.writeFileSync(tmp, srt, 'utf8');
+      savedPath = tmp;
+    }
+    res.json({ ok: true, path: savedPath, cues, srt });
+  } catch (e) {
+    console.error('[subtext]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /superautocut/parse-image — Claude Vision parses cutsheet screenshot
 app.post('/superautocut/parse-image', async (req, res) => {
   const { imageBase64 } = req.body || {};
