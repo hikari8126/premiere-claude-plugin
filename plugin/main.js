@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.11';  // Tạo Sub: more spacing between components
+var PLUGIN_VERSION = 'v4.5.0-srt.12';  // Tạo Sub spacing via margins (UXP ignores flex gap)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
