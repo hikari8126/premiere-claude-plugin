@@ -1784,22 +1784,83 @@ function subtextToSrt(cues) {
   return cues.map(c => `${c.index}\n${subtextSecToSrt(c.start)} --> ${subtextSecToSrt(c.end)}\n${c.text}\n`).join('\n');
 }
 
+// Concat timeline clips (chronological) into one mp3 via ffmpeg → returns path.
+async function subtextConcatClips(clips) {
+  const tmpDir = getTempDir(); ensureDir(tmpDir);
+  const ts = Date.now(); const segPaths = [];
+  try {
+    for (let i = 0; i < clips.length; i++) {
+      const { filePath, inPoint, outPoint } = clips[i] || {};
+      if (!filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
+      if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: không thấy file ${filePath}`);
+      const segPath = path.join(tmpDir, `sub_seg_${ts}_${i}.wav`);
+      await new Promise((resolve, reject) => {
+        const proc = spawn('ffmpeg', ['-y', '-i', filePath, '-ss', String(inPoint || 0),
+          '-to', String(outPoint || 0), '-vn', '-acodec', 'pcm_s16le', segPath], { stdio: 'pipe' });
+        let err = ''; proc.stderr.on('data', d => { err += d.toString(); });
+        proc.on('close', c => c === 0 ? resolve() : reject(new Error(`ffmpeg seg ${i + 1}: ${err.slice(-200)}`)));
+        proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
+      });
+      segPaths.push(segPath);
+    }
+    const listPath = path.join(tmpDir, `sub_list_${ts}.txt`);
+    fs.writeFileSync(listPath, segPaths.map(p => `file '${p}'`).join('\n'));
+    const outPath = path.join(tmpDir, `sub_audio_${ts}.mp3`);
+    await new Promise((resolve, reject) => {
+      const proc = spawn('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+        '-acodec', 'libmp3lame', '-q:a', '2', outPath], { stdio: 'pipe' });
+      let err = ''; proc.stderr.on('data', d => { err += d.toString(); });
+      proc.on('close', c => c === 0 ? resolve() : reject(new Error('ffmpeg concat: ' + err.slice(-200))));
+      proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
+    });
+    for (const s of segPaths) { try { fs.unlinkSync(s); } catch (e) {} }
+    try { fs.unlinkSync(listPath); } catch (e) {}
+    return outPath;
+  } catch (e) {
+    for (const s of segPaths) { try { fs.unlinkSync(s); } catch (er) {} }
+    throw e;
+  }
+}
+
+// No-script path: use whisper's own words; tag each with its segment index so the
+// chunker breaks at natural whisper phrase boundaries (e.g. "No mark" | "No digging in").
+function subtextWordsFromWhisper(words, segments) {
+  segments = segments || [];
+  let si = 0;
+  return words.map(w => {
+    while (si < segments.length - 1 && w.start >= segments[si].end) si++;
+    return { raw: w.text, n: norm(w.text), line: si, start: w.start, end: w.end };
+  });
+}
+
 app.post('/superautocut/subtext', async (req, res) => {
   try {
-    const { audioPath, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur } = req.body || {};
-    if (!audioPath) throw new Error('audioPath is required');
-    if (!fs.existsSync(audioPath)) throw new Error('audioPath not found: ' + audioPath);
-    if (!Array.isArray(scriptLines) || scriptLines.length === 0) throw new Error('scriptLines is required');
+    let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur } = req.body || {};
+    // Source audio: a direct path OR a list of timeline clips to concat first.
+    if (Array.isArray(clips) && clips.length) {
+      console.log(`[subtext] concat ${clips.length} timeline clips...`);
+      audioPath = await subtextConcatClips(clips);
+    }
+    if (!audioPath) throw new Error('Cần audioPath hoặc clips');
+    if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
 
-    const { words } = await transcribeWhisper(audioPath, language);
-    if (!words || !words.length) throw new Error('Whisper không nhận được từ nào từ voice');
+    const { words, segments } = await transcribeWhisper(audioPath, language);
+    if (!words || !words.length) throw new Error('Whisper không nhận được từ nào');
 
-    const sw = subtextFlattenScript(scriptLines);
-    if (!sw.length) throw new Error('Script rỗng');
-    subtextAssignTimes(sw, words);
+    const cleanScript = (Array.isArray(scriptLines) ? scriptLines : []).filter(s => String(s || '').trim());
+    let sw;
+    if (cleanScript.length) {
+      // Script provided → use the user's text, borrow timing from whisper.
+      sw = subtextFlattenScript(cleanScript);
+      subtextAssignTimes(sw, words);
+    } else {
+      // No script → whisper text + segment-boundary cue breaks.
+      sw = subtextWordsFromWhisper(words, segments);
+    }
+    if (!sw.length) throw new Error('Không có nội dung để tạo phụ đề');
     const cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
     const srt  = subtextToSrt(cues);
-    console.log(`[subtext] ${words.length} whisper words → ${sw.length} script words → ${cues.length} cues`);
+    console.log(`[subtext] ${words.length} words · ${cleanScript.length ? 'script' : 'whisper'} → ${cues.length} cues`);
 
     let savedPath;
     if (outputPath) {
@@ -1807,10 +1868,9 @@ app.post('/superautocut/subtext', async (req, res) => {
       fs.writeFileSync(outputPath, srt, 'utf8');
       savedPath = outputPath;
     } else {
-      const tmp = path.join(getTempDir(), 'subtext_' + Date.now() + '.srt');
-      ensureDir(path.dirname(tmp));
-      fs.writeFileSync(tmp, srt, 'utf8');
-      savedPath = tmp;
+      savedPath = path.join(getTempDir(), 'subtext_' + Date.now() + '.srt');
+      ensureDir(path.dirname(savedPath));
+      fs.writeFileSync(savedPath, srt, 'utf8');
     }
     res.json({ ok: true, path: savedPath, cues, srt });
   } catch (e) {
@@ -2021,7 +2081,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.0';  // branch feat/subtext-srt — test build (adds /superautocut/subtext)
+const BRIDGE_VERSION = '1.6.1';  // branch feat/subtext-srt — subtext accepts timeline clips + script-optional
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
