@@ -2051,8 +2051,11 @@ body {
   user-select: none;
 }
 
+/* Script box is now a contenteditable <div> (UXP <textarea> renders black past ~35
+   lines). A div grows with content and the panel (.vg-leftScroll) scrolls normally. */
 .vg-script {
   width: 100%;
+  min-height: 80px;
   padding: 10px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -2061,19 +2064,18 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 7px;
-  resize: none;
   outline: none;
   box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  cursor: text;
 }
-
-/* When inside a grow wrapper, textarea fills it absolutely — no internal scroll */
-.vg-scriptGrow > .vg-script {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  overflow: hidden;
-  min-height: 0;
+/* Placeholder for the contenteditable div (no native placeholder attr) */
+.vg-ce:empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-dim);
+  pointer-events: none;
 }
 
 .vg-script:focus { border-color: #a855f7; background: rgba(0,0,0,0.4); }
