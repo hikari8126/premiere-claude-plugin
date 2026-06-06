@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.8';  // branch — textarea restored (contenteditable unsupported by UXP)
+var PLUGIN_VERSION = 'v4.5.0-srt.9';  // branch — try line-height 1 on script box
 
 // ── State ──────────────────────────────────────────────────────────────────
 
