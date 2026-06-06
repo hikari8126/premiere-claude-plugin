@@ -3152,14 +3152,14 @@ body {
 /* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
 .st-app {
   flex: 1 1 0; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 16px; padding: 18px 12px 14px;
+  display: flex; flex-direction: column; gap: 24px; padding: 18px 14px 16px;
 }
-.st-head { display: flex; flex-direction: column; gap: 3px; }
+.st-head { display: flex; flex-direction: column; gap: 4px; }
 .st-title { font-size: 15px; font-weight: 700; color: var(--accent); }
 .st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
-.st-section { display: flex; flex-direction: column; gap: 8px; }
+.st-section { display: flex; flex-direction: column; gap: 11px; }
 .st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); }
-.st-trackList { display: flex; flex-direction: column; gap: 6px; }
+.st-trackList { display: flex; flex-direction: column; gap: 9px; }
 .st-trackRow {
   display: flex; align-items: center; gap: 9px; padding: 6px 11px;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);

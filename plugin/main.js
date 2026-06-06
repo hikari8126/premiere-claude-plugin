@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.10';  // Tạo Sub UI fixes: show all tracks, compact rows, title padding, narrow num
+var PLUGIN_VERSION = 'v4.5.0-srt.11';  // Tạo Sub: more spacing between components
 
 // ── State ──────────────────────────────────────────────────────────────────
 
