@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.5';  // branch — real fixes: prefix, temp, textarea rollback, custom slider, import btn
+var PLUGIN_VERSION = 'v4.5.0-srt.6';  // branch — EXPERIMENT: fixed-height textarea + native scroll
 
 // ── State ──────────────────────────────────────────────────────────────────
 
