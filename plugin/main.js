@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.3';  // branch — auto-track, slider, ffmpeg clamp
+var PLUGIN_VERSION = 'v4.5.0-srt.4';  // branch — UI polish + VoiceGen fixes
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4628,6 +4628,7 @@ async function ppMoveToVOBin(item, proj) {
   var VG_PREVIEW_URLS  = {}; // voiceId → ElevenLabs CDN preview_url string
   var VG_PREVIEW_CACHE = {}; // voiceId → local bridge URL (cached after first fetch)
   var VG_VOICES_DATA   = []; // { voice_id, label, preview_url, isCustom, isSep }
+  var vgCurrentVoiceId = ''; // source of truth for the picked voice (UXP <select>.value is unreliable)
   var VG_DROP_BTNS     = {}; // voiceId → ▶ button DOM element in dropdown
   var VG_PREV_ACTIVE   = null; // voiceId currently being previewed
   var vgDropResizeHandler = null; // window resize handler while dropdown is open
@@ -4638,8 +4639,8 @@ async function ppMoveToVOBin(item, proj) {
       VG_SPEAKER_TEXTS[VG_ACTIVE_SPEAKER] = (v == null ? '' : String(v));
     }
     var sp = VG_SPEAKERS.find(function(s) { return s.id === VG_ACTIVE_SPEAKER; });
-    if (sp && els.voiceSelect) {
-      sp.voiceId = els.voiceSelect.value || sp.voiceId;
+    if (sp) {
+      sp.voiceId = vgCurrentVoiceId || (els.voiceSelect && els.voiceSelect.value) || sp.voiceId;
       sp.voiceName = vgVoiceName(sp.voiceId);
     }
   }
@@ -4950,6 +4951,7 @@ async function ppMoveToVOBin(item, proj) {
   // Falls back gracefully if key is TTS-restricted (no voices_read perm).
   // ── Helpers ──────────────────────────────────────────────────────────────
   function vgVoiceName(voiceId) {
+    voiceId = voiceId || vgCurrentVoiceId;
     var v = VG_VOICES_DATA.find(function(x) { return !x.isSep && x.voice_id === voiceId; });
     if (v) return v.label.replace(/^⭐\s*/, '').split(' · ')[0];
     var opt = els.voiceSelect ? els.voiceSelect.options[els.voiceSelect.selectedIndex] : null;
@@ -4957,6 +4959,7 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   function vgSetVoice(voiceId) {
+    vgCurrentVoiceId = voiceId; // remember reliably (UXP select.value may not stick)
     if (els.voiceSelect) els.voiceSelect.value = voiceId;
     var v = VG_VOICES_DATA.find(function(x) { return !x.isSep && x.voice_id === voiceId; });
     var label = v ? v.label : (els.voiceSelect && els.voiceSelect.options[els.voiceSelect.selectedIndex]
@@ -5309,7 +5312,7 @@ async function ppMoveToVOBin(item, proj) {
           outputFormat: outputFmt,
           settings: getTtsSettings(),
           languageCode: getLangCode(),
-          outputDir: customOutputFolder || '',
+          outputDir: '', // always temp (11Lab temp); only move to the chosen folder on Import
         });
         if (!resp.ok) throw new Error(sp.voiceName + ': ' + (resp.error || 'failed'));
         resultCards.push({ speaker: sp, variations: resp.variations || [] });
@@ -6645,7 +6648,8 @@ async function ppMoveToVOBin(item, proj) {
 // ════════════════════════════════════════════════════════════════════════════
 (function() {
   function $(id) { return document.getElementById(id); }
-  var stTracks = []; // [{index, name, count, track}]
+  var stTracks = [];     // [{index, name, count, track}]
+  var stLastPath = null; // last generated .srt path (for the reveal button)
 
   function stStatus(msg) {
     var el = $('stStatus'); if (!el) return;
@@ -6695,7 +6699,7 @@ async function ppMoveToVOBin(item, proj) {
       row.className = 'st-trackRow';
       var cb = document.createElement('input');
       cb.type = 'checkbox'; cb.checked = true; cb.dataset.trackIdx = String(t.index);
-      var nm = document.createElement('span'); nm.textContent = '🔊 ' + t.name;
+      var nm = document.createElement('span'); nm.textContent = t.name;
       var meta = document.createElement('span'); meta.className = 'st-trackMeta'; meta.textContent = t.count + ' clip';
       row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
       listEl.appendChild(row);
@@ -6778,11 +6782,14 @@ async function ppMoveToVOBin(item, proj) {
       var d = await resp.json();
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
 
+      stLastPath = d.path;
+      var rv = $('stRevealBtn'); if (rv) rv.style.display = 'block';
       stStatus('⏳ Import .srt vào project...');
-      try { await stImportFile(d.path); }
-      catch (e) { stStatus('✅ Đã lưu ' + d.cues.length + ' dòng → ' + d.path + ' (import lỗi: ' + e.message + ', kéo tay).'); return; }
-      stStatus('✅ ' + d.cues.length + ' dòng phụ đề · đã import "' + d.path.split('/').pop() +
-        '" — kéo từ bin xuống timeline để tạo caption track.');
+      var imported = true;
+      try { await stImportFile(d.path); } catch (e) { imported = false; }
+      stStatus('✅ ' + d.cues.length + ' dòng phụ đề → "' + d.path.split('/').pop() + '"' +
+        (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
+                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).'));
     } catch (e) {
       stStatus('❌ ' + e.message);
     } finally {
@@ -6791,13 +6798,33 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   var makeBtn = $('stMakeBtn'); if (makeBtn) makeBtn.addEventListener('click', stMakeSrt);
+  var revealBtn = $('stRevealBtn');
+  if (revealBtn) revealBtn.addEventListener('click', async function () {
+    if (!stLastPath) return;
+    try {
+      await fetch(BRIDGE_URL + '/tts/reveal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: stLastPath }),
+      });
+    } catch (e) { stStatus('❌ Không mở được thư mục: ' + e.message); }
+  });
 
   // Two-way sync between each range slider and its number box.
   function stLinkSlider(rangeId, numId) {
     var r = $(rangeId), n = $(numId);
     if (!r || !n) return;
+    var min = parseFloat(n.min), max = parseFloat(n.max);
+    function clampNum() {
+      var v = parseFloat(n.value);
+      if (isNaN(v)) { n.value = r.value; return; }
+      if (!isNaN(min) && v < min) v = min;
+      if (!isNaN(max) && v > max) v = max;
+      n.value = v; r.value = v;
+    }
     r.addEventListener('input', function () { n.value = r.value; });
     n.addEventListener('input', function () { r.value = n.value; });
+    n.addEventListener('change', clampNum);
+    n.addEventListener('blur', clampNum);
   }
   stLinkSlider('stMaxWordsR', 'stMaxWords');
   stLinkSlider('stMaxCharsR', 'stMaxChars');
