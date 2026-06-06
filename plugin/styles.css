@@ -3199,3 +3199,14 @@ body {
 .st-btn-primary:hover { background: rgba(168,85,247,0.25); }
 .st-btn:disabled { opacity: 0.6; cursor: default; }
 .st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; }
+
+/* Tạo Sub — sequence name + slider rows */
+.st-seqName { font-weight: 400; font-size: 9.5px; color: rgba(255,255,255,0.4); margin-left: 4px; }
+.st-slideRow { display: flex; align-items: center; gap: 8px; }
+.st-slideLbl { flex: 0 0 42px; font-size: 10px; color: rgba(255,255,255,0.6); }
+.st-range { flex: 1 1 auto; min-width: 0; accent-color: #a855f7; cursor: pointer; }
+.st-num {
+  flex: 0 0 52px; box-sizing: border-box; text-align: center;
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 4px;
+}

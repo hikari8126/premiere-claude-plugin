@@ -1027,8 +1027,7 @@
     </div>
 
     <div class="st-section">
-      <div class="st-label">1 · Chọn track audio trên timeline</div>
-      <button id="stScanBtn" class="st-btn st-btn-sec">🔄 Quét track audio</button>
+      <div class="st-label">1 · Track audio <span class="st-seqName" id="stSeqName">— đang đọc sequence…</span></div>
       <div id="stTrackList" class="st-trackList"></div>
     </div>
 
@@ -1039,12 +1038,21 @@
 
     <div class="st-section">
       <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
-      <div class="st-tuneRow">
-        <label class="st-tune">từ <input id="stMaxWords" type="number" min="1" max="20" value="4" /></label>
-        <label class="st-tune">ký tự <input id="stMaxChars" type="number" min="8" max="80" value="24" /></label>
-        <label class="st-tune">giây <input id="stMaxDur" type="number" min="0.5" max="8" step="0.5" value="2" /></label>
+      <div class="st-slideRow">
+        <span class="st-slideLbl">Từ</span>
+        <input type="range" id="stMaxWordsR" class="st-range" min="1" max="20" step="1" value="4" />
+        <input type="number" id="stMaxWords" class="st-num" min="1" max="20" step="1" value="4" />
       </div>
-      <div class="st-hint">Tự ngắt theo dòng/câu — vd "No mark" · "No digging in" · "No sliding down" thành 3 dòng riêng.</div>
+      <div class="st-slideRow">
+        <span class="st-slideLbl">Ký tự</span>
+        <input type="range" id="stMaxCharsR" class="st-range" min="8" max="80" step="1" value="24" />
+        <input type="number" id="stMaxChars" class="st-num" min="8" max="80" step="1" value="24" />
+      </div>
+      <div class="st-slideRow">
+        <span class="st-slideLbl">Giây</span>
+        <input type="range" id="stMaxDurR" class="st-range" min="0.5" max="8" step="0.5" value="2" />
+        <input type="number" id="stMaxDur" class="st-num" min="0.5" max="8" step="0.5" value="2" />
+      </div>
     </div>
 
     <button id="stMakeBtn" class="st-btn st-btn-primary">📝 Tạo SRT</button>

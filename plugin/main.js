@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.2-overhaul';  // branch feat/subtext-srt — UI overhaul + standalone Sub tab
+var PLUGIN_VERSION = 'v4.5.0-srt.3';  // branch — auto-track, slider, ffmpeg clamp
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -770,6 +770,7 @@ async function pollTimeline() {
   var fp = await getSeqFingerprint();
   if (fp !== _lastSeqFingerprint) {
     _lastSeqFingerprint = fp;
+    if (window.__subtextSync) { try { window.__subtextSync(); } catch(e) {} }
     if (fp === null) {
       timelineContext = null;
       timelineInfo.textContent = 'No active sequence';
@@ -6653,12 +6654,16 @@ async function ppMoveToVOBin(item, proj) {
 
   async function stScanTracks() {
     var listEl = $('stTrackList');
-    stStatus('');
-    if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">⏳ Đang quét...</div>';
+    var seqEl  = $('stSeqName');
     stTracks = [];
     try {
       var seq = await getActiveSequence();
-      if (!seq) { if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">⚠ Chưa mở sequence nào.</div>'; return; }
+      if (!seq) {
+        if (seqEl) seqEl.textContent = '— chưa mở sequence';
+        if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">⚠ Chưa mở sequence nào.</div>';
+        return;
+      }
+      if (seqEl) seqEl.textContent = '· ' + (seq.name || 'sequence');
       var cnt = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
       if (cnt && typeof cnt.then === 'function') cnt = await cnt;
       cnt = cnt || 0;
@@ -6720,8 +6725,9 @@ async function ppMoveToVOBin(item, proj) {
           var op = it.getOutPoint && it.getOutPoint(); if (op && op.then) op = await op; outSec = getTimeSec(op);
           var sps = it.getStart && it.getStart(); if (sps && sps.then) sps = await sps; startSec = getTimeSec(sps);
         } catch (e) {}
+        inSec = Math.max(0, inSec); outSec = Math.max(0, outSec); // guard tiny negative FP (ffmpeg -ss)
         if (outSec <= inSec) continue;
-        out.push({ filePath: fp, inPoint: inSec, outPoint: outSec, start: startSec });
+        out.push({ filePath: fp, inPoint: inSec, outPoint: outSec, start: Math.max(0, startSec) });
       }
     }
     out.sort(function (a, b) { return a.start - b.start; });
@@ -6784,8 +6790,18 @@ async function ppMoveToVOBin(item, proj) {
     }
   }
 
-  var scanBtn = $('stScanBtn'); if (scanBtn) scanBtn.addEventListener('click', stScanTracks);
   var makeBtn = $('stMakeBtn'); if (makeBtn) makeBtn.addEventListener('click', stMakeSrt);
+
+  // Two-way sync between each range slider and its number box.
+  function stLinkSlider(rangeId, numId) {
+    var r = $(rangeId), n = $(numId);
+    if (!r || !n) return;
+    r.addEventListener('input', function () { n.value = r.value; });
+    n.addEventListener('input', function () { r.value = n.value; });
+  }
+  stLinkSlider('stMaxWordsR', 'stMaxWords');
+  stLinkSlider('stMaxCharsR', 'stMaxChars');
+  stLinkSlider('stMaxDurR',   'stMaxDur');
 
   ['stScript', 'stMaxWords', 'stMaxChars', 'stMaxDur'].forEach(function (id) {
     var el = $(id);
@@ -6795,7 +6811,12 @@ async function ppMoveToVOBin(item, proj) {
     }
   });
 
-  // Auto-scan tracks the first time the Tạo Sub tab is opened.
+  // Auto-scan when the Tạo Sub tab is opened…
   var subTabBtn = document.querySelector('.tab-btn[data-tab="subtext"]');
-  if (subTabBtn) subTabBtn.addEventListener('click', function () { if (!stTracks.length) stScanTracks(); });
+  if (subTabBtn) subTabBtn.addEventListener('click', function () { stScanTracks(); });
+  // …and whenever the active sequence changes (pollTimeline calls this), if visible.
+  window.__subtextSync = function () {
+    var panel = document.getElementById('tab-subtext');
+    if (panel && panel.classList.contains('active')) stScanTracks();
+  };
 })();
