@@ -2029,6 +2029,7 @@ body {
 .vg-scriptGrow {
   position: relative;
   min-height: 80px;
+  max-height: 300px;   /* cap growth — textarea scrolls internally past this */
   width: 100%;
 }
 
@@ -2036,6 +2037,8 @@ body {
 .vg-scriptSizer {
   width: 100%;
   min-height: 80px;
+  max-height: 300px;   /* must match wrapper so it stops driving height past the cap */
+  overflow: hidden;
   padding: 10px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -2066,13 +2069,13 @@ body {
   box-sizing: border-box;
 }
 
-/* When inside a grow wrapper, textarea fills it absolutely — no internal scroll */
+/* Textarea fills the wrapper absolutely; scrolls internally once content exceeds the cap */
 .vg-scriptGrow > .vg-script {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
 }
 
@@ -3152,27 +3155,29 @@ body {
 /* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
 .st-app {
   flex: 1 1 0; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 12px; padding: 10px;
+  display: flex; flex-direction: column; gap: 16px; padding: 12px;
 }
-.st-head { display: flex; flex-direction: column; gap: 2px; }
-.st-title { font-size: 13px; font-weight: 700; color: var(--accent); }
-.st-sub { font-size: 9.5px; color: rgba(255,255,255,0.4); }
-.st-section { display: flex; flex-direction: column; gap: 6px; }
-.st-label { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.7); }
-.st-hint { font-size: 9px; color: rgba(255,255,255,0.35); line-height: 1.4; }
-.st-trackList { display: flex; flex-direction: column; gap: 4px; }
+.st-head { display: flex; flex-direction: column; gap: 3px; }
+.st-title { font-size: 15px; font-weight: 700; color: var(--accent); }
+.st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
+.st-section { display: flex; flex-direction: column; gap: 8px; }
+.st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); }
+.st-trackList { display: flex; flex-direction: column; gap: 6px; }
 .st-trackRow {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  background: rgba(255,255,255,0.04); border-radius: 6px;
-  font-size: 10.5px; color: rgba(255,255,255,0.82); cursor: pointer;
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px; font-size: 12.5px; font-weight: 600;
+  color: rgba(255,255,255,0.95); cursor: pointer;
 }
-.st-trackRow input { cursor: pointer; }
-.st-trackMeta { margin-left: auto; font-size: 9px; color: rgba(255,255,255,0.4); }
-.st-trackEmpty { font-size: 10px; color: rgba(255,255,255,0.4); padding: 4px 2px; }
+.st-trackRow:hover { background: rgba(255,255,255,0.09); }
+.st-trackRow input { cursor: pointer; width: 15px; height: 15px; flex: 0 0 auto; }
+.st-trackMeta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.5); }
+.st-trackEmpty { font-size: 11px; color: rgba(255,255,255,0.45); padding: 6px 2px; }
 .st-script {
-  width: 100%; min-height: 60px; resize: vertical; box-sizing: border-box;
+  width: 100%; height: 90px; max-height: 220px; resize: vertical;
+  overflow-y: auto; box-sizing: border-box;
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 6px; color: var(--text); font-size: 11px; padding: 8px;
+  border-radius: 6px; color: var(--text); font-size: 12px; padding: 9px; line-height: 1.45;
 }
 .st-tuneRow { display: flex; gap: 8px; }
 .st-tune {
