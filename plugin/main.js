@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.7d';  // branch — TEMP diagnostic on vgAutoResize
+var PLUGIN_VERSION = 'v4.5.0-ce.1';  // branch — contenteditable script editors (replace UXP textarea)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1176,20 +1176,36 @@ function autoResize() {
 // VoiceGen textarea auto-resize: set height to '1px' first so the browser is forced
 // to reflow and report the true content height via scrollHeight, then lock that in.
 // Sizer div drives wrapper height — no scrollHeight tricks needed (UXP-safe).
-function vgAutoResize(el) {
-  var sizer = el.parentNode && el.parentNode.querySelector('.vg-scriptSizer');
-  if (!sizer) return;
-  sizer.textContent = (el.value || '') + '\n';
-  // ── TEMP DIAGNOSTIC: real measured heights, to find the "black box" cause ──
+// Script editors are now contenteditable <div>s (a UXP <textarea> renders black once it
+// grows past ~35 lines). A div grows as a block and the panel scrolls — so resizing is a
+// no-op now. Kept as a stub so existing callers don't break.
+function vgAutoResize(_el) { /* no-op */ }
+
+// Make a contenteditable <div> behave like a <textarea>: el.value get/set + plain-text paste.
+function vgUpgradeEditable(el) {
+  if (!el || el._ceUpgraded) return;
+  el._ceUpgraded = true;
   try {
-    var grow = el.parentNode;
-    var dbg = 'sizer=' + sizer.offsetHeight + ' box=' + grow.offsetHeight +
-              ' ta=' + el.offsetHeight + ' contentSH=' + el.scrollHeight;
-    console.log('[vgResize]', el.id, dbg, '| chars', (el.value || '').length);
-    var cc = document.getElementById('vgCharCount');
-    if (cc && el.id === 'vgScript') cc.textContent = (el.value || '').length + ' /5000 · ▣ ' + dbg;
+    Object.defineProperty(el, 'value', {
+      configurable: true,
+      get: function () { return this.innerText != null ? this.innerText : (this.textContent || ''); },
+      set: function (v) { this.textContent = (v == null ? '' : String(v)); },
+    });
   } catch (e) {}
+  // Paste as plain text (don't inject rich HTML into the editor)
+  el.addEventListener('paste', function (e) {
+    try {
+      e.preventDefault();
+      var t = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+      if (document.execCommand) document.execCommand('insertText', false, t);
+      else this.textContent = (this.textContent || '') + t;
+      el.dispatchEvent(new Event('input'));
+    } catch (err) {}
+  });
 }
+['vgScript', 'vgSfxText', 'vgMusicPrompt', 'stScript'].forEach(function (id) {
+  vgUpgradeEditable(document.getElementById(id));
+});
 
 msgInput.addEventListener('input', autoResize);
 msgInput.addEventListener('focus', window.claimKeyboard);
