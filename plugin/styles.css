@@ -3218,9 +3218,3 @@ body {
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 4px;
 }
-
-/* Voice script editor via Spectrum sp-textfield (UXP textarea goes black when tall;
-   contenteditable can't be typed in UXP). sp-textfield multiline scrolls natively. */
-.vg-scriptGrow--spft { position: static; min-height: 0; width: 100%; }
-.vg-spft { width: 100%; }
-.vg-spft[multiline] { min-height: 150px; }
