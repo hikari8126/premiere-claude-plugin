@@ -252,8 +252,9 @@
           </div>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
-              <div id="vgScript" class="vg-script vg-ce" contenteditable="true" spellcheck="false"
-                data-placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></div>
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgScript" class="vg-script" spellcheck="false"
+                placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
@@ -275,8 +276,9 @@
         <div class="vg-modeContent" data-mode="sfx" hidden>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
-              <div id="vgSfxText" class="vg-script vg-ce" contenteditable="true" spellcheck="false"
-                data-placeholder="Describe the sound effect… thunder rumbling on a tin roof"></div>
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgSfxText" class="vg-script" spellcheck="false"
+                placeholder="Describe the sound effect...&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgSfxCharCount">0 / 500</span>
@@ -288,8 +290,9 @@
         <div class="vg-modeContent" data-mode="music" hidden>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
-              <div id="vgMusicPrompt" class="vg-script vg-ce" contenteditable="true" spellcheck="false"
-                data-placeholder="Describe the music… upbeat electronic, 120 BPM"></div>
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgMusicPrompt" class="vg-script" spellcheck="false"
+                placeholder="Describe the music...&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgMusicCharCount">0 / 1000</span>
@@ -1032,8 +1035,8 @@
       <div class="st-label">2 · Script (tùy chọn)</div>
       <!-- Auto-grow via sizer (UXP textareas don't scroll) — same pattern as Voice Gen -->
       <div class="vg-scriptGrow">
-        <div id="stScript" class="vg-script vg-ce" contenteditable="true"
-          data-placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></div>
+        <div class="vg-scriptSizer" id="stScriptSizer"></div>
+        <textarea id="stScript" class="vg-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
       </div>
     </div>
 
