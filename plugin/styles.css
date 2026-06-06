@@ -3152,7 +3152,7 @@ body {
 /* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
 .st-app {
   flex: 1 1 0; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 16px; padding: 12px;
+  display: flex; flex-direction: column; gap: 16px; padding: 18px 12px 14px;
 }
 .st-head { display: flex; flex-direction: column; gap: 3px; }
 .st-title { font-size: 15px; font-weight: 700; color: var(--accent); }
@@ -3161,14 +3161,17 @@ body {
 .st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); }
 .st-trackList { display: flex; flex-direction: column; gap: 6px; }
 .st-trackRow {
-  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  display: flex; align-items: center; gap: 9px; padding: 6px 11px;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 7px; font-size: 12.5px; font-weight: 600;
-  color: rgba(255,255,255,0.95); cursor: pointer;
+  border-radius: 7px; font-size: 12.5px; cursor: pointer;
 }
 .st-trackRow:hover { background: rgba(255,255,255,0.09); }
 .st-trackRow input { cursor: pointer; width: 15px; height: 15px; flex: 0 0 auto; }
-.st-trackMeta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.5); }
+.st-trackName { font-weight: 700; color: #fff; }
+.st-trackMeta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.55); }
+/* Empty tracks: shown (no numbering gaps) but dimmed + not selectable */
+.st-trackRow.is-empty { opacity: 0.4; cursor: default; }
+.st-trackRow.is-empty:hover { background: rgba(255,255,255,0.06); }
 .st-trackEmpty { font-size: 11px; color: rgba(255,255,255,0.45); padding: 6px 2px; }
 .st-script {
   width: 100%; height: 90px; max-height: 220px; resize: vertical;
@@ -3214,7 +3217,8 @@ body {
 .st-afterRow { display: flex; gap: 8px; }
 .st-afterRow .st-btn-sec { flex: 1 1 0; align-self: stretch; }
 .st-num {
-  flex: 0 0 52px; box-sizing: border-box; text-align: center;
+  flex: 0 0 56px; width: 56px; max-width: 56px;  /* UXP number input ignores flex-basis → force width */
+  box-sizing: border-box; text-align: center;
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 4px;
+  border-radius: 4px; color: var(--text); font-size: 12px; padding: 4px;
 }
