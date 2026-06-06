@@ -3150,23 +3150,26 @@ body {
 }
 
 /* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
+/* NOTE: UXP doesn't honor flexbox `gap` → use explicit margins everywhere instead. */
 .st-app {
   flex: 1 1 0; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 24px; padding: 18px 14px 16px;
+  display: flex; flex-direction: column; padding: 18px 14px 16px;
 }
-.st-head { display: flex; flex-direction: column; gap: 4px; }
-.st-title { font-size: 15px; font-weight: 700; color: var(--accent); }
+.st-head { display: flex; flex-direction: column; margin-bottom: 24px; }
+.st-title { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
 .st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
-.st-section { display: flex; flex-direction: column; gap: 11px; }
-.st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); }
-.st-trackList { display: flex; flex-direction: column; gap: 9px; }
+.st-section { display: flex; flex-direction: column; margin-bottom: 24px; }
+.st-section:last-child { margin-bottom: 0; }
+.st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 11px; }
+.st-trackList { display: flex; flex-direction: column; }
 .st-trackRow {
-  display: flex; align-items: center; gap: 9px; padding: 6px 11px;
+  display: flex; align-items: center; padding: 6px 11px; margin-bottom: 9px;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
   border-radius: 7px; font-size: 12.5px; cursor: pointer;
 }
+.st-trackRow:last-child { margin-bottom: 0; }
 .st-trackRow:hover { background: rgba(255,255,255,0.09); }
-.st-trackRow input { cursor: pointer; width: 15px; height: 15px; flex: 0 0 auto; }
+.st-trackRow input { cursor: pointer; width: 15px; height: 15px; flex: 0 0 auto; margin-right: 9px; }
 .st-trackName { font-weight: 700; color: #fff; }
 .st-trackMeta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.55); }
 /* Empty tracks: shown (no numbering gaps) but dimmed + not selectable */
@@ -3203,22 +3206,24 @@ body {
 }
 .st-btn-primary:hover { background: rgba(168,85,247,0.25); }
 .st-btn:disabled { opacity: 0.6; cursor: default; }
-.st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; }
+.st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; margin-top: 12px; }
 
 /* Tạo Sub — sequence name + slider rows */
 .st-seqName { font-weight: 400; font-size: 9.5px; color: rgba(255,255,255,0.4); margin-left: 4px; }
-.st-slideRow { display: flex; align-items: center; gap: 10px; }
-.st-slideLbl { flex: 0 0 44px; font-size: 11px; color: rgba(255,255,255,0.65); }
+.st-slideRow { display: flex; align-items: center; margin-bottom: 14px; }
+.st-slideRow:last-child { margin-bottom: 0; }
+.st-slideLbl { flex: 0 0 44px; font-size: 11px; color: rgba(255,255,255,0.65); margin-right: 10px; }
 /* Custom slider (UXP native <input type=range> doesn't drag) */
 .st-cslider { flex: 1 1 auto; min-width: 0; position: relative; height: 22px; cursor: pointer; }
 .st-cline  { position: absolute; top: 9px; left: 0; right: 0; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.15); }
 .st-cfill  { position: absolute; top: 9px; left: 0; width: 0; height: 4px; border-radius: 3px; background: #a855f7; }
 .st-cthumb { position: absolute; top: 3px; left: 0; margin-left: -8px; width: 16px; height: 16px; border-radius: 50%; background: #c084fc; border: 2px solid #1a1a1a; }
-.st-afterRow { display: flex; gap: 8px; }
+.st-afterRow { display: flex; margin-top: 12px; }
 .st-afterRow .st-btn-sec { flex: 1 1 0; align-self: stretch; }
+.st-afterRow .st-btn-sec + .st-btn-sec { margin-left: 8px; }
 .st-num {
   flex: 0 0 56px; width: 56px; max-width: 56px;  /* UXP number input ignores flex-basis → force width */
-  box-sizing: border-box; text-align: center;
+  margin-left: 10px; box-sizing: border-box; text-align: center;
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
   border-radius: 4px; color: var(--text); font-size: 12px; padding: 4px;
 }
