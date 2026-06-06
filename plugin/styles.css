@@ -2032,9 +2032,8 @@ body {
   width: 100%;
 }
 
-/* Sizer disabled — fixed-height textarea with native scroll instead (UXP test) */
+/* Invisible sizer: same font/padding as textarea, grows naturally as a block div */
 .vg-scriptSizer {
-  display: none;
   width: 100%;
   min-height: 80px;
   padding: 10px;
@@ -2067,13 +2066,14 @@ body {
   box-sizing: border-box;
 }
 
-/* EXPERIMENT: fixed-height textarea + native internal scroll (no sizer/absolute) */
+/* When inside a grow wrapper, textarea fills it absolutely — no internal scroll */
 .vg-scriptGrow > .vg-script {
-  position: static;
-  height: 180px;
-  min-height: 80px;
-  overflow-y: auto;
-  resize: vertical;
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .vg-script:focus { border-color: #a855f7; background: rgba(0,0,0,0.4); }
