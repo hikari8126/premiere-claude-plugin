@@ -251,9 +251,10 @@
             <button id="vgAddSpeaker" class="vg-addSpeakerBtn">+ Add speaker</button>
           </div>
           <div class="vg-editorWrap">
-            <div class="vg-scriptGrow vg-scriptGrow--spft">
-              <sp-textfield id="vgScript" class="vg-spft" multiline rows="8"
-                placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></sp-textfield>
+            <div class="vg-scriptGrow">
+              <div class="vg-scriptSizer" aria-hidden="true"></div>
+              <textarea id="vgScript" class="vg-script" spellcheck="false"
+                placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
