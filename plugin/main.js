@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.9';  // branch — try line-height 1 on script box
+var PLUGIN_VERSION = 'v4.5.0-srt.9b';  // line-height 0.75 test
 
 // ── State ──────────────────────────────────────────────────────────────────
 
