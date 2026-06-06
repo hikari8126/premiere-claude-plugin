@@ -2029,7 +2029,6 @@ body {
 .vg-scriptGrow {
   position: relative;
   min-height: 80px;
-  max-height: 300px;   /* cap growth — textarea scrolls internally past this */
   width: 100%;
 }
 
@@ -2037,8 +2036,6 @@ body {
 .vg-scriptSizer {
   width: 100%;
   min-height: 80px;
-  max-height: 300px;   /* must match wrapper so it stops driving height past the cap */
-  overflow: hidden;
   padding: 10px;
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -2069,13 +2066,13 @@ body {
   box-sizing: border-box;
 }
 
-/* Textarea fills the wrapper absolutely; scrolls internally once content exceeds the cap */
+/* When inside a grow wrapper, textarea fills it absolutely — no internal scroll */
 .vg-scriptGrow > .vg-script {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
@@ -3207,9 +3204,15 @@ body {
 
 /* Tạo Sub — sequence name + slider rows */
 .st-seqName { font-weight: 400; font-size: 9.5px; color: rgba(255,255,255,0.4); margin-left: 4px; }
-.st-slideRow { display: flex; align-items: center; gap: 8px; }
-.st-slideLbl { flex: 0 0 42px; font-size: 10px; color: rgba(255,255,255,0.6); }
-.st-range { flex: 1 1 auto; min-width: 0; accent-color: #a855f7; cursor: pointer; }
+.st-slideRow { display: flex; align-items: center; gap: 10px; }
+.st-slideLbl { flex: 0 0 44px; font-size: 11px; color: rgba(255,255,255,0.65); }
+/* Custom slider (UXP native <input type=range> doesn't drag) */
+.st-cslider { flex: 1 1 auto; min-width: 0; position: relative; height: 22px; cursor: pointer; }
+.st-cline  { position: absolute; top: 9px; left: 0; right: 0; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.15); }
+.st-cfill  { position: absolute; top: 9px; left: 0; width: 0; height: 4px; border-radius: 3px; background: #a855f7; }
+.st-cthumb { position: absolute; top: 3px; left: 0; margin-left: -8px; width: 16px; height: 16px; border-radius: 50%; background: #c084fc; border: 2px solid #1a1a1a; }
+.st-afterRow { display: flex; gap: 8px; }
+.st-afterRow .st-btn-sec { flex: 1 1 0; align-self: stretch; }
 .st-num {
   flex: 0 0 52px; box-sizing: border-box; text-align: center;
   background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
