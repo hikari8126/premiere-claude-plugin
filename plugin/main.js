@@ -2322,9 +2322,6 @@ async function ppMoveToVOBin(item, proj) {
       var nvChk = $('sacCutNoVoiceChk');
       if (nvChk) nvChk.checked = sacNoVoiceMode;
     }
-    // Subtext (.srt) — only meaningful with a real voice file (not pure no-voice mode)
-    var stBtn = $('sacSubtextBtn');
-    if (stBtn) stBtn.style.display = (sacVoicePath || window.sacVoicePath) ? 'block' : 'none';
     $('sacCutPanel').style.display = 'flex';
   }
 
@@ -3849,66 +3846,6 @@ async function ppMoveToVOBin(item, proj) {
     sacShowCutPanel(); // refresh label; sacVoiceReady stays true so panel persists
   });
 
-  // ── Subtext (.srt) — word-synced captions from voice + script ─────────────
-  function sacSubtextStatus(msg) {
-    var el = $('sacSubtextStatus'); if (!el) return;
-    el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
-  }
-
-  async function sacMakeSubtext() {
-    var voicePath = sacVoicePath || window.sacVoicePath;
-    if (!voicePath) { sacSubtextStatus('⚠ Cần có voice trước (⚡ Gen hoặc 📂 Pick).'); return; }
-    var scriptLines = (parsedBlocks || [])
-      .map(function(b) { return (b.texts || []).join(' ').trim(); })
-      .filter(Boolean);
-    if (!scriptLines.length) { sacSubtextStatus('⚠ Không có script để làm phụ đề.'); return; }
-
-    var btn = $('sacSubtextBtn');
-    var old = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo subtext...'; }
-    try {
-      // Reuse the folder already chosen in Voice Gen; else ask the user to pick one.
-      var folder = localStorage.getItem('vg_last_save_folder') || '';
-      if (!folder) {
-        try {
-          var lfs = require('uxp').storage.localFileSystem;
-          var f = await lfs.getFolder();
-          if (!f) { sacSubtextStatus('Đã huỷ — chưa chọn thư mục lưu.'); return; }
-          folder = f.nativePath || f.path || '';
-          if (folder) localStorage.setItem('vg_last_save_folder', folder);
-        } catch (e) { sacSubtextStatus('Không chọn được thư mục: ' + e.message); return; }
-      }
-      var base = (voicePath.split('/').pop().split('\\').pop() || 'subtext').replace(/\.[^.]+$/, '') || 'subtext';
-      var outputPath = folder.replace(/[\/\\]+$/, '') + '/' + base + '.srt';
-
-      sacSubtextStatus('⏳ Whisper đang nghe + canh giờ từng từ...');
-      var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioPath: voicePath, scriptLines: scriptLines, outputPath: outputPath }),
-      });
-      var d = await resp.json();
-      if (!d || !d.ok) { sacSubtextStatus('❌ ' + ((d && d.error) || 'Tạo subtext thất bại')); return; }
-
-      sacSubtextStatus('⏳ Import .srt vào project...');
-      try {
-        await sacFindOrImportFile(d.path);
-      } catch (e) {
-        sacSubtextStatus('✅ Đã lưu ' + d.cues.length + ' dòng → ' + d.path +
-          '  (import tự động lỗi: ' + e.message + ' — kéo file vào project tay).');
-        return;
-      }
-      sacSubtextStatus('✅ ' + d.cues.length + ' dòng phụ đề · đã import "' + base +
-        '.srt" vào project — kéo từ bin xuống timeline để tạo caption track.');
-    } catch (e) {
-      sacSubtextStatus('❌ Bridge lỗi: ' + e.message);
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = old; }
-    }
-  }
-
-  var sacSubtextBtn = $('sacSubtextBtn');
-  if (sacSubtextBtn) sacSubtextBtn.addEventListener('click', sacMakeSubtext);
 
   // "Run anyway" — bypass the voice-match gate. Matched blocks keep their voice;
   // unmatched blocks (voiceStart=null) place video only. Sources must be validated.
