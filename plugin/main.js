@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.7';  // branch — reverted textarea experiment (UXP textarea confirmed non-scrollable)
+var PLUGIN_VERSION = 'v4.5.0-srt.7d';  // branch — TEMP diagnostic on vgAutoResize
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1180,6 +1180,15 @@ function vgAutoResize(el) {
   var sizer = el.parentNode && el.parentNode.querySelector('.vg-scriptSizer');
   if (!sizer) return;
   sizer.textContent = (el.value || '') + '\n';
+  // ── TEMP DIAGNOSTIC: real measured heights, to find the "black box" cause ──
+  try {
+    var grow = el.parentNode;
+    var dbg = 'sizer=' + sizer.offsetHeight + ' box=' + grow.offsetHeight +
+              ' ta=' + el.offsetHeight + ' contentSH=' + el.scrollHeight;
+    console.log('[vgResize]', el.id, dbg, '| chars', (el.value || '').length);
+    var cc = document.getElementById('vgCharCount');
+    if (cc && el.id === 'vgScript') cc.textContent = (el.value || '').length + ' /5000 · ▣ ' + dbg;
+  } catch (e) {}
 }
 
 msgInput.addEventListener('input', autoResize);
