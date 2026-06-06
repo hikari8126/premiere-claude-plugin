@@ -1033,31 +1033,44 @@
 
     <div class="st-section">
       <div class="st-label">2 · Script (tùy chọn)</div>
-      <textarea id="stScript" class="st-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
+      <!-- Auto-grow via sizer (UXP textareas don't scroll) — same pattern as Voice Gen -->
+      <div class="vg-scriptGrow">
+        <div class="vg-scriptSizer" id="stScriptSizer"></div>
+        <textarea id="stScript" class="vg-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
+      </div>
     </div>
 
     <div class="st-section">
       <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
       <div class="st-slideRow">
         <span class="st-slideLbl">Từ</span>
-        <input type="range" id="stMaxWordsR" class="st-range" min="1" max="20" step="1" value="4" />
+        <div class="st-cslider" id="stMaxWordsC" data-min="1" data-max="20" data-step="1">
+          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+        </div>
         <input type="number" id="stMaxWords" class="st-num" min="1" max="20" step="1" value="4" />
       </div>
       <div class="st-slideRow">
         <span class="st-slideLbl">Ký tự</span>
-        <input type="range" id="stMaxCharsR" class="st-range" min="8" max="80" step="1" value="24" />
+        <div class="st-cslider" id="stMaxCharsC" data-min="8" data-max="80" data-step="1">
+          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+        </div>
         <input type="number" id="stMaxChars" class="st-num" min="8" max="80" step="1" value="24" />
       </div>
       <div class="st-slideRow">
         <span class="st-slideLbl">Giây</span>
-        <input type="range" id="stMaxDurR" class="st-range" min="0.5" max="8" step="0.5" value="2" />
+        <div class="st-cslider" id="stMaxDurC" data-min="0.5" data-max="8" data-step="0.5">
+          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+        </div>
         <input type="number" id="stMaxDur" class="st-num" min="0.5" max="8" step="0.5" value="2" />
       </div>
     </div>
 
     <button id="stMakeBtn" class="st-btn st-btn-primary">📝 Tạo SRT</button>
     <div id="stStatus" class="st-status" style="display:none"></div>
-    <button id="stRevealBtn" class="st-btn st-btn-sec" style="display:none">📂 Mở thư mục chứa .srt</button>
+    <div class="st-afterRow" id="stAfterRow" style="display:none">
+      <button id="stImportBtn" class="st-btn st-btn-sec">📥 Import vào project</button>
+      <button id="stRevealBtn" class="st-btn st-btn-sec">📂 Mở trong Finder</button>
+    </div>
   </div>
 </div>
 

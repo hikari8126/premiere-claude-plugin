@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.4';  // branch — UI polish + VoiceGen fixes
+var PLUGIN_VERSION = 'v4.5.0-srt.5';  // branch — real fixes: prefix, temp, textarea rollback, custom slider, import btn
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -5352,16 +5352,15 @@ async function ppMoveToVOBin(item, proj) {
         // Multi-speaker: each speaker uses its own voice name as filename prefix
         return await generateMultiSpeaker(numVar, userFilename || undefined, outputFmt);
       }
-      var voiceId = els.voiceSelect.value || '';
+      var voiceId = vgCurrentVoiceId || els.voiceSelect.value || '';
       if (voiceId === '__custom__') voiceId = safeVal(els.customVoiceId);
       if (!voiceId) return setStatus('Pick a voice', false);
       var text = safeVal(els.script);
       if (!text) return setStatus('Script is empty', false);
-      // Voice name is always prefix; user's text (if any) is appended as a note;
-      // timestamp suffix makes every generated file unique → no overwrite on import.
-      var selOpt = els.voiceSelect.options[els.voiceSelect.selectedIndex];
-      var selOptText = (selOpt && (selOpt.text || selOpt.textContent || '').trim()) || '';
-      var voiceLabel = safeFileStr(selOptText.split(' ')[0]) || 'voice';
+      // Voice name = prefix. Resolve via vgVoiceName(voiceId) (looks up VG_VOICES_DATA by
+      // id) — NOT via selectedIndex: UXP doesn't update selectedIndex when .value is set
+      // programmatically by the custom dropdown, so the old code always read Rachel/blank.
+      var voiceLabel = safeFileStr((vgVoiceName(voiceId) || 'voice').split(' ')[0]) || 'voice';
       var userSuffix = safeFileStr(userFilename);
       var customName = voiceLabel + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/tts/generate';
@@ -5371,7 +5370,7 @@ async function ppMoveToVOBin(item, proj) {
         outputFormat: outputFmt,
         languageCode: getLangCode(),
         settings: getTtsSettings(),
-        outputDir: customOutputFolder || '',
+        outputDir: '', // temp only; move to chosen folder happens on Import
       };
       label = 'voice';
     } else if (currentMode === 'sfx') {
@@ -5386,7 +5385,7 @@ async function ppMoveToVOBin(item, proj) {
         promptInfluence: parseFloat($('vgSfxInfluence').value),
         filename: customName, variations: numVar,
         outputFormat: ($('vgSfxOutputFormat') && $('vgSfxOutputFormat').value) || 'mp3_44100_128',
-        outputDir: customOutputFolder || '',
+        outputDir: '', // temp only; move to chosen folder happens on Import
       };
       label = 'SFX';
     } else if (currentMode === 'music') {
@@ -5399,7 +5398,7 @@ async function ppMoveToVOBin(item, proj) {
         apiKey: ELEVENLABS_KEY, prompt: prompt,
         lengthSec: parseFloat($('vgMusicLength').value),
         filename: customName, variations: numVar,
-        outputDir: customOutputFolder || '',
+        outputDir: '', // temp only; move to chosen folder happens on Import
       };
       label = 'music';
     }
@@ -6047,7 +6046,7 @@ async function ppMoveToVOBin(item, proj) {
 
           var resp = await postJsonVG('/tts/concat-from-sequence', {
             clips:     clipList,
-            outputDir: customOutputFolder || '',
+            outputDir: '', // temp only; move to chosen folder happens on Import
           });
           if (!resp.ok) throw new Error(resp.error || 'Concat failed');
 
@@ -6656,6 +6655,12 @@ async function ppMoveToVOBin(item, proj) {
     el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
   }
 
+  // Auto-grow the script box via its sizer (UXP textareas don't scroll).
+  function stAutoResize() {
+    var el = $('stScript'), sizer = $('stScriptSizer');
+    if (el && sizer) sizer.textContent = (el.value || '') + '\n';
+  }
+
   async function stScanTracks() {
     var listEl = $('stTrackList');
     var seqEl  = $('stSeqName');
@@ -6783,7 +6788,7 @@ async function ppMoveToVOBin(item, proj) {
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
 
       stLastPath = d.path;
-      var rv = $('stRevealBtn'); if (rv) rv.style.display = 'block';
+      var ar = $('stAfterRow'); if (ar) ar.style.display = 'flex';
       stStatus('⏳ Import .srt vào project...');
       var imported = true;
       try { await stImportFile(d.path); } catch (e) { imported = false; }
@@ -6808,27 +6813,54 @@ async function ppMoveToVOBin(item, proj) {
       });
     } catch (e) { stStatus('❌ Không mở được thư mục: ' + e.message); }
   });
+  var importBtn = $('stImportBtn');
+  if (importBtn) importBtn.addEventListener('click', async function () {
+    if (!stLastPath) return;
+    try {
+      await stImportFile(stLastPath);
+      stStatus('✅ Đã import "' + stLastPath.split('/').pop() + '" vào project — tìm trong bin gốc.');
+    } catch (e) { stStatus('❌ Import lỗi: ' + e.message + ' — dùng 📂 Mở Finder rồi kéo vào.'); }
+  });
 
-  // Two-way sync between each range slider and its number box.
-  function stLinkSlider(rangeId, numId) {
-    var r = $(rangeId), n = $(numId);
-    if (!r || !n) return;
-    var min = parseFloat(n.min), max = parseFloat(n.max);
-    function clampNum() {
-      var v = parseFloat(n.value);
-      if (isNaN(v)) { n.value = r.value; return; }
-      if (!isNaN(min) && v < min) v = min;
-      if (!isNaN(max) && v > max) v = max;
-      n.value = v; r.value = v;
+  // Custom slider: UXP native <input type=range> won't drag, so drive a div+thumb
+  // via pointer events and keep it two-way synced with the number box (clamped).
+  function makeCSlider(sliderId, numId) {
+    var s = $(sliderId), n = $(numId);
+    if (!s || !n) return;
+    var min  = parseFloat(s.dataset.min), max = parseFloat(s.dataset.max);
+    var step = parseFloat(s.dataset.step) || 1;
+    var decimals = (String(step).split('.')[1] || '').length;
+    var fill = s.querySelector('.st-cfill'), thumb = s.querySelector('.st-cthumb');
+    var dragging = false;
+    function render(v) {
+      var pct = max > min ? (v - min) / (max - min) : 0;
+      pct = Math.max(0, Math.min(1, pct)) * 100;
+      if (fill)  fill.style.width = pct + '%';
+      if (thumb) thumb.style.left = pct + '%';
     }
-    r.addEventListener('input', function () { n.value = r.value; });
-    n.addEventListener('input', function () { r.value = n.value; });
-    n.addEventListener('change', clampNum);
-    n.addEventListener('blur', clampNum);
+    function setVal(v, fromInput) {
+      if (isNaN(v)) return;
+      v = Math.round(v / step) * step;
+      v = Math.max(min, Math.min(max, parseFloat(v.toFixed(decimals))));
+      if (!fromInput) n.value = v;
+      render(v);
+    }
+    function valFromX(clientX) {
+      var r = s.getBoundingClientRect();
+      var pct = r.width ? (clientX - r.left) / r.width : 0;
+      return min + Math.max(0, Math.min(1, pct)) * (max - min);
+    }
+    s.addEventListener('pointerdown', function (e) { dragging = true; setVal(valFromX(e.clientX)); });
+    window.addEventListener('pointermove', function (e) { if (dragging) setVal(valFromX(e.clientX)); });
+    window.addEventListener('pointerup', function () { dragging = false; });
+    n.addEventListener('input',  function () { setVal(parseFloat(n.value), true); });
+    n.addEventListener('change', function () { setVal(parseFloat(n.value)); });
+    n.addEventListener('blur',   function () { setVal(parseFloat(n.value)); });
+    setVal(parseFloat(n.value)); // init thumb position
   }
-  stLinkSlider('stMaxWordsR', 'stMaxWords');
-  stLinkSlider('stMaxCharsR', 'stMaxChars');
-  stLinkSlider('stMaxDurR',   'stMaxDur');
+  makeCSlider('stMaxWordsC', 'stMaxWords');
+  makeCSlider('stMaxCharsC', 'stMaxChars');
+  makeCSlider('stMaxDurC',   'stMaxDur');
 
   ['stScript', 'stMaxWords', 'stMaxChars', 'stMaxDur'].forEach(function (id) {
     var el = $(id);
@@ -6837,6 +6869,8 @@ async function ppMoveToVOBin(item, proj) {
       el.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
     }
   });
+  var stScriptEl = $('stScript');
+  if (stScriptEl) { stScriptEl.addEventListener('input', stAutoResize); stAutoResize(); }
 
   // Auto-scan when the Tạo Sub tab is opened…
   var subTabBtn = document.querySelector('.tab-btn[data-tab="subtext"]');
