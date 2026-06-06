@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.9f';  // line-height 1.1
+var PLUGIN_VERSION = 'v4.5.0-srt.10';  // Tạo Sub UI fixes: show all tracks, compact rows, title padding, narrow num
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -6693,19 +6693,23 @@ async function ppMoveToVOBin(item, proj) {
   function stRenderTracks() {
     var listEl = $('stTrackList'); if (!listEl) return;
     listEl.innerHTML = '';
-    var withClips = stTracks.filter(function (t) { return t.count > 0; });
-    if (!withClips.length) {
-      listEl.innerHTML = '<div class="st-trackEmpty">Không có clip audio nào. Thêm audio rồi bấm 🔄.</div>';
+    if (!stTracks.length) {
+      listEl.innerHTML = '<div class="st-trackEmpty">Không có track audio — mở sequence rồi thử lại.</div>';
       return;
     }
+    // Show ALL tracks (no A1→A3 gaps); empty tracks are dimmed + disabled, not hidden.
     stTracks.forEach(function (t) {
-      if (t.count === 0) return;
+      var empty = t.count === 0;
       var row = document.createElement('label');
-      row.className = 'st-trackRow';
+      row.className = 'st-trackRow' + (empty ? ' is-empty' : '');
       var cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.checked = true; cb.dataset.trackIdx = String(t.index);
-      var nm = document.createElement('span'); nm.textContent = t.name;
-      var meta = document.createElement('span'); meta.className = 'st-trackMeta'; meta.textContent = t.count + ' clip';
+      cb.type = 'checkbox';
+      cb.checked = !empty;     // only tracks with clips ticked by default
+      cb.disabled = empty;     // empty tracks can't be selected
+      cb.dataset.trackIdx = String(t.index);
+      var nm = document.createElement('span'); nm.className = 'st-trackName'; nm.textContent = t.name;
+      var meta = document.createElement('span'); meta.className = 'st-trackMeta';
+      meta.textContent = empty ? 'trống' : (t.count + ' clip');
       row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
       listEl.appendChild(row);
     });
