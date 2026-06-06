@@ -13,6 +13,8 @@
   <span id="versionBarBridgeWarn" class="version-bar-warn" style="display:none">
     ⚠ Cần update Bridge
   </span>
+  <span class="version-bar-spacer"></span>
+  <button class="vb-icon-btn" id="settings-btn" title="Settings (API key)">&#9881;</button>
 </div>
 
 <!-- ── PLUGIN UPDATE BANNER — shown when a newer plugin version is available ── -->
@@ -24,15 +26,16 @@
 
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
-  <button class="tab-btn active" data-tab="claude">&#10022; CLAUDE</button>
-  <button class="tab-btn" data-tab="voicegen">&#127908; VOICE GEN</button>
+  <!-- Claude chat tab temporarily hidden (kept in DOM below for later) -->
+  <button class="tab-btn active" data-tab="voicegen">&#127908; VOICE GEN</button>
   <button class="tab-btn" data-tab="autocut">&#9986; AUTOCUT</button>
+  <button class="tab-btn" data-tab="subtext">&#128221; TẠO SUB</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- TAB: CLAUDE                                            -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="tab-panel active" id="tab-claude">
+<div class="tab-panel" id="tab-claude">
 
   <!-- Header -->
   <div id="header">
@@ -40,7 +43,6 @@
     <div id="header-actions">
       <button class="text-btn" id="refresh-btn">&#8635; Refresh</button>
       <button class="text-btn" id="clear-btn">&#10005; Clear</button>
-      <button class="icon-btn" id="settings-btn">&#9881;</button>
     </div>
   </div>
 
@@ -178,7 +180,7 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- TAB: VOICE GEN (ElevenLabs)                            -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="tab-voicegen">
+<div class="tab-panel active" id="tab-voicegen">
   <div class="vg-app">
 
     <!-- Status bar -->
@@ -1017,7 +1019,42 @@
 
 </div><!-- /tab-autocut -->
 
-<!-- Settings panel (floating, draggable) -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: TẠO SUB  (subtitle .srt từ audio trên timeline)   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-subtext">
+  <div class="st-app">
+    <div class="st-head">
+      <span class="st-title">📝 Tạo phụ đề (.srt)</span>
+      <span class="st-sub">Whisper canh giờ audio trên timeline → .srt → import vào project</span>
+    </div>
+
+    <div class="st-section">
+      <div class="st-label">1 · Chọn track audio trên timeline</div>
+      <button id="stScanBtn" class="st-btn st-btn-sec">🔄 Quét track audio</button>
+      <div id="stTrackList" class="st-trackList"></div>
+    </div>
+
+    <div class="st-section">
+      <div class="st-label">2 · Script (tùy chọn)</div>
+      <textarea id="stScript" class="st-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
+    </div>
+
+    <div class="st-section">
+      <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
+      <div class="st-tuneRow">
+        <label class="st-tune">từ <input id="stMaxWords" type="number" min="1" max="20" value="4" /></label>
+        <label class="st-tune">ký tự <input id="stMaxChars" type="number" min="8" max="80" value="24" /></label>
+        <label class="st-tune">giây <input id="stMaxDur" type="number" min="0.5" max="8" step="0.5" value="2" /></label>
+      </div>
+      <div class="st-hint">Tự ngắt theo dòng/câu — vd "No mark" · "No digging in" · "No sliding down" thành 3 dòng riêng.</div>
+    </div>
+
+    <button id="stMakeBtn" class="st-btn st-btn-primary">📝 Tạo SRT</button>
+    <div id="stStatus" class="st-status" style="display:none"></div>
+  </div>
+</div>
+
 <!-- Single non-module script -->
 <script src="main.js"></script>
 </body>

@@ -49,6 +49,13 @@ body {
   border-radius: 3px; cursor: pointer; font-weight: 600;
 }
 .version-bar-btn:hover { background: #059669; }
+.version-bar-spacer { flex: 1 1 auto; }
+.vb-icon-btn {
+  flex: 0 0 auto; background: none; border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.55); border-radius: 4px; padding: 0 6px; height: 16px;
+  font-size: 10px; line-height: 1; cursor: pointer;
+}
+.vb-icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Tab Bar ───────────────────────────────────────── */
 .tab-bar {
@@ -3141,3 +3148,54 @@ body {
   color: rgba(255,255,255,0.45);
   text-align: center;
 }
+
+/* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
+.st-app {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 10px;
+}
+.st-head { display: flex; flex-direction: column; gap: 2px; }
+.st-title { font-size: 13px; font-weight: 700; color: var(--accent); }
+.st-sub { font-size: 9.5px; color: rgba(255,255,255,0.4); }
+.st-section { display: flex; flex-direction: column; gap: 6px; }
+.st-label { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.7); }
+.st-hint { font-size: 9px; color: rgba(255,255,255,0.35); line-height: 1.4; }
+.st-trackList { display: flex; flex-direction: column; gap: 4px; }
+.st-trackRow {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: rgba(255,255,255,0.04); border-radius: 6px;
+  font-size: 10.5px; color: rgba(255,255,255,0.82); cursor: pointer;
+}
+.st-trackRow input { cursor: pointer; }
+.st-trackMeta { margin-left: auto; font-size: 9px; color: rgba(255,255,255,0.4); }
+.st-trackEmpty { font-size: 10px; color: rgba(255,255,255,0.4); padding: 4px 2px; }
+.st-script {
+  width: 100%; min-height: 60px; resize: vertical; box-sizing: border-box;
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px; color: var(--text); font-size: 11px; padding: 8px;
+}
+.st-tuneRow { display: flex; gap: 8px; }
+.st-tune {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10px; color: rgba(255,255,255,0.6);
+}
+.st-tune input {
+  width: 46px; box-sizing: border-box; text-align: center;
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px; color: var(--text); font-size: 11px; padding: 3px 4px;
+}
+.st-btn { border: none; border-radius: 18px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.st-btn-sec {
+  align-self: flex-start; padding: 0 14px; height: 30px;
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.st-btn-sec:hover { background: rgba(255,255,255,0.1); }
+.st-btn-primary {
+  width: 100%; height: 36px;
+  background: rgba(168,85,247,0.15); color: #c084fc;
+  border: 1px solid rgba(168,85,247,0.35);
+}
+.st-btn-primary:hover { background: rgba(168,85,247,0.25); }
+.st-btn:disabled { opacity: 0.6; cursor: default; }
+.st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; }

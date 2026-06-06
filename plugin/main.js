@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-subtext-srt';  // branch feat/subtext-srt — test build
+var PLUGIN_VERSION = 'v4.5.0-srt.2-overhaul';  // branch feat/subtext-srt — UI overhaul + standalone Sub tab
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -569,6 +569,9 @@ var timelineInfo   = document.getElementById('timeline-info');
 var contextPanel   = document.getElementById('context-panel');
 var contextContent = document.getElementById('context-content');
 var settingsModal  = document.getElementById('settings-modal');
+// Settings used to live inside #tab-claude (now hidden). Reparent it to <body> so
+// the ⚙ in the version bar can open it as a global overlay from any tab.
+if (settingsModal && settingsModal.parentNode !== document.body) document.body.appendChild(settingsModal);
 var bridgeUrlInput = document.getElementById('bridge-url-input');
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -1516,28 +1519,24 @@ function populateBridgeInfo() {
   xhr.send();
 }
 
-// Settings panel is position:absolute inside #tab-claude.
-// Measure the actual header height at open time so we don't overlap it.
+// Settings is a global overlay (reparented to <body>), opened from the ⚙ in the
+// version bar. It sits just below the version bar and covers the active tab.
 function openSettingsPanel() {
-  var header     = document.getElementById('header');
-  var statusBar  = document.getElementById('status-bar');
-  var headerH    = header    ? (header.offsetTop    + header.offsetHeight)    : 40;
-  var statusH    = statusBar ? (statusBar.offsetTop + statusBar.offsetHeight) : 0;
-  var topPx      = Math.max(headerH, statusH) + 2;
+  var vb    = document.getElementById('versionBar');
+  var topPx = vb ? (vb.offsetTop + vb.offsetHeight + 2) : 4;
   settingsModal.style.top = topPx + 'px';
   settingsModal.style.display = 'block';
-  // Hide chat+input while settings is open. UXP renders native <textarea> above
-  // other content regardless of DOM order, so it would otherwise overlap the panel.
-  var cc = document.getElementById('claude-content');
-  if (cc) cc.style.display = 'none';
+  // UXP renders native <textarea>/<input>/<select> above everything, so the active
+  // tab's fields would bleed over the overlay — hide all tab panels while open.
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = 'none'; });
   populateBridgeInfo();
   var spv = document.getElementById('settings-plugin-version');
   if (spv) spv.textContent = PLUGIN_VERSION;
 }
 function closeSettingsPanel() {
   settingsModal.style.display = 'none';
-  var cc = document.getElementById('claude-content');
-  if (cc) cc.style.display = '';
+  // Clear the inline display so the .tab-panel.active CSS rule shows the right tab again.
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = ''; });
 }
 
 document.getElementById('settings-btn').addEventListener('click', function(e) {
@@ -6700,4 +6699,166 @@ async function ppMoveToVOBin(item, proj) {
       if (pid) _vgProjectId = pid;
     } catch(e) {}
   }, 5000);
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// TẠO SUB MODULE — standalone subtitle (.srt) from timeline audio
+// Reads checked audio tracks → concat (bridge ffmpeg) → Whisper → .srt → import.
+// ════════════════════════════════════════════════════════════════════════════
+(function() {
+  function $(id) { return document.getElementById(id); }
+  var stTracks = []; // [{index, name, count, track}]
+
+  function stStatus(msg) {
+    var el = $('stStatus'); if (!el) return;
+    el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
+  }
+
+  async function stScanTracks() {
+    var listEl = $('stTrackList');
+    stStatus('');
+    if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">⏳ Đang quét...</div>';
+    stTracks = [];
+    try {
+      var seq = await getActiveSequence();
+      if (!seq) { if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">⚠ Chưa mở sequence nào.</div>'; return; }
+      var cnt = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
+      if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+      cnt = cnt || 0;
+      for (var i = 0; i < cnt; i++) {
+        var tr = seq.getAudioTrack(i);
+        if (tr && typeof tr.then === 'function') tr = await tr;
+        if (!tr) continue;
+        var items = [];
+        try { items = await getClipItems(tr); } catch (e) {}
+        stTracks.push({ index: i, name: 'A' + (i + 1), count: (items || []).length, track: tr });
+      }
+      stRenderTracks();
+    } catch (e) {
+      if (listEl) listEl.innerHTML = '<div class="st-trackEmpty">❌ ' + e.message + '</div>';
+    }
+  }
+
+  function stRenderTracks() {
+    var listEl = $('stTrackList'); if (!listEl) return;
+    listEl.innerHTML = '';
+    var withClips = stTracks.filter(function (t) { return t.count > 0; });
+    if (!withClips.length) {
+      listEl.innerHTML = '<div class="st-trackEmpty">Không có clip audio nào. Thêm audio rồi bấm 🔄.</div>';
+      return;
+    }
+    stTracks.forEach(function (t) {
+      if (t.count === 0) return;
+      var row = document.createElement('label');
+      row.className = 'st-trackRow';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = true; cb.dataset.trackIdx = String(t.index);
+      var nm = document.createElement('span'); nm.textContent = '🔊 ' + t.name;
+      var meta = document.createElement('span'); meta.className = 'st-trackMeta'; meta.textContent = t.count + ' clip';
+      row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
+      listEl.appendChild(row);
+    });
+  }
+
+  // Collect clips from checked tracks → [{filePath,inPoint,outPoint,start}] sorted by timeline start.
+  async function stCollectClips() {
+    var checked = Array.prototype.slice.call(document.querySelectorAll('#stTrackList input[type=checkbox]'))
+      .filter(function (cb) { return cb.checked; })
+      .map(function (cb) { return parseInt(cb.dataset.trackIdx, 10); });
+    if (!checked.length) return [];
+    var out = [];
+    for (var k = 0; k < stTracks.length; k++) {
+      var t = stTracks[k];
+      if (checked.indexOf(t.index) === -1) continue;
+      var items = [];
+      try { items = await getClipItems(t.track); } catch (e) { continue; }
+      for (var j = 0; j < items.length; j++) {
+        var it = items[j];
+        var fp = null;
+        try { fp = await vcGetTrackItemFilePath(it); } catch (e) {}
+        if (!fp) continue;
+        var inSec = 0, outSec = 0, startSec = 0;
+        try {
+          var ip = it.getInPoint && it.getInPoint(); if (ip && ip.then) ip = await ip; inSec = getTimeSec(ip);
+          var op = it.getOutPoint && it.getOutPoint(); if (op && op.then) op = await op; outSec = getTimeSec(op);
+          var sps = it.getStart && it.getStart(); if (sps && sps.then) sps = await sps; startSec = getTimeSec(sps);
+        } catch (e) {}
+        if (outSec <= inSec) continue;
+        out.push({ filePath: fp, inPoint: inSec, outPoint: outSec, start: startSec });
+      }
+    }
+    out.sort(function (a, b) { return a.start - b.start; });
+    return out;
+  }
+
+  // Own import (SAC's sacFindOrImportFile lives in another IIFE).
+  async function stImportFile(filePath) {
+    var proj = await getActiveProject();
+    if (!proj) throw new Error('Không có project đang mở');
+    if (typeof proj.importFiles === 'function') await proj.importFiles([filePath]);
+    else if (typeof proj.importFile === 'function') await proj.importFile(filePath);
+    else throw new Error('No importFiles API');
+  }
+
+  async function stMakeSrt() {
+    var btn = $('stMakeBtn'); var old = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang xử lý...'; }
+    try {
+      stStatus('⏳ Đọc clip audio từ timeline...');
+      var clips = await stCollectClips();
+      if (!clips.length) { stStatus('⚠ Chưa chọn track có clip audio (bấm 🔄 Quét track rồi tick).'); return; }
+
+      var scriptRaw = ($('stScript') && $('stScript').value || '').trim();
+      var scriptLines = scriptRaw ? scriptRaw.split('\n').map(function (s) { return s.trim(); }).filter(Boolean) : [];
+      var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 4;
+      var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 24;
+      var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 2;
+
+      var folder = localStorage.getItem('vg_last_save_folder') || '';
+      if (!folder) {
+        try {
+          var lfs = require('uxp').storage.localFileSystem;
+          var f = await lfs.getFolder();
+          if (!f) { stStatus('Đã huỷ — chưa chọn thư mục lưu.'); return; }
+          folder = f.nativePath || f.path || '';
+          if (folder) localStorage.setItem('vg_last_save_folder', folder);
+        } catch (e) { stStatus('Không chọn được thư mục: ' + e.message); return; }
+      }
+      var outputPath = folder.replace(/[\/\\]+$/, '') + '/subtitle_' + Date.now() + '.srt';
+
+      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ... (có thể mất 1-2 phút)');
+      var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clips: clips, scriptLines: scriptLines, outputPath: outputPath,
+          maxWords: maxWords, maxChars: maxChars, maxDur: maxDur }),
+      });
+      var d = await resp.json();
+      if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
+
+      stStatus('⏳ Import .srt vào project...');
+      try { await stImportFile(d.path); }
+      catch (e) { stStatus('✅ Đã lưu ' + d.cues.length + ' dòng → ' + d.path + ' (import lỗi: ' + e.message + ', kéo tay).'); return; }
+      stStatus('✅ ' + d.cues.length + ' dòng phụ đề · đã import "' + d.path.split('/').pop() +
+        '" — kéo từ bin xuống timeline để tạo caption track.');
+    } catch (e) {
+      stStatus('❌ ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = old; }
+    }
+  }
+
+  var scanBtn = $('stScanBtn'); if (scanBtn) scanBtn.addEventListener('click', stScanTracks);
+  var makeBtn = $('stMakeBtn'); if (makeBtn) makeBtn.addEventListener('click', stMakeSrt);
+
+  ['stScript', 'stMaxWords', 'stMaxChars', 'stMaxDur'].forEach(function (id) {
+    var el = $(id);
+    if (el) {
+      el.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      el.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
+    }
+  });
+
+  // Auto-scan tracks the first time the Tạo Sub tab is opened.
+  var subTabBtn = document.querySelector('.tab-btn[data-tab="subtext"]');
+  if (subTabBtn) subTabBtn.addEventListener('click', function () { if (!stTracks.length) stScanTracks(); });
 })();
