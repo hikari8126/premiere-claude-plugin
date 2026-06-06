@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.6';  // branch — EXPERIMENT: fixed-height textarea + native scroll
+var PLUGIN_VERSION = 'v4.5.0-srt.7';  // branch — reverted textarea experiment (UXP textarea confirmed non-scrollable)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
