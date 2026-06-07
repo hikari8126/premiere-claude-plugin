@@ -1764,11 +1764,11 @@ function subtextChunk(sw, opts) {
       cues.splice(k, 1);
     }
   }
-  // Clean timing: ensure positive duration + no overlap with the next cue.
+  // Back-to-back captions: each cue stays on screen until the NEXT cue starts
+  // (don't cut off when the voice for this line ends → no blank gaps between captions).
   for (let k = 0; k < cues.length; k++) {
+    if (k + 1 < cues.length) cues[k].end = cues[k + 1].start;
     if (cues[k].end <= cues[k].start) cues[k].end = cues[k].start + 0.4;
-    if (k + 1 < cues.length && cues[k].end > cues[k + 1].start)
-      cues[k].end = Math.max(cues[k].start + 0.1, cues[k + 1].start - 0.02);
   }
   return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: c.text }));
 }
@@ -1785,44 +1785,63 @@ function subtextToSrt(cues) {
 }
 
 // Concat timeline clips (chronological) into one mp3 via ffmpeg → returns path.
+// Build a TIMELINE-ACCURATE audio: each clip placed at its timeline position with
+// silence filling the gaps, so Whisper timestamps map straight onto the timeline.
+// Audio t=0 ↔ timeline `offset` (= first clip's start); caller adds `offset` to cues.
+// Returns { audioPath, offset }. Uniform 16kHz mono so the concat demuxer accepts all parts.
 async function subtextConcatClips(clips) {
   const tmpDir = getTempDir(); ensureDir(tmpDir);
-  const ts = Date.now(); const segPaths = [];
-  try {
-    for (let i = 0; i < clips.length; i++) {
-      const { filePath, inPoint, outPoint } = clips[i] || {};
-      if (!filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
-      if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: không thấy file ${filePath}`);
-      // Clamp + fixed-decimal: in/out can be a tiny negative float (e.g. -3.9e-12)
-      // which ffmpeg rejects ("Invalid duration for option ss").
-      const inS  = Math.max(0, Number(inPoint)  || 0);
-      let   outS = Math.max(0, Number(outPoint) || 0);
-      if (outS <= inS) outS = inS + 0.05;
-      const segPath = path.join(tmpDir, `sub_seg_${ts}_${i}.wav`);
-      await new Promise((resolve, reject) => {
-        const proc = spawn('ffmpeg', ['-y', '-i', filePath, '-ss', inS.toFixed(3),
-          '-to', outS.toFixed(3), '-vn', '-acodec', 'pcm_s16le', segPath], { stdio: 'pipe' });
-        let err = ''; proc.stderr.on('data', d => { err += d.toString(); });
-        proc.on('close', c => c === 0 ? resolve() : reject(new Error(`ffmpeg seg ${i + 1}: ${err.slice(-200)}`)));
-        proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
-      });
-      segPaths.push(segPath);
-    }
-    const listPath = path.join(tmpDir, `sub_list_${ts}.txt`);
-    fs.writeFileSync(listPath, segPaths.map(p => `file '${p}'`).join('\n'));
-    const outPath = path.join(tmpDir, `sub_audio_${ts}.mp3`);
-    await new Promise((resolve, reject) => {
-      const proc = spawn('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listPath,
-        '-acodec', 'libmp3lame', '-q:a', '2', outPath], { stdio: 'pipe' });
+  const ts = Date.now();
+  const parts = [];     // ordered segment paths (clips + silence)
+  const tmpFiles = [];
+  const AR = '16000';
+  const order = clips.slice().sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0));
+  const offset = Math.max(0, Number(order[0] && order[0].start) || 0);
+
+  function run(args) {
+    return new Promise((resolve, reject) => {
+      const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
       let err = ''; proc.stderr.on('data', d => { err += d.toString(); });
-      proc.on('close', c => c === 0 ? resolve() : reject(new Error('ffmpeg concat: ' + err.slice(-200))));
+      proc.on('close', c => c === 0 ? resolve() : reject(new Error('ffmpeg: ' + err.slice(-220))));
       proc.on('error', e => reject(new Error('ffmpeg: ' + e.message)));
     });
-    for (const s of segPaths) { try { fs.unlinkSync(s); } catch (e) {} }
-    try { fs.unlinkSync(listPath); } catch (e) {}
-    return outPath;
+  }
+
+  try {
+    let cursor = offset; // timeline time covered so far (audio begins at the first clip)
+    for (let i = 0; i < order.length; i++) {
+      const c = order[i];
+      if (!c.filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
+      if (!fs.existsSync(c.filePath)) throw new Error(`Clip ${i + 1}: không thấy file ${c.filePath}`);
+      const start = Math.max(0, Number(c.start) || 0);
+      const inS   = Math.max(0, Number(c.inPoint) || 0);
+      let   outS  = Math.max(0, Number(c.outPoint) || 0);
+      if (outS <= inS) outS = inS + 0.05;
+
+      // Gap before this clip (timeline) → insert exact silence so timing stays aligned.
+      const gap = start - cursor;
+      if (gap > 0.02) {
+        const silPath = path.join(tmpDir, `sub_sil_${ts}_${i}.wav`);
+        await run(['-y', '-f', 'lavfi', '-i', `anullsrc=r=${AR}:cl=mono`,
+          '-t', gap.toFixed(3), '-acodec', 'pcm_s16le', silPath]);
+        parts.push(silPath); tmpFiles.push(silPath);
+      }
+      // Clip segment, forced to uniform format.
+      const segPath = path.join(tmpDir, `sub_seg_${ts}_${i}.wav`);
+      await run(['-y', '-i', c.filePath, '-ss', inS.toFixed(3), '-to', outS.toFixed(3),
+        '-vn', '-ar', AR, '-ac', '1', '-acodec', 'pcm_s16le', segPath]);
+      parts.push(segPath); tmpFiles.push(segPath);
+      cursor = start + (outS - inS);
+    }
+    const listPath = path.join(tmpDir, `sub_list_${ts}.txt`); tmpFiles.push(listPath);
+    fs.writeFileSync(listPath, parts.map(p => `file '${p}'`).join('\n'));
+    const outPath = path.join(tmpDir, `sub_audio_${ts}.mp3`);
+    await run(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-acodec', 'libmp3lame', '-q:a', '2', outPath]);
+    for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (e) {} }
+    console.log(`[subtext] timeline-accurate audio: ${order.length} clips, offset ${offset.toFixed(2)}s`);
+    return { audioPath: outPath, offset: offset };
   } catch (e) {
-    for (const s of segPaths) { try { fs.unlinkSync(s); } catch (er) {} }
+    for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (er) {} }
     throw e;
   }
 }
@@ -1841,10 +1860,12 @@ function subtextWordsFromWhisper(words, segments) {
 app.post('/superautocut/subtext', async (req, res) => {
   try {
     let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur } = req.body || {};
-    // Source audio: a direct path OR a list of timeline clips to concat first.
+    // Source audio: a direct path OR a list of timeline clips → timeline-accurate render.
+    let offset = 0;
     if (Array.isArray(clips) && clips.length) {
-      console.log(`[subtext] concat ${clips.length} timeline clips...`);
-      audioPath = await subtextConcatClips(clips);
+      console.log(`[subtext] timeline-accurate concat of ${clips.length} clips...`);
+      const r = await subtextConcatClips(clips);
+      audioPath = r.audioPath; offset = r.offset;
     }
     if (!audioPath) throw new Error('Cần audioPath hoặc clips');
     if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
@@ -1864,8 +1885,10 @@ app.post('/superautocut/subtext', async (req, res) => {
     }
     if (!sw.length) throw new Error('Không có nội dung để tạo phụ đề');
     const cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
+    // Shift cue times to absolute timeline (audio t=0 ↔ timeline `offset`) → drag .srt at 0 = aligned.
+    if (offset) cues.forEach(c => { c.start += offset; c.end += offset; });
     const srt  = subtextToSrt(cues);
-    console.log(`[subtext] ${words.length} words · ${cleanScript.length ? 'script' : 'whisper'} → ${cues.length} cues`);
+    console.log(`[subtext] ${words.length} words · ${cleanScript.length ? 'script' : 'whisper'} → ${cues.length} cues · offset ${offset.toFixed(2)}s`);
 
     let savedPath;
     if (outputPath) {
@@ -2086,7 +2109,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.2';  // branch — subtext concat clamps ffmpeg -ss
+const BRIDGE_VERSION = '1.6.3';  // branch — subtext timeline-accurate audio (silence for gaps) + back-to-back cues
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
