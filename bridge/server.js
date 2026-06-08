@@ -1709,6 +1709,17 @@ function subtextAssignTimes(sw, whisper) {
   subtextInterpolate(sw, whisper);
 }
 
+// First whisper speech onset (start of a word preceded by a >0.4s silence)
+// within (after, before). Used to keep interpolated words out of silent gaps.
+function subtextFirstOnset(whisper, after, before) {
+  for (let k = 1; k < whisper.length; k++) {
+    const prevEnd = whisper[k - 1].end, st = whisper[k].start;
+    if (st > before) break;
+    if (prevEnd >= after - 0.05 && (st - prevEnd) > 0.4) return st;
+  }
+  return null;
+}
+
 function subtextInterpolate(sw, whisper) {
   const n = sw.length;
   const audioEnd = whisper.length ? whisper[whisper.length - 1].end : n;
@@ -1722,8 +1733,14 @@ function subtextInterpolate(sw, whisper) {
   while (i < n) {
     if (sw[i].start != null) { i++; continue; }
     let j = i; while (j < n && sw[j].start == null) j++;
-    const leftEnd    = sw[i - 1].end;
+    let   leftEnd    = sw[i - 1].end;
     const rightStart = (j < n) ? sw[j].start : audioEnd;
+    // Unmatched words after a pause are the onset of a new utterance (whisper
+    // often mis-hears the first word). Don't spread them from the previous
+    // word's end — that drops the caption into the silent gap, making it show
+    // "voice + the PRECEDING gap". Snap the run to where speech actually resumes.
+    const onset = subtextFirstOnset(whisper, leftEnd, rightStart);
+    if (onset != null && onset > leftEnd) leftEnd = onset;
     const span = Math.max(0, rightStart - leftEnd), cnt = j - i;
     for (let k = 0; k < cnt; k++) {
       sw[i + k].start = leftEnd + span * k / cnt;
@@ -1809,6 +1826,7 @@ async function subtextConcatClips(clips) {
 
   try {
     let cursor = offset; // timeline time covered so far (audio begins at the first clip)
+    let totalGap = 0;
     for (let i = 0; i < order.length; i++) {
       const c = order[i];
       if (!c.filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
@@ -1821,6 +1839,7 @@ async function subtextConcatClips(clips) {
       // Gap before this clip (timeline) → insert exact silence so timing stays aligned.
       const gap = start - cursor;
       if (gap > 0.02) {
+        totalGap += gap;
         const silPath = path.join(tmpDir, `sub_sil_${ts}_${i}.wav`);
         await run(['-y', '-f', 'lavfi', '-i', `anullsrc=r=${AR}:cl=mono`,
           '-t', gap.toFixed(3), '-acodec', 'pcm_s16le', silPath]);
@@ -1837,8 +1856,9 @@ async function subtextConcatClips(clips) {
     fs.writeFileSync(listPath, parts.map(p => `file '${p}'`).join('\n'));
     const outPath = path.join(tmpDir, `sub_audio_${ts}.mp3`);
     await run(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-acodec', 'libmp3lame', '-q:a', '2', outPath]);
+    const realDur = await ffprobeDuration(outPath);
     for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (e) {} }
-    console.log(`[subtext] timeline-accurate audio: ${order.length} clips, offset ${offset.toFixed(2)}s`);
+    console.log(`[subtext] timeline-accurate audio: ${order.length} clips, offset ${offset.toFixed(2)}s, total gap-silence ${totalGap.toFixed(2)}s, audio dur ${realDur.toFixed(2)}s (timeline span ${(cursor - offset).toFixed(2)}s)`);
     return { audioPath: outPath, offset: offset };
   } catch (e) {
     for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (er) {} }
@@ -1854,6 +1874,18 @@ function subtextWordsFromWhisper(words, segments) {
   return words.map(w => {
     while (si < segments.length - 1 && w.start >= segments[si].end) si++;
     return { raw: w.text, n: norm(w.text), line: si, start: w.start, end: w.end };
+  });
+}
+
+// Audio duration in seconds via ffprobe (resolves 0 on any failure).
+function ffprobeDuration(audioPath) {
+  return new Promise((resolve) => {
+    const proc = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1', audioPath], { stdio: 'pipe' });
+    let out = '';
+    proc.stdout.on('data', d => { out += d.toString(); });
+    proc.on('close', () => resolve(parseFloat(out.trim()) || 0));
+    proc.on('error', () => resolve(0));
   });
 }
 
@@ -1885,6 +1917,13 @@ app.post('/superautocut/subtext', async (req, res) => {
     }
     if (!sw.length) throw new Error('Không có nội dung để tạo phụ đề');
     const cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
+    // Extend the LAST cue to the true audio end — whisper's last word usually ends
+    // before the audio actually does, leaving total subtitle span < voice length.
+    if (cues.length) {
+      const audioDur = await ffprobeDuration(audioPath);
+      const last = cues[cues.length - 1];
+      if (audioDur > last.end) last.end = audioDur;
+    }
     // Shift cue times to absolute timeline (audio t=0 ↔ timeline `offset`) → drag .srt at 0 = aligned.
     if (offset) cues.forEach(c => { c.start += offset; c.end += offset; });
     const srt  = subtextToSrt(cues);
@@ -2109,7 +2148,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.3';  // branch — subtext timeline-accurate audio (silence for gaps) + back-to-back cues
+const BRIDGE_VERSION = '1.6.4';  // subtext: extend last cue to true audio end (ffprobe)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

@@ -2088,17 +2088,21 @@ body {
   font-family: ui-monospace, monospace;
   color: var(--text-dim);
   margin-right: auto; /* push Organize controls to the right */
+  flex: 0 0 auto;
 }
 .vg-organizeModel {
   background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
   color: var(--text); font-size: 10px; padding: 3px 6px; cursor: pointer;
-  appearance: none; -webkit-appearance: none; max-width: 130px;
+  appearance: none; -webkit-appearance: none;
+  /* Shrinkable so the Organize button never overflows the left card (UXP flex
+     gap is a no-op → space the controls with margins instead). */
+  flex: 1 1 auto; min-width: 60px; max-width: 110px; margin-left: 6px;
 }
 .vg-organizeModel:focus { outline: none; border-color: var(--accent); }
 .vg-organizeBtn {
   background: rgba(168,85,247,0.18); border: 1px solid var(--accent); border-radius: 5px;
-  color: var(--accent); font-size: 10.5px; font-weight: 600; padding: 3px 10px; cursor: pointer;
-  white-space: nowrap;
+  color: var(--accent); font-size: 10.5px; font-weight: 600; padding: 3px 8px; cursor: pointer;
+  white-space: nowrap; flex: 0 0 auto; margin-left: 6px;
 }
 .vg-organizeBtn:hover { background: rgba(168,85,247,0.3); color: #fff; }
 .vg-organizeBtn:disabled { opacity: 0.6; cursor: default; }
@@ -2204,8 +2208,8 @@ body {
 
 /* ── Right: settings panel ── */
 .vg-right {
-  flex: 0 0 278px;
-  width: 278px;
+  flex: 0 0 232px;
+  width: 232px;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -2214,7 +2218,7 @@ body {
   border-left: 1px solid var(--border);
   background: rgba(0,0,0,0.12);
 }
-@media (max-width: 450px) { .vg-right { flex: 0 0 185px; width: 185px; } }
+@media (max-width: 450px) { .vg-right { flex: 0 0 168px; width: 168px; } }
 .vg-rightScroll {
   flex: 1 1 0;
   min-height: 0;       /* critical: allows the flex child to shrink and scroll in UXP */
