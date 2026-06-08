@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0';  // Tạo Sub (.srt từ audio timeline) + VoiceGen fixes + UI overhaul
+var PLUGIN_VERSION = 'v4.5.1';  // UI: organize fit (right card narrower); subtext last cue covers full voice
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -6736,7 +6736,11 @@ async function ppMoveToVOBin(item, proj) {
         try {
           var ip = it.getInPoint && it.getInPoint(); if (ip && ip.then) ip = await ip; inSec = getTimeSec(ip);
           var op = it.getOutPoint && it.getOutPoint(); if (op && op.then) op = await op; outSec = getTimeSec(op);
-          var sps = it.getStart && it.getStart(); if (sps && sps.then) sps = await sps; startSec = getTimeSec(sps);
+          // Timeline position: UXP trackitems expose getStartTime() (sequence time);
+          // getStart() is absent on these items → was always 0, which collapsed all
+          // timeline gaps (silence never inserted). Prefer getStartTime, fall back.
+          var startFn = it.getStartTime || it.getStart;
+          var sps = startFn ? startFn.call(it) : null; if (sps && sps.then) sps = await sps; startSec = getTimeSec(sps);
         } catch (e) {}
         inSec = Math.max(0, inSec); outSec = Math.max(0, outSec); // guard tiny negative FP (ffmpeg -ss)
         if (outSec <= inSec) continue;
