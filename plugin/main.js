@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.0-srt.12';  // Tạo Sub spacing via margins (UXP ignores flex gap)
+var PLUGIN_VERSION = 'v4.5.0';  // Tạo Sub (.srt từ audio timeline) + VoiceGen fixes + UI overhaul
 
 // ── State ──────────────────────────────────────────────────────────────────
 
