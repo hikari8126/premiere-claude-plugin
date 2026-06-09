@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.2';  // Tạo Sub: AI phrase-segmentation (verbatim) + line-boundary enforce
+var PLUGIN_VERSION = 'v4.5.3';  // VoiceGen UI: settings popup, results+voice right, import→timeline, SFX/Music sliders
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -5588,6 +5588,12 @@ async function ppMoveToVOBin(item, proj) {
         importB.textContent = 'Import';
         importB.addEventListener('click', function() { importVariation(v); });
 
+        // Import + drop on the timeline at the playhead (first free audio track)
+        var toTimelineB = document.createElement('button');
+        toTimelineB.className = 'ac-secondaryButton vg-actionButton';
+        toTimelineB.textContent = '⬇ Timeline';
+        toTimelineB.addEventListener('click', function() { importToTimeline(v); });
+
         // Move to Autocut — feed this generated voice into the Autocut pipeline
         var toAutocutB = document.createElement('button');
         toAutocutB.className = 'ac-secondaryButton vg-actionButton';
@@ -5597,6 +5603,7 @@ async function ppMoveToVOBin(item, proj) {
         var actionsRow = document.createElement('div');
         actionsRow.className = 'vg-resultActions';
         actionsRow.appendChild(importB);
+        actionsRow.appendChild(toTimelineB);
         actionsRow.appendChild(toAutocutB);
 
         wrap.appendChild(sizeEl);
@@ -5696,6 +5703,94 @@ async function ppMoveToVOBin(item, proj) {
     }
   }
 
+  // Import the variation AND drop it on the timeline at the playhead, on the
+  // first audio track that is free there (never overwrites existing audio).
+  async function importToTimeline(variation) {
+    if (!variation || !variation.audioPath) return;
+    if (!els.importStatus) els.importStatus = $('vgImportStatus');
+    var setMsg = function(cls, txt) { if (els.importStatus) { els.importStatus.className = 'ac-manualStatus' + (cls ? ' ' + cls : ''); els.importStatus.textContent = txt; } };
+    try {
+      if (!ppro || !ppro.SequenceEditor) throw new Error('Premiere 25.x API (SequenceEditor) không khả dụng');
+      // 1. Ask where to save (same modal as Import) — temp files get cleaned, so the
+      //    clip needs a permanent path before it goes on the timeline.
+      var picked = await promptSaveLocation(variation.filename || 'voice.mp3');
+      if (!picked) { setMsg('is-err', '✗ Cancelled'); return; }
+      var saveDir = picked.dir, saveName = picked.name;
+      if (els.outputFolder) els.outputFolder.value = saveDir;
+      var finalPath = variation.audioPath;
+      var alreadyInDest = variation.audioPath.startsWith(saveDir) && (!saveName || variation.audioPath.endsWith('/' + saveName));
+      if (!alreadyInDest) {
+        var mp = { sourcePath: variation.audioPath, targetDir: saveDir };
+        if (saveName) mp.targetName = saveName;
+        var mr = await postJsonVG('/tts/move', mp);
+        if (!mr || !mr.ok) throw new Error((mr && mr.error) || 'move failed');
+        finalPath = mr.targetPath;
+      }
+      var fname = finalPath.split('/').pop();
+
+      // 2. Import (if not already in bin) + locate the ProjectItem.
+      setMsg('', 'Đang import + đặt lên timeline...');
+      var project = await getActiveProject();
+      if (!project) throw new Error('Không có project đang mở');
+      var rootItem = (typeof project.getRootItem === 'function') ? project.getRootItem() : project.rootItem;
+      if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+      var find = async function() {
+        var its = rootItem ? await sacCollectBinItems(rootItem) : [];
+        return its.find(function(b) { return b.name === fname; });
+      };
+      var found = await find();
+      if (!found) {
+        if (typeof project.importFiles === 'function') await project.importFiles([finalPath]);
+        else if (typeof project.importFile === 'function') await project.importFile(finalPath);
+        else throw new Error('No importFiles API');
+        found = await find();
+      }
+      if (!found) throw new Error('Không tìm thấy clip trong bin sau khi import');
+      var item = found.item;
+
+      // 3. Playhead time + first audio track free at that point.
+      var seq = await getActiveSequence();
+      if (!seq) throw new Error('Chưa mở sequence');
+      var ph = seq.getPlayerPosition ? seq.getPlayerPosition() : null;
+      if (ph && ph.then) ph = await ph;
+      var atSec = getTimeSec(ph);
+      var dur = Number(variation.duration) || 0.05;
+      var aCount = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
+      if (aCount && aCount.then) aCount = await aCount;
+      aCount = aCount || 0;
+      var targetA = -1;
+      for (var i = 0; i < aCount; i++) {
+        var tr = seq.getAudioTrack(i); if (tr && tr.then) tr = await tr;
+        var clips = []; try { clips = await getClipItems(tr); } catch (e) {}
+        var busy = false;
+        for (var k = 0; k < clips.length; k++) {
+          var cs = 0, ce = 0;
+          try { var gs = clips[k].getStartTime ? clips[k].getStartTime() : clips[k].getStart(); if (gs && gs.then) gs = await gs; cs = getTimeSec(gs); } catch (e) {}
+          try { var ge = clips[k].getEndTime ? clips[k].getEndTime() : null; if (ge && ge.then) ge = await ge; ce = getTimeSec(ge); } catch (e) {}
+          if (atSec < ce - 0.001 && (atSec + dur) > cs + 0.001) { busy = true; break; }
+        }
+        if (!busy) { targetA = i; break; }
+      }
+      if (targetA < 0) targetA = aCount; // all busy → ask Premiere for a new track index
+
+      // 4. Place (overwrite — track is free here, so nothing is clobbered).
+      var seqEditor = ppro.SequenceEditor.getEditor(seq);
+      var timeAt = ppro.TickTime.createWithSeconds(Math.max(0, atSec));
+      var txErr = null;
+      var r = project.lockedAccess(function() {
+        try { project.executeTransaction(function(ca) { ca.addAction(seqEditor.createOverwriteItemAction(item, timeAt, 5, targetA)); }, 'VG import to timeline'); }
+        catch (e) { txErr = e; }
+      });
+      if (r && typeof r.then === 'function') await r;
+      if (txErr) throw txErr;
+
+      if ($('vgMoveToVOBin') && $('vgMoveToVOBin').checked) { try { await ppMoveToVOBin(item, project); } catch (e) {} }
+      setMsg('is-ok', '✓ Đã đặt "' + fname + '" lên A' + (targetA + 1) + ' tại ' + atSec.toFixed(2) + 's');
+    } catch (e) {
+      setMsg('is-err', '✗ Timeline: ' + e.message);
+    }
+  }
+
   // Custom save modal: lets the user type a filename while showing (and remembering)
   // the destination folder. Resolves to { dir, name } or null if cancelled.
   // Needed because UXP's native getFileForSaving cannot open at a remembered folder.
@@ -5788,12 +5883,20 @@ async function ppMoveToVOBin(item, proj) {
 
   // ⚙ settings toggle — show/hide the API profiles + output format panel
   var vgSettingsBtn = $('vgSettingsBtn'), vgSettingsPanel = $('vgSettingsPanel');
-  if (vgSettingsBtn && vgSettingsPanel) {
-    vgSettingsBtn.addEventListener('click', function() {
-      vgSettingsPanel.hidden = !vgSettingsPanel.hidden;
-      vgSettingsBtn.classList.toggle('is-active', !vgSettingsPanel.hidden);
-    });
+  var vgSettingsClose = $('vgSettingsClose');
+  var vgBodyEl = document.querySelector('#tab-voicegen .vg-body');
+  // Open/close the settings popup. Hide the body while open so UXP text inputs
+  // underneath don't render on top of the overlay (known UXP z-order issue).
+  function vgSetSettingsOpen(open) {
+    if (!vgSettingsPanel) return;
+    vgSettingsPanel.hidden = !open;
+    if (vgSettingsBtn) vgSettingsBtn.classList.toggle('is-active', open);
+    if (vgBodyEl) vgBodyEl.style.visibility = open ? 'hidden' : '';
   }
+  if (vgSettingsBtn && vgSettingsPanel) {
+    vgSettingsBtn.addEventListener('click', function() { vgSetSettingsOpen(vgSettingsPanel.hidden); });
+  }
+  if (vgSettingsClose) vgSettingsClose.addEventListener('click', function() { vgSetSettingsOpen(false); });
   els.voiceSelect.addEventListener('change', function() {
     els.customVoiceId.hidden = els.voiceSelect.value !== '__custom__';
     if (!els.customVoiceId.hidden) els.customVoiceId.focus();
@@ -5849,6 +5952,9 @@ async function ppMoveToVOBin(item, proj) {
   // Variation buttons
   if (els.var1Import) els.var1Import.addEventListener('click', function() { importVariation(lastVariations[0]); });
   if (els.var2Import) els.var2Import.addEventListener('click', function() { importVariation(lastVariations[1]); });
+  var vgV1TL = $('vgVar1Timeline'), vgV2TL = $('vgVar2Timeline');
+  if (vgV1TL) vgV1TL.addEventListener('click', function() { importToTimeline(lastVariations[0]); });
+  if (vgV2TL) vgV2TL.addEventListener('click', function() { importToTimeline(lastVariations[1]); });
 
   // Move to Autocut — pick save location (folder + filename) then push to Autocut
   async function moveToAutocut(v) {
@@ -6542,11 +6648,41 @@ async function ppMoveToVOBin(item, proj) {
     update();
   }
 
-  // SFX sliders
-  hookSlider('vgSfxDuration',  'vgSfxDurationValue',  3,   function(n){ return n.toFixed(1) + 's'; });
-  hookSlider('vgSfxInfluence', 'vgSfxInfluenceValue', 0.3, function(n){ return n.toFixed(2); });
-  // Music slider
-  hookSlider('vgMusicLength',  'vgMusicLengthValue',  10,  function(n){ return Math.round(n) + 's'; });
+  // SFX/Music params: same custom drag-slider as the Tạo Sub tab (UXP native
+  // range can't drag). The number box keeps its ID so generate() reads it as before.
+  function vgMakeCSlider(sliderId, numId) {
+    var s = $(sliderId), n = $(numId);
+    if (!s || !n) return;
+    var min = parseFloat(s.dataset.min), max = parseFloat(s.dataset.max);
+    var step = parseFloat(s.dataset.step) || 1;
+    var decimals = (String(step).split('.')[1] || '').length;
+    var fill = s.querySelector('.st-cfill'), thumb = s.querySelector('.st-cthumb');
+    var dragging = false;
+    function render(v) {
+      var pct = max > min ? (v - min) / (max - min) : 0;
+      pct = Math.max(0, Math.min(1, pct)) * 100;
+      if (fill) fill.style.width = pct + '%';
+      if (thumb) thumb.style.left = pct + '%';
+    }
+    function setVal(v, fromInput) {
+      if (isNaN(v)) return;
+      v = Math.round(v / step) * step;
+      v = Math.max(min, Math.min(max, parseFloat(v.toFixed(decimals))));
+      if (!fromInput) n.value = v;
+      render(v);
+    }
+    function valFromX(cx) { var r = s.getBoundingClientRect(); var pct = r.width ? (cx - r.left) / r.width : 0; return min + Math.max(0, Math.min(1, pct)) * (max - min); }
+    s.addEventListener('pointerdown', function (e) { dragging = true; setVal(valFromX(e.clientX)); });
+    window.addEventListener('pointermove', function (e) { if (dragging) setVal(valFromX(e.clientX)); });
+    window.addEventListener('pointerup', function () { dragging = false; });
+    n.addEventListener('input', function () { setVal(parseFloat(n.value), true); });
+    n.addEventListener('change', function () { setVal(parseFloat(n.value)); });
+    n.addEventListener('blur', function () { setVal(parseFloat(n.value)); });
+    setVal(parseFloat(n.value));
+  }
+  vgMakeCSlider('vgSfxDurationC',  'vgSfxDuration');
+  vgMakeCSlider('vgSfxInfluenceC', 'vgSfxInfluence');
+  vgMakeCSlider('vgMusicLengthC',  'vgMusicLength');
 
   // SFX char count + auto-resize
   var sfxText = $('vgSfxText');
