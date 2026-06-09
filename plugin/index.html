@@ -193,6 +193,8 @@
 
     <!-- Collapsible settings panel (toggled by the ⚙ button) -->
     <div class="vg-settingsPanel" id="vgSettingsPanel" hidden>
+      <div class="vg-settings-box">
+      <div class="vg-settings-title">&#9881; Cài đặt</div>
 
       <!-- ElevenLabs API Key Profiles -->
       <div class="vg-sg vg-apiKeySection">
@@ -228,6 +230,69 @@
         </select>
       </div>
 
+      <!-- Model + Language (TTS only) -->
+      <div class="vg-modeContent" data-mode="tts">
+        <div class="vg-sg">
+          <div class="vg-sl">Model</div>
+          <select id="vgModelSelect" class="vg-select">
+            <option value="eleven_v3" selected>&#9655; v3 · most expressive</option>
+          </select>
+        </div>
+        <div class="vg-sg">
+          <div class="vg-toggleRow">
+            <span class="vg-sl">Language Override</span>
+            <label class="vg-switch">
+              <input type="checkbox" id="vgLangOverride" />
+              <span class="vg-switchTrack"></span>
+            </label>
+          </div>
+          <select id="vgLangSelect" class="vg-select" hidden style="margin-top:4px;">
+            <option value="en">English</option>
+            <option value="vi">Ti&#7871;ng Vi&#7879;t</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="es">Spanish</option>
+            <option value="it">Italian</option>
+            <option value="pt">Portuguese</option>
+            <option value="nl">Dutch</option>
+            <option value="pl">Polish</option>
+            <option value="ru">Russian</option>
+            <option value="ar">Arabic</option>
+            <option value="hi">Hindi</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- SFX output format (Duration & Prompt Influence live outside, by the editor) -->
+      <div class="vg-modeContent" data-mode="sfx" hidden>
+        <div class="vg-sg">
+          <div class="vg-sl">Output Format</div>
+          <select id="vgSfxOutputFormat" class="vg-select">
+            <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
+            <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Output folder + filename -->
+      <div class="vg-sg vg-sgDivider">
+        <div class="vg-sl">Output Folder</div>
+        <div class="vg-folderRow">
+          <input id="vgOutputFolder" type="text" readonly class="vg-folderInput" placeholder="11Lab temp (default)" />
+          <button id="vgBrowseFolder" class="vg-folderBtn">&#128193;</button>
+          <button id="vgResetFolder"  class="vg-folderBtn">&#8635;</button>
+        </div>
+      </div>
+      <div class="vg-sg">
+        <div class="vg-sl">Filename suffix <span class="vg-sm">voice · note · timestamp</span></div>
+        <input id="vgFilename" type="text" class="vg-settingInput" placeholder="optional note" />
+      </div>
+
+      <button id="vgSettingsClose" class="vg-settings-close">&#10003; Lưu &amp; Đóng</button>
+      </div><!-- /vg-settings-box -->
     </div>
 
     <!-- Mode selector -->
@@ -284,6 +349,20 @@
               <span class="vg-charCount" id="vgSfxCharCount">0 / 500</span>
             </div>
           </div>
+          <div class="st-slideRow">
+            <span class="st-slideLbl">Thời lượng</span>
+            <div class="st-cslider" id="vgSfxDurationC" data-min="0.5" data-max="22" data-step="0.5">
+              <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+            </div>
+            <input type="number" id="vgSfxDuration" class="st-num" min="0.5" max="22" step="0.5" value="3" />
+          </div>
+          <div class="st-slideRow">
+            <span class="st-slideLbl">Prompt</span>
+            <div class="st-cslider" id="vgSfxInfluenceC" data-min="0" data-max="1" data-step="0.05">
+              <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+            </div>
+            <input type="number" id="vgSfxInfluence" class="st-num" min="0" max="1" step="0.05" value="0.3" />
+          </div>
         </div>
 
         <!-- Music editor -->
@@ -297,6 +376,13 @@
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgMusicCharCount">0 / 1000</span>
             </div>
+          </div>
+          <div class="st-slideRow">
+            <span class="st-slideLbl">Độ dài</span>
+            <div class="st-cslider" id="vgMusicLengthC" data-min="5" data-max="300" data-step="1">
+              <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+            </div>
+            <input type="number" id="vgMusicLength" class="st-num" min="5" max="300" step="1" value="10" />
           </div>
         </div>
 
@@ -412,7 +498,11 @@
           </div><!-- /vc-scroll -->
         </div><!-- /create modeContent -->
 
-        <!-- Generate bar -->
+        <!-- Move-to-VO toggle + Generate bar (results now live in the right column) -->
+        <label class="vg-checkbox-row vg-moveVoRow">
+          <input type="checkbox" id="vgMoveToVOBin" checked>
+          <span>Move to "Voice Over" bin after import/autocut</span>
+        </label>
         <div class="vg-genBar">
           <label class="vg-varToggle">
             <input type="checkbox" id="vg2Variations" />
@@ -421,60 +511,13 @@
           <button id="vgGenerate" class="vg-genButton">&#9889; GENERATE VOICE</button>
         </div>
 
-        <!-- Results -->
-        <div class="vg-results" id="vgResultSection" hidden>
-
-          <!-- Single-speaker output (always in DOM, shown/hidden per mode) -->
-          <div id="vgSingleVars">
-            <div class="vg-variation" id="vgVar1">
-              <div class="vg-varHeader">
-                <span class="vg-varLabel">Variation 1</span>
-                <span class="vg-varSize" id="vgVar1Size"></span>
-              </div>
-              <div class="vg-player">
-                <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
-                <div class="vg-progressWrap" id="vgVar1ProgWrap">
-                  <div class="vg-progressFill" id="vgVar1Fill"></div>
-                </div>
-                <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
-              </div>
-              <div class="vg-resultActions">
-                <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <button id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
-              </div>
-            </div>
-            <div class="vg-variation" id="vgVar2" style="display:none;">
-              <div class="vg-varHeader">
-                <span class="vg-varLabel">Variation 2</span>
-                <span class="vg-varSize" id="vgVar2Size"></span>
-              </div>
-              <div class="vg-player">
-                <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
-                <div class="vg-progressWrap" id="vgVar2ProgWrap">
-                  <div class="vg-progressFill" id="vgVar2Fill"></div>
-                </div>
-                <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
-              </div>
-              <div class="vg-resultActions">
-                <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <button id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
-              </div>
-            </div>
-            <div id="vgImportStatus" class="ac-manualStatus"></div>
-          </div>
-
-          <!-- Multi-speaker output (dynamically filled, never destroys single vars) -->
-          <div id="vgMultiVars" style="display:none;"></div>
-
-        </div>
-
       </div><!-- /vg-leftScroll -->
       </div><!-- /vg-left -->
 
       <!-- ── RIGHT: Settings panel ── -->
       <div class="vg-right">
         <div class="vg-rightHeader">
-          <span class="vg-rightTab is-active">Settings</span>
+          <span class="vg-rightTab is-active">Voice &amp; Output</span>
         </div>
         <div class="vg-rightScroll">
 
@@ -525,96 +568,50 @@
             <input id="vgCustomVoiceId" type="text" class="vg-settingInput" placeholder="Paste voice_id" hidden style="margin-top:4px;" />
           </div>
 
-          <div class="vg-sg">
-            <div class="vg-sl">Model</div>
-            <select id="vgModelSelect" class="vg-select">
-              <option value="eleven_v3" selected>&#9655; v3 · most expressive</option>
-            </select>
-          </div>
+        </div><!-- /tts modeContent: voice picker (Model/Lang/folder moved to ⚙ Settings) -->
 
-          <div class="vg-sg">
-            <div class="vg-toggleRow">
-              <span class="vg-sl">Language Override</span>
-              <label class="vg-switch">
-                <input type="checkbox" id="vgLangOverride" />
-                <span class="vg-switchTrack"></span>
-              </label>
+        <!-- Generated audio results (shared across modes) -->
+        <div class="vg-results" id="vgResultSection" hidden>
+          <div id="vgSingleVars">
+            <div class="vg-variation" id="vgVar1">
+              <div class="vg-varHeader">
+                <span class="vg-varLabel">Variation 1</span>
+                <span class="vg-varSize" id="vgVar1Size"></span>
+              </div>
+              <div class="vg-player">
+                <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
+                <div class="vg-progressWrap" id="vgVar1ProgWrap">
+                  <div class="vg-progressFill" id="vgVar1Fill"></div>
+                </div>
+                <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
+              </div>
+              <div class="vg-resultActions">
+                <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar1Timeline" class="ac-secondaryButton vg-actionButton">⬇ Timeline</button>
+                <button id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
+              </div>
             </div>
-            <select id="vgLangSelect" class="vg-select" hidden style="margin-top:4px;">
-              <option value="en">English</option>
-              <option value="vi">Ti&#7871;ng Vi&#7879;t</option>
-              <option value="ja">Japanese</option>
-              <option value="ko">Korean</option>
-              <option value="zh">Chinese</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="es">Spanish</option>
-              <option value="it">Italian</option>
-              <option value="pt">Portuguese</option>
-              <option value="nl">Dutch</option>
-              <option value="pl">Polish</option>
-              <option value="ru">Russian</option>
-              <option value="ar">Arabic</option>
-              <option value="hi">Hindi</option>
-            </select>
-          </div>
-
-        </div><!-- /tts settings -->
-
-        <!-- SFX settings -->
-        <div class="vg-modeContent" data-mode="sfx" hidden>
-          <div class="vg-sg">
-            <div class="vg-sl">Duration (0.5–22s)</div>
-            <div class="vg-numRow">
-              <input type="number" id="vgSfxDuration" min="0.5" max="22" step="0.5" value="3" />
-              <span class="vg-nu" id="vgSfxDurationValue">3.0s</span>
+            <div class="vg-variation" id="vgVar2" style="display:none;">
+              <div class="vg-varHeader">
+                <span class="vg-varLabel">Variation 2</span>
+                <span class="vg-varSize" id="vgVar2Size"></span>
+              </div>
+              <div class="vg-player">
+                <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
+                <div class="vg-progressWrap" id="vgVar2ProgWrap">
+                  <div class="vg-progressFill" id="vgVar2Fill"></div>
+                </div>
+                <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
+              </div>
+              <div class="vg-resultActions">
+                <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
+                <button id="vgVar2Timeline" class="ac-secondaryButton vg-actionButton">⬇ Timeline</button>
+                <button id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
+              </div>
             </div>
+            <div id="vgImportStatus" class="ac-manualStatus"></div>
           </div>
-          <div class="vg-sg">
-            <div class="vg-sl">Prompt Influence (0–1)</div>
-            <div class="vg-numRow">
-              <input type="number" id="vgSfxInfluence" min="0" max="1" step="0.05" value="0.3" />
-              <span class="vg-nu" id="vgSfxInfluenceValue">0.30</span>
-            </div>
-          </div>
-          <div class="vg-sg">
-            <div class="vg-sl">Output Format</div>
-            <select id="vgSfxOutputFormat" class="vg-select">
-              <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
-              <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
-            </select>
-          </div>
-        </div><!-- /sfx settings -->
-
-        <!-- Music settings -->
-        <div class="vg-modeContent" data-mode="music" hidden>
-          <div class="vg-sg">
-            <div class="vg-sl">Length (5–300s)</div>
-            <div class="vg-numRow">
-              <input type="number" id="vgMusicLength" min="5" max="300" step="1" value="10" />
-              <span class="vg-nu" id="vgMusicLengthValue">10s</span>
-            </div>
-          </div>
-        </div><!-- /music settings -->
-
-        <!-- Shared: output folder + filename -->
-        <div class="vg-sg vg-sgDivider">
-          <div class="vg-sl">Output Folder</div>
-          <div class="vg-folderRow">
-            <input id="vgOutputFolder" type="text" readonly class="vg-folderInput" placeholder="11Lab temp (default)" />
-            <button id="vgBrowseFolder" class="vg-folderBtn">&#128193;</button>
-            <button id="vgResetFolder"  class="vg-folderBtn">&#8635;</button>
-          </div>
-        </div>
-        <div class="vg-sg">
-          <label class="vg-checkbox-row">
-            <input type="checkbox" id="vgMoveToVOBin" checked>
-            <span>Move to "Voice Over" bin after import/autocut</span>
-          </label>
-        </div>
-        <div class="vg-sg">
-          <div class="vg-sl">Filename suffix <span class="vg-sm">voice · note · timestamp</span></div>
-          <input id="vgFilename" type="text" class="vg-settingInput" placeholder="optional note" />
+          <div id="vgMultiVars" style="display:none;"></div>
         </div>
 
         </div><!-- /vg-rightScroll -->

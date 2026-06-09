@@ -1896,15 +1896,35 @@ body {
 }
 #vgSettingsBtn { margin-left: auto; }
 #vgSettingsBtn.is-active { color: #d8b4fe; }
+/* Settings popup — overlay over the whole VoiceGen tab (mirrors .vg-save-modal,
+   no z-index needed; absolute resolves to #tab-voicegen which is position:relative). */
 .vg-settingsPanel {
-  flex: 0 0 auto;
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
 }
 /* explicit display:flex overrides the [hidden] attribute → re-assert it */
 .vg-settingsPanel[hidden] { display: none; }
+.vg-settings-box {
+  width: 100%;
+  max-width: 300px;
+  max-height: 86%;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+}
+.vg-settings-box > .vg-sg { margin-bottom: 10px; }
+.vg-settings-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.vg-settings-close { margin-top: 6px; width: 100%; height: 34px; border: none; border-radius: 16px; cursor: pointer;
+  background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); font-weight: 700; font-size: 12px; }
 .vg-statusDot {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -2193,8 +2213,9 @@ body {
   font-size: 9px; color: var(--text-dim);
   white-space: nowrap; min-width: 62px; text-align: right;
 }
-.vg-resultActions { display: flex; gap: 6px; }
-.vg-actionButton { flex: 1 1 0; height: 30px; font-size: 10px; letter-spacing: 0.04em; }
+.vg-resultActions { display: flex; }   /* UXP: flex gap is a no-op → space via margin */
+.vg-actionButton { flex: 1 1 0; min-width: 0; height: 30px; font-size: 10px; letter-spacing: 0.02em; padding: 0 6px; }
+.vg-actionButton + .vg-actionButton { margin-left: 5px; }
 .vg-multiSpeakerHeader {
   font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
   color: white; padding: 6px 0 4px 8px;
