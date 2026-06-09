@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.1';  // UI: organize fit (right card narrower); subtext last cue covers full voice
+var PLUGIN_VERSION = 'v4.5.2';  // Tạo Sub: AI phrase-segmentation (verbatim) + line-boundary enforce
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -6786,11 +6786,14 @@ async function ppMoveToVOBin(item, proj) {
       }
       var outputPath = folder.replace(/[\/\\]+$/, '') + '/subtitle_' + Date.now() + '.srt';
 
-      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ... (có thể mất 1-2 phút)');
+      var useAI = !($('stUseAI')) || $('stUseAI').checked;  // default on
+      var aiCfg = (useAI && window.sacOrganizeConfig) ? window.sacOrganizeConfig() : {};
+      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '... (có thể mất 1-2 phút)');
       var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clips: clips, scriptLines: scriptLines, outputPath: outputPath,
-          maxWords: maxWords, maxChars: maxChars, maxDur: maxDur }),
+          maxWords: maxWords, maxChars: maxChars, maxDur: maxDur,
+          useAI: useAI, provider: aiCfg.provider, model: aiCfg.model, apiKey: aiCfg.apiKey }),
       });
       var d = await resp.json();
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
