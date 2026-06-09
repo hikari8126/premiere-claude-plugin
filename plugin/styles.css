@@ -3210,6 +3210,8 @@ body {
 }
 .st-btn-primary:hover { background: rgba(168,85,247,0.25); }
 .st-btn:disabled { opacity: 0.6; cursor: default; }
+.st-aiToggle { display: flex; align-items: center; font-size: 11px; color: rgba(255,255,255,0.75); margin-bottom: 10px; cursor: pointer; }
+.st-aiToggle input { margin-right: 7px; }
 .st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; margin-top: 12px; }
 
 /* Tạo Sub — sequence name + slider rows */

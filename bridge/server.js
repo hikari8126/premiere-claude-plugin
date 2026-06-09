@@ -1750,44 +1750,176 @@ function subtextInterpolate(sw, whisper) {
   }
 }
 
-// Group timed words into short caption cues. Break on: block/line change, hard
-// sentence end (.!?…), or when adding the next word would exceed word/char/dur caps.
+// Function words that must lead a phrase, never dangle at the END of a cue.
+// (articles, coordinating/subordinating conjunctions, relatives, common prepositions)
+const SUBTEXT_FN_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'nor', 'so', 'yet', 'for',
+  'that', 'which', 'who', 'whom', 'whose', 'when', 'while', 'where', 'why', 'how',
+  'because', 'since', 'although', 'though', 'if', 'unless', 'until', 'as', 'than',
+  'at', 'in', 'on', 'of', 'to', 'with', 'by', 'from', 'into', 'onto', 'about',
+  'over', 'under', 'after', 'before', 'between', 'through',
+  // determiners / quantifiers / possessives — lead a phrase, never dangle
+  'no', 'not', 'this', 'these', 'those', 'every', 'each', 'all', 'both',
+  'some', 'any', 'such', 'more', 'most', 'my', 'your', 'his', 'her', 'its', 'our', 'their',
+]);
+function subtextIsFn(w) { return SUBTEXT_FN_WORDS.has(norm(w.raw)); }
+
+// Group timed words into short caption cues with PHRASE-AWARE breaks:
+//  • break AFTER clause/sentence punctuation (, ; : . ! ? …)
+//  • break on line change or when word/char/dur caps are exceeded
+//  • never end a cue on a function word — carry it forward so it leads the next
+//    phrase (fixes dangling "...and" / "...for a" / "...that").
 function subtextChunk(sw, opts) {
   const maxWords = opts.maxWords || 7;
   const maxChars = opts.maxChars || 42;
   const maxDur   = opts.maxDur   || 3.0;
   const cues = [];
   let cur = null;
-  const flush = () => { if (cur && cur.words.length) cues.push(cur); cur = null; };
+  const textOf = (c) => c.words.map(w => w.raw).join(' ');
+  const seed = (s) => { cur = { words: [s], line: s.line, start: s.start, end: s.end }; };
+  // Close the current cue; move any trailing function words to a fresh cue so
+  // they lead the next phrase instead of dangling. `hard` = ended at clause/
+  // sentence punctuation → a real phrase boundary that merges must NOT cross.
+  const flush = (hard) => {
+    if (!cur || !cur.words.length) { cur = null; return; }
+    const carry = [];
+    while (cur.words.length > 1 && subtextIsFn(cur.words[cur.words.length - 1])) {
+      carry.unshift(cur.words.pop());
+    }
+    cur.end = cur.words[cur.words.length - 1].end;
+    cur.hard = !!hard;
+    cues.push(cur);
+    cur = null;
+    carry.forEach(s => { if (!cur) seed(s); else { cur.words.push(s); cur.end = s.end; } });
+  };
   for (const s of sw) {
     if (cur) {
-      const merged = cur.text + ' ' + s.raw;
+      const merged = textOf(cur) + ' ' + s.raw;
       const dur    = (s.end != null ? s.end : cur.end) - cur.start;
-      if (s.line !== cur.line || cur.words.length >= maxWords || merged.length > maxChars || dur > maxDur) flush();
+      if (s.line !== cur.line || cur.words.length >= maxWords || merged.length > maxChars || dur > maxDur) flush(false);
     }
-    if (!cur) cur = { words: [], text: '', line: s.line, start: s.start, end: s.end };
-    cur.words.push(s);
-    cur.text = cur.text ? cur.text + ' ' + s.raw : s.raw;
-    cur.end  = s.end;
-    if (/[.!?…]$/.test(s.raw)) flush();
+    if (!cur) seed(s); else { cur.words.push(s); cur.end = s.end; }
+    if (/[.!?…,;:]$/.test(s.raw)) flush(true);   // break after clause/sentence punctuation
   }
-  flush();
-  // Merge tiny trailing fragments (≤2 words, e.g. an orphan "phí.") back into the
-  // previous cue when same line and the result stays readable.
-  for (let k = cues.length - 1; k > 0; k--) {
-    const c = cues[k], p = cues[k - 1];
-    if (c.words.length <= 2 && c.line === p.line && (p.text.length + 1 + c.text.length) <= maxChars + 12) {
-      p.text += ' ' + c.text; p.end = c.end; p.words = p.words.concat(c.words);
-      cues.splice(k, 1);
+  flush(false);
+
+  // Re-absorb single-word cues left by overflow. Merge toward the SOFT boundary
+  // (an overflow split) and never across a HARD boundary (punctuation): e.g.
+  // "Designed by a 20-year" | "expert" → merge back; "expert," | "trusted" |
+  // "by over 50,000 women" → "trusted" merges forward (prev ended on a comma).
+  const SLACK = 12;
+  for (let k = 0; k < cues.length; k++) {
+    const c = cues[k];
+    if (c.words.length !== 1) continue;
+    const prev = cues[k - 1], next = cues[k + 1];
+    const beforeHard = prev ? prev.hard : true;       // stream start = hard
+    const afterHard  = c.hard && next ? true : (next ? c.hard : true); // stream end = hard
+    const fitBack = prev && prev.line === c.line &&
+      (textOf(prev) + ' ' + textOf(c)).length <= maxChars + SLACK;
+    const fitFwd  = next && next.line === c.line &&
+      (textOf(c) + ' ' + textOf(next)).length <= maxChars + SLACK;
+    let dir = null;
+    if (!beforeHard && fitBack && (afterHard || !fitFwd)) dir = 'back';
+    else if (!afterHard && fitFwd && (beforeHard || !fitBack)) dir = 'fwd';
+    else if (!beforeHard && fitBack) dir = 'back';     // both soft → prefer back
+    else if (!afterHard && fitFwd) dir = 'fwd';
+    if (dir === 'back') {
+      prev.words = prev.words.concat(c.words); prev.end = c.end; prev.hard = c.hard;
+      cues.splice(k, 1); k--;
+    } else if (dir === 'fwd') {
+      next.words = c.words.concat(next.words); next.start = c.start;
+      cues.splice(k, 1); k--;
     }
   }
-  // Back-to-back captions: each cue stays on screen until the NEXT cue starts
-  // (don't cut off when the voice for this line ends → no blank gaps between captions).
+
+  return subtextFinalize(cues);
+}
+
+function subtextTextOf(c) { return c.words.map(w => w.raw).join(' '); }
+
+// Back-to-back timing + index + trailing-comma cleanup. Shared by the rule
+// chunker and the AI segmenter so both emit identical cue shapes.
+function subtextFinalize(cues) {
   for (let k = 0; k < cues.length; k++) {
     if (k + 1 < cues.length) cues[k].end = cues[k + 1].start;
     if (cues[k].end <= cues[k].start) cues[k].end = cues[k].start + 0.4;
   }
-  return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: c.text }));
+  return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: subtextTextOf(c).replace(/[,;:]+$/, '') }));
+}
+
+// AI segmentation: ask the LLM to insert line breaks into the (already-timed)
+// word stream WITHOUT changing any word, then regroup sw by those breaks so
+// timing stays exact. Returns finalized cues, or null on any failure → caller
+// falls back to the rule chunker.
+async function subtextSegmentAI(sw, opts, llm) {
+  if (!sw || sw.length < 2) return null;
+  const maxChars = opts.maxChars || 42;
+  // Reconstruct the source lines (each is a distinct on-screen segment) so the
+  // model never merges separate script lines into one caption.
+  const srcLines = [];
+  let ln = -1;
+  for (const w of sw) { if (w.line !== ln) { srcLines.push([]); ln = w.line; } srcLines[srcLines.length - 1].push(w.raw); }
+  const text = srcLines.map(a => a.join(' ')).join('\n');
+  const prompt = [
+    'You split a voice-over transcript into SUBTITLE LINES for on-screen captions.',
+    'Return ONLY the lines, one per row — no numbering, no quotes, no commentary.',
+    'STRICT RULES:',
+    '1. Output the EXACT same words in the EXACT same order. Do NOT add, remove, reorder, reword, or fix spelling/grammar. ONLY decide where each line breaks.',
+    '2. The transcript already has line breaks separating DISTINCT on-screen segments. NEVER merge across them — keep each input line separate; you may only SPLIT a line further if it is long.',
+    '3. Break at natural phrase boundaries: after commas/clauses, before conjunctions and relative pronouns.',
+    '4. NEVER end a line with a function word (a, an, the, and, or, that, which, of, to, for, at, in, on, with, by, no, both, your…) — let it lead the next line.',
+    '5. Keep phrasal verbs ("gave up") and modifier+noun ("extra pull") together on one line.',
+    `6. Aim for about ${maxChars} characters per line max, but prioritise natural phrasing over strict length.`,
+    'TRANSCRIPT:',
+    text,
+  ].join('\n');
+
+  let out;
+  try {
+    out = await callLLM(prompt, { provider: llm.provider, model: llm.model, apiKey: llm.apiKey, maxTokens: 2048 });
+  } catch (e) { console.warn('[subtext AI] LLM error:', e.message); return null; }
+
+  const lines = (out || '').split('\n').map(s => s.replace(/^\s*[-*•\d.)\]]+\s*/, '').trim()).filter(Boolean);
+  if (lines.length < 1) return null;
+
+  // Flatten AI tokens (with line index) and align to sw by position, tolerant of
+  // minor diffs. Bail (→ fallback) if alignment drifts too much.
+  const aiTok = [];
+  lines.forEach((ln, li) => ln.split(/\s+/).filter(Boolean).forEach(tok => aiTok.push({ n: norm(tok), li })));
+  let j = 0, miss = 0;
+  for (let i = 0; i < sw.length; i++) {
+    const sn = norm(sw[i].raw);
+    if (j < aiTok.length && aiTok[j].n === sn) { sw[i]._seg = aiTok[j].li; j++; continue; }
+    // resync: look ahead a few AI tokens for a match
+    let found = -1;
+    for (let k = j; k < Math.min(aiTok.length, j + 4); k++) { if (aiTok[k].n === sn) { found = k; break; } }
+    if (found >= 0) { sw[i]._seg = aiTok[found].li; j = found + 1; }
+    else { sw[i]._seg = (i > 0 ? sw[i - 1]._seg : 0); miss++; }
+  }
+  if (miss > Math.max(3, sw.length * 0.12)) { console.warn(`[subtext AI] align drift miss=${miss}/${sw.length} → fallback`); return null; }
+
+  // Group sw by AI line index → raw cues. ALSO force a break on original script
+  // line change so the AI can never glue two distinct segments together.
+  const cues = [];
+  let cur = null;
+  for (const w of sw) {
+    if (!cur || w._seg !== cur._seg || w.line !== cur.line) { cur = { words: [], _seg: w._seg, line: w.line, start: w.start, end: w.end }; cues.push(cur); }
+    cur.words.push(w); cur.end = w.end;
+  }
+  cues.forEach(c => { c.start = c.words[0].start; c.end = c.words[c.words.length - 1].end; });
+  // Clean up stray single-word cues by merging them into a SAME-LINE neighbour
+  // (guards against the model leaving a word orphaned, e.g. "50,000+").
+  const SLACK = 12;
+  for (let k = 0; k < cues.length; k++) {
+    const c = cues[k];
+    if (c.words.length !== 1) continue;
+    const prev = cues[k - 1], next = cues[k + 1];
+    const fitBack = prev && prev.line === c.line && (subtextTextOf(prev) + ' ' + subtextTextOf(c)).length <= maxChars + SLACK;
+    const fitFwd  = next && next.line === c.line && (subtextTextOf(c) + ' ' + subtextTextOf(next)).length <= maxChars + SLACK;
+    if (fitBack && !fitFwd) { prev.words = prev.words.concat(c.words); prev.end = c.end; cues.splice(k, 1); k--; }
+    else if (fitFwd) { next.words = c.words.concat(next.words); next.start = c.start; cues.splice(k, 1); k--; }
+  }
+  return cues.length ? subtextFinalize(cues) : null;
 }
 
 function subtextSecToSrt(sec) {
@@ -1891,7 +2023,8 @@ function ffprobeDuration(audioPath) {
 
 app.post('/superautocut/subtext', async (req, res) => {
   try {
-    let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur } = req.body || {};
+    let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur,
+          useAI, provider, model, apiKey } = req.body || {};
     // Source audio: a direct path OR a list of timeline clips → timeline-accurate render.
     let offset = 0;
     if (Array.isArray(clips) && clips.length) {
@@ -1916,7 +2049,13 @@ app.post('/superautocut/subtext', async (req, res) => {
       sw = subtextWordsFromWhisper(words, segments);
     }
     if (!sw.length) throw new Error('Không có nội dung để tạo phụ đề');
-    const cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
+    // AI phrase-segmentation (verbatim) if requested; fall back to the rule chunker.
+    let cues = null;
+    if (useAI) {
+      cues = await subtextSegmentAI(sw, { maxChars }, { provider, model, apiKey });
+      console.log(cues ? `[subtext] AI segmentation → ${cues.length} cues` : '[subtext] AI segmentation failed → rule chunker');
+    }
+    if (!cues) cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
     // Extend the LAST cue to the true audio end — whisper's last word usually ends
     // before the audio actually does, leaving total subtitle span < voice length.
     if (cues.length) {
@@ -2148,7 +2287,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.4';  // subtext: extend last cue to true audio end (ffprobe)
+const BRIDGE_VERSION = '1.6.5';  // subtext: AI segmentation endpoint (useAI) + phrase chunker
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
