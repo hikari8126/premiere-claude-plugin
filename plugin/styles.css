@@ -797,7 +797,10 @@ body {
 .sac-bind-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .sac-bind-colHead { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.55);
-  padding: 5px 7px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border); }
+  padding: 5px 7px; background: rgba(255,255,255,0.04); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; }
+.sac-bind-allChk { font-size: 9px; font-weight: 400; color: rgba(255,255,255,0.55); cursor: pointer; display: inline-flex; align-items: center; }
+.sac-bind-allChk input { margin-right: 3px; }
 /* Fill remaining height; min-height keeps it visible even if UXP flex collapses. */
 .sac-bind-list { flex: 1 1 0; min-height: 140px; overflow-y: auto; scrollbar-width: thin; }
 /* Wrap long names so they show fully (no ellipsis truncation). */
@@ -805,6 +808,8 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.04); white-space: normal; word-break: break-word; }
 .sac-bind-row:hover { background: rgba(168,85,247,0.15); color: #fff; }
 .sac-bind-row.is-active { background: rgba(168,85,247,0.25); color: #fff; }
+.sac-bind-caret { display: inline-block; width: 14px; text-align: center; color: rgba(255,255,255,0.5); font-size: 9px; margin-right: 2px; }
+.sac-bind-caret:hover { color: #fff; }
 .sac-bind-none { padding: 10px 8px; font-size: 10px; color: rgba(255,255,255,0.35); text-align: center; }
 
 /* Gen-voice button: highlighted once the script is prepared (auto on validate) */
@@ -2908,11 +2913,12 @@ body {
 .sac-srcSkipped { color: #6b7280; }
 
 .sac-blockHintBtn {
-  flex: 0 0 auto; background: transparent; border: none;
-  font-size: 9px; cursor: pointer; opacity: 0.5; padding: 0 2px;
-  line-height: 1;
+  flex: 0 0 auto; width: 20px; height: 20px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 5px; font-size: 10px; line-height: 1; cursor: pointer; opacity: 0.75;
 }
-.sac-blockHintBtn:hover { opacity: 1; }
+.sac-blockHintBtn:hover { opacity: 1; background: rgba(168,85,247,0.22); border-color: var(--accent); }
 .sac-blockUnbindBtn {
   flex: 0 0 auto; background: transparent; border: none;
   font-size: 11px; cursor: pointer; opacity: 0.55; padding: 0 2px;
