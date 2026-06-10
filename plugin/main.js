@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.4';  // Autocut bind modal: numeric match + folder collapse/show-all + re-bind matched + Match label
+var PLUGIN_VERSION = 'v4.5.5';  // bind modal: show-all folders also widens source pool
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -3051,8 +3051,9 @@ async function ppMoveToVOBin(item, proj) {
     function renderSources() {
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
-      // Default pool = relevant (token-matching) clips; typing searches ALL clips.
-      var pool = q ? cands : relevant;
+      // Default pool = relevant (token-matching) clips. Typing OR "show all folders"
+      // widens the pool to ALL clips so any folder's sources are browsable.
+      var pool = (q || showAllFolders) ? cands : relevant;
       var base = pool.filter(function(c) {
         // Selecting a branch shows clips in it AND in its sub-folders.
         if (selectedFolder !== '__all__' &&
@@ -3857,7 +3858,8 @@ async function ppMoveToVOBin(item, proj) {
     });
   }
 
-  $('sacClearBlocks').addEventListener('click', function() {
+  var sacClearBlocksBtn = $('sacClearBlocks'); // removed from UI (replaced by Refresh Block) — guard
+  if (sacClearBlocksBtn) sacClearBlocksBtn.addEventListener('click', function() {
     $('sacBlockSection').style.display = 'none';
     parsedBlocks = [];
   });

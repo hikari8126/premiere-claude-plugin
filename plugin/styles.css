@@ -2826,6 +2826,15 @@ body {
   font-size: 12px; cursor: pointer; outline: none;
 }
 .sac-clearBtn:hover { color: #fca5a5; background: rgba(239,68,68,0.15); }
+.sac-refreshBlockBtn {
+  margin-left: auto;
+  padding: 3px 11px; height: 22px;
+  border: 1px solid rgba(168,85,247,0.4); border-radius: 11px;
+  background: rgba(168,85,247,0.15); color: #c084fc;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+  cursor: pointer; outline: none; white-space: nowrap;
+}
+.sac-refreshBlockBtn:hover { background: rgba(168,85,247,0.28); color: #fff; }
 .sac-blockList {
   flex: 1 1 0; min-height: 0;
   overflow-y: auto;
