@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.3';  // VoiceGen UI: settings popup, results+voice right, import→timeline, SFX/Music sliders
+var PLUGIN_VERSION = 'v4.5.4';  // Autocut bind modal: numeric match + folder collapse/show-all + re-bind matched + Match label
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2839,8 +2839,8 @@ async function ppMoveToVOBin(item, proj) {
         } else if (sacSourceMap[name]) {  // found ✓
           el.dataset.srcBaseKind = 'found';
           statusEl.className = 'sac-srcStatus sac-srcOk';
-          statusEl.textContent = '✓';
-          if (hintBtn) hintBtn.style.display = 'none';
+          statusEl.textContent = '✓ Match';
+          if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can be re-bound (e.g. reuse a clip that already has effects)
           if (msgEl) { msgEl.textContent = ''; msgEl.className = 'sac-srcMsg'; }
           if (existingSkip) existingSkip.parentNode.removeChild(existingSkip);
         } else {  // missing ✗
@@ -2915,8 +2915,8 @@ async function ppMoveToVOBin(item, proj) {
         if (uMsg) { uMsg.textContent = '⚠ trùng ' + count + ' clip — bấm 📁 để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
         sacAddSkipButton(srcEl);
       } else if (item) {
-        statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; statusEl.title = '';
-        if (hintBtn) hintBtn.style.display = 'none';
+        statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
+        if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can still be re-bound
         if (uMsg) { uMsg.textContent = ''; uMsg.className = 'sac-srcMsg'; }
       } else {
         statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
@@ -2953,7 +2953,14 @@ async function ppMoveToVOBin(item, proj) {
     // Rank ALL clips by closeness to the source name (token hits, then edit distance),
     // so the right clip is near the top instead of dumping every loose token match.
     var tNoX = sacNorm(src.name);
-    var toks = tNoX.split(' ').filter(function(t) { return t.length >= 2; });
+    var toks = tNoX.split(' ').filter(function(t) { return t.length >= 2 || /^[0-9]+$/.test(t); });
+    // Pure-number source name ("1","2",…): plain token match is too loose because
+    // sacNorm splits decimals ("5.1"→"5 1", "1.2"→"1 2") so every "X.1" / "1.x" clip
+    // gains a "1" token. Instead require the clip NAME to start with exactly that
+    // number followed by a separator (space / _ / -) or end → matches "1", "1 abc",
+    // "1_abc", "1-abc", "1.gif" but NOT "5.1" / "1.2" / "10.1" / "1.0clone".
+    var srcNum = (toks.length === 1 && /^[0-9]+$/.test(toks[0])) ? toks[0] : null;
+    var numRe  = srcNum ? new RegExp('^' + srcNum + '([\\s_-]|$)') : null;
     var TOP_N = 25; // default visible count when not filtering
     function toCand(b) {
       var clipNoX = b.name.replace(/\.[^.]+$/, '');
@@ -2963,30 +2970,45 @@ async function ppMoveToVOBin(item, proj) {
       var nameToks = sacNorm(b.name).split(' ').filter(Boolean);
       var hits     = toks.filter(function(tk) { return hayToks.indexOf(tk)  !== -1; }).length;
       var nameHits = toks.filter(function(tk) { return nameToks.indexOf(tk) !== -1; }).length;
-      // coverage = how much of the CLIP NAME the matched tokens explain. Low coverage
-      // = incidental match (e.g. "12" inside "ElevenLabs_2025-12-09_..." → ~0.05).
       var coverage = nameHits / Math.max(1, nameToks.length);
       var lev = sacLev(tNoX, sacNorm(clipNoX));
+      // leadNum: clip name (real media ext stripped) starts with the numeric source.
+      var leadNum = numRe ? numRe.test(dispName(b.name).trim()) : false;
       return { folder: b.parent || '', folderPath: b.path || '', clip: b.name, clipNoX: clipNoX,
-               item: b.item, coverage: coverage, score: hits * 1000 + Math.round(coverage * 100) - lev, hits: hits };
+               item: b.item, coverage: coverage, score: hits * 1000 + Math.round(coverage * 100) - lev, hits: hits, leadNum: leadNum };
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
-    // Relevant = clips that share a whole token AND where that match covers a real
-    // part of the clip name (coverage ≥ 0.34) — so a short token like "12" doesn't
-    // pull in long unrelated names where it appears incidentally (dates, comp #s).
-    var relevant = cands.filter(function(c) { return c.hits > 0 && c.coverage >= 0.34; });
-    if (!relevant.length) relevant = cands.filter(function(c) { return c.hits > 0; }); // softer fallback
+    var relevant;
+    if (srcNum) {
+      // Numeric source → only clips whose name leads with that exact number.
+      relevant = cands.filter(function(c) { return c.leadNum; });
+    } else {
+      // Share a whole token AND that match covers a real part of the clip name
+      // (coverage ≥ 0.34) so a short token doesn't pull in incidental matches.
+      relevant = cands.filter(function(c) { return c.hits > 0 && c.coverage >= 0.34; });
+      if (!relevant.length) relevant = cands.filter(function(c) { return c.hits > 0; });
+    }
     if (!relevant.length) relevant = cands;
-    // Build the folder TREE from relevant clips + their ancestors (parents precede children).
-    var folderSet = {};
-    relevant.forEach(function(c) {
-      var segs = c.folderPath ? c.folderPath.split(' / ') : [];
-      for (var d = 1; d <= segs.length; d++) folderSet[segs.slice(0, d).join(' / ')] = true;
-    });
-    var topFolders = Object.keys(folderSet).sort();
+    // Build a folder TREE (each path + its ancestors) from a clip array.
+    function buildFolders(arr) {
+      var set = {};
+      arr.forEach(function(c) {
+        var segs = c.folderPath ? c.folderPath.split(' / ') : [];
+        for (var d = 1; d <= segs.length; d++) set[segs.slice(0, d).join(' / ')] = true;
+      });
+      return Object.keys(set).sort();
+    }
+    var relevantFolders = buildFolders(relevant);  // default: only folders of matching clips
+    var allFolders      = buildFolders(cands);      // "show all" → every folder in the bin
+    var showAllFolders  = false;
+    function topFoldersNow() { return showAllFolders ? allFolders : relevantFolders; }
 
     var selectedFolder = '__all__'; // holds a folderPath, or '__all__'
+    var expanded = {};               // folderPath -> true; empty = all collapsed (default)
+    function fHasChildren(fp) { return topFoldersNow().some(function(o) { return o.indexOf(fp + ' / ') === 0; }); }
+    function fParent(fp) { var s = fp.split(' / '); return s.length > 1 ? s.slice(0, -1).join(' / ') : null; }
+    function fVisible(fp) { var p = fParent(fp); while (p) { if (!expanded[p]) return false; p = fParent(p); } return true; }
 
     function mkRow(text, active) {
       var d = document.createElement('div');
@@ -2995,7 +3017,7 @@ async function ppMoveToVOBin(item, proj) {
       return d;
     }
     // Strip only real media extensions for display (NOT arbitrary dots in the name).
-    function dispName(n) { return String(n).replace(/\.(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|png|jpg|jpeg|tif|tiff|psd|prproj)$/i, ''); }
+    function dispName(n) { return String(n).replace(/\.(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|gif|png|jpg|jpeg|tif|tiff|psd|prproj)$/i, ''); }
 
     function renderFolders() {
       foldersEl.innerHTML = '';
@@ -3003,12 +3025,25 @@ async function ppMoveToVOBin(item, proj) {
       all.style.paddingLeft = '8px';
       all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
       foldersEl.appendChild(all);
-      topFolders.forEach(function(fp) {
+      // Collapsible tree: a folder shows only when all its ancestors are expanded
+      // (default: everything collapsed → only top-level folders visible). A caret
+      // toggles expand; clicking the name selects the folder.
+      topFoldersNow().forEach(function(fp) {
+        if (!fVisible(fp)) return;
         var segs = fp.split(' / ');
         var leaf = segs[segs.length - 1];
-        var row = mkRow('📁 ' + leaf, selectedFolder === fp);
-        row.style.paddingLeft = (8 + (segs.length - 1) * 16) + 'px'; // REAL indent by depth
-        row.title = fp; // full branch on hover
+        var kids = fHasChildren(fp);
+        var row = document.createElement('div');
+        row.className = 'sac-bind-row' + (selectedFolder === fp ? ' is-active' : '');
+        row.style.paddingLeft = (8 + (segs.length - 1) * 16) + 'px';
+        row.title = fp;
+        var caret = document.createElement('span');
+        caret.className = 'sac-bind-caret';
+        caret.textContent = kids ? (expanded[fp] ? '▾' : '▸') : '';
+        if (kids) caret.addEventListener('click', function(e) { e.stopPropagation(); expanded[fp] = !expanded[fp]; renderFolders(); });
+        var lbl = document.createElement('span');
+        lbl.textContent = '📁 ' + leaf;
+        row.appendChild(caret); row.appendChild(lbl);
         row.addEventListener('click', function() { selectedFolder = fp; renderFolders(); renderSources(); });
         foldersEl.appendChild(row);
       });
@@ -3065,7 +3100,7 @@ async function ppMoveToVOBin(item, proj) {
       if (bMsg) { bMsg.textContent = c.item ? '' : '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg' + (c.item ? '' : ' is-err'); }
       var statusEl = srcEl.querySelector('.sac-srcStatus');
       if (statusEl) {
-        if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓'; }
+        if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; }
         else { statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; sacAddSkipButton(srcEl); }
       }
       var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
@@ -3094,6 +3129,12 @@ async function ppMoveToVOBin(item, proj) {
 
     // Open
     filterEl.value = '';
+    // "Show all folders" checkbox — default off (only folders of matching clips).
+    var allFoldersChk = $('sacBindAllFolders');
+    if (allFoldersChk) {
+      allFoldersChk.checked = false;
+      allFoldersChk.onchange = function() { showAllFolders = allFoldersChk.checked; expanded = {}; renderFolders(); };
+    }
     renderFolders();
     renderSources();
     var app = document.querySelector('#tab-autocut .sac-app');
