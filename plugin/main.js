@@ -527,7 +527,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.5';  // bind modal: show-all folders also widens source pool
+var PLUGIN_VERSION = 'v4.5.6';  // Autocut: fix short-code fuzzy mismatch (K5→D5) + keep 📁 after bind + strip notes after ext
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2176,9 +2176,11 @@ function sacMatchBinItem(items, targetName) {
     else if (d === bestD) { tie = true; }
   }
   // Accept only a very close unique match: ≤20% of the name length, capped at 2.
-  // (Tight enough that "intro" won't match "outro", loose enough for "K10 opt1"↔"K10 op1".)
-  var fuzzMax = Math.min(2, Math.max(1, Math.floor(tNoX.length * 0.2)));
-  if (best && !tie && bestD <= fuzzMax) return best;
+  // NO floor of 1 — short codes are exact identifiers, so "K5" must NOT fuzzy-match
+  // "D5"/"H5" (1-char diff). fuzzMax = 0 for names < 5 chars → fuzzy off for them;
+  // longer names still tolerate a typo ("K10 opt1" ↔ "K10 op1").
+  var fuzzMax = Math.min(2, Math.floor(tNoX.length * 0.2));
+  if (best && !tie && fuzzMax >= 1 && bestD <= fuzzMax) return best;
   return null;
 }
 
@@ -2544,6 +2546,17 @@ async function ppMoveToVOBin(item, proj) {
   //   • Only text non-empty          → add text to current block
   //   • Only source non-empty        → add source to current block
   //   • Both empty                   → skip
+  // A source cell may be multi-line; on EACH line, drop anything AFTER the file
+  // extension (notes like "K5.mov ref clip" → "K5.mov"). Lines without a known
+  // media extension are left untouched.
+  function sacStripSrcNotes(str) {
+    var EXT = 'mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|gif|png|jpg|jpeg|tif|tiff|psd|prproj|aep';
+    var re = new RegExp('^(.*?\\.(?:' + EXT + '))\\b.*$', 'i');
+    return String(str || '').split('\n').map(function(line) {
+      return line.replace(re, '$1').trim();
+    }).join('\n').trim();
+  }
+
   function parseBlocks() {
     var rows = Array.from($('sacBody').querySelectorAll('.sac-row'));
     var data = rows.map(function(row) {
@@ -2551,7 +2564,7 @@ async function ppMoveToVOBin(item, proj) {
       return {
         text: inputs[0] ? inputs[0].value.trim() : '',
         time: inputs[1] ? inputs[1].value.trim() : '',
-        src:  inputs[2] ? inputs[2].value.trim() : '',
+        src:  inputs[2] ? sacStripSrcNotes(inputs[2].value) : '',
       };
     });
 
@@ -3105,9 +3118,9 @@ async function ppMoveToVOBin(item, proj) {
         else { statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; sacAddSkipButton(srcEl); }
       }
       var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
-      if (hintBtn2) hintBtn2.style.display = c.item ? 'none' : '';
+      if (hintBtn2) hintBtn2.style.display = ''; // keep 📁 visible so a wrong bind can be re-bound
       var ub = srcEl.querySelector('.sac-blockUnbindBtn');
-      if (ub) ub.style.display = ''; // now bound → allow undo
+      if (ub) ub.style.display = ''; // now bound → allow undo (↩)
       sacCheckSkipGate();
       closeModal();
     }
