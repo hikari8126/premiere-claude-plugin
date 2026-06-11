@@ -82,6 +82,7 @@ body {
   letter-spacing: 0.08em;
   padding: 10px 8px;
   text-align: center;
+  display: flex; align-items: center; justify-content: center;
   transition: all 0.18s ease;
   margin: 0 2px;
   bottom: -1px;
@@ -810,6 +811,24 @@ body {
 .sac-bind-row.is-active { background: rgba(168,85,247,0.25); color: #fff; }
 .sac-bind-caret { display: inline-block; width: 14px; text-align: center; color: rgba(255,255,255,0.5); font-size: 9px; margin-right: 2px; }
 .sac-bind-caret:hover { color: #fff; }
+/* Flat inline SVG icons (FontAwesome solid). Colour is baked into each <svg fill>
+   in JS — UXP ignores fill:currentColor, so CSS color has no effect here. */
+.sac-ic, .p-ic { display: inline-flex; align-items: center; vertical-align: -2px; }
+.sac-ic svg, .p-ic svg { display: block; }
+.tab-btn .p-ic { margin-right: 6px; vertical-align: 0; }
+.sac-bind-fLbl { display: inline-flex; align-items: center; }
+/* Source media-type filter chips */
+.sac-bind-typeChips { flex: 0 0 auto; display: flex; flex-wrap: wrap; padding: 5px 6px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05); }
+.sac-bind-chip { display: inline-flex; align-items: center; font-size: 11px; padding: 3px 9px; margin: 1px 4px 1px 0; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.14); color: rgba(255,255,255,0.65); background: transparent; }
+.sac-bind-chip:hover { color: #fff; border-color: rgba(168,85,247,0.5); }
+.sac-bind-chip.is-active { background: rgba(168,85,247,0.22); border-color: var(--accent); color: #fff; }
+/* Source rows: name + dimmed folder path; highlight the currently-bound clip */
+.sac-bind-srcRow { padding: 5px 8px; }
+.sac-bind-srcTop { font-size: 11px; color: rgba(255,255,255,0.85); word-break: break-word; }
+.sac-bind-srcPath { font-size: 9px; color: rgba(255,255,255,0.32); margin-top: 1px; word-break: break-word; }
+.sac-bind-srcRow.is-bound { background: rgba(16,185,129,0.12); border-left: 2px solid #10b981; }
+.sac-bind-srcRow.is-bound .sac-bind-srcTop { color: #6ee7b7; }
 .sac-bind-none { padding: 10px 8px; font-size: 10px; color: rgba(255,255,255,0.35); text-align: center; }
 
 /* Gen-voice button: highlighted once the script is prepared (auto on validate) */

@@ -10,6 +10,76 @@
 var ppro = null;
 try { ppro = require('premierepro'); } catch(e) { console.warn('premierepro not available:', e.message); }
 
+// ── Global flat icon system (FontAwesome solid SVG paths) ───────────────────
+// UXP can't load icon fonts and ignores fill:currentColor → colour is baked into
+// each <path fill>. Put <i data-ic="NAME"> in HTML (optionally data-ic-size /
+// data-ic-color); pluginRenderIcons() fills them. For JS use pluginIconSVG().
+var PI_ICONS = {
+    arrow_right: { vb: '0 0 448 512', d: 'M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z', c: '#cbd5e1' },
+    audio: { vb: '0 0 512 512', d: 'M499.1 6.3c8.1 6 12.9 15.6 12.9 25.7v72V368c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V147L192 223.8V432c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V200 128c0-14.1 9.3-26.6 22.8-30.7l320-96c9.7-2.9 20.2-1.1 28.3 5z', c: '#a855f7' },
+    bolt: { vb: '0 0 448 512', d: 'M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288l111.5 0L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7l-111.5 0L349.4 44.6z', c: '#c084fc' },
+    check: { vb: '0 0 448 512', d: 'M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z', c: '#22c55e' },
+    chevron_down: { vb: '0 0 512 512', d: 'M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z', c: '#cbd5e1' },
+    circle_info: { vb: '0 0 512 512', d: 'M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336l24 0 0-64-24 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l48 0c13.3 0 24 10.7 24 24l0 88 8 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-80 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z', c: '#cbd5e1' },
+    closed_captioning: { vb: '0 0 576 512', d: 'M0 96C0 60.7 28.7 32 64 32l448 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM200 208c14.2 0 27 6.1 35.8 16c8.8 9.9 24 10.7 33.9 1.9s10.7-24 1.9-33.9c-17.5-19.6-43.1-32-71.5-32c-53 0-96 43-96 96s43 96 96 96c28.4 0 54-12.4 71.5-32c8.8-9.9 8-25-1.9-33.9s-25-8-33.9 1.9c-8.8 9.9-21.6 16-35.8 16c-26.5 0-48-21.5-48-48s21.5-48 48-48zm144 48c0-26.5 21.5-48 48-48c14.2 0 27 6.1 35.8 16c8.8 9.9 24 10.7 33.9 1.9s10.7-24 1.9-33.9c-17.5-19.6-43.1-32-71.5-32c-53 0-96 43-96 96s43 96 96 96c28.4 0 54-12.4 71.5-32c8.8-9.9 8-25-1.9-33.9s-25-8-33.9 1.9c-8.8 9.9-21.6 16-35.8 16c-26.5 0-48-21.5-48-48z', c: '#cbd5e1' },
+    download: { vb: '0 0 512 512', d: 'M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 242.7-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7 288 32zM64 352c-35.3 0-64 28.7-64 64l0 32c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-32c0-35.3-28.7-64-64-64l-101.5 0-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352 64 352zm368 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z', c: '#cbd5e1' },
+    file: { vb: '0 0 384 512', d: 'M0 64C0 28.7 28.7 0 64 0H224V128c0 17.7 14.3 32 32 32H384V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V64zm384 64H256V0L384 128z', c: 'rgba(255,255,255,.55)' },
+    floppy_disk: { vb: '0 0 448 512', d: 'M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-242.7c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32L64 32zm0 96c0-17.7 14.3-32 32-32l192 0c17.7 0 32 14.3 32 32l0 64c0 17.7-14.3 32-32 32L96 224c-17.7 0-32-14.3-32-32l0-64zM224 288a64 64 0 1 1 0 128 64 64 0 1 1 0-128z', c: '#cbd5e1' },
+    folder: { vb: '0 0 512 512', d: 'M64 480H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H298.5c-17 0-33.3-6.7-45.3-18.7L226.7 50.7c-12-12-28.3-18.7-45.3-18.7H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64z', c: '#eab308' },
+    folder_open: { vb: '0 0 576 512', d: 'M88.7 223.8L0 375.8 0 96C0 60.7 28.7 32 64 32l117.5 0c17 0 33.3 6.7 45.3 18.7l26.5 26.5c12 12 28.3 18.7 45.3 18.7L416 96c35.3 0 64 28.7 64 64l0 32-336 0c-22.8 0-43.8 12.1-55.3 31.8zm27.6 16.1C122.1 230 132.6 224 144 224l400 0c11.5 0 22 6.1 27.7 16.1s5.7 22.2-.1 32.1l-112 192C453.9 474 443.4 480 432 480L32 480c-11.5 0-22-6.1-27.7-16.1s-5.7-22.2 .1-32.1l112-192z', c: '#cbd5e1' },
+    gauge_high: { vb: '0 0 512 512', d: 'M0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zM288 96a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zM256 416c35.3 0 64-28.7 64-64c0-17.4-6.9-33.1-18.1-44.6L366 161.7c5.3-12.1-.2-26.3-12.3-31.6s-26.3 .2-31.6 12.3L257.9 288c-.6 0-1.3 0-1.9 0c-35.3 0-64 28.7-64 64s28.7 64 64 64zM176 144a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zM96 288a32 32 0 1 0 0-64 32 32 0 1 0 0 64zm352-32a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z', c: '#cbd5e1' },
+    gear: { vb: '0 0 512 512', d: 'M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z', c: '#cbd5e1' },
+    image: { vb: '0 0 512 512', d: 'M0 96C0 60.7 28.7 32 64 32H448c35.3 0 64 28.7 64 64V416c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6h96 32H424c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z', c: '#f59e0b' },
+    layer_group: { vb: '0 0 576 512', d: 'M264.5 5.2c14.9-6.9 32.1-6.9 47 0l218.6 101c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 149.8C37.4 145.8 32 137.3 32 128s5.4-17.9 13.9-21.8L264.5 5.2zM476.9 209.6l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 277.8C37.4 273.8 32 265.3 32 256s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2zm0 144l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 405.8C37.4 401.8 32 393.3 32 384s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2z', c: '#ec4899' },
+    microphone: { vb: '0 0 384 512', d: 'M192 0C139 0 96 43 96 96l0 160c0 53 43 96 96 96s96-43 96-96l0-160c0-53-43-96-96-96zM64 216c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40c0 89.1 66.2 162.7 152 174.4l0 33.6-48 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l72 0 72 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-48 0 0-33.6c85.8-11.7 152-85.3 152-174.4l0-40c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40c0 70.7-57.3 128-128 128s-128-57.3-128-128l0-40z', c: '#cbd5e1' },
+    microphone_lines: { vb: '0 0 384 512', d: 'M96 96l0 160c0 53 43 96 96 96s96-43 96-96l-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0 0-32-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0 0-32-80 0c-8.8 0-16-7.2-16-16s7.2-16 16-16l80 0c0-53-43-96-96-96S96 43 96 96zM320 240l0 16c0 70.7-57.3 128-128 128s-128-57.3-128-128l0-40c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 40c0 89.1 66.2 162.7 152 174.4l0 33.6-48 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l72 0 72 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-48 0 0-33.6c85.8-11.7 152-85.3 152-174.4l0-40c0-13.3-10.7-24-24-24s-24 10.7-24 24l0 24z', c: '#cbd5e1' },
+    palette: { vb: '0 0 512 512', d: 'M512 256c0 .9 0 1.8 0 2.7c-.4 36.5-33.6 61.3-70.1 61.3L344 320c-26.5 0-48 21.5-48 48c0 3.4 .4 6.7 1 9.9c2.1 10.2 6.5 20 10.8 29.9c6.1 13.8 12.1 27.5 12.1 42c0 31.8-21.6 60.7-53.4 62c-3.5 .1-7 .2-10.6 .2C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256zM128 288a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm0-96a32 32 0 1 0 0-64 32 32 0 1 0 0 64zM288 96a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm96 96a32 32 0 1 0 0-64 32 32 0 1 0 0 64z', c: '#cbd5e1' },
+    paperclip: { vb: '0 0 448 512', d: 'M364.2 83.8c-24.4-24.4-64-24.4-88.4 0l-184 184c-42.1 42.1-42.1 110.3 0 152.4s110.3 42.1 152.4 0l152-152c10.9-10.9 28.7-10.9 39.6 0s10.9 28.7 0 39.6l-152 152c-64 64-167.6 64-231.6 0s-64-167.6 0-231.6l184-184c46.3-46.3 121.3-46.3 167.6 0s46.3 121.3 0 167.6l-176 176c-28.6 28.6-75 28.6-103.6 0s-28.6-75 0-103.6l144-144c10.9-10.9 28.7-10.9 39.6 0s10.9 28.7 0 39.6l-144 144c-6.7 6.7-6.7 17.7 0 24.4s17.7 6.7 24.4 0l176-176c24.4-24.4 24.4-64 0-88.4z', c: '#cbd5e1' },
+    pause: { vb: '0 0 320 512', d: 'M48 64C21.5 64 0 85.5 0 112L0 400c0 26.5 21.5 48 48 48l32 0c26.5 0 48-21.5 48-48l0-288c0-26.5-21.5-48-48-48L48 64zm192 0c-26.5 0-48 21.5-48 48l0 288c0 26.5 21.5 48 48 48l32 0c26.5 0 48-21.5 48-48l0-288c0-26.5-21.5-48-48-48l-32 0z', c: '#cbd5e1' },
+    play: { vb: '0 0 384 512', d: 'M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80L0 432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z', c: '#cbd5e1' },
+    plus: { vb: '0 0 448 512', d: 'M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 144L48 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l144 0 0 144c0 17.7 14.3 32 32 32s32-14.3 32-32l0-144 144 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-144 0 0-144z', c: '#cbd5e1' },
+    rotate_right: { vb: '0 0 512 512', d: 'M463.5 224l8.5 0c13.3 0 24-10.7 24-24l0-128c0-9.7-5.8-18.5-14.8-22.2s-19.3-1.7-26.2 5.2L413.4 96.6c-87.6-86.5-228.7-86.2-315.8 1c-87.5 87.5-87.5 229.3 0 316.8s229.3 87.5 316.8 0c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0c-62.5 62.5-163.8 62.5-226.3 0s-62.5-163.8 0-226.3c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2s12.5 14.8 22.2 14.8l119.5 0z', c: '#cbd5e1' },
+    scissors: { vb: '0 0 512 512', d: 'M256 192l-39.5-39.5c4.9-12.6 7.5-26.2 7.5-40.5C224 50.1 173.9 0 112 0S0 50.1 0 112s50.1 112 112 112c14.3 0 27.9-2.7 40.5-7.5L192 256l-39.5 39.5c-12.6-4.9-26.2-7.5-40.5-7.5C50.1 288 0 338.1 0 400s50.1 112 112 112s112-50.1 112-112c0-14.3-2.7-27.9-7.5-40.5L499.2 76.8c7.1-7.1 7.1-18.5 0-25.6c-28.3-28.3-74.1-28.3-102.4 0L256 192zm22.6 150.6L396.8 460.8c28.3 28.3 74.1 28.3 102.4 0c7.1-7.1 7.1-18.5 0-25.6L342.6 278.6l-64 64zM64 112a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zm48 240a48 48 0 1 1 0 96 48 48 0 1 1 0-96z', c: '#cbd5e1' },
+    sequence: { vb: '0 0 512 512', d: 'M0 128C0 92.7 28.7 64 64 64H448c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zm32 32v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM32 288v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM160 160V352c0 17.7 14.3 32 32 32H320c17.7 0 32-14.3 32-32V160c0-17.7-14.3-32-32-32H192c-17.7 0-32 14.3-32 32z', c: '#ec4899' },
+    trash: { vb: '0 0 448 512', d: 'M135.2 17.7L128 32 32 32C14.3 32 0 46.3 0 64S14.3 96 32 96l384 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-96 0-7.2-14.3C307.4 6.8 296.3 0 284.2 0L163.8 0c-12.1 0-23.2 6.8-28.6 17.7zM416 128L32 128 53.2 467c1.6 25.3 22.6 45 47.9 45l245.8 0c25.3 0 46.3-19.7 47.9-45L416 128z', c: '#ef4444' },
+    video: { vb: '0 0 576 512', d: 'M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zM559.1 99.8c10.4 5.6 16.9 16.4 16.9 28.2V384c0 11.8-6.5 22.6-16.9 28.2s-23 5-32.9-1.6l-96-64L416 337.1V320 192 174.9l14.2-9.5 96-64c9.8-6.5 22.4-7.2 32.9-1.6z', c: '#22c55e' },
+    wand_magic_sparkles: { vb: '0 0 576 512', d: 'M234.7 42.7L197 56.8c-3 1.1-5 4-5 7.2s2 6.1 5 7.2l37.7 14.1L248.8 123c1.1 3 4 5 7.2 5s6.1-2 7.2-5l14.1-37.7L315 71.2c3-1.1 5-4 5-7.2s-2-6.1-5-7.2L277.3 42.7 263.2 5c-1.1-3-4-5-7.2-5s-6.1 2-7.2 5L234.7 42.7zM46.1 395.4c-18.7 18.7-18.7 49.1 0 67.9l34.6 34.6c18.7 18.7 49.1 18.7 67.9 0L529.9 116.5c18.7-18.7 18.7-49.1 0-67.9L495.3 14.1c-18.7-18.7-49.1-18.7-67.9 0L46.1 395.4zM484.6 82.6l-105 105-23.3-23.3 105-105 23.3 23.3zM7.5 117.2C3 118.9 0 123.2 0 128s3 9.1 7.5 10.8L64 160l21.2 56.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L128 160l56.5-21.2c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L128 96 106.8 39.5C105.1 35 100.8 32 96 32s-9.1 3-10.8 7.5L64 96 7.5 117.2zm352 256c-4.5 1.7-7.5 6-7.5 10.8s3 9.1 7.5 10.8L416 416l21.2 56.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L480 416l56.5-21.2c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L480 352l-21.2-56.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L416 352l-56.5 21.2z', c: '#c084fc' },
+    xmark: { vb: '0 0 384 512', d: 'M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z', c: '#cbd5e1' }
+};
+function pluginIconSVG(name, size, colorOverride) {
+  var ic = PI_ICONS[name] || PI_ICONS.file;
+  var s = size || 14;
+  return '<svg viewBox="' + ic.vb + '" width="' + s + '" height="' + s + '"><path fill="' + (colorOverride || ic.c) + '" d="' + ic.d + '"/></svg>';
+}
+// data-URI of the icon SVG — for background-image (UXP won't render a child <svg>
+// inside a <button>, but a background-image data-URI shows everywhere).
+function pluginIconDataUri(name, colorOverride) {
+  var ic = PI_ICONS[name] || PI_ICONS.file;
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + ic.vb + '"><path fill="' + (colorOverride || ic.c) + '" d="' + ic.d + '"/></svg>';
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+// Fill <span data-ic="NAME"> placeholders with an inline <svg> (UXP renders inline
+// SVG inside DIV/SPAN — but NOT inside <button>, which is text-only; icon hosts
+// must therefore be a div/span, not a button).
+function pluginRenderIcons(root) {
+  var els = (root || document).querySelectorAll('[data-ic]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (el.getAttribute('data-ic-done') === '1') continue;
+    el.classList.add('p-ic');
+    el.innerHTML = pluginIconSVG(el.getAttribute('data-ic'), parseInt(el.getAttribute('data-ic-size'), 10) || 0, el.getAttribute('data-ic-color') || null);
+    el.setAttribute('data-ic-done', '1');
+  }
+}
+window.pluginIconSVG = pluginIconSVG;
+window.pluginRenderIcons = pluginRenderIcons;
+// Render placeholders now + a couple of deferred passes (UXP's DOMContentLoaded
+// is unreliable; main.js runs at body end so the DOM is already parsed).
+function _piRenderSafe() { try { pluginRenderIcons(document); } catch (e) {} }
+_piRenderSafe();
+setTimeout(_piRenderSafe, 0);
+setTimeout(_piRenderSafe, 500);
+
 // Convert any TickTime/time object to seconds
 // Premiere Pro 25.x TickTime has non-enumerable getters — try everything
 function getTimeSec(t) {
@@ -2065,6 +2135,26 @@ async function sacGetFolderChildren(item) {
 // Walk the whole project tree (BFS) and return [{name, item, parent}, ...].
 // `parent` is the immediate folder's name ('' for top-level items) — needed to
 // match cutsheet entries like "Senyue 70" = folder "Senyue" + clip "70".
+// Classify a bin item → 'sequence' | 'video' | 'audio' | 'image' | 'other'.
+// Extension is the reliable split for video/audio/image (UXP MediaType only knows
+// VIDEO/AUDIO — a still is "video"); extensionless items are checked via isSequence().
+async function sacItemMediaType(rawItem, name) {
+  var ext = (String(name).match(/\.([a-z0-9]+)$/i) || ['', ''])[1].toLowerCase();
+  if (/^(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|webm|m2ts|mts|wmv|flv|r3d|braw|m2v|vob)$/.test(ext)) return 'video';
+  if (/^(wav|mp3|m4a|aac|flac|ogg|oga|aif|aiff|wma|caf)$/.test(ext))                          return 'audio';
+  if (/^(png|jpg|jpeg|tif|tiff|psd|gif|bmp|exr|tga|ai|eps|heic|heif|webp|svg|dpx)$/.test(ext)) return 'image';
+  // No known media extension → likely a sequence (or extensionless media).
+  try {
+    var clip = (ppro && ppro.ClipProjectItem && ppro.ClipProjectItem.cast) ? ppro.ClipProjectItem.cast(rawItem) : null;
+    if (clip && typeof clip.isSequence === 'function') {
+      var sq = clip.isSequence();
+      if (sq && typeof sq.then === 'function') sq = await sq;
+      if (sq) return 'sequence';
+    }
+  } catch (e) {}
+  return 'other';
+}
+
 async function sacCollectBinItems(rootItem) {
   var out = [];
   // path = full folder path of the node (branch); name = its leaf name.
@@ -2079,8 +2169,9 @@ async function sacCollectBinItems(rootItem) {
       var name  = await sacGetItemName(child);
       var isFolder = false;
       try { if (ppro && ppro.FolderItem && ppro.FolderItem.cast) isFolder = !!ppro.FolderItem.cast(child); } catch(e) {}
+      var mediaType = isFolder ? 'folder' : await sacItemMediaType(child, name);
       // parent = immediate folder leaf (for "Senyue 70" matching); path = full branch.
-      out.push({ name: name, item: child, parent: node.name, path: node.path || '', isFolder: isFolder });
+      out.push({ name: name, item: child, parent: node.name, path: node.path || '', isFolder: isFolder, mediaType: mediaType });
       queue.push({ item: child, name: name, path: node.path ? (node.path + ' / ' + name) : name });
     }
   }
@@ -2284,6 +2375,28 @@ async function ppMoveToVOBin(item, proj) {
 (function() {
   'use strict';
   var $ = function(id) { return document.getElementById(id); };
+
+  // FontAwesome 6 (solid) icon SVG paths inline — UXP can't load icon fonts
+  // (<i class="fa-...">). NOTE: UXP's SVG renderer ignores fill="currentColor",
+  // so the colour is baked straight into each <svg fill="..."> instead of via CSS.
+  var SAC_ICON_PATHS = {
+    folder:   { vb: '0 0 512 512', d: 'M64 480H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H298.5c-17 0-33.3-6.7-45.3-18.7L226.7 50.7c-12-12-28.3-18.7-45.3-18.7H64C28.7 32 0 60.7 0 96V416c0 35.3 28.7 64 64 64z' },
+    video:    { vb: '0 0 576 512', d: 'M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zM559.1 99.8c10.4 5.6 16.9 16.4 16.9 28.2V384c0 11.8-6.5 22.6-16.9 28.2s-23 5-32.9-1.6l-96-64L416 337.1V320 192 174.9l14.2-9.5 96-64c9.8-6.5 22.4-7.2 32.9-1.6z' },
+    audio:    { vb: '0 0 512 512', d: 'M499.1 6.3c8.1 6 12.9 15.6 12.9 25.7v72V368c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V147L192 223.8V432c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V200 128c0-14.1 9.3-26.6 22.8-30.7l320-96c9.7-2.9 20.2-1.1 28.3 5z' },
+    image:    { vb: '0 0 512 512', d: 'M0 96C0 60.7 28.7 32 64 32H448c35.3 0 64 28.7 64 64V416c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V96zM323.8 202.5c-4.5-6.6-11.9-10.5-19.8-10.5s-15.4 3.9-19.8 10.5l-87 127.6L170.7 297c-4.6-5.7-11.5-9-18.7-9s-14.2 3.3-18.7 9l-64 80c-5.8 7.2-6.9 17.1-2.9 25.4s12.4 13.6 21.6 13.6h96 32H424c8.9 0 17.1-4.9 21.2-12.8s3.6-17.4-1.4-24.7l-120-176zM112 192a48 48 0 1 0 0-96 48 48 0 1 0 0 96z' },
+    sequence: { vb: '0 0 512 512', d: 'M0 128C0 92.7 28.7 64 64 64H448c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zm32 32v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM32 288v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM160 160V352c0 17.7 14.3 32 32 32H320c17.7 0 32-14.3 32-32V160c0-17.7-14.3-32-32-32H192c-17.7 0-32 14.3-32 32z' },
+    other:    { vb: '0 0 384 512', d: 'M0 64C0 28.7 28.7 0 64 0H224V128c0 17.7 14.3 32 32 32H384V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V64zm384 64H256V0L384 128z' }
+  };
+  var SAC_ICON_COLOR = { folder: '#eab308', video: '#22c55e', audio: '#a855f7', image: '#f59e0b', sequence: '#ec4899', other: 'rgba(255,255,255,0.55)' };
+  function sacIconEl(name) {
+    var def = SAC_ICON_PATHS[name] || SAC_ICON_PATHS.other;
+    var color = SAC_ICON_COLOR[name] || SAC_ICON_COLOR.other;
+    var s = document.createElement('span');
+    s.className = 'sac-ic';
+    // fill must be ON the <path> — UXP doesn't inherit fill from the parent <svg>.
+    s.innerHTML = '<svg viewBox="' + def.vb + '" width="13" height="13"><path fill="' + color + '" d="' + def.d + '"/></svg>';
+    return s;
+  }
 
   var rowSeq = 0;
   var parsedBlocks = [];
@@ -2988,7 +3101,7 @@ async function ppMoveToVOBin(item, proj) {
       // leadNum: clip name (real media ext stripped) starts with the numeric source.
       var leadNum = numRe ? numRe.test(dispName(b.name).trim()) : false;
       return { folder: b.parent || '', folderPath: b.path || '', clip: b.name, clipNoX: clipNoX,
-               item: b.item, coverage: coverage, score: hits * 1000 + Math.round(coverage * 100) - lev, hits: hits, leadNum: leadNum };
+               item: b.item, coverage: coverage, score: hits * 1000 + Math.round(coverage * 100) - lev, hits: hits, leadNum: leadNum, mediaType: b.mediaType || 'other' };
     }
     var cands = sacBinItems.filter(function(b) { return !b.isFolder; }).map(toCand)
       .sort(function(a, b) { return b.score - a.score; });
@@ -3018,6 +3131,9 @@ async function ppMoveToVOBin(item, proj) {
     function topFoldersNow() { return showAllFolders ? allFolders : relevantFolders; }
 
     var selectedFolder = '__all__'; // holds a folderPath, or '__all__'
+    var typeFilter = 'all';          // 'all' | 'video' | 'audio' | 'image' | 'sequence'
+    var _theSrc0 = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
+    var boundItem = _theSrc0 ? sacSourceMap[_theSrc0.name] : null; // clip the source currently binds to
     var expanded = {};               // folderPath -> true; empty = all collapsed (default)
     function fHasChildren(fp) { return topFoldersNow().some(function(o) { return o.indexOf(fp + ' / ') === 0; }); }
     function fParent(fp) { var s = fp.split(' / '); return s.length > 1 ? s.slice(0, -1).join(' / ') : null; }
@@ -3031,11 +3147,15 @@ async function ppMoveToVOBin(item, proj) {
     }
     // Strip only real media extensions for display (NOT arbitrary dots in the name).
     function dispName(n) { return String(n).replace(/\.(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|gif|png|jpg|jpeg|tif|tiff|psd|prproj)$/i, ''); }
+    function sacTypeIcon(t) { return t === 'sequence' ? '🎞️' : t === 'audio' ? '🎵' : t === 'image' ? '🖼️' : t === 'video' ? '🎬' : '📄'; }
 
     function renderFolders() {
       foldersEl.innerHTML = '';
-      var all = mkRow('📁 Tất cả', selectedFolder === '__all__');
+      var all = document.createElement('div');
+      all.className = 'sac-bind-row' + (selectedFolder === '__all__' ? ' is-active' : '');
       all.style.paddingLeft = '8px';
+      all.appendChild(sacIconEl('folder'));
+      var allTxt = document.createElement('span'); allTxt.textContent = ' Tất cả'; all.appendChild(allTxt);
       all.addEventListener('click', function() { selectedFolder = '__all__'; renderFolders(); renderSources(); });
       foldersEl.appendChild(all);
       // Collapsible tree: a folder shows only when all its ancestors are expanded
@@ -3055,13 +3175,32 @@ async function ppMoveToVOBin(item, proj) {
         caret.textContent = kids ? (expanded[fp] ? '▾' : '▸') : '';
         if (kids) caret.addEventListener('click', function(e) { e.stopPropagation(); expanded[fp] = !expanded[fp]; renderFolders(); });
         var lbl = document.createElement('span');
-        lbl.textContent = '📁 ' + leaf;
+        lbl.className = 'sac-bind-fLbl';
+        lbl.appendChild(sacIconEl('folder'));
+        var lt = document.createElement('span'); lt.textContent = ' ' + leaf; lbl.appendChild(lt);
         row.appendChild(caret); row.appendChild(lbl);
         row.addEventListener('click', function() { selectedFolder = fp; renderFolders(); renderSources(); });
         foldersEl.appendChild(row);
       });
     }
+    // Type-filter chips (only show types actually present in the pool).
+    function renderTypeChips() {
+      var el = $('sacBindTypeChips'); if (!el) return;
+      el.innerHTML = '';
+      var present = {};
+      (showAllFolders ? cands : relevant).forEach(function(c) { present[c.mediaType] = true; });
+      ['all', 'video', 'audio', 'image', 'sequence'].forEach(function(t) {
+        if (t !== 'all' && !present[t]) return;
+        var chip = document.createElement('span');
+        chip.className = 'sac-bind-chip' + (typeFilter === t ? ' is-active' : '');
+        if (t === 'all') chip.textContent = 'Tất cả';
+        else chip.appendChild(sacIconEl(t));
+        chip.addEventListener('click', function() { typeFilter = t; renderTypeChips(); renderSources(); });
+        el.appendChild(chip);
+      });
+    }
     function renderSources() {
+      renderTypeChips();
       sourcesEl.innerHTML = '';
       var q = sacNorm(filterEl.value || '');
       // Default pool = relevant (token-matching) clips. Typing OR "show all folders"
@@ -3071,16 +3210,32 @@ async function ppMoveToVOBin(item, proj) {
         // Selecting a branch shows clips in it AND in its sub-folders.
         if (selectedFolder !== '__all__' &&
             !(c.folderPath === selectedFolder || c.folderPath.indexOf(selectedFolder + ' / ') === 0)) return false;
+        if (typeFilter !== 'all' && c.mediaType !== typeFilter) return false;
         if (q && sacNorm(c.folderPath + ' ' + c.clip).indexOf(q) === -1) return false;
         return true;
       });
       if (!base.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— không có —'; sourcesEl.appendChild(n); return; }
-      // When not filtering, show only the closest TOP_N so the list isn't overwhelming.
-      var showAll = !!q || selectedFolder !== '__all__';
+      // When not filtering/picking, show only the closest TOP_N so the list isn't overwhelming.
+      var showAll = !!q || selectedFolder !== '__all__' || typeFilter !== 'all';
       var rows = showAll ? base : base.slice(0, TOP_N);
       rows.forEach(function(c) {
-        var row = mkRow('🎬 ' + dispName(c.clip), false); // full name (no arbitrary-dot truncation)
+        var isBound = boundItem && c.item === boundItem;
+        var row = document.createElement('div');
+        row.className = 'sac-bind-row sac-bind-srcRow' + (isBound ? ' is-bound' : '');
         row.title = (c.folderPath ? c.folderPath + ' / ' : '') + c.clip;
+        var top = document.createElement('div');
+        top.className = 'sac-bind-srcTop';
+        top.appendChild(sacIconEl(c.mediaType));
+        var nm = document.createElement('span');
+        nm.textContent = ' ' + dispName(c.clip) + (isBound ? '   ✓ đang chọn' : '');
+        top.appendChild(nm);
+        row.appendChild(top);
+        if (c.folderPath) {
+          var p = document.createElement('div');
+          p.className = 'sac-bind-srcPath';
+          p.textContent = c.folderPath;
+          row.appendChild(p);
+        }
         row.addEventListener('click', function() { bindTo(c); });
         sourcesEl.appendChild(row);
       });

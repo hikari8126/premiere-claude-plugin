@@ -27,9 +27,9 @@
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
   <!-- Claude chat tab temporarily hidden (kept in DOM below for later) -->
-  <button class="tab-btn active" data-tab="voicegen">&#127908; VOICE GEN</button>
-  <button class="tab-btn" data-tab="autocut">&#9986; AUTOCUT</button>
-  <button class="tab-btn" data-tab="subtext">&#128221; TẠO SUB</button>
+  <div class="tab-btn active" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
+  <div class="tab-btn" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
+  <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -1005,6 +1005,7 @@
         </div>
         <div class="sac-bind-col">
           <div class="sac-bind-colHead">🎬 Source</div>
+          <div id="sacBindTypeChips" class="sac-bind-typeChips"></div>
           <div id="sacBindSources" class="sac-bind-list"></div>
         </div>
       </div>
