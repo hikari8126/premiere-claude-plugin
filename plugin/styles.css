@@ -809,12 +809,25 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.04); white-space: normal; word-break: break-word; }
 .sac-bind-row:hover { background: rgba(168,85,247,0.15); color: #fff; }
 .sac-bind-row.is-active { background: rgba(168,85,247,0.25); color: #fff; }
-.sac-bind-caret { display: inline-block; width: 14px; text-align: center; color: rgba(255,255,255,0.5); font-size: 9px; margin-right: 2px; }
+.sac-bind-caret { display: inline-block; width: 20px; text-align: center; color: rgba(255,255,255,0.65); font-size: 13px; margin-right: 4px; cursor: pointer; }
 .sac-bind-caret:hover { color: #fff; }
 /* Flat inline SVG icons (FontAwesome solid). Colour is baked into each <svg fill>
    in JS — UXP ignores fill:currentColor, so CSS color has no effect here. */
 .sac-ic, .p-ic { display: inline-flex; align-items: center; vertical-align: -2px; }
 .sac-ic svg, .p-ic svg { display: block; }
+/* Icon-bearing buttons are <div role="button">; give them button-like affordances:
+   inline-flex + center mirrors a native <button>'s content centering. Widths still
+   come from each button's own class (flex:1, width:100%, etc.). */
+div[role="button"] {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+div[role="button"].is-disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+div[role="button"] > .p-ic { margin-right: 5px; }
+div[role="button"] > .p-ic:only-child { margin-right: 0; }
 .tab-btn .p-ic { margin-right: 6px; vertical-align: 0; }
 .sac-bind-fLbl { display: inline-flex; align-items: center; }
 /* Source media-type filter chips */
@@ -825,7 +838,9 @@ body {
 .sac-bind-chip.is-active { background: rgba(168,85,247,0.22); border-color: var(--accent); color: #fff; }
 /* Source rows: name + dimmed folder path; highlight the currently-bound clip */
 .sac-bind-srcRow { padding: 5px 8px; }
-.sac-bind-srcTop { font-size: 11px; color: rgba(255,255,255,0.85); word-break: break-word; }
+.sac-bind-srcTop { display: flex; align-items: center; font-size: 11px; color: rgba(255,255,255,0.85); word-break: break-word; }
+.sac-bind-srcTop .sac-ic { flex: 0 0 auto; margin-right: 7px; vertical-align: 0; }
+.sac-bind-fLbl .sac-ic { margin-right: 6px; vertical-align: 0; }
 .sac-bind-srcPath { font-size: 9px; color: rgba(255,255,255,0.32); margin-top: 1px; word-break: break-word; }
 .sac-bind-srcRow.is-bound { background: rgba(16,185,129,0.12); border-left: 2px solid #10b981; }
 .sac-bind-srcRow.is-bound .sac-bind-srcTop { color: #6ee7b7; }
@@ -1947,8 +1962,8 @@ body {
 }
 .vg-settings-box > .vg-sg { margin-bottom: 10px; }
 .vg-settings-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
-.vg-settings-close { margin-top: 6px; width: 100%; height: 34px; border: none; border-radius: 16px; cursor: pointer;
-  background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); font-weight: 700; font-size: 12px; }
+.vg-settings-close { margin-top: 10px; width: 100%; height: 46px; border: none; border-radius: 14px; cursor: pointer;
+  background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); font-weight: 700; font-size: 13px; }
 .vg-statusDot {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -1966,6 +1981,9 @@ body {
 }
 .vg-modeBtn {
   flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1976,8 +1994,25 @@ body {
   padding: 9px 4px;
   cursor: pointer;
 }
+.vg-modeBtn { font-size: 11.5px; }
+div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vg-modeBtn:hover { color: var(--text); }
-.vg-modeBtn.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+/* short vertical divider between tabs (skip the last) */
+.vg-modeBtn { position: relative; }
+.vg-modeBtn:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 50%; margin-top: -8px;
+  width: 1px; height: 16px;
+  background: rgba(255,255,255,0.12);
+}
+.vg-modeBtn.is-active {
+  color: var(--accent);
+  border-bottom-width: 2.5px;
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+  text-shadow: 0 0 9px rgba(168,85,247,0.45);
+}
 
 /* ── Body: left + right ── */
 .vg-body {
@@ -2930,12 +2965,17 @@ body {
   color: rgba(255,255,255,0.35);
   font-family: ui-monospace, monospace;
 }
+/* Action buttons (folder · unbind · skip) pack on the LEFT right after the name;
+   the status glyph alone is pushed to the far right via margin-left:auto. UXP
+   ignores the row's flex `gap`, so each control carries its own left margin. */
 .sac-srcStatus {
   margin-left: auto;
   font-size: 9px;
   flex: 0 0 auto;
   color: rgba(255,255,255,0.3);
 }
+.sac-blockTimeBadge { margin-left: 5px; }
+.sac-blockHintBtn { margin-left: 5px; }
 .sac-srcOk      { color: #10b981; }
 .sac-srcMissing { color: #ef4444; font-weight: 600; }
 .sac-srcSkipped { color: #6b7280; }
@@ -2948,11 +2988,24 @@ body {
 }
 .sac-blockHintBtn:hover { opacity: 1; background: rgba(168,85,247,0.22); border-color: var(--accent); }
 .sac-blockUnbindBtn {
-  flex: 0 0 auto; background: transparent; border: none;
-  font-size: 11px; cursor: pointer; opacity: 0.55; padding: 0 2px;
-  line-height: 1; color: #f59e0b;
+  flex: 0 0 auto; width: 20px; height: 20px; padding: 0; margin-left: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.32);
+  border-radius: 5px; line-height: 1; cursor: pointer; opacity: 0.85; color: #f59e0b;
 }
-.sac-blockUnbindBtn:hover { opacity: 1; }
+.sac-blockUnbindBtn:hover { opacity: 1; background: rgba(245,158,11,0.2); border-color: #f59e0b; }
+/* Hover tooltips for the small block-source action buttons (UXP supports ::after content,
+   but the native `title` attribute positions wrong — so we roll our own). */
+.sac-blockHintBtn, .sac-blockUnbindBtn { position: relative; }
+.sac-blockHintBtn:hover::after, .sac-blockUnbindBtn:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 7px); top: 50%; margin-top: -11px;
+  background: #15131f; color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
+  padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;
+  white-space: nowrap; pointer-events: none;
+}
 .sac-hintChip {
   display: inline-block; margin: 2px 3px 2px 0;
   padding: 1px 7px; border-radius: 10px; font-size: 9px;
@@ -2963,15 +3016,16 @@ body {
 
 .sac-skipBtn {
   flex: 0 0 auto;
-  font-size: 6.5px;
-  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 9.5px; font-weight: 600;
+  padding: 3px 10px;
   background: transparent;
   border: 1px solid #7c3535;
   color: #f87171;
-  border-radius: 3px;
+  border-radius: 5px;
   cursor: pointer;
-  line-height: 1.8;
-  opacity: 0.75;
+  line-height: 1.3;
+  opacity: 0.85;
 }
 .sac-skipBtn:hover { background: rgba(239,68,68,0.12); opacity: 1; }
 .sac-skipBtn.is-active { border-color: #555; color: #9ca3af; }
@@ -2983,17 +3037,28 @@ body {
   padding: 6px 0 0;
 }
 .sac-voiceRow {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center;   /* UXP ignores flex `gap` → use child margins */
 }
+.sac-voiceRow > * { margin-right: 9px; }
+.sac-voiceRow > *:last-child { margin-right: 0; }
 .sac-voiceGenBtn { flex: 1 1 auto; }
 .sac-voiceBtn {
   flex: 0 0 auto;
-  height: 28px; padding: 0 12px;
-  border: 1px solid rgba(168,85,247,0.4); border-radius: 14px;
-  background: rgba(168,85,247,0.1); color: #d8b4fe;
+  height: 30px; padding: 0 14px;
+  border: 1px solid rgba(168,85,247,0.4); border-radius: 15px;
+  background: rgba(168,85,247,0.12); color: #d8b4fe;
   font-size: 10.5px; font-weight: 600; cursor: pointer; outline: none;
 }
-.sac-voiceBtn:hover { background: rgba(168,85,247,0.2); }
+.sac-voiceBtn:hover { background: rgba(168,85,247,0.22); }
+.sac-voiceBtn .p-ic { margin-right: 6px; }
+/* Folder-pick button (icon only) — slate tone reads as a distinct secondary action */
+.sac-voiceBtn:not(.sac-voiceGenBtn) {
+  width: 36px; padding: 0;
+  border-color: rgba(148,163,184,0.4);
+  background: rgba(148,163,184,0.12); color: #cbd5e1;
+}
+.sac-voiceBtn:not(.sac-voiceGenBtn) .p-ic { margin-right: 0; }
+.sac-voiceBtn:not(.sac-voiceGenBtn):hover { background: rgba(148,163,184,0.22); }
 .sac-voicePlayer {
   display: flex; align-items: center; gap: 8px;
   padding: 4px 8px;
@@ -3037,12 +3102,13 @@ body {
   align-self: center; margin: 0 2px;
 }
 .sac-cutNoVoiceBtn {
-  flex: 0 0 auto; height: 26px; padding: 0 10px;
-  background: transparent; border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.4); border-radius: 13px;
-  font-size: 9.5px; cursor: pointer; white-space: nowrap;
+  flex: 0 0 auto; height: 30px; padding: 0 12px;
+  background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.35);
+  color: #fbbf24; border-radius: 15px;
+  font-size: 10px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
-.sac-cutNoVoiceBtn:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.7); }
+.sac-cutNoVoiceBtn .p-ic { margin-right: 6px; }
+.sac-cutNoVoiceBtn:hover { background: rgba(245,158,11,0.2); border-color: rgba(245,158,11,0.6); color: #fcd34d; }
 
 /* ── Cut panel ── */
 .sac-cutPanel {

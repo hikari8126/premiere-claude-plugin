@@ -43,6 +43,12 @@ var PI_ICONS = {
     sequence: { vb: '0 0 512 512', d: 'M0 128C0 92.7 28.7 64 64 64H448c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zm32 32v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V160c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM32 288v32c0 8.8 7.2 16 16 16H80c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H48c-8.8 0-16 7.2-16 16zm384 0v32c0 8.8 7.2 16 16 16h32c8.8 0 16-7.2 16-16V288c0-8.8-7.2-16-16-16H432c-8.8 0-16 7.2-16 16zM160 160V352c0 17.7 14.3 32 32 32H320c17.7 0 32-14.3 32-32V160c0-17.7-14.3-32-32-32H192c-17.7 0-32 14.3-32 32z', c: '#ec4899' },
     trash: { vb: '0 0 448 512', d: 'M135.2 17.7L128 32 32 32C14.3 32 0 46.3 0 64S14.3 96 32 96l384 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-96 0-7.2-14.3C307.4 6.8 296.3 0 284.2 0L163.8 0c-12.1 0-23.2 6.8-28.6 17.7zM416 128L32 128 53.2 467c1.6 25.3 22.6 45 47.9 45l245.8 0c25.3 0 46.3-19.7 47.9-45L416 128z', c: '#ef4444' },
     video: { vb: '0 0 576 512', d: 'M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zM559.1 99.8c10.4 5.6 16.9 16.4 16.9 28.2V384c0 11.8-6.5 22.6-16.9 28.2s-23 5-32.9-1.6l-96-64L416 337.1V320 192 174.9l14.2-9.5 96-64c9.8-6.5 22.4-7.2 32.9-1.6z', c: '#22c55e' },
+    wave_square: { vb: '0 0 640 512', d: 'M128 64c0-17.7 14.3-32 32-32l160 0c17.7 0 32 14.3 32 32l0 352 96 0 0-160c0-17.7 14.3-32 32-32l128 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-96 0 0 160c0 17.7-14.3 32-32 32l-160 0c-17.7 0-32-14.3-32-32l0-352-96 0 0 160c0 17.7-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32s14.3-32 32-32l96 0 0-160z', c: '#cbd5e1' },
+    magnifying_glass: { vb: '0 0 512 512', d: 'M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z', c: '#cbd5e1' },
+    stop: { vb: '0 0 384 512', d: 'M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128z', c: '#cbd5e1' },
+    comment_dots: { vb: '0 0 512 512', d: 'M256 448c141.4 0 256-93.1 256-208S397.4 32 256 32S0 125.1 0 240c0 45.1 17.7 86.8 47.7 120.9c-1.9 24.5-11.4 46.3-21.4 62.9c-5.5 9.2-11.1 16.6-15.2 21.6c-2.1 2.5-3.7 4.4-4.9 5.7c-.6 .6-1 1.1-1.3 1.4l-.3 .3c0 0 0 0 0 0c0 0 0 0 0 0s0 0 0 0s0 0 0 0c-4.6 4.6-5.9 11.4-3.4 17.4c2.5 6 8.3 9.9 14.8 9.9c28.7 0 57.6-8.9 81.6-19.3c22.9-10 42.4-21.9 54.3-30.6c31.8 11.5 67 17.9 104.1 17.9zM128 208a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm128 0a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm96 32a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z', c: '#cbd5e1' },
+    arrow_left: { vb: '0 0 448 512', d: 'M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.2 288 416 288c17.7 0 32-14.3 32-32s-14.3-32-32-32l-306.7 0L214.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z', c: '#cbd5e1' },
+    rotate_left: { vb: '0 0 512 512', d: 'M125.7 160l50.3 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L48 224c-17.7 0-32-14.3-32-32L16 64c0-17.7 14.3-32 32-32s32 14.3 32 32l0 51.2L97.6 97.6c87.5-87.5 229.3-87.5 316.8 0s87.5 229.3 0 316.8s-229.3 87.5-316.8 0c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0c62.5 62.5 163.8 62.5 226.3 0s62.5-163.8 0-226.3s-163.8-62.5-226.3 0L125.7 160z', c: '#cbd5e1' },
     wand_magic_sparkles: { vb: '0 0 576 512', d: 'M234.7 42.7L197 56.8c-3 1.1-5 4-5 7.2s2 6.1 5 7.2l37.7 14.1L248.8 123c1.1 3 4 5 7.2 5s6.1-2 7.2-5l14.1-37.7L315 71.2c3-1.1 5-4 5-7.2s-2-6.1-5-7.2L277.3 42.7 263.2 5c-1.1-3-4-5-7.2-5s-6.1 2-7.2 5L234.7 42.7zM46.1 395.4c-18.7 18.7-18.7 49.1 0 67.9l34.6 34.6c18.7 18.7 49.1 18.7 67.9 0L529.9 116.5c18.7-18.7 18.7-49.1 0-67.9L495.3 14.1c-18.7-18.7-49.1-18.7-67.9 0L46.1 395.4zM484.6 82.6l-105 105-23.3-23.3 105-105 23.3 23.3zM7.5 117.2C3 118.9 0 123.2 0 128s3 9.1 7.5 10.8L64 160l21.2 56.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L128 160l56.5-21.2c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L128 96 106.8 39.5C105.1 35 100.8 32 96 32s-9.1 3-10.8 7.5L64 96 7.5 117.2zm352 256c-4.5 1.7-7.5 6-7.5 10.8s3 9.1 7.5 10.8L416 416l21.2 56.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L480 416l56.5-21.2c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L480 352l-21.2-56.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L416 352l-56.5 21.2z', c: '#c084fc' },
     xmark: { vb: '0 0 384 512', d: 'M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z', c: '#cbd5e1' }
 };
@@ -73,9 +79,45 @@ function pluginRenderIcons(root) {
 }
 window.pluginIconSVG = pluginIconSVG;
 window.pluginRenderIcons = pluginRenderIcons;
+
+// UXP <button> cannot render child elements (icons), so icon-bearing buttons are
+// authored as <div role="button">. Native <button>.disabled doesn't exist on a div,
+// so we install a virtual `disabled` property that mirrors a CSS class — existing
+// code like `btn.disabled = true` then keeps working unchanged on the div.
+function piMakeButton(el) {
+  if (!el || el.__piBtn || el.tagName === 'BUTTON') return el;
+  el.__piBtn = true;
+  try {
+    Object.defineProperty(el, 'disabled', {
+      configurable: true,
+      get: function () { return el.classList.contains('is-disabled'); },
+      set: function (v) {
+        if (v) { el.classList.add('is-disabled'); el.setAttribute('aria-disabled', 'true'); }
+        else { el.classList.remove('is-disabled'); el.removeAttribute('aria-disabled'); }
+      }
+    });
+  } catch (e) {}
+  return el;
+}
+window.piMakeButton = piMakeButton;
+// Set a button's content to an inline icon (optionally followed by a text label).
+// Use for dynamically-created or state-toggling buttons (play/pause/stop) so they
+// stay flat-icon instead of falling back to emoji glyphs.
+function piSetBtn(el, iconName, label, color, size) {
+  if (!el) return;
+  var ic = '<span class="p-ic">' + pluginIconSVG(iconName, size || (label ? 13 : 12), color || null) + '</span>';
+  el.innerHTML = label ? (ic + ' ' + label) : ic;
+}
+window.piSetBtn = piSetBtn;
+function pluginInitButtons(root) {
+  var els = (root || document).querySelectorAll('div[role="button"]');
+  for (var i = 0; i < els.length; i++) piMakeButton(els[i]);
+}
+window.pluginInitButtons = pluginInitButtons;
+
 // Render placeholders now + a couple of deferred passes (UXP's DOMContentLoaded
 // is unreliable; main.js runs at body end so the DOM is already parsed).
-function _piRenderSafe() { try { pluginRenderIcons(document); } catch (e) {} }
+function _piRenderSafe() { try { pluginRenderIcons(document); pluginInitButtons(document); } catch (e) {} }
 _piRenderSafe();
 setTimeout(_piRenderSafe, 0);
 setTimeout(_piRenderSafe, 500);
@@ -597,7 +639,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.5.6';  // Autocut: fix short-code fuzzy mismatch (K5→D5) + keep 📁 after bind + strip notes after ext
+var PLUGIN_VERSION = 'v4.6.0';  // Flat FontAwesome icon system across whole plugin + UI overhaul (bind modal, voice bar, mode tabs, settings declutter)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2397,6 +2439,20 @@ async function ppMoveToVOBin(item, proj) {
     s.innerHTML = '<svg viewBox="' + def.vb + '" width="13" height="13"><path fill="' + color + '" d="' + def.d + '"/></svg>';
     return s;
   }
+  // Set an element's content to a flat icon (from the global PI_ICONS set) + text.
+  // Text goes through createTextNode so filenames with special chars stay safe.
+  function sacLabelIcon(el, iconName, color, size, text) {
+    el.innerHTML = '<span class="p-ic" style="margin-right:6px">' + pluginIconSVG(iconName, size || 12, color || null) + '</span>';
+    el.appendChild(document.createTextNode(text == null ? '' : text));
+  }
+  // Inline folder-icon glyph (yellow) for embedding mid-sentence in status messages.
+  function sacFolderIco() {
+    return '<span class="sac-ic" style="margin:0 2px;vertical-align:-2px">' + pluginIconSVG('folder', 11, '#eab308') + '</span>';
+  }
+  // Escape user/clip-derived text before it goes into innerHTML.
+  function sacEsc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   var rowSeq = 0;
   var parsedBlocks = [];
@@ -2423,7 +2479,7 @@ async function ppMoveToVOBin(item, proj) {
     var lbl = $('sacCutLabel');
     if (lbl) {
       if (sacNoVoiceMode) {
-        lbl.textContent = '✂ Without voice';
+        sacLabelIcon(lbl, 'scissors', '#fbbf24', 12, 'Without voice');
       } else {
         var info = $('sacVoiceInfo');
         lbl.textContent = info ? info.textContent : '✅ Voice ready';
@@ -2626,10 +2682,11 @@ async function ppMoveToVOBin(item, proj) {
     });
 
     // Folder hint button — suggests parent folders from the last bin scan
-    var hintBtn = document.createElement('button');
+    var hintBtn = document.createElement('div');
     hintBtn.className = 'sac-rowBtn sac-hintBtn';
+    hintBtn.setAttribute('role', 'button');
     hintBtn.title = 'Thêm folder hint';
-    hintBtn.textContent = '📁';
+    piSetBtn(hintBtn, 'folder', null, null, 12);
     hintBtn.addEventListener('click', function() { sacShowFolderHints(inpSrc.value.trim(), inpSrc); });
 
     var cText = makeCell('sac-col-text'); cText.appendChild(inpText);
@@ -2809,7 +2866,7 @@ async function ppMoveToVOBin(item, proj) {
       block.texts.forEach(function(t) {
         var el = document.createElement('div');
         el.className = 'sac-blockText';
-        el.textContent = '💬 ' + t;
+        sacLabelIcon(el, 'comment_dots', '#64748b', 11, t);
         body.appendChild(el);
       });
 
@@ -2827,7 +2884,7 @@ async function ppMoveToVOBin(item, proj) {
         el.dataset.srcIdx   = String(si);
         var nameSpan = document.createElement('span');
         nameSpan.className = 'sac-srcName';
-        nameSpan.textContent = '🎬 ' + s.name;
+        sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, s.name);
         el.appendChild(nameSpan);
         if (s.time) {
           var badge = document.createElement('span');
@@ -2837,11 +2894,11 @@ async function ppMoveToVOBin(item, proj) {
         }
         // 📁 folder hint button — lets user fix source name from block card
         (function(srcEl, bIdx, sIdx) {
-          var hintBtn = document.createElement('button');
-          hintBtn.type = 'button';
+          var hintBtn = document.createElement('div');
+          hintBtn.setAttribute('role', 'button');
           hintBtn.className = 'sac-blockHintBtn';
-          hintBtn.textContent = '📁';
-          hintBtn.title = 'Gợi ý folder hint';
+          piSetBtn(hintBtn, 'folder', null, null, 11);
+          hintBtn.setAttribute('data-tip', 'Gợi ý folder hint');
           hintBtn.style.display = 'none'; // shown after validate (✗ or ⚠)
           hintBtn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -2849,11 +2906,11 @@ async function ppMoveToVOBin(item, proj) {
           });
           srcEl.appendChild(hintBtn);
           // ↩ unbind — revert an accidental bind back to the original sheet name.
-          var unbindBtn = document.createElement('button');
-          unbindBtn.type = 'button';
+          var unbindBtn = document.createElement('div');
+          unbindBtn.setAttribute('role', 'button');
           unbindBtn.className = 'sac-blockUnbindBtn';
-          unbindBtn.textContent = '↩';
-          unbindBtn.title = 'Bỏ bind (về tên gốc trong script)';
+          piSetBtn(unbindBtn, 'rotate_left', null, null, 11);
+          unbindBtn.setAttribute('data-tip', 'Bỏ bind — về tên gốc');
           unbindBtn.style.display = sacBindOverrides[sacNorm(s._orig || s.name)] ? '' : 'none';
           unbindBtn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -2960,7 +3017,7 @@ async function ppMoveToVOBin(item, proj) {
           statusEl.textContent = '⚠';
           statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
-          if (msgEl) { msgEl.textContent = '⚠ trùng ' + ambiguousNames[name] + ' clip — bấm 📁 để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
+          if (msgEl) { msgEl.innerHTML = '⚠ trùng ' + sacEsc(ambiguousNames[name]) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
           sacAddSkipButton(el);
         } else if (sacSourceMap[name]) {  // found ✓
           el.dataset.srcBaseKind = 'found';
@@ -2974,7 +3031,7 @@ async function ppMoveToVOBin(item, proj) {
           statusEl.className = 'sac-srcStatus sac-srcMissing';
           statusEl.textContent = '✗';
           if (hintBtn) hintBtn.style.display = '';
-          if (msgEl) { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
+          if (msgEl) { msgEl.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
           sacAddSkipButton(el);
         }
       });
@@ -3024,7 +3081,7 @@ async function ppMoveToVOBin(item, proj) {
 
     srcEl.dataset.srcName = orig;
     var nameSpan = srcEl.querySelector('.sac-srcName');
-    if (nameSpan) { nameSpan.textContent = '🎬 ' + orig; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+    if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, orig); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
 
     var statusEl = srcEl.querySelector('.sac-srcStatus');
     var hintBtn  = srcEl.querySelector('.sac-blockHintBtn');
@@ -3038,7 +3095,7 @@ async function ppMoveToVOBin(item, proj) {
         statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
         statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
         if (hintBtn) hintBtn.style.display = '';
-        if (uMsg) { uMsg.textContent = '⚠ trùng ' + count + ' clip — bấm 📁 để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
+        if (uMsg) { uMsg.innerHTML = '⚠ trùng ' + sacEsc(count) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
         sacAddSkipButton(srcEl);
       } else if (item) {
         statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
@@ -3047,7 +3104,7 @@ async function ppMoveToVOBin(item, proj) {
       } else {
         statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
         if (hintBtn) hintBtn.style.display = '';
-        if (uMsg) { uMsg.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
+        if (uMsg) { uMsg.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
         sacAddSkipButton(srcEl);
       }
     }
@@ -3227,7 +3284,7 @@ async function ppMoveToVOBin(item, proj) {
         top.className = 'sac-bind-srcTop';
         top.appendChild(sacIconEl(c.mediaType));
         var nm = document.createElement('span');
-        nm.textContent = ' ' + dispName(c.clip) + (isBound ? '   ✓ đang chọn' : '');
+        nm.textContent = dispName(c.clip) + (isBound ? '   ✓ đang chọn' : '');
         top.appendChild(nm);
         row.appendChild(top);
         if (c.folderPath) {
@@ -3258,7 +3315,7 @@ async function ppMoveToVOBin(item, proj) {
       theSrc.skipped = false;
       srcEl.dataset.srcName = label;
       var nameSpan = srcEl.querySelector('.sac-srcName');
-      if (nameSpan) { nameSpan.textContent = '🎬 ' + label; nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+      if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, label); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
       var skipBtn2 = srcEl.querySelector('.sac-skipBtn');
       if (skipBtn2) skipBtn2.parentNode.removeChild(skipBtn2);
       // Bind directly to the chosen clip — no name re-matching needed (robust).
@@ -3321,8 +3378,8 @@ async function ppMoveToVOBin(item, proj) {
   // assembly replaces it with a 1s gap instead of a real clip.
   function sacAddSkipButton(srcEl) {
     if (srcEl.querySelector('.sac-skipBtn')) return; // already added
-    var btn = document.createElement('button');
-    btn.type = 'button';
+    var btn = document.createElement('div');
+    btn.setAttribute('role', 'button');
     btn.className = 'sac-skipBtn';
 
     // Paint the row to reflect the current skipped state (so a re-render of an
@@ -3336,7 +3393,7 @@ async function ppMoveToVOBin(item, proj) {
       var nameSpan = srcEl.querySelector('.sac-srcName');
       var msgEl    = srcEl.querySelector('.sac-srcMsg');
       if (skipped) {
-        btn.textContent = '↩ Bỏ skip';
+        sacLabelIcon(btn, 'rotate_left', null, 11, 'Bỏ skip');
         btn.classList.add('is-active');
         srcEl.classList.add('is-skipped');
         if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; statusEl.title = 'Đã bỏ qua — chèn gap'; }
@@ -3353,10 +3410,10 @@ async function ppMoveToVOBin(item, proj) {
         if (kind === 'ambiguous') {
           var cnt = srcEl.dataset.srcBaseCount || '';
           if (statusEl) { statusEl.textContent = '⚠'; statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.title = cnt + ' clip trùng tên — bấm 📁'; }
-          if (msgEl)    { msgEl.textContent = '⚠ trùng ' + cnt + ' clip — bấm 📁 để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
+          if (msgEl)    { msgEl.innerHTML = '⚠ trùng ' + sacEsc(cnt) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
         } else {
           if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.title = ''; }
-          if (msgEl)    { msgEl.textContent = '✗ không thấy trong bin — 📁 hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
+          if (msgEl)    { msgEl.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
         }
       }
     }
@@ -3370,7 +3427,10 @@ async function ppMoveToVOBin(item, proj) {
       applyState();
       sacCheckSkipGate(); // all missing now skipped → open Run gate
     });
-    srcEl.appendChild(btn);
+    // Insert BEFORE the status glyph (which has margin-left:auto, so it floats to the
+    // far right) — keeps Skip in the left cluster next to the folder/unbind buttons.
+    var statusRef = srcEl.querySelector('.sac-srcStatus');
+    if (statusRef) srcEl.insertBefore(btn, statusRef); else srcEl.appendChild(btn);
     applyState(); // reflect current state on creation (handles carried-over skip)
   }
 
@@ -3406,7 +3466,7 @@ async function ppMoveToVOBin(item, proj) {
       statusEl.style.display = 'block'; return;
     }
     if (!sacBinItems.length) {
-      statusEl.textContent = '⚠ Bấm Validate trước để load danh sách bin — sau đó bấm 📁 lại.';
+      statusEl.innerHTML = '⚠ Bấm Validate trước để load danh sách bin — sau đó bấm ' + sacFolderIco() + ' lại.';
       statusEl.style.display = 'block'; return;
     }
 
@@ -3549,13 +3609,13 @@ async function ppMoveToVOBin(item, proj) {
   function sacVPStop() {
     if (sacVP.ticker) { clearInterval(sacVP.ticker); sacVP.ticker = null; }
     sacVP.playing = false;
-    var btn = $('sacVoicePlay'); if (btn) btn.textContent = '▶';
+    var btn = $('sacVoicePlay'); if (btn) piSetBtn(btn, 'play');
     fetch(BRIDGE_URL + '/tts/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(function(){});
   }
   function sacVPPlay() {
     if (!sacVP.path) return;
     sacVP.playing = true; sacVP.startedAt = Date.now();
-    var btn = $('sacVoicePlay'); if (btn) btn.textContent = '⏸';
+    var btn = $('sacVoicePlay'); if (btn) piSetBtn(btn, 'pause');
     sacVP.ticker = setInterval(sacVPTick, 200);
     fetch(BRIDGE_URL + '/tts/play', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3563,10 +3623,10 @@ async function ppMoveToVOBin(item, proj) {
     }).then(function(r) { return r.json(); }).then(function() {
       if (sacVP.ticker) { clearInterval(sacVP.ticker); sacVP.ticker = null; }
       sacVP.playing = false;
-      var b = $('sacVoicePlay'); if (b) b.textContent = '▶';
+      var b = $('sacVoicePlay'); if (b) piSetBtn(b, 'play');
       $('sacVoiceFill').style.width = sacVP.dur > 0 ? '100%' : '0%';
     }).catch(function() {
-      sacVP.playing = false; var b = $('sacVoicePlay'); if (b) b.textContent = '▶';
+      sacVP.playing = false; var b = $('sacVoicePlay'); if (b) piSetBtn(b, 'play');
     });
   }
   function sacVoicePlayerSetSrc(path) {
@@ -3591,8 +3651,8 @@ async function ppMoveToVOBin(item, proj) {
     sacScriptPrepared = ready;
     var b = $('sacVoiceGenBtn');
     if (!b) return;
-    if (ready) { b.textContent = '🎙 Gen voice ngay →'; b.classList.add('is-ready'); }
-    else       { b.textContent = '⚡ Gen voice (Voice Gen) →'; b.classList.remove('is-ready'); }
+    if (ready) { piSetBtn(b, 'microphone_lines', 'Gen voice ngay →', '#10b981', 13); b.classList.add('is-ready'); }
+    else       { piSetBtn(b, 'bolt', 'Gen voice (Voice Gen) →', '#d8b4fe', 13); b.classList.remove('is-ready'); }
   }
 
   // ── Gen voice = normalize via Claude → push to Voice Gen tab ───────────────
@@ -3762,14 +3822,14 @@ async function ppMoveToVOBin(item, proj) {
         var badge = document.querySelector('.sac-blockVoiceBadge[data-block-idx="' + i + '"]');
         if (badge) {
           if (trulyMatched) {
-            badge.textContent = '🎤 ' + a.duration.toFixed(1) + 's';
+            sacLabelIcon(badge, 'microphone', null, 11, a.duration.toFixed(1) + 's');
             badge.className = 'sac-blockVoiceBadge sac-voiceOk';
           } else if (a.duration != null) {
             // Gap-filled — has timing but not confirmed match
-            badge.textContent = '🎤 ~' + a.duration.toFixed(1) + 's';
+            sacLabelIcon(badge, 'microphone', null, 11, '~' + a.duration.toFixed(1) + 's');
             badge.className = 'sac-blockVoiceBadge sac-voiceWeak';
           } else {
-            badge.textContent = '🎤 ?';
+            sacLabelIcon(badge, 'microphone', null, 11, '?');
             badge.className = 'sac-blockVoiceBadge sac-voiceMissing';
           }
         }
@@ -3795,7 +3855,7 @@ async function ppMoveToVOBin(item, proj) {
       // "Run anyway" — validate passed but voice gate not met → let the user run
       // (matched blocks get voice; unmatched get video only).
       var raBtn = $('sacRunAnywayBtn');
-      if (raBtn) raBtn.style.display = (sacValidatePassed && !sacVoiceReady && matched >= 0) ? 'block' : 'none';
+      if (raBtn) raBtn.style.display = (sacValidatePassed && !sacVoiceReady && matched >= 0) ? 'flex' : 'none';
     } catch(e) {
       sacVoiceBusy = false;
       sacSetVoiceInfo('❌ Bridge offline: ' + e.message);
@@ -3919,8 +3979,7 @@ async function ppMoveToVOBin(item, proj) {
     }
 
     btn.disabled = true;
-    var oldLabel = btn.textContent;
-    btn.textContent = '⏳ Validating...';
+    piSetBtn(btn, 'rotate_right', 'Validating...', null, 12);
     status.textContent = '⏳ Đang kiểm tra source + cấu trúc...';
     status.style.display = 'block';
     var myVTok = ++sacValidateToken; // a Clear (or newer validate) invalidates this run
@@ -3948,8 +4007,8 @@ async function ppMoveToVOBin(item, proj) {
         sacValidatePassed = false;
       } else if (srcResult.ambiguous && srcResult.ambiguous.length > 0) {
         // Ambiguous sources: structure OK + all found, but some names match multiple clips
-        status.textContent = '⚠ Source trùng tên — cần folder hint (bấm 📁): '
-          + srcResult.ambiguous.join(', ');
+        status.innerHTML = '⚠ Source trùng tên — cần folder hint (bấm ' + sacFolderIco() + '): '
+          + sacEsc(srcResult.ambiguous.join(', '));
         sacValidatePassed = false;
       } else {
         var note = srcResult.premiereAvailable ? '' : ' (dev mode — chưa kiểm tra bin)';
@@ -3975,7 +4034,7 @@ async function ppMoveToVOBin(item, proj) {
       sacUpdateRunVisibility();
     } finally {
       btn.disabled = false;
-      btn.textContent = oldLabel;
+      piSetBtn(btn, 'check', 'Validate', null, 12);
     }
   }
 
@@ -3985,7 +4044,7 @@ async function ppMoveToVOBin(item, proj) {
     sacParseImg.addEventListener('click', function() {
       if (!sacImgDataUrl) return;
       sacParseImg.disabled = true;
-      sacParseImg.textContent = '⏳ Đang phân tích...';
+      piSetBtn(sacParseImg, 'rotate_right', 'Đang phân tích...', null, 12);
       $('sacImgStatus').textContent = '';
       $('sacImgStatus').style.display = 'none';
 
@@ -3997,7 +4056,7 @@ async function ppMoveToVOBin(item, proj) {
         .then(function(r) { return r.json(); })
         .then(function(d) {
           sacParseImg.disabled = false;
-          sacParseImg.textContent = 'Parse với AI →';
+          piSetBtn(sacParseImg, 'wand_magic_sparkles', 'Parse với AI →', null, 12);
           if (!d.ok || !d.rows || d.rows.length === 0) {
             $('sacImgStatus').textContent = '❌ ' + (d.error || 'Không parse được.');
             $('sacImgStatus').style.display = 'block';
@@ -4019,7 +4078,7 @@ async function ppMoveToVOBin(item, proj) {
         })
         .catch(function(e) {
           sacParseImg.disabled = false;
-          sacParseImg.textContent = 'Parse với AI →';
+          piSetBtn(sacParseImg, 'wand_magic_sparkles', 'Parse với AI →', null, 12);
           $('sacImgStatus').textContent = '❌ Bridge lỗi: ' + e.message;
           $('sacImgStatus').style.display = 'block';
         });
@@ -5069,7 +5128,7 @@ async function ppMoveToVOBin(item, proj) {
     }
     function setPlaying(val) {
       isPlaying = val;
-      playBtn.textContent = val ? '⏸' : '▶';
+      piSetBtn(playBtn, val ? 'pause' : 'play');
       if (!val) stopTicker();
     }
     function doPlay(offset) {
@@ -5225,9 +5284,11 @@ async function ppMoveToVOBin(item, proj) {
       item.appendChild(info);
 
       if (v.voice_id !== '__custom__') {
-        var btn = document.createElement('button');
+        var btn = document.createElement('div');
         btn.className = 'vg-dropItemPrev';
-        btn.textContent = '▶';
+        btn.setAttribute('role', 'button');
+        piMakeButton(btn);
+        piSetBtn(btn, 'play');
         VG_DROP_BTNS[v.voice_id] = btn;
         (function(vid, b) {
           b.addEventListener('click', function(e) {
@@ -5326,7 +5387,7 @@ async function ppMoveToVOBin(item, proj) {
     // Different voice was playing → reset its button
     if (VG_PREV_ACTIVE) {
       var oldBtn = VG_DROP_BTNS[VG_PREV_ACTIVE];
-      if (oldBtn) { oldBtn.textContent = '▶'; oldBtn.classList.remove('is-playing'); }
+      if (oldBtn) { piSetBtn(oldBtn, 'play'); oldBtn.classList.remove('is-playing'); }
       vgStopAll();
     }
 
@@ -5337,7 +5398,7 @@ async function ppMoveToVOBin(item, proj) {
     }
 
     btn.disabled = true;
-    btn.textContent = '…';
+    btn.innerHTML = '…';
 
     (async function() {
       try {
@@ -5363,7 +5424,7 @@ async function ppMoveToVOBin(item, proj) {
         vgStartPreviewPlay(voiceId, btn, url);
       } catch(e) {
         btn.disabled = false;
-        btn.textContent = '▶';
+        piSetBtn(btn, 'play');
         VG_PREV_ACTIVE = null;
         setStatus('Preview: ' + e.message, false);
       }
@@ -5372,17 +5433,17 @@ async function ppMoveToVOBin(item, proj) {
 
   function vgStartPreviewPlay(voiceId, btn, url) {
     VG_PREV_ACTIVE = voiceId;
-    btn.textContent = '⏸';
+    piSetBtn(btn, 'pause');
     btn.classList.add('is-playing');
     vgPlayUrl(url, null,
       function() {
         if (VG_PREV_ACTIVE === voiceId) VG_PREV_ACTIVE = null;
-        btn.textContent = '▶';
+        piSetBtn(btn, 'play');
         btn.classList.remove('is-playing');
       },
       function(e) {
         if (VG_PREV_ACTIVE === voiceId) VG_PREV_ACTIVE = null;
-        btn.textContent = '▶';
+        piSetBtn(btn, 'play');
         btn.classList.remove('is-playing');
         console.warn('[vgPreview]', e);
       }
@@ -5511,7 +5572,7 @@ async function ppMoveToVOBin(item, proj) {
         var sp = active[i];
         var spVoice = safeFileStr(sp.voiceName.split(' ')[0]) || 'voice';
         var spName = spVoice + (userSuffix ? '_' + userSuffix : '') + '_' + ts + (active.length > 1 ? '-' + (i + 1) : '');
-        els.btnGenerate.textContent = '⏳ ' + sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...';
+        piSetBtn(els.btnGenerate, 'rotate_right', sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...', '#ffffff', 14);
         setStatus('Generating ' + sp.voiceName + '...', false);
         var resp = await postJsonVG('/tts/generate', {
           apiKey: ELEVENLABS_KEY,
@@ -5534,7 +5595,7 @@ async function ppMoveToVOBin(item, proj) {
       setStatus('✗ ' + e.message, false);
     } finally {
       els.btnGenerate.disabled = false;
-      els.btnGenerate.textContent = '⚡ GENERATE VOICE';
+      piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
     }
   }
 
@@ -5615,7 +5676,7 @@ async function ppMoveToVOBin(item, proj) {
     }
 
     els.btnGenerate.disabled = true;
-    els.btnGenerate.textContent = '⏳ Generating ' + numVar + ' ' + label + '...';
+    piSetBtn(els.btnGenerate, 'rotate_right', 'Generating ' + numVar + ' ' + label + '...', '#ffffff', 14);
     setStatus('Calling ElevenLabs...', false);
 
     try {
@@ -5631,7 +5692,7 @@ async function ppMoveToVOBin(item, proj) {
       setStatus('✗ ' + e.message, false);
     } finally {
       els.btnGenerate.disabled = false;
-      els.btnGenerate.textContent = '⚡ GENERATE VOICE';
+      piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
     }
   }
 
@@ -5650,8 +5711,13 @@ async function ppMoveToVOBin(item, proj) {
     if (genBar)  genBar.style.display  = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     if (els.resultSection) els.resultSection.hidden = true;
-    var labels = { tts: '⚡ GENERATE VOICE', sfx: '💥 GENERATE SFX', music: '🎵 GENERATE MUSIC' };
-    els.btnGenerate.textContent = labels[mode] || labels.tts;
+    var genLabels = {
+      tts:   { ic: 'bolt',        label: 'GENERATE VOICE' },
+      sfx:   { ic: 'wave_square', label: 'GENERATE SFX' },
+      music: { ic: 'audio',       label: 'GENERATE MUSIC' },
+    };
+    var gl = genLabels[mode] || genLabels.tts;
+    piSetBtn(els.btnGenerate, gl.ic, gl.label, '#ffffff', 14);
   }
 
   function renderVariations() {
@@ -5704,9 +5770,11 @@ async function ppMoveToVOBin(item, proj) {
         var cardPath = v.audioPath;
         var cardPlaying = false;
 
-        var playB = document.createElement('button');
+        var playB = document.createElement('div');
         playB.className = 'vg-playBtn';
-        playB.textContent = '▶';
+        playB.setAttribute('role', 'button');
+        piMakeButton(playB);
+        piSetBtn(playB, 'play');
 
         var progWrap = document.createElement('div');
         progWrap.className = 'vg-progressWrap';
@@ -5739,7 +5807,7 @@ async function ppMoveToVOBin(item, proj) {
         }
         function setCardPlaying(val) {
           cardPlaying = val;
-          playB.textContent = val ? '⏸' : '▶';
+          piSetBtn(playB, val ? 'pause' : 'play');
           if (!val) stopCardTicker();
         }
         function doCardPlay(offset) {
@@ -5794,21 +5862,24 @@ async function ppMoveToVOBin(item, proj) {
         sizeEl.className = 'vg-varSize';
         sizeEl.textContent = (idx === 0 ? 'Var 1: ' : 'Var 2: ') + sizeTxt;
 
-        var importB = document.createElement('button');
+        var importB = document.createElement('div');
         importB.className = 'ac-secondaryButton vg-actionButton';
+        importB.setAttribute('role', 'button');
         importB.textContent = 'Import';
         importB.addEventListener('click', function() { importVariation(v); });
 
         // Import + drop on the timeline at the playhead (first free audio track)
-        var toTimelineB = document.createElement('button');
+        var toTimelineB = document.createElement('div');
         toTimelineB.className = 'ac-secondaryButton vg-actionButton';
-        toTimelineB.textContent = '⬇ Timeline';
+        toTimelineB.setAttribute('role', 'button');
+        piSetBtn(toTimelineB, 'download', 'Timeline', null, 12);
         toTimelineB.addEventListener('click', function() { importToTimeline(v); });
 
         // Move to Autocut — feed this generated voice into the Autocut pipeline
-        var toAutocutB = document.createElement('button');
+        var toAutocutB = document.createElement('div');
         toAutocutB.className = 'ac-secondaryButton vg-actionButton';
-        toAutocutB.textContent = '→ Autocut';
+        toAutocutB.setAttribute('role', 'button');
+        piSetBtn(toAutocutB, 'arrow_right', 'Autocut', null, 12);
         toAutocutB.addEventListener('click', function() { moveToAutocut(v); });
 
         var actionsRow = document.createElement('div');
@@ -6027,7 +6098,8 @@ async function ppMoveToVOBin(item, proj) {
       var vgApp = document.querySelector('#tab-voicegen .vg-app');
 
       function renderFolder() {
-        folderEl.textContent = customOutputFolder || '(chưa chọn — bấm 📁 Đổi…)';
+        if (customOutputFolder) { folderEl.textContent = customOutputFolder; }
+        else { folderEl.innerHTML = '(chưa chọn — bấm <span class="p-ic" style="margin:0 2px;vertical-align:-2px">' + window.pluginIconSVG('folder_open', 11, '#cbd5e1') + '</span> Đổi…)'; }
       }
       renderFolder();
       if (vgApp) vgApp.style.display = 'none';
@@ -6134,10 +6206,9 @@ async function ppMoveToVOBin(item, proj) {
     var ta = els.script;
     if (!ta) return;
     var lines = String(ta.value || '').split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
-    if (!lines.length) { vgOrgBtn.textContent = '✨ Organize'; return; }
+    if (!lines.length) { piSetBtn(vgOrgBtn, 'wand_magic_sparkles', 'Organize', null, 13); return; }
     var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider:'anthropic', model:null, apiKey:'' };
-    var oldT = vgOrgBtn.textContent;
-    vgOrgBtn.disabled = true; vgOrgBtn.textContent = '⏳ Organizing…';
+    vgOrgBtn.disabled = true; piSetBtn(vgOrgBtn, 'rotate_right', 'Organizing…', null, 13);
     try {
       var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6156,7 +6227,7 @@ async function ppMoveToVOBin(item, proj) {
       alert('Organize lỗi: ' + e.message);
     } finally {
       vgOrgBtn.disabled = false;
-      setTimeout(function(){ vgOrgBtn.textContent = oldT || '✨ Organize'; }, 1500);
+      setTimeout(function(){ piSetBtn(vgOrgBtn, 'wand_magic_sparkles', 'Organize', null, 13); }, 1500);
     }
   });
 
@@ -6414,7 +6485,7 @@ async function ppMoveToVOBin(item, proj) {
         if (!ELEVENLABS_KEY)     return showVcStatus(vcCloneStatus, 'No ElevenLabs API key set', false);
 
         vcCloneSubmit.disabled = true;
-        vcCloneSubmit.textContent = '⏳ Cloning…';
+        piSetBtn(vcCloneSubmit, 'rotate_right', 'Cloning…', '#ffffff', 14);
         showVcStatus(vcCloneStatus, 'Uploading audio to ElevenLabs…', null);
         try {
           var resp = await postJsonVG('/voice/clone', {
@@ -6432,7 +6503,7 @@ async function ppMoveToVOBin(item, proj) {
           showVcStatus(vcCloneStatus, '✗ ' + e.message, false);
         } finally {
           vcCloneSubmit.disabled = false;
-          vcCloneSubmit.textContent = '🎙 CLONE VOICE';
+          piSetBtn(vcCloneSubmit, 'microphone_lines', 'CLONE VOICE', '#ffffff', 14);
         }
       });
     }
@@ -6452,7 +6523,7 @@ async function ppMoveToVOBin(item, proj) {
         if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
 
         vcDesignPreview.disabled = true;
-        vcDesignPreview.textContent = '⏳ Generating…';
+        piSetBtn(vcDesignPreview, 'rotate_right', 'Generating…', '#ffffff', 13);
         showVcStatus(vcDesignStatus, 'Generating voice preview…', null);
         if (vcPreviewPlayer) vcPreviewPlayer.hidden = true;
         if (vcDesignSaveSec) vcDesignSaveSec.hidden = true;
@@ -6477,7 +6548,7 @@ async function ppMoveToVOBin(item, proj) {
           if (vcPreviewPlayer) vcPreviewPlayer.hidden = false;
           if (vcPreviewFill)   vcPreviewFill.style.width = '0%';
           if (vcPreviewTime)   vcPreviewTime.textContent = '0:00 / 0:00';
-          if (vcPreviewPlay)   vcPreviewPlay.textContent = '▶';
+          if (vcPreviewPlay)   piSetBtn(vcPreviewPlay, 'play');
           vcPreviewIsPlaying = false;
 
           // Show save section
@@ -6486,7 +6557,7 @@ async function ppMoveToVOBin(item, proj) {
           showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
         } finally {
           vcDesignPreview.disabled = false;
-          vcDesignPreview.textContent = '▶ PREVIEW VOICE';
+          piSetBtn(vcDesignPreview, 'play', 'PREVIEW VOICE', '#ffffff', 13);
         }
       });
     }
@@ -6516,13 +6587,13 @@ async function ppMoveToVOBin(item, proj) {
       // Ask bridge to stop afplay
       postJsonVG('/tts/stop', {}).catch(function(){});
       vcPreviewIsPlaying = false;
-      if (vcPreviewPlay) vcPreviewPlay.textContent = '▶';
+      if (vcPreviewPlay) piSetBtn(vcPreviewPlay, 'play');
     }
 
     function startVcPreview() {
       stopVcPreview();
       vcPreviewIsPlaying = true;
-      if (vcPreviewPlay) vcPreviewPlay.textContent = '⏹';
+      if (vcPreviewPlay) piSetBtn(vcPreviewPlay, 'stop');
       vcPreviewPosition = 0;
       var startTime = Date.now();
       // Kick off play on bridge
@@ -6554,7 +6625,7 @@ async function ppMoveToVOBin(item, proj) {
         if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
 
         vcDesignSave.disabled = true;
-        vcDesignSave.textContent = '⏳ Saving…';
+        piSetBtn(vcDesignSave, 'rotate_right', 'Saving…', '#ffffff', 13);
         showVcStatus(vcDesignStatus, 'Saving voice to your library…', null);
         try {
           var resp = await postJsonVG('/voice/design/save', {
@@ -6572,7 +6643,7 @@ async function ppMoveToVOBin(item, proj) {
           showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
         } finally {
           vcDesignSave.disabled = false;
-          vcDesignSave.textContent = '✓ SAVE VOICE';
+          piSetBtn(vcDesignSave, 'check', 'SAVE VOICE', '#ffffff', 13);
         }
       });
     }
@@ -7108,8 +7179,8 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   async function stMakeSrt() {
-    var btn = $('stMakeBtn'); var old = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang xử lý...'; }
+    var btn = $('stMakeBtn');
+    if (btn) { btn.disabled = true; piSetBtn(btn, 'rotate_right', 'Đang xử lý...', '#ffffff', 14); }
     try {
       stStatus('⏳ Đọc clip audio từ timeline...');
       var clips = await stCollectClips();
@@ -7156,7 +7227,7 @@ async function ppMoveToVOBin(item, proj) {
     } catch (e) {
       stStatus('❌ ' + e.message);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = old; }
+      if (btn) { btn.disabled = false; piSetBtn(btn, 'closed_captioning', 'Tạo SRT', '#ffffff', 14); }
     }
   }
 
