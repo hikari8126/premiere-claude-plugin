@@ -14,7 +14,7 @@
     ⚠ Cần update Bridge
   </span>
   <span class="version-bar-spacer"></span>
-  <button class="vb-icon-btn" id="settings-btn" title="Settings (API key)">&#9881;</button>
+  <div class="vb-icon-btn" id="settings-btn" role="button" title="Settings (API key)"><span data-ic="gear" data-ic-size="15"></span></div>
 </div>
 
 <!-- ── PLUGIN UPDATE BANNER — shown when a newer plugin version is available ── -->
@@ -111,7 +111,8 @@
         <h2>Settings</h2>
       </div>
 
-      <div class="setting-row">
+      <!-- Bridge URL kept in DOM (JS reads it) but hidden — default localhost:3030 -->
+      <div class="setting-row" style="display:none">
         <label>Bridge Server URL</label>
         <input id="bridge-url-input" type="text" value="http://localhost:3030" />
       </div>
@@ -155,17 +156,10 @@
         <div class="bridge-info-row"><span>Whisper:</span> <span id="bridge-info-whisper">—</span></div>
       </div>
 
-      <p class="settings-hint">
-        <strong>API mode:</strong> set <code>ANTHROPIC_API_KEY</code> in <code>bridge/.env</code> for vision + better quality.<br>
-        <strong>CLI mode:</strong> uses <code>claude</code> CLI (Claude Code OAuth) — model is fixed by your subscription.
-      </p>
-
-      <div class="setting-row" style="align-items:center;">
+      <!-- Verbose hint + plugin-version row hidden to declutter (span kept for JS) -->
+      <div class="setting-row" style="display:none;align-items:center;">
         <label>Plugin version</label>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span id="settings-plugin-version" style="opacity:0.6;font-size:12px;"></span>
-          <span style="opacity:0.45;font-size:10px;">Cập nhật tự động hiện ở thanh trên cùng khi có bản mới</span>
-        </div>
+        <span id="settings-plugin-version" style="opacity:0.6;font-size:12px;"></span>
       </div>
 
       <div class="settings-actions">
@@ -187,21 +181,21 @@
     <div class="vg-statusBar" id="vgStatusBar">
       <span class="vg-statusDot" id="vgStatusDot"></span>
       <span id="vgStatusText">Connecting...</span>
-      <button id="vgSettingsBtn" class="ac-iconBtn" title="API & Output settings">&#9881;</button>
-      <button id="vgRefreshVoices" class="ac-iconBtn">&#8635;</button>
+      <div id="vgSettingsBtn" class="ac-iconBtn" role="button" title="API & Output settings"><span data-ic="gear" data-ic-size="15"></span></div>
+      <div id="vgRefreshVoices" class="ac-iconBtn" role="button"><span data-ic="rotate_right" data-ic-size="15"></span></div>
     </div>
 
     <!-- Collapsible settings panel (toggled by the ⚙ button) -->
     <div class="vg-settingsPanel" id="vgSettingsPanel" hidden>
       <div class="vg-settings-box">
-      <div class="vg-settings-title">&#9881; Cài đặt</div>
+      <div class="vg-settings-title"><span data-ic="gear" data-ic-size="14" style="margin-right:7px"></span>Cài đặt</div>
 
       <!-- ElevenLabs API Key Profiles -->
       <div class="vg-sg vg-apiKeySection">
         <div class="vg-sl">API Key Profiles <span class="setting-pill" id="vgElStatus">not set</span></div>
         <div class="vg-profileRow">
           <select id="vgProfileSelect" class="vg-settingInput vg-profileSelect"></select>
-          <button id="vgAddProfile" class="vg-profileBtn">+ New</button>
+          <div id="vgAddProfile" class="vg-profileBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> New</div>
         </div>
         <div class="vg-profileNameRow">
           <input type="text" id="vgProfileName" class="vg-settingInput"
@@ -212,33 +206,32 @@
             placeholder="sk_..." autocomplete="off" />
         </div>
         <div class="vg-profileActions">
-          <button id="vgSaveKey" class="vg-saveKeyBtn">Save Profile</button>
-          <button id="vgDeleteProfile" class="vg-deleteProfileBtn">Delete</button>
+          <div id="vgSaveKey" class="vg-saveKeyBtn" role="button"><span data-ic="floppy_disk" data-ic-size="12"></span> Save Profile</div>
+          <div id="vgDeleteProfile" class="vg-deleteProfileBtn" role="button"><span data-ic="trash" data-ic-size="12"></span> Delete</div>
         </div>
-        <div class="vg-sm" style="margin-top:4px;">elevenlabs.io &#8594; Profile &#8594; API Key</div>
       </div>
 
-      <!-- Output Format -->
-      <div class="vg-sg">
+      <!-- Output Format — hidden; fixed default MP3 192kbps (JS reads vgOutputFormat.value) -->
+      <div class="vg-sg" style="display:none">
         <div class="vg-sl">Output Format</div>
         <select id="vgOutputFormat" class="vg-select">
           <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
-          <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+          <option value="mp3_44100_192" selected>MP3 44.1 kHz (192kbps)</option>
           <option value="mp3_22050_32">MP3 22 kHz (32kbps)</option>
           <option value="pcm_16000">PCM 16kHz</option>
           <option value="pcm_24000">PCM 24kHz</option>
         </select>
       </div>
 
-      <!-- Model + Language (TTS only) -->
+      <!-- Model + Language (TTS only) — hidden; single fixed model (eleven_v3), no lang override -->
       <div class="vg-modeContent" data-mode="tts">
-        <div class="vg-sg">
+        <div class="vg-sg" style="display:none">
           <div class="vg-sl">Model</div>
           <select id="vgModelSelect" class="vg-select">
             <option value="eleven_v3" selected>&#9655; v3 · most expressive</option>
           </select>
         </div>
-        <div class="vg-sg">
+        <div class="vg-sg" style="display:none">
           <div class="vg-toggleRow">
             <span class="vg-sl">Language Override</span>
             <label class="vg-switch">
@@ -266,13 +259,13 @@
         </div>
       </div>
 
-      <!-- SFX output format (Duration & Prompt Influence live outside, by the editor) -->
+      <!-- SFX output format — hidden; fixed default MP3 192kbps -->
       <div class="vg-modeContent" data-mode="sfx" hidden>
-        <div class="vg-sg">
+        <div class="vg-sg" style="display:none">
           <div class="vg-sl">Output Format</div>
           <select id="vgSfxOutputFormat" class="vg-select">
             <option value="mp3_44100_128">MP3 44.1 kHz (128kbps)</option>
-            <option value="mp3_44100_192">MP3 44.1 kHz (192kbps)</option>
+            <option value="mp3_44100_192" selected>MP3 44.1 kHz (192kbps)</option>
           </select>
         </div>
       </div>
@@ -282,25 +275,25 @@
         <div class="vg-sl">Output Folder</div>
         <div class="vg-folderRow">
           <input id="vgOutputFolder" type="text" readonly class="vg-folderInput" placeholder="11Lab temp (default)" />
-          <button id="vgBrowseFolder" class="vg-folderBtn">&#128193;</button>
-          <button id="vgResetFolder"  class="vg-folderBtn">&#8635;</button>
+          <div id="vgBrowseFolder" class="vg-folderBtn" role="button"><span data-ic="folder_open" data-ic-size="14"></span></div>
+          <div id="vgResetFolder"  class="vg-folderBtn" role="button"><span data-ic="rotate_right" data-ic-size="14"></span></div>
         </div>
       </div>
       <div class="vg-sg">
-        <div class="vg-sl">Filename suffix <span class="vg-sm">voice · note · timestamp</span></div>
+        <div class="vg-sl">Filename suffix</div>
         <input id="vgFilename" type="text" class="vg-settingInput" placeholder="optional note" />
       </div>
 
-      <button id="vgSettingsClose" class="vg-settings-close">&#10003; Lưu &amp; Đóng</button>
+      <div id="vgSettingsClose" class="vg-settings-close" role="button"><span data-ic="check" data-ic-size="14"></span> Lưu &amp; Đóng</div>
       </div><!-- /vg-settings-box -->
     </div>
 
     <!-- Mode selector -->
     <div class="vg-modeBar">
-      <button class="vg-modeBtn is-active" data-mode="tts">&#127908; Voice</button>
-      <button class="vg-modeBtn" data-mode="sfx">&#128165; SFX</button>
-      <button class="vg-modeBtn" data-mode="music">&#127925; Music</button>
-      <button class="vg-modeBtn" data-mode="create">&#43; Create</button>
+      <div class="vg-modeBtn is-active" role="button" data-mode="tts"><span data-ic="microphone" data-ic-size="14" data-ic-color="#a855f7"></span> Voice</div>
+      <div class="vg-modeBtn" role="button" data-mode="sfx"><span data-ic="wave_square" data-ic-size="14" data-ic-color="#22d3ee"></span> SFX</div>
+      <div class="vg-modeBtn" role="button" data-mode="music"><span data-ic="audio" data-ic-size="14" data-ic-color="#ec4899"></span> Music</div>
+      <div class="vg-modeBtn" role="button" data-mode="create"><span data-ic="palette" data-ic-size="14" data-ic-color="#f59e0b"></span> Create</div>
     </div>
 
     <!-- Body: left editor + right settings -->
@@ -313,7 +306,7 @@
         <!-- TTS editor -->
         <div class="vg-modeContent" data-mode="tts">
           <div class="vg-speakerBar" id="vgSpeakerBar">
-            <button id="vgAddSpeaker" class="vg-addSpeakerBtn">+ Add speaker</button>
+            <div id="vgAddSpeaker" class="vg-addSpeakerBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Add speaker</div>
           </div>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
@@ -332,7 +325,7 @@
                 <option value="gpt-4.1">GPT-4.1</option>
                 <option value="gpt-4.1-mini">GPT-4.1 mini</option>
               </select>
-              <button id="vgOrganizeBtn" class="vg-organizeBtn" title="Chuẩn hoá script + thêm tag cảm xúc">✨ Organize</button>
+              <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
             </div>
           </div>
         </div>
@@ -415,11 +408,11 @@
               </div>
               <div id="vcFromSequenceSection" class="vc-field">
                 <div class="vc-clipInfo" id="vcClipInfo">Click below to extract all clips from audio track A1</div>
-                <button id="vcGetClip" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#9654; Extract A1 Clips</button>
+                <div id="vcGetClip" class="ac-secondaryButton" role="button" style="margin-top:5px;width:100%;"><span data-ic="play" data-ic-size="12"></span> Extract A1 Clips</div>
               </div>
               <div id="vcFromFileSection" class="vc-field" hidden>
                 <div class="vc-clipInfo" id="vcFileInfo">No file selected</div>
-                <button id="vcBrowseFile" class="ac-secondaryButton" style="margin-top:5px;width:100%;">&#128193; Browse File</button>
+                <div id="vcBrowseFile" class="ac-secondaryButton" role="button" style="margin-top:5px;width:100%;"><span data-ic="folder_open" data-ic-size="12"></span> Browse File</div>
               </div>
               <div class="vc-field">
                 <label class="vc-label">Description <span class="vg-sm">optional</span></label>
@@ -429,7 +422,7 @@
                 <input type="checkbox" id="vcDenoise" />
                 <span>Remove background noise</span>
               </label>
-              <button id="vcCloneSubmit" class="vg-genButton" style="margin-top:10px;width:100%;">&#127897; CLONE VOICE</button>
+              <div id="vcCloneSubmit" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="microphone_lines" data-ic-size="14" data-ic-color="#ffffff"></span> CLONE VOICE</div>
               <div id="vcCloneStatus" class="vc-status" hidden></div>
             </div>
 
@@ -471,10 +464,10 @@
                 <textarea id="vcPreviewText" class="vg-settingInput" rows="3" style="resize:none;"
                   placeholder="Text to preview the voice...">Hello! I am a newly designed voice. How do I sound to you?</textarea>
               </div>
-              <button id="vcDesignPreview" class="vg-genButton" style="margin-top:6px;width:100%;">&#9654; PREVIEW VOICE</button>
+              <div id="vcDesignPreview" class="vg-genButton" role="button" style="margin-top:6px;width:100%;"><span data-ic="play" data-ic-size="13" data-ic-color="#ffffff"></span> PREVIEW VOICE</div>
               <!-- inline audio player for design preview -->
               <div id="vcPreviewPlayer" class="vc-previewPlayer" hidden>
-                <button class="vg-playBtn" id="vcPreviewPlay">&#9654;</button>
+                <div class="vg-playBtn" role="button" id="vcPreviewPlay"><span data-ic="play" data-ic-size="12"></span></div>
                 <div class="vg-progressWrap" id="vcPreviewProgWrap">
                   <div class="vg-progressFill" id="vcPreviewFill"></div>
                 </div>
@@ -490,7 +483,7 @@
                   <label class="vc-label">Description <span class="vg-sm">optional</span></label>
                   <input type="text" id="vcDesignDesc" class="vg-settingInput" placeholder="Short description..." />
                 </div>
-                <button id="vcDesignSave" class="ac-primaryButton" style="width:100%;">&#10003; SAVE VOICE</button>
+                <div id="vcDesignSave" class="ac-primaryButton" role="button" style="width:100%;"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> SAVE VOICE</div>
               </div>
               <div id="vcDesignStatus" class="vc-status" hidden></div>
             </div>
@@ -508,7 +501,7 @@
             <input type="checkbox" id="vg2Variations" />
             <span>2 variations</span>
           </label>
-          <button id="vgGenerate" class="vg-genButton">&#9889; GENERATE VOICE</button>
+          <div id="vgGenerate" class="vg-genButton" role="button"><span data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
         </div>
 
       </div><!-- /vg-leftScroll -->
@@ -561,7 +554,7 @@
             <div class="vg-voiceDrop" id="vgVoiceDrop">
               <div class="vg-voiceDropTrigger" id="vgVoiceDropTrigger">
                 <span id="vgVoiceDropLabel">Rachel · female · narrator</span>
-                <span class="vg-dropArrow">&#9660;</span>
+                <span class="vg-dropArrow" data-ic="chevron_down" data-ic-size="10"></span>
               </div>
               <div class="vg-voiceDropPanel" id="vgVoiceDropPanel" hidden></div>
             </div>
@@ -579,7 +572,7 @@
                 <span class="vg-varSize" id="vgVar1Size"></span>
               </div>
               <div class="vg-player">
-                <button class="vg-playBtn" id="vgVar1Play">&#9654;</button>
+                <div class="vg-playBtn" role="button" id="vgVar1Play"><span data-ic="play" data-ic-size="12"></span></div>
                 <div class="vg-progressWrap" id="vgVar1ProgWrap">
                   <div class="vg-progressFill" id="vgVar1Fill"></div>
                 </div>
@@ -587,8 +580,8 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <button id="vgVar1Timeline" class="ac-secondaryButton vg-actionButton">⬇ Timeline</button>
-                <button id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
+                <div id="vgVar1Timeline" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
+                <div id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
               </div>
             </div>
             <div class="vg-variation" id="vgVar2" style="display:none;">
@@ -597,7 +590,7 @@
                 <span class="vg-varSize" id="vgVar2Size"></span>
               </div>
               <div class="vg-player">
-                <button class="vg-playBtn" id="vgVar2Play">&#9654;</button>
+                <div class="vg-playBtn" role="button" id="vgVar2Play"><span data-ic="play" data-ic-size="12"></span></div>
                 <div class="vg-progressWrap" id="vgVar2ProgWrap">
                   <div class="vg-progressFill" id="vgVar2Fill"></div>
                 </div>
@@ -605,8 +598,8 @@
               </div>
               <div class="vg-resultActions">
                 <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <button id="vgVar2Timeline" class="ac-secondaryButton vg-actionButton">⬇ Timeline</button>
-                <button id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton">→ Autocut</button>
+                <div id="vgVar2Timeline" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
+                <div id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
               </div>
             </div>
             <div id="vgImportStatus" class="ac-manualStatus"></div>
@@ -630,7 +623,7 @@
       <label class="vg-save-label">Thư mục lưu</label>
       <div class="vg-save-folderRow">
         <span id="vgSaveFolder" class="vg-save-folder">(chưa chọn)</span>
-        <button id="vgSaveChangeFolder" class="vg-folderBtn">&#128193; Đổi…</button>
+        <div id="vgSaveChangeFolder" class="vg-folderBtn" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Đổi…</div>
       </div>
       <div class="vg-save-actions">
         <button id="vgSaveCancel" class="btn-secondary">Huỷ</button>
@@ -649,8 +642,8 @@
 
     <!-- Method bar -->
     <div class="sac-methodBar">
-      <button class="sac-methodBtn is-active" data-method="manual">📝 Manual</button>
-      <button class="sac-methodBtn" data-method="screenshot">📷 Ảnh</button>
+      <div class="sac-methodBtn is-active" role="button" data-method="manual"><span data-ic="file" data-ic-size="13"></span> Manual</div>
+      <div class="sac-methodBtn" role="button" data-method="screenshot"><span data-ic="image" data-ic-size="13"></span> Ảnh</div>
     </div>
 
     <!-- ── MANUAL PANEL ── -->
@@ -660,7 +653,7 @@
       <div class="sac-aiParse">
         <div class="sac-sectionToggle" id="sacAiToggle">
           <span class="sac-blockChevron" id="sacAiChevron">▸</span>
-          <span>✨ Parse cutsheet rối bằng AI</span>
+          <span><span data-ic="wand_magic_sparkles" data-ic-size="12" style="margin-right:6px"></span>Parse cutsheet rối bằng AI</span>
         </div>
         <div id="sacAiBody" style="display:none">
           <textarea id="sacAiRaw" class="sac-aiRaw" spellcheck="false"
@@ -675,20 +668,20 @@
               <option value="gpt-4.1">GPT-4.1</option>
               <option value="gpt-4.1-mini">GPT-4.1 mini</option>
             </select>
-            <button id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary">✨ Parse AI</button>
+            <div id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Parse AI</div>
           </div>
           <div id="sacAiStatus" class="sac-aiStatus"></div>
           <textarea id="sacAiPreview" class="sac-aiPreview" spellcheck="false" style="display:none"
             placeholder="Kết quả (Thoại ⇥ Time ⇥ Source) — sửa nếu cần rồi Đổ vào bảng"></textarea>
-          <button id="sacAiFill" class="sac-aiBtn sac-aiPrimary" style="display:none">⬇ Đổ vào bảng script</button>
+          <div id="sacAiFill" class="sac-aiBtn sac-aiPrimary" role="button" style="display:none"><span data-ic="download" data-ic-size="13"></span> Đổ vào bảng script</div>
         </div>
       </div>
 
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
-        <span>📝 Script input</span>
-        <button id="sacScriptClear" class="sac-scriptClearBtn" title="Clear toàn bộ script + huỷ tác vụ đang chạy">🗑 Clear</button>
+        <span><span data-ic="file" data-ic-size="12" style="margin-right:6px"></span>Script input</span>
+        <div id="sacScriptClear" class="sac-scriptClearBtn" role="button" title="Clear toàn bộ script + huỷ tác vụ đang chạy"><span data-ic="trash" data-ic-size="12"></span> Clear</div>
       </div>
       <div class="sac-tableWrap" id="sacTableWrap">
         <div class="sac-thead">
@@ -700,41 +693,41 @@
         <div id="sacBody" class="sac-tbody"></div>
       </div>
       <div class="sac-tableFooter" id="sacTableFooter">
-        <button id="sacAddRow" class="sac-addBtn">+ Row</button>
-        <button id="sacClearBoard" class="sac-clearBoardBtn">🗑</button>
-        <button id="sacPreviewBtn" class="sac-previewBtn">✔ Validate</button>
+        <div id="sacAddRow" class="sac-addBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Row</div>
+        <div id="sacClearBoard" class="sac-clearBoardBtn" role="button"><span data-ic="trash" data-ic-size="13"></span></div>
+        <div id="sacPreviewBtn" class="sac-previewBtn" role="button"><span data-ic="check" data-ic-size="12"></span> Validate</div>
       </div>
 
       <!-- Block preview (inside manual panel so flex space is shared) -->
       <div id="sacBlockSection" class="sac-blockSection" style="display:none">
         <div class="sac-blockHeader">
-          <span class="sac-blockTitle">✂️ Blocks</span>
+          <span class="sac-blockTitle"><span data-ic="scissors" data-ic-size="13" style="margin-right:6px"></span>Blocks</span>
           <span id="sacBlockCount" class="sac-blockMeta"></span>
-          <button id="sacRefreshBlocks" class="sac-refreshBlockBtn" title="Validate lại sources (sau khi import source mới)">🔄 Refresh Block</button>
+          <div id="sacRefreshBlocks" class="sac-refreshBlockBtn" role="button" title="Validate lại sources (sau khi import source mới)"><span data-ic="rotate_right" data-ic-size="12"></span> Refresh Block</div>
         </div>
         <div id="sacBlockList" class="sac-blockList"></div>
         <!-- Voice panel — hidden once voice ready or "without voice" clicked -->
         <div class="sac-voicePanel" id="sacVoicePanel">
           <div class="sac-voiceRow">
-            <button id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn">⚡ Gen voice (Voice Gen) →</button>
-            <button id="sacVoiceBtn" class="sac-voiceBtn" title="Chọn file voice có sẵn">📂</button>
+            <div id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn" role="button"><span data-ic="bolt" data-ic-size="13" data-ic-color="#d8b4fe"></span> Gen voice (Voice Gen) →</div>
+            <div id="sacVoiceBtn" class="sac-voiceBtn" role="button" title="Chọn file voice có sẵn"><span data-ic="folder_open" data-ic-size="14"></span></div>
             <span class="sac-vDivider"></span>
-            <button id="sacCutNoVoiceBtn" class="sac-cutNoVoiceBtn">✂ Without voice</button>
+            <div id="sacCutNoVoiceBtn" class="sac-cutNoVoiceBtn" role="button"><span data-ic="scissors" data-ic-size="13" data-ic-color="#fbbf24"></span> Without voice</div>
           </div>
           <div class="sac-voicePlayer" id="sacVoicePlayer" style="display:none">
-            <button id="sacVoicePlay" class="sac-voicePlayBtn">▶</button>
+            <div id="sacVoicePlay" class="sac-voicePlayBtn" role="button"><span data-ic="play" data-ic-size="12"></span></div>
             <div id="sacVoiceProgWrap" class="sac-voiceProgWrap"><div id="sacVoiceFill" class="sac-voiceFill"></div></div>
             <span id="sacVoiceTime" class="sac-voiceTime">0:00 / 0:00</span>
           </div>
           <div id="sacVoiceInfo" class="sac-voiceInfo">Chưa có voice</div>
-          <button id="sacRunAnywayBtn" class="sac-runAnywayBtn" style="display:none">▶ Run anyway (bỏ voice block chưa khớp)</button>
+          <div id="sacRunAnywayBtn" class="sac-runAnywayBtn" role="button" style="display:none"><span data-ic="play" data-ic-size="12"></span> Run anyway (bỏ voice block chưa khớp)</div>
         </div>
 
         <!-- Cut panel — replaces voice panel when ready -->
         <div id="sacCutPanel" class="sac-cutPanel" style="display:none">
           <div class="sac-cutStatusRow">
             <span id="sacCutLabel" class="sac-cutLabel"></span>
-            <button id="sacCutBack" class="sac-cutBackBtn">✕</button>
+            <div id="sacCutBack" class="sac-cutBackBtn" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
           </div>
           <!-- Only shown when voice is aligned: lets the user cut video-only
                WITHOUT discarding the generated voice (unlike ✕ which clears it). -->
@@ -742,9 +735,9 @@
             <input type="checkbox" id="sacCutNoVoiceChk" /> Chỉ video (bỏ voice đã gen)
           </label>
           <div class="sac-cutRow">
-            <button id="sacCutThis" class="sac-cutBtn">▶ This seq</button>
+            <div id="sacCutThis" class="sac-cutBtn" role="button"><span data-ic="play" data-ic-size="12"></span> This seq</div>
             <span class="sac-cutDivider"></span>
-            <button id="sacCutNew" class="sac-cutBtn">▶ New seq…</button>
+            <div id="sacCutNew" class="sac-cutBtn" role="button"><span data-ic="play" data-ic-size="12"></span> New seq…</div>
           </div>
         </div>
       </div>
@@ -760,8 +753,8 @@
       <div id="sacSuccessStats" class="sac-successStats"></div>
       <div class="sac-successDivider"></div>
       <div class="sac-successActions">
-        <button id="sacNewAutocut"   class="sac-successPrimaryBtn">↺ New AutoCut</button>
-        <button id="sacBackToScript" class="sac-successSecondaryBtn">↩ Back to script</button>
+        <div id="sacNewAutocut"   class="sac-successPrimaryBtn" role="button"><span data-ic="rotate_right" data-ic-size="13"></span> New AutoCut</div>
+        <div id="sacBackToScript" class="sac-successSecondaryBtn" role="button"><span data-ic="arrow_left" data-ic-size="13" data-ic-color="#94a3b8"></span> Back to script</div>
       </div>
     </div>
 
@@ -770,13 +763,13 @@
       <div class="sac-drop" id="sacDrop">
         <img id="sacImgPreview" class="sac-imgPreview" hidden />
         <div class="sac-dropPrompt" id="sacDropPrompt">
-          <div class="sac-dropIcon">📷</div>
+          <div class="sac-dropIcon"><span data-ic="image" data-ic-size="30"></span></div>
           <div class="sac-dropText">Chụp màn hình cutsheet</div>
           <div class="sac-dropHint">Bấm vào đây để chọn ảnh</div>
         </div>
       </div>
       <div class="sac-screenshotFooter">
-        <button id="sacParseImg" class="sac-previewBtn" disabled>Parse với AI →</button>
+        <div id="sacParseImg" class="sac-previewBtn is-disabled" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="12"></span> Parse với AI →</div>
       </div>
       <div id="sacImgStatus" class="sac-statusMsg"></div>
     </div>
@@ -829,19 +822,14 @@
       <div class="ac-sttHint">Whisper chạy local. Audio voiceover được lấy tự động từ sequence đang mở.</div>
     </div>
     <div class="ac-sttConfigRow" id="premiereConfigRow" hidden>
-      <div class="ac-sttHint">
-        <b>1.</b> Premiere → <i>Window → Text → Transcript → Transcribe Sequence</i><br>
-        <b>2.</b> Export transcript (.json hoặc .transcript)<br>
-        <b>3.</b> Paste path file ở dưới:
-      </div>
       <input id="premiereTranscriptPath" type="text" class="ac-input ac-inputFull"
-             placeholder="/Users/.../sequence.transcript" />
+             placeholder="Paste path transcript (.json / .transcript)…" />
     </div>
 
     <!-- ── ACTION BAR ── -->
     <div class="ac-actionBar">
-      <button id="btnPushCurrent" class="ac-primaryButton">▶ PUSH TO CURRENT SEQUENCE</button>
-      <button id="btnPushNew" class="ac-secondaryButton">+ NEW SEQUENCE</button>
+      <div id="btnPushCurrent" class="ac-primaryButton" role="button"><span data-ic="play" data-ic-size="13" data-ic-color="#ffffff"></span> PUSH TO CURRENT SEQUENCE</div>
+      <div id="btnPushNew" class="ac-secondaryButton" role="button"><span data-ic="plus" data-ic-size="13"></span> NEW SEQUENCE</div>
     </div>
 
     <!-- ── SCROLL AREA: cutlist preview + status ── -->
@@ -893,7 +881,7 @@
           <button class="ac-chevron" id="cutlistChevron">&#9656;</button>
           <span class="ac-sectionTitle">Cut List</span>
           <span class="ac-sectionMeta" id="cutlistMeta">— no rows yet —</span>
-          <button id="btnClearCutlist" class="ac-iconBtn">&#10005;</button>
+          <div id="btnClearCutlist" class="ac-iconBtn" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
         </div>
         <div id="cutlistPreview" class="ac-cutlistPreview">
           <div class="ac-emptyHint">
@@ -907,7 +895,7 @@
         <div class="ac-sectionHeader">
           <span class="ac-sectionTitle">Run Status</span>
           <span class="ac-sectionMeta" id="runStatusMeta"></span>
-          <button id="btnRetryRun" class="ac-iconBtn ac-iconBtnPrimary">&#8635;</button>
+          <div id="btnRetryRun" class="ac-iconBtn ac-iconBtnPrimary" role="button"><span data-ic="rotate_right" data-ic-size="14"></span></div>
         </div>
         <div id="runStatus" class="ac-runStatus"></div>
       </div>
@@ -921,8 +909,8 @@
 
       <div class="ac-section" id="seqDiagnosticSection" hidden>
         <div class="ac-sectionHeader">
-          <span class="ac-sectionTitle">📊 Sequence Audio</span>
-          <button id="btnRefreshSeqInfo" class="ac-iconBtn">&#8635;</button>
+          <span class="ac-sectionTitle"><span data-ic="wave_square" data-ic-size="13" style="margin-right:6px"></span>Sequence Audio</span>
+          <div id="btnRefreshSeqInfo" class="ac-iconBtn" role="button"><span data-ic="rotate_right" data-ic-size="14"></span></div>
         </div>
         <div id="seqDiagnostic" class="ac-seqDiagnostic"></div>
       </div>
@@ -937,20 +925,20 @@
   <div id="sacNewSeqModal" class="sac-newseq-modal" hidden>
     <div class="sac-newseq-box">
       <div class="sac-confirm-head">
-        <span class="sac-confirm-title">✂ Cut to New Sequence</span>
-        <button id="sacNewSeqCancelX" class="sac-confirm-x" title="Huỷ">✕</button>
+        <span class="sac-confirm-title"><span data-ic="scissors" data-ic-size="13" style="margin-right:6px"></span>Cut to New Sequence</span>
+        <div id="sacNewSeqCancelX" class="sac-confirm-x" role="button" title="Huỷ"><span data-ic="xmark" data-ic-size="13"></span></div>
       </div>
 
       <label class="sac-nsf2-label">Tên sequence</label>
       <div class="sac-nsf2-nameRow">
         <input id="sacNewSeqName" class="sac-nsf2-input" type="text" placeholder="AutoCut" />
-        <button id="sacSeqNameSave" class="sac-nsf2-iconBtn" title="Lưu tên này thành preset">💾</button>
+        <div id="sacSeqNameSave" class="sac-nsf2-iconBtn" role="button" title="Lưu tên này thành preset"><span data-ic="floppy_disk" data-ic-size="14"></span></div>
       </div>
       <div class="sac-nsf2-presetRow">
         <select id="sacSeqNamePreset" class="sac-nsf2-select">
           <option value="">— Preset tên đã lưu —</option>
         </select>
-        <button id="sacSeqNameDel" class="sac-nsf2-iconBtn" title="Xoá preset đang chọn">🗑</button>
+        <div id="sacSeqNameDel" class="sac-nsf2-iconBtn" role="button" title="Xoá preset đang chọn"><span data-ic="trash" data-ic-size="14"></span></div>
       </div>
 
       <label class="sac-nsf2-label">Tỉ lệ khung (Ratio)</label>
@@ -966,7 +954,7 @@
 
       <div class="sac-confirm-actions">
         <button id="sacNewSeqCancel" class="btn-secondary">Cancel</button>
-        <button id="sacNewSeqRun" class="btn-primary">✂ Autocut</button>
+        <div id="sacNewSeqRun" class="btn-primary" role="button"><span data-ic="scissors" data-ic-size="13" data-ic-color="#ffffff"></span> Autocut</div>
       </div>
     </div>
   </div>
@@ -976,7 +964,7 @@
     <div class="sac-confirm-box">
       <div class="sac-confirm-head">
         <span class="sac-confirm-title">Chuẩn hoá &amp; gen voice?</span>
-        <button id="sacGenConfirmCancel" class="sac-confirm-x" title="Huỷ">✕</button>
+        <div id="sacGenConfirmCancel" class="sac-confirm-x" role="button" title="Huỷ"><span data-ic="xmark" data-ic-size="13"></span></div>
       </div>
       <div class="sac-confirm-msg">Bấm "Có" để chuẩn hoá script + đẩy sang Voice Gen luôn. Bấm "Không" nếu bạn còn muốn sửa script.</div>
       <label class="sac-confirm-skip"><input type="checkbox" id="sacGenConfirmSkip" /> Lần sau không hỏi nữa (nhớ lựa chọn)</label>
@@ -993,18 +981,18 @@
     <div class="sac-bind-box">
       <div class="sac-bind-head">
         <span id="sacBindTitle" class="sac-bind-title">Chọn source</span>
-        <button id="sacBindClose" class="sac-bind-close">✕</button>
+        <div id="sacBindClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
       </div>
       <input id="sacBindFilter" type="text" class="sac-bind-filter" placeholder="🔍 Lọc theo tên..." />
       <div class="sac-bind-cols">
         <div class="sac-bind-col">
-          <div class="sac-bind-colHead">📁 Folder
+          <div class="sac-bind-colHead"><span data-ic="folder" data-ic-size="13" style="margin-right:6px"></span>Folder
             <label class="sac-bind-allChk"><input type="checkbox" id="sacBindAllFolders" /> tất cả</label>
           </div>
           <div id="sacBindFolders" class="sac-bind-list"></div>
         </div>
         <div class="sac-bind-col">
-          <div class="sac-bind-colHead">🎬 Source</div>
+          <div class="sac-bind-colHead"><span data-ic="video" data-ic-size="13" style="margin-right:6px"></span>Source</div>
           <div id="sacBindTypeChips" class="sac-bind-typeChips"></div>
           <div id="sacBindSources" class="sac-bind-list"></div>
         </div>
@@ -1021,8 +1009,7 @@
 <div class="tab-panel" id="tab-subtext">
   <div class="st-app">
     <div class="st-head">
-      <span class="st-title">📝 Tạo phụ đề (.srt)</span>
-      <span class="st-sub">Whisper canh giờ audio trên timeline → .srt → import vào project</span>
+      <span class="st-title"><span data-ic="closed_captioning" data-ic-size="14" style="margin-right:7px"></span>Tạo phụ đề (.srt)</span>
     </div>
 
     <div class="st-section">
@@ -1065,11 +1052,11 @@
     </div>
 
     <label class="st-aiToggle"><input type="checkbox" id="stUseAI" checked /> <span>Dùng AI ngắt câu (mượt hơn, cần Claude/API)</span></label>
-    <button id="stMakeBtn" class="st-btn st-btn-primary">📝 Tạo SRT</button>
+    <div id="stMakeBtn" class="st-btn st-btn-primary" role="button"><span data-ic="closed_captioning" data-ic-size="14" data-ic-color="#ffffff"></span> Tạo SRT</div>
     <div id="stStatus" class="st-status" style="display:none"></div>
     <div class="st-afterRow" id="stAfterRow" style="display:none">
-      <button id="stImportBtn" class="st-btn st-btn-sec">📥 Import vào project</button>
-      <button id="stRevealBtn" class="st-btn st-btn-sec">📂 Mở trong Finder</button>
+      <div id="stImportBtn" class="st-btn st-btn-sec" role="button"><span data-ic="download" data-ic-size="13"></span> Import vào project</div>
+      <div id="stRevealBtn" class="st-btn st-btn-sec" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Mở trong Finder</div>
     </div>
   </div>
 </div>
