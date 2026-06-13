@@ -3277,29 +3277,49 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 /* ── Tạo Sub tab (subtitle .srt) ─────────────────────── */
 /* NOTE: UXP doesn't honor flexbox `gap` → use explicit margins everywhere instead. */
 .st-app {
-  flex: 1 1 0; min-height: 0; overflow-y: auto;
-  display: flex; flex-direction: column; padding: 18px 14px 16px;
+  flex: 1 1 0; min-height: 0;
+  display: flex; flex-direction: column;
 }
+/* Inner scroll child (UXP: overflow must live on the inner child, not the flex
+   container) — content scrolls instead of cramming/overlapping when panel shrinks. */
+.st-scroll {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 18px 14px 12px;
+}
+/* Pinned footer — make button always visible at the bottom of the panel */
+.st-footer {
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg);
+}
+.st-footer .st-status   { margin: 0 0 8px; }
+.st-footer .st-afterRow { margin: 0 0 8px; }
 .st-head { display: flex; flex-direction: column; margin-bottom: 24px; }
 .st-title { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
 .st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
 .st-section { display: flex; flex-direction: column; margin-bottom: 24px; }
 .st-section:last-child { margin-bottom: 0; }
 .st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 11px; }
-.st-trackList { display: flex; flex-direction: column; }
+/* 2 columns (UXP ignores flex `gap` → use width calc + space-between) */
+.st-trackList { display: flex; flex-wrap: wrap; justify-content: space-between; }
 .st-trackRow {
-  display: flex; align-items: center; padding: 6px 11px; margin-bottom: 9px;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 7px; font-size: 12.5px; cursor: pointer;
+  display: flex; align-items: center; padding: 5px 10px; margin-bottom: 7px;  /* ~15% shorter */
+  width: calc(50% - 4px); box-sizing: border-box; flex: 0 0 auto;
+  background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 7px; font-size: 13px; color: #fff; cursor: pointer;
 }
-.st-trackRow:last-child { margin-bottom: 0; }
-.st-trackRow:hover { background: rgba(255,255,255,0.09); }
-.st-trackRow input { cursor: pointer; width: 15px; height: 15px; flex: 0 0 auto; margin-right: 9px; }
-.st-trackName { font-weight: 700; color: #fff; }
-.st-trackMeta { margin-left: auto; font-size: 10.5px; font-weight: 400; color: rgba(255,255,255,0.55); }
-/* Empty tracks: shown (no numbering gaps) but dimmed + not selectable */
-.st-trackRow.is-empty { opacity: 0.4; cursor: default; }
-.st-trackRow.is-empty:hover { background: rgba(255,255,255,0.06); }
+.st-trackRow:hover { background: rgba(255,255,255,0.18); }
+.st-trackRow input { cursor: pointer; width: 14px; height: 14px; flex: 0 0 auto; margin-right: 8px; }
+/* weight 400 (normal) — UXP synth-bold (600/700) at small size renders grey/blurry.
+   The host font only has real 400/700, so 600 still faux-renders → use plain 400. */
+.st-trackName { font-weight: 400; color: #ffffff; font-size: 14px; }
+.st-trackMeta { margin-left: auto; font-size: 10px; font-weight: 400; color: rgba(255,255,255,0.75); }
+/* Empty tracks: shown (no numbering gaps) but dimmed + not selectable.
+   Keep text readable — dim via background, not a heavy opacity that greys the label. */
+.st-trackRow.is-empty { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); cursor: default; }
+.st-trackRow.is-empty .st-trackName { color: rgba(255,255,255,0.4); font-weight: 400; }
+.st-trackRow.is-empty:hover { background: rgba(255,255,255,0.04); }
 .st-trackEmpty { font-size: 11px; color: rgba(255,255,255,0.45); padding: 6px 2px; }
 .st-script {
   width: 100%; height: 90px; max-height: 220px; resize: vertical;
@@ -3330,6 +3350,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border: 1px solid rgba(168,85,247,0.35);
 }
 .st-btn-primary:hover { background: rgba(168,85,247,0.25); }
+/* While generating, the primary button flips to a red Cancel */
+.st-btn-primary.is-cancel { background: rgba(239,68,68,0.18); color: #fca5a5; border-color: rgba(239,68,68,0.5); }
+.st-btn-primary.is-cancel:hover { background: rgba(239,68,68,0.28); }
 .st-btn:disabled { opacity: 0.6; cursor: default; }
 .st-aiToggle { display: flex; align-items: center; font-size: 11px; color: rgba(255,255,255,0.75); margin-bottom: 10px; cursor: pointer; }
 .st-aiToggle input { margin-right: 7px; }

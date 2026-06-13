@@ -632,7 +632,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.6.0';  // Flat FontAwesome icon system across whole plugin + UI overhaul (bind modal, voice bar, mode tabs, settings declutter)
+var PLUGIN_VERSION = 'v4.6.1';  // Tạo Sub: cancel button + pinned-footer/scroll layout + 2-col tracks (label→div fix) + defaults 5/30/3
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -7034,6 +7034,8 @@ async function ppMoveToVOBin(item, proj) {
   function $(id) { return document.getElementById(id); }
   var stTracks = [];     // [{index, name, count, track}]
   var stLastPath = null; // last generated .srt path (for the reveal button)
+  var stAbort = null;    // AbortController for the in-flight /subtext fetch (cancel)
+  var stBusy  = false;   // true while making SRT → button acts as Cancel
 
   function stStatus(msg) {
     var el = $('stStatus'); if (!el) return;
@@ -7085,7 +7087,10 @@ async function ppMoveToVOBin(item, proj) {
     // Show ALL tracks (no A1→A3 gaps); empty tracks are dimmed + disabled, not hidden.
     stTracks.forEach(function (t) {
       var empty = t.count === 0;
-      var row = document.createElement('label');
+      // NOTE: a <label> wrapping the checkbox makes UXP render the adjacent text as the
+      // checkbox's "control label" in a muted theme colour (ignores CSS color). Use a
+      // <div> + manual toggle so the track name renders with our white CSS colour.
+      var row = document.createElement('div');
       row.className = 'st-trackRow' + (empty ? ' is-empty' : '');
       var cb = document.createElement('input');
       cb.type = 'checkbox';
@@ -7096,6 +7101,12 @@ async function ppMoveToVOBin(item, proj) {
       var meta = document.createElement('span'); meta.className = 'st-trackMeta';
       meta.textContent = empty ? 'trống' : (t.count + ' clip');
       row.appendChild(cb); row.appendChild(nm); row.appendChild(meta);
+      if (!empty) {
+        row.addEventListener('click', function (e) {
+          if (e.target === cb) return;        // clicking the box itself toggles natively
+          cb.checked = !cb.checked;
+        });
+      }
       listEl.appendChild(row);
     });
   }
@@ -7147,7 +7158,10 @@ async function ppMoveToVOBin(item, proj) {
 
   async function stMakeSrt() {
     var btn = $('stMakeBtn');
-    if (btn) { btn.disabled = true; piSetBtn(btn, 'rotate_right', 'Đang xử lý...', '#ffffff', 14); }
+    stBusy = true;
+    stAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    // Button stays clickable but flips to Cancel mode (don't .disable it).
+    if (btn) { btn.classList.add('is-cancel'); piSetBtn(btn, 'xmark', 'Huỷ', '#ffffff', 13); }
     try {
       stStatus('⏳ Đọc clip audio từ timeline...');
       var clips = await stCollectClips();
@@ -7155,9 +7169,9 @@ async function ppMoveToVOBin(item, proj) {
 
       var scriptRaw = ($('stScript') && $('stScript').value || '').trim();
       var scriptLines = scriptRaw ? scriptRaw.split('\n').map(function (s) { return s.trim(); }).filter(Boolean) : [];
-      var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 4;
-      var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 24;
-      var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 2;
+      var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 5;
+      var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 30;
+      var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 3;
 
       var folder = localStorage.getItem('vg_last_save_folder') || '';
       if (!folder) {
@@ -7173,12 +7187,15 @@ async function ppMoveToVOBin(item, proj) {
 
       var useAI = !($('stUseAI')) || $('stUseAI').checked;  // default on
       var aiCfg = (useAI && window.sacOrganizeConfig) ? window.sacOrganizeConfig() : {};
-      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '... (có thể mất 1-2 phút)');
+      // Cancelled during the (interactive) clip/folder steps before the request went out.
+      if (stAbort && stAbort.signal.aborted) { stStatus('⏹ Đã huỷ tạo phụ đề.'); return; }
+      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '... (có thể mất 1-2 phút · bấm Huỷ để dừng)');
       var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clips: clips, scriptLines: scriptLines, outputPath: outputPath,
           maxWords: maxWords, maxChars: maxChars, maxDur: maxDur,
           useAI: useAI, provider: aiCfg.provider, model: aiCfg.model, apiKey: aiCfg.apiKey }),
+        signal: stAbort ? stAbort.signal : undefined,
       });
       var d = await resp.json();
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
@@ -7192,13 +7209,20 @@ async function ppMoveToVOBin(item, proj) {
         (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
                   : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).'));
     } catch (e) {
-      stStatus('❌ ' + e.message);
+      if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ tạo phụ đề.');
+      else stStatus('❌ ' + e.message);
     } finally {
-      if (btn) { btn.disabled = false; piSetBtn(btn, 'closed_captioning', 'Tạo SRT', '#ffffff', 14); }
+      stBusy = false; stAbort = null;
+      if (btn) { btn.classList.remove('is-cancel'); piSetBtn(btn, 'closed_captioning', 'Tạo SRT', '#ffffff', 14); }
     }
   }
 
-  var makeBtn = $('stMakeBtn'); if (makeBtn) makeBtn.addEventListener('click', stMakeSrt);
+  // The make button doubles as Cancel while a run is in flight.
+  var makeBtn = $('stMakeBtn');
+  if (makeBtn) makeBtn.addEventListener('click', function () {
+    if (stBusy) { if (stAbort) stAbort.abort(); return; }
+    stMakeSrt();
+  });
   var revealBtn = $('stRevealBtn');
   if (revealBtn) revealBtn.addEventListener('click', async function () {
     if (!stLastPath) return;
