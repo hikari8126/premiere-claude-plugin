@@ -57,13 +57,6 @@ function pluginIconSVG(name, size, colorOverride) {
   var s = size || 14;
   return '<svg viewBox="' + ic.vb + '" width="' + s + '" height="' + s + '"><path fill="' + (colorOverride || ic.c) + '" d="' + ic.d + '"/></svg>';
 }
-// data-URI of the icon SVG — for background-image (UXP won't render a child <svg>
-// inside a <button>, but a background-image data-URI shows everywhere).
-function pluginIconDataUri(name, colorOverride) {
-  var ic = PI_ICONS[name] || PI_ICONS.file;
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + ic.vb + '"><path fill="' + (colorOverride || ic.c) + '" d="' + ic.d + '"/></svg>';
-  return 'data:image/svg+xml,' + encodeURIComponent(svg);
-}
 // Fill <span data-ic="NAME"> placeholders with an inline <svg> (UXP renders inline
 // SVG inside DIV/SPAN — but NOT inside <button>, which is text-only; icon hosts
 // must therefore be a div/span, not a button).
@@ -3196,15 +3189,8 @@ async function ppMoveToVOBin(item, proj) {
     function fParent(fp) { var s = fp.split(' / '); return s.length > 1 ? s.slice(0, -1).join(' / ') : null; }
     function fVisible(fp) { var p = fParent(fp); while (p) { if (!expanded[p]) return false; p = fParent(p); } return true; }
 
-    function mkRow(text, active) {
-      var d = document.createElement('div');
-      d.className = 'sac-bind-row' + (active ? ' is-active' : '');
-      d.textContent = text;
-      return d;
-    }
     // Strip only real media extensions for display (NOT arbitrary dots in the name).
     function dispName(n) { return String(n).replace(/\.(mov|mp4|mxf|mkv|avi|m4v|mpg|mpeg|wav|mp3|m4a|aac|flac|ogg|gif|png|jpg|jpeg|tif|tiff|psd|prproj)$/i, ''); }
-    function sacTypeIcon(t) { return t === 'sequence' ? '🎞️' : t === 'audio' ? '🎵' : t === 'image' ? '🖼️' : t === 'video' ? '🎬' : '📄'; }
 
     function renderFolders() {
       foldersEl.innerHTML = '';
@@ -5194,15 +5180,6 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   // (sliders + meta are wired via hookSlider below — this just refreshes the meta line)
-  function updateSettingsMeta() {
-    if (!els.settingsMeta) return;
-    function n(el, d) { var v = el && parseFloat(el.value); return isNaN(v) ? d : v; }
-    els.settingsMeta.textContent =
-      'stability ' + n(els.stability, 0.5).toFixed(2) +
-      ' · similarity ' + n(els.similarity, 0.75).toFixed(2) +
-      ' · style ' + n(els.style, 0).toFixed(2);
-  }
-
   // UXP textarea .value can be null when empty — guard
   function safeLen(el) {
     if (!el) return 0;
@@ -5972,16 +5949,6 @@ async function ppMoveToVOBin(item, proj) {
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
       els.importStatus.textContent = '✗ Import: ' + e.message;
-    }
-  }
-
-  async function revealVariation(variation) {
-    if (!variation || !variation.audioPath) return;
-    try {
-      var resp = await postJsonVG('/tts/reveal', { filePath: variation.audioPath });
-      if (!resp.ok) throw new Error(resp.error || 'reveal failed');
-    } catch(e) {
-      alert('File: ' + variation.audioPath + '\n' + e.message);
     }
   }
 
