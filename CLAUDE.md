@@ -44,9 +44,8 @@ premiere-claude-plugin/
 ├── plugin/                 ← UXP Plugin (load vào Premiere)
 │   ├── manifest.json       ← UXP manifest v5, id: com.claudeai.premiere-assistant
 │   ├── index.html          ← UI 3 tab: Claude / Voice Gen / Autocut
-│   ├── main.js             ← Toàn bộ logic plugin (~4100 lines, no ES modules)
-│   ├── styles.css          ← Dark purple theme (~2200 lines)
-│   └── premiere-api.js     ← UNUSED (dead code, kept for reference)
+│   ├── main.js             ← Toàn bộ logic plugin (~7300 lines, no ES modules)
+│   └── styles.css          ← Dark purple theme (~3350 lines)
 ├── bridge/
 │   ├── server.js           ← Express proxy + Whisper + align logic
 │   ├── package.json        ← dependencies: express, cors, dotenv, @anthropic-ai/sdk

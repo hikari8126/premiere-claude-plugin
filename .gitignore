@@ -9,6 +9,7 @@ bridge/.env
 Claude\ Bridge.app/
 Installer\ Claude\ AI.app/
 *.zip
+*.ccx
 
 # Generated / binary output
 bridge/.tts-output/
