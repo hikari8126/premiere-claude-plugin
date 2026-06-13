@@ -1008,55 +1008,62 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-subtext">
   <div class="st-app">
-    <div class="st-head">
-      <span class="st-title"><span data-ic="closed_captioning" data-ic-size="14" style="margin-right:7px"></span>Tạo phụ đề (.srt)</span>
-    </div>
-
-    <div class="st-section">
-      <div class="st-label">1 · Track audio <span class="st-seqName" id="stSeqName">— đang đọc sequence…</span></div>
-      <div id="stTrackList" class="st-trackList"></div>
-    </div>
-
-    <div class="st-section">
-      <div class="st-label">2 · Script (tùy chọn)</div>
-      <!-- Auto-grow via sizer (UXP textareas don't scroll) — same pattern as Voice Gen -->
-      <div class="vg-scriptGrow">
-        <div class="vg-scriptSizer" id="stScriptSizer"></div>
-        <textarea id="stScript" class="vg-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
+    <!-- Scrollable content: shrinks to a scrollbar instead of cramming/overlapping -->
+    <div class="st-scroll">
+      <div class="st-head">
+        <span class="st-title"><span data-ic="closed_captioning" data-ic-size="14" style="margin-right:7px"></span>Tạo phụ đề (.srt)</span>
       </div>
-    </div>
 
-    <div class="st-section">
-      <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
-      <div class="st-slideRow">
-        <span class="st-slideLbl">Từ</span>
-        <div class="st-cslider" id="stMaxWordsC" data-min="1" data-max="20" data-step="1">
-          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+      <div class="st-section">
+        <div class="st-label">1 · Track audio <span class="st-seqName" id="stSeqName">— đang đọc sequence…</span></div>
+        <div id="stTrackList" class="st-trackList"></div>
+      </div>
+
+      <div class="st-section">
+        <div class="st-label">2 · Script (tùy chọn)</div>
+        <!-- Auto-grow via sizer (UXP textareas don't scroll) — same pattern as Voice Gen -->
+        <div class="vg-scriptGrow">
+          <div class="vg-scriptSizer" id="stScriptSizer"></div>
+          <textarea id="stScript" class="vg-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
         </div>
-        <input type="number" id="stMaxWords" class="st-num" min="1" max="20" step="1" value="4" />
       </div>
-      <div class="st-slideRow">
-        <span class="st-slideLbl">Ký tự</span>
-        <div class="st-cslider" id="stMaxCharsC" data-min="8" data-max="80" data-step="1">
-          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+
+      <div class="st-section">
+        <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
+        <div class="st-slideRow">
+          <span class="st-slideLbl">Từ</span>
+          <div class="st-cslider" id="stMaxWordsC" data-min="1" data-max="20" data-step="1">
+            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+          </div>
+          <input type="number" id="stMaxWords" class="st-num" min="1" max="20" step="1" value="5" />
         </div>
-        <input type="number" id="stMaxChars" class="st-num" min="8" max="80" step="1" value="24" />
-      </div>
-      <div class="st-slideRow">
-        <span class="st-slideLbl">Giây</span>
-        <div class="st-cslider" id="stMaxDurC" data-min="0.5" data-max="8" data-step="0.5">
-          <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+        <div class="st-slideRow">
+          <span class="st-slideLbl">Ký tự</span>
+          <div class="st-cslider" id="stMaxCharsC" data-min="8" data-max="80" data-step="1">
+            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+          </div>
+          <input type="number" id="stMaxChars" class="st-num" min="8" max="80" step="1" value="30" />
         </div>
-        <input type="number" id="stMaxDur" class="st-num" min="0.5" max="8" step="0.5" value="2" />
+        <div class="st-slideRow">
+          <span class="st-slideLbl">Giây</span>
+          <div class="st-cslider" id="stMaxDurC" data-min="0.5" data-max="8" data-step="0.5">
+            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+          </div>
+          <input type="number" id="stMaxDur" class="st-num" min="0.5" max="8" step="0.5" value="3" />
+        </div>
       </div>
+
+      <label class="st-aiToggle"><input type="checkbox" id="stUseAI" checked /> <span>Dùng AI ngắt câu (mượt hơn, cần Claude/API)</span></label>
     </div>
 
-    <label class="st-aiToggle"><input type="checkbox" id="stUseAI" checked /> <span>Dùng AI ngắt câu (mượt hơn, cần Claude/API)</span></label>
-    <div id="stMakeBtn" class="st-btn st-btn-primary" role="button"><span data-ic="closed_captioning" data-ic-size="14" data-ic-color="#ffffff"></span> Tạo SRT</div>
-    <div id="stStatus" class="st-status" style="display:none"></div>
-    <div class="st-afterRow" id="stAfterRow" style="display:none">
-      <div id="stImportBtn" class="st-btn st-btn-sec" role="button"><span data-ic="download" data-ic-size="13"></span> Import vào project</div>
-      <div id="stRevealBtn" class="st-btn st-btn-sec" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Mở trong Finder</div>
+    <!-- Pinned footer: status + after-actions + the make button (always visible, bottom) -->
+    <div class="st-footer">
+      <div id="stStatus" class="st-status" style="display:none"></div>
+      <div class="st-afterRow" id="stAfterRow" style="display:none">
+        <div id="stImportBtn" class="st-btn st-btn-sec" role="button"><span data-ic="download" data-ic-size="13"></span> Import vào project</div>
+        <div id="stRevealBtn" class="st-btn st-btn-sec" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Mở trong Finder</div>
+      </div>
+      <div id="stMakeBtn" class="st-btn st-btn-primary" role="button"><span data-ic="closed_captioning" data-ic-size="14" data-ic-color="#ffffff"></span> Tạo SRT</div>
     </div>
   </div>
 </div>
