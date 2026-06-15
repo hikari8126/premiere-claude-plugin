@@ -108,9 +108,168 @@ function pluginInitButtons(root) {
 }
 window.pluginInitButtons = pluginInitButtons;
 
+// ── Accent theming ─────────────────────────────────────────────────────────
+// The whole UI's purple is driven by --accent + derived shade/opacity vars.
+// rgba(var()) is unreliable in UXP, so we COMPUTE every shade as a literal in JS
+// and set it as a plain CSS variable (which UXP substitutes fine).
+var PI_ACCENT_OPACITIES = [4, 6, 7, 8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 35, 40, 45, 50, 60, 70];
+var PI_ACCENT_PRESETS = [
+  { name: 'Violet',  hex: '#a855f7' },
+  { name: 'Blue',    hex: '#3b82f6' },
+  { name: 'Emerald', hex: '#10b981' },
+  { name: 'Amber',   hex: '#f59e0b' },
+  { name: 'Rose',    hex: '#f43f5e' }
+];
+function piHexToRgb(h) {
+  h = String(h || '').replace('#', '').trim();
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  var n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function piRgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  var mx = Math.max(r, g, b), mn = Math.min(r, g, b), h = 0, s = 0, l = (mx + mn) / 2;
+  if (mx !== mn) {
+    var d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+function piHslToHex(h, s, l) {
+  h /= 360; s /= 100; l /= 100;
+  function hue(p, q, t) { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }
+  var r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else { var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q; r = hue(p, q, h + 1 / 3); g = hue(p, q, h); b = hue(p, q, h - 1 / 3); }
+  function tohex(x) { var v = Math.round(x * 255).toString(16); return v.length === 1 ? '0' + v : v; }
+  return '#' + tohex(r) + tohex(g) + tohex(b);
+}
+function piApplyAccent(hex) {
+  var rgb = piHexToRgb(hex);
+  if (!rgb) return false;
+  try {
+    var hsl = piRgbToHsl(rgb.r, rgb.g, rgb.b);
+    var root = document.documentElement.style;
+    root.setProperty('--accent', hex);
+    root.setProperty('--accent-rgb', rgb.r + ', ' + rgb.g + ', ' + rgb.b);
+    // Auto-contrast: text/icon colour to put ON an accent-filled surface.
+    // Perceived luminance > 0.6 → the accent is light → use dark text, else white.
+    var lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+    root.setProperty('--accent-fg', lum > 0.6 ? '#1a1a1a' : '#ffffff');
+    root.setProperty('--accent-light',   piHslToHex(hsl.h, Math.min(100, hsl.s), Math.min(100, hsl.l + 12)));
+    root.setProperty('--accent-lighter', piHslToHex(hsl.h, Math.min(100, hsl.s), Math.min(100, hsl.l + 24)));
+    root.setProperty('--accent-dark',    piHslToHex(hsl.h, hsl.s, Math.max(0, hsl.l - 12)));
+    PI_ACCENT_OPACITIES.forEach(function (o) {
+      root.setProperty('--accent-a' + (o < 10 ? '0' + o : o), 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + (o / 100) + ')');
+    });
+    try { localStorage.setItem('pi_accent', hex); } catch (e) {}
+    return true;
+  } catch (e) { return false; }
+}
+function piInitAccent() {
+  var saved = null;
+  try { saved = localStorage.getItem('pi_accent'); } catch (e) {}
+  piApplyAccent(saved || '#a855f7');
+}
+window.piApplyAccent = piApplyAccent;
+window.PI_ACCENT_PRESETS = PI_ACCENT_PRESETS;
+// User-saved custom accent presets (localStorage). Built-ins are never stored here.
+function piGetCustoms() { try { return JSON.parse(localStorage.getItem('pi_accent_customs') || '[]'); } catch (e) { return []; } }
+function piSaveCustoms(arr) { try { localStorage.setItem('pi_accent_customs', JSON.stringify(arr)); } catch (e) {} }
+function piAddCustom(hex) {
+  hex = String(hex).toLowerCase();
+  if (PI_ACCENT_PRESETS.some(function (p) { return p.hex.toLowerCase() === hex; })) return; // already a built-in
+  var arr = piGetCustoms();
+  if (arr.map(function (h) { return h.toLowerCase(); }).indexOf(hex) !== -1) return;        // already saved
+  arr.push(hex);
+  if (arr.length > 12) arr = arr.slice(arr.length - 12);
+  piSaveCustoms(arr);
+}
+function piRemoveCustom(hex) {
+  hex = String(hex).toLowerCase();
+  piSaveCustoms(piGetCustoms().filter(function (h) { return h.toLowerCase() !== hex; }));
+}
+// Render the preset swatches + custom-colour input in Settings; wire to piApplyAccent.
+function piRenderAccentUI() {
+  var wrap = document.getElementById('accentSwatches');
+  if (!wrap) return;
+  var current = '#a855f7';
+  try { current = (localStorage.getItem('pi_accent') || '#a855f7'); } catch (e) {}
+  current = String(current).toLowerCase();
+  wrap.innerHTML = '';
+  PI_ACCENT_PRESETS.forEach(function (p) {
+    var sw = document.createElement('div');
+    sw.className = 'accent-swatch' + (p.hex.toLowerCase() === current ? ' is-active' : '');
+    sw.style.background = p.hex;
+    sw.title = p.name;
+    sw.addEventListener('click', function () { piApplyAccent(p.hex); piRenderAccentUI(); });
+    wrap.appendChild(sw);
+  });
+  // User custom presets — removable via a × on hover.
+  piGetCustoms().forEach(function (hex) {
+    var sw = document.createElement('div');
+    sw.className = 'accent-swatch accent-swatch-custom' + (hex.toLowerCase() === current ? ' is-active' : '');
+    sw.style.background = hex;
+    sw.title = hex;
+    sw.addEventListener('click', function () { piApplyAccent(hex); piRenderAccentUI(); });
+    var del = document.createElement('span');
+    del.className = 'accent-swatch-del';
+    del.textContent = '×';
+    del.title = 'Xoá màu này';
+    del.addEventListener('click', function (e) { e.stopPropagation(); piRemoveCustom(hex); piRenderAccentUI(); });
+    sw.appendChild(del);
+    wrap.appendChild(sw);
+  });
+  // Custom hex input (UXP has no <input type=color>) — "+" toggles a hex field.
+  var addBtn = document.getElementById('accentAddBtn');
+  var row = document.getElementById('accentCustomRow');
+  var hexIn = document.getElementById('accentHex');
+  var apply = document.getElementById('accentHexApply');
+  if (addBtn && !addBtn.__wired) {
+    addBtn.__wired = true;
+    addBtn.addEventListener('click', function () {
+      if (!row) return;
+      var show = row.hasAttribute('hidden');
+      if (show) { row.removeAttribute('hidden'); if (hexIn) { hexIn.value = current; try { hexIn.focus(); } catch (e) {} } }
+      else row.setAttribute('hidden', '');
+    });
+  }
+  if (hexIn && !hexIn.__wired) {
+    hexIn.__wired = true;
+    hexIn.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+    hexIn.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
+    hexIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); piAccentApplyHex(); } });
+  }
+  if (apply && !apply.__wired) {
+    apply.__wired = true;
+    apply.addEventListener('click', piAccentApplyHex);
+  }
+}
+// Validate + apply the hex from the custom input; ignore invalid input.
+function piAccentApplyHex() {
+  var hexIn = document.getElementById('accentHex');
+  if (!hexIn) return;
+  var v = String(hexIn.value || '').trim();
+  if (v && v[0] !== '#') v = '#' + v;
+  if (!piHexToRgb(v)) { hexIn.style.borderColor = '#ef4444'; return; }
+  hexIn.style.borderColor = '';
+  piApplyAccent(v);
+  piAddCustom(v);   // saving the colour turns it into a removable preset swatch
+  var row = document.getElementById('accentCustomRow');
+  if (row) row.setAttribute('hidden', '');
+  piRenderAccentUI();
+}
+window.piRenderAccentUI = piRenderAccentUI;
+
 // Render placeholders now + a couple of deferred passes (UXP's DOMContentLoaded
 // is unreliable; main.js runs at body end so the DOM is already parsed).
-function _piRenderSafe() { try { pluginRenderIcons(document); pluginInitButtons(document); } catch (e) {} }
+function _piRenderSafe() { try { pluginRenderIcons(document); pluginInitButtons(document); piRenderAccentUI(); } catch (e) {} }
+try { piInitAccent(); } catch (e) {}   // apply saved accent ASAP (before first paint)
 _piRenderSafe();
 setTimeout(_piRenderSafe, 0);
 setTimeout(_piRenderSafe, 500);
@@ -632,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.6.2';  // Autocut: paste cutsheet column-by-column (single & multi-col fill-down from focused column)
+var PLUGIN_VERSION = 'v4.7.0';  // Accent theming (5 presets + custom hex presets + auto-contrast fg) + tab reorder (Autocut first)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
