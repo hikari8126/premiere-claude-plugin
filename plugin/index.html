@@ -27,8 +27,8 @@
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
   <!-- Claude chat tab temporarily hidden (kept in DOM below for later) -->
-  <div class="tab-btn active" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
-  <div class="tab-btn" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
+  <div class="tab-btn active" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
+  <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
   <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
 </div>
 
@@ -150,6 +150,18 @@
         </div>
       </div>
 
+      <div class="setting-row">
+        <label>Màu giao diện (accent)</label>
+        <div class="accent-row">
+          <div id="accentSwatches" class="accent-swatches"></div>
+          <div class="accent-add" id="accentAddBtn" role="button" title="Nhập mã màu hex"><span data-ic="plus" data-ic-size="12"></span></div>
+        </div>
+        <div class="accent-custom" id="accentCustomRow" hidden>
+          <input type="text" id="accentHex" class="accent-hex" placeholder="#a855f7" maxlength="7" autocomplete="off" />
+          <div class="accent-hexApply" id="accentHexApply" role="button">Áp dụng</div>
+        </div>
+      </div>
+
       <div id="bridge-info" class="bridge-info">
         <div class="bridge-info-row"><span>Status:</span> <span id="bridge-info-status">—</span></div>
         <div class="bridge-info-row"><span>Mode:</span>   <span id="bridge-info-mode">—</span></div>
@@ -174,7 +186,7 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- TAB: VOICE GEN (ElevenLabs)                            -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="tab-panel active" id="tab-voicegen">
+<div class="tab-panel" id="tab-voicegen">
   <div class="vg-app">
 
     <!-- Status bar -->
@@ -636,7 +648,7 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- TAB: AUTOCUT  (placeholder — coming soon)             -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="tab-autocut">
+<div class="tab-panel active" id="tab-autocut">
   <!-- ═══ SUPER AUTO CUT ═══ -->
   <div class="sac-app">
 
