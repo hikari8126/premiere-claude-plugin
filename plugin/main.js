@@ -632,7 +632,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.6.1';  // Tạo Sub: cancel button + pinned-footer/scroll layout + 2-col tracks (label→div fix) + defaults 5/30/3
+var PLUGIN_VERSION = 'v4.6.2';  // Autocut: paste cutsheet column-by-column (single & multi-col fill-down from focused column)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2606,11 +2606,72 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   // ── Row factory ─────────────────────────────────────────────────────────
-  function makeInput(placeholder) {
+  // Fill ONE column downward starting at `inp`'s row — creates rows as needed and
+  // keeps blank lines (1 line = 1 row) so columns stay aligned. Does NOT touch the
+  // other two columns. Used for single-column paste (no tabs).
+  function sacFillColumnDown(inp, colIdx, lines) {
+    var startRow = inp.parentNode;
+    while (startRow && !(startRow.classList && startRow.classList.contains('sac-row'))) startRow = startRow.parentNode;
+    var body = $('sacBody');
+    if (!startRow || !body) return;
+    var rows = Array.prototype.slice.call(body.querySelectorAll('.sac-row'));
+    var startIdx = rows.indexOf(startRow);
+    if (startIdx === -1) return;
+    for (var k = 0; k < lines.length; k++) {
+      var rowEl = rows[startIdx + k];
+      if (!rowEl) {                         // ran out of rows → append
+        createRow('', '', '');
+        rows = Array.prototype.slice.call(body.querySelectorAll('.sac-row'));
+        rowEl = rows[startIdx + k];
+      }
+      if (!rowEl) break;
+      // UXP querySelector with a DESCENDANT combinator ('.sac-col-x .sac-input') is
+      // flaky — only matches some rows. Each row has exactly 3 inputs in column order
+      // (text, time, src), so pick by index with a single-class selector instead.
+      var cell = rowEl.querySelectorAll('.sac-input')[colIdx];
+      if (cell) cell.value = lines[k].trim();
+    }
+    // Editing the source column invalidates a prior validate pass
+    if (colIdx === 2 && sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
+  }
+
+  // Fill MULTIPLE columns downward starting at (focused row, startCol). grid[r] is the
+  // array of tab-split values for row r; grid col c maps to table col (startCol + c),
+  // clamped to the 3 columns (text/time/src). Preserves columns left of startCol and
+  // rows above. Used for multi-column paste into the time/source column.
+  function sacFillGridDown(inp, startCol, grid) {
+    var startRow = inp.parentNode;
+    while (startRow && !(startRow.classList && startRow.classList.contains('sac-row'))) startRow = startRow.parentNode;
+    var body = $('sacBody');
+    if (!startRow || !body) return;
+    var rows = Array.prototype.slice.call(body.querySelectorAll('.sac-row'));
+    var startIdx = rows.indexOf(startRow);
+    if (startIdx === -1) return;
+    var touchedSrc = false;
+    for (var k = 0; k < grid.length; k++) {
+      var rowEl = rows[startIdx + k];
+      if (!rowEl) {
+        createRow('', '', '');
+        rows = Array.prototype.slice.call(body.querySelectorAll('.sac-row'));
+        rowEl = rows[startIdx + k];
+      }
+      if (!rowEl) break;
+      var inputs = rowEl.querySelectorAll('.sac-input');
+      for (var c = 0; c < grid[k].length; c++) {
+        var col = startCol + c;
+        if (col > 2) break;            // only text/time/src exist
+        if (inputs[col]) { inputs[col].value = (grid[k][c] || '').trim(); if (col === 2) touchedSrc = true; }
+      }
+    }
+    if (touchedSrc && sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
+  }
+
+  function makeInput(placeholder, colIdx) {
     var inp = document.createElement('input');
     inp.type = 'text';
     inp.className = 'sac-input';
     inp.placeholder = placeholder;
+    inp.dataset.colIdx = String(colIdx || 0);
     inp.addEventListener('focus', function() {
       if (window.claimKeyboard) window.claimKeyboard();
     });
@@ -2619,20 +2680,57 @@ async function ppMoveToVOBin(item, proj) {
     });
     // Multi-row paste from Google Sheets / Excel
     inp.addEventListener('paste', function(e) {
-      var text = e.clipboardData && e.clipboardData.getData('text/plain');
-      if (!text || text.indexOf('\n') === -1) return; // single cell → normal paste
+      // clipboardData is only valid during the event → capture synchronously now.
+      var raw = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (!raw || raw.indexOf('\n') === -1) return; // single cell → normal paste
       e.preventDefault();
-      var rows = expandRows(parseTSV(text));
-      if (rows.length === 0) return;
-      $('sacBody').innerHTML = '';
-      rowSeq = 0;
-      rows.forEach(function(cols) {
-        createRow(
-          cols[0] ? cols[0].trim() : '',
-          cols[1] ? cols[1].trim() : '',
-          cols[2] ? cols[2].trim() : ''
-        );
-      });
+      // UXP often IGNORES preventDefault and still dumps the blob into the focused input.
+      // So defer our distribution to the next tick — it then runs AFTER the native paste
+      // and our values become the final state (focused cell gets line 0, rest fill down).
+      setTimeout(function() {
+        // Build a grid; a single-column copy from Sheets can still carry stray trailing
+        // tabs (empty adjacent cells), so decide by how many columns actually have data —
+        // not merely by the presence of a tab.
+        var grid = raw.replace(/\r\n?/g, '\n').split('\n').map(function(l) { return l.split('\t'); });
+        if (grid.length && grid[grid.length - 1].every(function(v) { return v.trim() === ''; })) grid.pop(); // drop trailing empty line
+        if (!grid.length) return;
+        var maxCols = 0;
+        grid.forEach(function(c) { var n = 0; for (var i = 0; i < c.length; i++) if (c[i].trim() !== '') n = i + 1; if (n > maxCols) maxCols = n; });
+        if (maxCols >= 2 && (colIdx || 0) === 0) {
+          // FULL CUTSHEET pasted into the first column → rebuild the whole table
+          // (runs expandRows: splits multi-timestamp cells, inherits merged sources).
+          var rows = expandRows(parseTSV(raw));
+          if (rows.length === 0) return;
+          $('sacBody').innerHTML = '';
+          rowSeq = 0;
+          rows.forEach(function(cols) {
+            createRow(
+              cols[0] ? cols[0].trim() : '',
+              cols[1] ? cols[1].trim() : '',
+              cols[2] ? cols[2].trim() : ''
+            );
+          });
+        } else if (maxCols >= 2) {
+          // MULTI-COLUMN pasted into time/source → fill those columns down FROM the
+          // focused column (col 2 paste → time+source), preserving the columns to the left.
+          sacFillGridDown(inp, colIdx || 0, grid);
+          var firstG = (grid[0] && grid[0][0] || '').trim();
+          var fixG = function() { if (inp.value !== firstG) inp.value = firstG; };
+          setTimeout(fixG, 30); setTimeout(fixG, 120); setTimeout(fixG, 300);
+        } else {
+          // SINGLE COLUMN → fill down ONLY the focused column, preserve the other two.
+          var lines = grid.map(function(c) { return (c[0] || '').trim(); });
+          sacFillColumnDown(inp, colIdx || 0, lines);
+          // UXP applies the native paste LATE (after this tick), clobbering the FOCUSED
+          // cell (line 0) with the whole blob — only the first cell is hit. Re-assert it
+          // a few times so our line-0 value wins the race.
+          var first = lines[0] || '';
+          var fixFirst = function() { if (inp.value !== first) inp.value = first; };
+          setTimeout(fixFirst, 30);
+          setTimeout(fixFirst, 120);
+          setTimeout(fixFirst, 300);
+        }
+      }, 0);
     });
     return inp;
   }
@@ -2650,9 +2748,9 @@ async function ppMoveToVOBin(item, proj) {
     row.className = 'sac-row';
     row.dataset.rowId = String(id);
 
-    var inpText = makeInput('Script text...');
-    var inpTime = makeInput('0:00-0:10');
-    var inpSrc  = makeInput('Source name');
+    var inpText = makeInput('Script text...', 0);
+    var inpTime = makeInput('0:00-0:10', 1);
+    var inpSrc  = makeInput('Source name', 2);
     if (text) inpText.value = text;
     if (time) inpTime.value = time;
     if (src)  inpSrc.value  = src;
