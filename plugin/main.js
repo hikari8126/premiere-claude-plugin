@@ -2784,21 +2784,20 @@ async function ppMoveToVOBin(item, proj) {
         rowEl = rows[startIdx + k];
       }
       if (!rowEl) break;
-      // UXP querySelector with a DESCENDANT combinator ('.sac-col-x .sac-input') is
-      // flaky — only matches some rows. Each row has exactly 3 inputs in column order
-      // (text, time, src), so pick by index with a single-class selector instead.
-      var cell = rowEl.querySelectorAll('.sac-input')[colIdx];
+      // colIdx is the focused column's SEMANTIC index; look it up by tag so it works
+      // no matter where the column physically sits after a reorder.
+      var cell = sacInputBySem(rowEl, colIdx);
       if (cell) cell.value = lines[k].trim();
     }
     // Editing the source column invalidates a prior validate pass
     if (colIdx === 2 && sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
   }
 
-  // Fill MULTIPLE columns downward starting at (focused row, startCol). grid[r] is the
-  // array of tab-split values for row r; grid col c maps to table col (startCol + c),
-  // clamped to the 3 columns (text/time/src). Preserves columns left of startCol and
-  // rows above. Used for multi-column paste into the time/source column.
-  function sacFillGridDown(inp, startCol, grid) {
+  // Fill MULTIPLE columns downward starting at (focused row, focused cell). `focusedSem`
+  // is the focused input's SEMANTIC index (0=text,1=time,2=src). grid col c maps to the
+  // DISPLAY position (focusedDisp + c) → whatever semantic currently sits there, so paste
+  // follows the on-screen column order. Preserves columns left of the focus and rows above.
+  function sacFillGridDown(inp, focusedSem, grid) {
     var startRow = inp.parentNode;
     while (startRow && !(startRow.classList && startRow.classList.contains('sac-row'))) startRow = startRow.parentNode;
     var body = $('sacBody');
@@ -2806,6 +2805,7 @@ async function ppMoveToVOBin(item, proj) {
     var rows = Array.prototype.slice.call(body.querySelectorAll('.sac-row'));
     var startIdx = rows.indexOf(startRow);
     if (startIdx === -1) return;
+    var fdisp = sacSemToDisp(focusedSem);
     var touchedSrc = false;
     for (var k = 0; k < grid.length; k++) {
       var rowEl = rows[startIdx + k];
@@ -2815,11 +2815,12 @@ async function ppMoveToVOBin(item, proj) {
         rowEl = rows[startIdx + k];
       }
       if (!rowEl) break;
-      var inputs = rowEl.querySelectorAll('.sac-input');
       for (var c = 0; c < grid[k].length; c++) {
-        var col = startCol + c;
-        if (col > 2) break;            // only text/time/src exist
-        if (inputs[col]) { inputs[col].value = (grid[k][c] || '').trim(); if (col === 2) touchedSrc = true; }
+        var disp = fdisp + c;
+        if (disp > 2) break;                       // only 3 columns exist
+        var sem = SAC_SEM[SAC_COL_ORDER[disp]];     // display pos → semantic input index
+        var cell = sacInputBySem(rowEl, sem);
+        if (cell) { cell.value = (grid[k][c] || '').trim(); if (sem === 2) touchedSrc = true; }
       }
     }
     if (touchedSrc && sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
@@ -2855,10 +2856,17 @@ async function ppMoveToVOBin(item, proj) {
         if (!grid.length) return;
         var maxCols = 0;
         grid.forEach(function(c) { var n = 0; for (var i = 0; i < c.length; i++) if (c[i].trim() !== '') n = i + 1; if (n > maxCols) maxCols = n; });
-        if (maxCols >= 2 && (colIdx || 0) === 0) {
-          // FULL CUTSHEET pasted into the first column → rebuild the whole table
-          // (runs expandRows: splits multi-timestamp cells, inherits merged sources).
-          var rows = expandRows(parseTSV(raw));
+        if (maxCols >= 2 && sacSemToDisp(colIdx || 0) === 0) {
+          // FULL CUTSHEET pasted into the LEFTMOST column → rebuild the whole table.
+          // Pasted columns are in DISPLAY order; remap each to its semantic slot BEFORE
+          // expandRows (which expects [text,time,src] and does multi-timestamp split +
+          // merged-source inheritance).
+          var parsed = parseTSV(raw).map(function(cols) {
+            var o = ['', '', ''];
+            for (var d = 0; d < 3; d++) o[SAC_SEM[SAC_COL_ORDER[d]]] = cols[d] || '';
+            return o;
+          });
+          var rows = expandRows(parsed);
           if (rows.length === 0) return;
           $('sacBody').innerHTML = '';
           rowSeq = 0;
@@ -2898,6 +2906,69 @@ async function ppMoveToVOBin(item, proj) {
     var cell = document.createElement('div');
     cell.className = 'sac-cell ' + colClass;
     return cell;
+  }
+
+  // ── Column reorder ────────────────────────────────────────────────────────
+  // Columns are reordered by PHYSICALLY moving the cell elements in the DOM — NOT
+  // CSS flex `order`, which UXP fails to repaint until a hover/scroll invalidates
+  // the region (reflow ≠ repaint). Moving DOM nodes is a structural mutation UXP
+  // must re-render, so the reorder shows instantly.
+  // Inputs keep a semantic tag (dataset.colIdx: 0=text,1=time,2=src), so every
+  // reader looks up by semantic regardless of physical position.
+  // SAC_COL_ORDER = semantic keys in physical L→R order.
+  var SAC_SEM      = { text: 0, time: 1, src: 2 };
+  var SAC_COL_KEYS = ['text', 'time', 'src'];
+  var SAC_COL_ORDER = ['text', 'time', 'src'];
+
+  function sacSemToDisp(semIdx) { return SAC_COL_ORDER.indexOf(SAC_COL_KEYS[semIdx]); }
+
+  // Find a row's input for a semantic column, independent of physical order.
+  // Single-class selector only (descendant combinators are flaky in UXP); match
+  // on dataset.colIdx, with a positional fallback if the tag is somehow missing.
+  function sacInputBySem(row, sem) {
+    var ins = row.querySelectorAll('.sac-input');
+    for (var i = 0; i < ins.length; i++) {
+      if (parseInt(ins[i].dataset.colIdx, 10) === sem) return ins[i];
+    }
+    return ins[sem] || null;
+  }
+
+  function sacLoadColOrder() {
+    try {
+      var s = JSON.parse(localStorage.getItem('sac_col_order'));
+      if (Array.isArray(s) && s.length === 3 &&
+          s.indexOf('text') >= 0 && s.indexOf('time') >= 0 && s.indexOf('src') >= 0) {
+        SAC_COL_ORDER = s;
+      }
+    } catch (e) {}
+  }
+  function sacSaveColOrder() {
+    try { localStorage.setItem('sac_col_order', JSON.stringify(SAC_COL_ORDER)); } catch (e) {}
+  }
+
+  // Physically reorder one container's column cells to match SAC_COL_ORDER, action
+  // cell last. appendChild moves an existing node to the end, so appending in order
+  // rebuilds the L→R sequence. Works for both a data row and the header row.
+  function sacOrderCells(container) {
+    if (!container) return;
+    SAC_COL_ORDER.forEach(function(k) {
+      var c = container.querySelector('.sac-col-' + k);
+      if (c) container.appendChild(c);
+    });
+    var act = container.querySelector('.sac-col-act');
+    if (act) container.appendChild(act);
+  }
+
+  // Apply current order to a single row (called for every row created)
+  function sacApplyRowOrder(row) { sacOrderCells(row); }
+
+  // Re-apply order to header + all existing rows, and sync the preset picker
+  function sacApplyColOrder() {
+    var body = $('sacBody');
+    if (body) Array.prototype.forEach.call(body.querySelectorAll('.sac-row'), sacOrderCells);
+    sacOrderCells(document.querySelector('.sac-thead'));
+    var preset = document.getElementById('sacColPreset');
+    if (preset) { var v = SAC_COL_ORDER.join(','); if (preset.value !== v) preset.value = v; }
   }
 
   // afterRow: if provided, insert new row after that element; else append
@@ -2957,6 +3028,7 @@ async function ppMoveToVOBin(item, proj) {
     } else {
       body.appendChild(row);
     }
+    sacApplyRowOrder(row);   // honour current column order
     return row;
   }
 
@@ -2980,11 +3052,12 @@ async function ppMoveToVOBin(item, proj) {
   function parseBlocks() {
     var rows = Array.from($('sacBody').querySelectorAll('.sac-row'));
     var data = rows.map(function(row) {
-      var inputs = row.querySelectorAll('.sac-input');
+      // Read by semantic tag, not physical position — columns may be reordered.
+      var it = sacInputBySem(row, 0), im = sacInputBySem(row, 1), is = sacInputBySem(row, 2);
       return {
-        text: inputs[0] ? inputs[0].value.trim() : '',
-        time: inputs[1] ? inputs[1].value.trim() : '',
-        src:  inputs[2] ? sacStripSrcNotes(inputs[2].value) : '',
+        text: it ? it.value.trim() : '',
+        time: im ? im.value.trim() : '',
+        src:  is ? sacStripSrcNotes(is.value) : '',
       };
     });
 
@@ -4171,6 +4244,24 @@ async function ppMoveToVOBin(item, proj) {
   if (sacDrop) sacDrop.addEventListener('click', sacOpenImagePicker);
 
   // ── Event listeners ──────────────────────────────────────────────────────
+  // Column-order preset: restore saved order, bind the preset picker, apply.
+  sacLoadColOrder();
+  var sacColPreset = document.getElementById('sacColPreset');
+  if (sacColPreset) {
+    // Lives inside the collapsible header bar → stop clicks toggling the section.
+    sacColPreset.addEventListener('click', function(e) { e.stopPropagation(); });
+    sacColPreset.addEventListener('change', function(e) {
+      e.stopPropagation();
+      var keys = (sacColPreset.value || '').split(',');
+      if (keys.length === 3 && keys.indexOf('text') >= 0 && keys.indexOf('time') >= 0 && keys.indexOf('src') >= 0) {
+        SAC_COL_ORDER = keys;
+        sacSaveColOrder();
+        sacApplyColOrder();
+      }
+    });
+  }
+  sacApplyColOrder();
+
   $('sacAddRow').addEventListener('click', function() { createRow(); });
 
   $('sacClearBoard').addEventListener('click', function() {

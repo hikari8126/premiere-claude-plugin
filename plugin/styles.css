@@ -2789,6 +2789,22 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-col-src  { flex: 2 1 0; min-width: 0; }
 .sac-col-act  { flex: 0 0 40px; align-items: center; justify-content: center;
                 gap: 2px; padding: 0 2px; }
+
+/* Column-order preset picker (next to the "Script input" title) */
+.sac-presetSel {
+  box-sizing: border-box;
+  appearance: none; -webkit-appearance: none;
+  background: var(--surface2); color: rgba(255,255,255,0.7);
+  border: 1px solid var(--border); border-radius: 5px;
+  padding: 2px 8px; font-size: 10px; font-weight: 600;
+  letter-spacing: normal; text-transform: none;
+  cursor: pointer; margin: 0;
+}
+.sac-presetSel:hover  { border-color: var(--accent); color: #fff; }
+.sac-presetSel:focus  { outline: none; border-color: var(--accent); }
+.sac-presetSel option {
+  background-color: #1a1a1a; color: rgba(255,255,255,0.85); font-weight: 500;
+}
 .sac-rowBtn {
   width: 16px; height: 16px; padding: 0;
   border: none; border-radius: 50%;

@@ -693,6 +693,14 @@
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
         <span><span data-ic="file" data-ic-size="12" style="margin-right:6px"></span>Script input</span>
+        <select class="sac-presetSel" id="sacColPreset" title="Thứ tự cột nhập">
+          <option value="text,time,src">Script → Time → Source</option>
+          <option value="text,src,time">Script → Source → Time</option>
+          <option value="time,text,src">Time → Script → Source</option>
+          <option value="time,src,text">Time → Source → Script</option>
+          <option value="src,text,time">Source → Script → Time</option>
+          <option value="src,time,text">Source → Time → Script</option>
+        </select>
         <div id="sacScriptClear" class="sac-scriptClearBtn" role="button" title="Clear toàn bộ script + huỷ tác vụ đang chạy"><span data-ic="trash" data-ic-size="12"></span> Clear</div>
       </div>
       <div class="sac-tableWrap" id="sacTableWrap">
