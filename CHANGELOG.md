@@ -3,6 +3,20 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.7.1 — 2026-06-16
+
+### ✅ Thêm mới / Cải tiến
+- **Autocut — preset thứ tự cột cutsheet**: dropdown cạnh tiêu đề "Script input" cho chọn 1 trong 6 hoán vị thứ tự cột (Script / In→Out / Source). Thứ tự lưu `localStorage` (`sac_col_order`), khôi phục khi mở lại. Paste khối nhiều cột map theo đúng thứ tự đang hiển thị.
+
+### 🐛 Bugs đã fix
+- **Đổi preset không cập nhật UI, phải hover chuột mới đổi** — Nguyên nhân: UXP defer **paint** của thay đổi CSS flex `order` (reflow ≠ repaint), chỉ vẽ lại khi vùng bị invalidate (hover/scroll). Cách fix: bỏ `style.order`, **di chuyển cell thật trong DOM** bằng `appendChild` theo `SAC_COL_ORDER` (`sacOrderCells`) — DOM mutation buộc UXP render lại ngay.
+
+### 🔧 Kỹ thuật / Approach
+- Đọc input theo **semantic** qua `dataset.colIdx` (`sacInputBySem`) bằng single-class selector `.sac-input` (descendant combinator `.sac-col-x .sac-input` flaky trong UXP) → `parseBlocks`/validate/run/paste đúng cột bất kể vị trí vật lý.
+- Reorder cả header lẫn từng row qua cùng `sacOrderCells(container)`; action cell luôn `appendChild` cuối.
+
+---
+
 ## v4.2.0-beta.22 — 2026-05-30
 
 ### ✅ Thêm mới / Cải tiến
