@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.7.0';  // Accent theming (5 presets + custom hex presets + auto-contrast fg) + tab reorder (Autocut first)
+var PLUGIN_VERSION = 'v4.7.1';  // Autocut cutsheet column-order preset (DOM reorder via sacOrderCells) — on top of v4.7.0 accent theming + tab reorder
 
 // ── State ──────────────────────────────────────────────────────────────────
 
