@@ -2293,60 +2293,62 @@ ${rawText}`;
     }
   }
 
-  const numberedInput = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+  // ── PER-SENTENCE mode (default — Autocut "Gen voice") ─────────────────────
+  // Tách script thành TỪNG CÂU, mỗi câu 1 dòng với [emotion] ở đầu (xuống dòng
+  // trước mỗi thẻ). Một block nhiều câu → nhiều dòng, nên số dòng output KHÔNG
+  // còn bằng input → KHÔNG ép 1:1. KHÔNG đổi từ ngữ (giữ để voice-align khớp lại
+  // với block text gốc — align dùng block.texts, độc lập số dòng normalize này).
+  const rawScript = lines.join('\n');
   const prompt =
-`Bạn là chuyên gia hiệu đính script cho TTS (Text-to-Speech) ElevenLabs.
+`Bạn là chuyên gia hiệu đính script cho TTS (Text-to-Speech) ElevenLabs v3.
 
-Phân tích toàn bộ script để xác định tone/mood tổng thể, sau đó với MỖI DÒNG:
-1. Thêm một tag cảm xúc trong [] ở ĐẦU DÒNG để hướng dẫn giọng đọc ElevenLabs
-2. Thêm hoặc thay dấu ! ? phù hợp với tone và cảm xúc của câu (nếu dấu cũ chưa đúng thì thay)
-3. Sửa lỗi chính tả nếu có
-4. TUYỆT ĐỐI không thay đổi từ ngữ, nội dung hay ý nghĩa
+Phân tích toàn bộ script để xác định tone/mood tổng thể, sau đó:
+1. TÁCH script thành từng CÂU riêng — MỖI CÂU nằm trên MỘT DÒNG riêng.
+2. Đặt một tag cảm xúc trong [] ở ĐẦU mỗi câu để hướng dẫn giọng đọc ElevenLabs.
+   → BẮT BUỘC xuống dòng trước mỗi thẻ [] (mỗi dòng = 1 thẻ [] + 1 câu).
+3. Thêm hoặc thay dấu ! ? phù hợp với tone và cảm xúc của câu.
+4. Sửa lỗi chính tả nếu có.
+5. TUYỆT ĐỐI không thay đổi từ ngữ, không thêm/bớt nội dung hay ý nghĩa.
 
-Tags gợi ý (chọn tag phù hợp nhất với từng câu, không bắt buộc dùng list này):
+Tags gợi ý (chọn tag phù hợp nhất từng câu, không bắt buộc dùng list này):
 [excited] [energetic] [warm] [friendly] [confident] [dramatic] [urgent]
 [whispering] [conversational] [serious] [calm] [laughing] [curious]
 
-Ví dụ:
-  Input:  "Grab it now"          → Output: "[excited] Grab it now!"
-  Input:  "Chỉ còn 3 ngày"       → Output: "[urgent] Chỉ còn 3 ngày!"
-  Input:  "Bạn có biết không"    → Output: "[curious] Bạn có biết không?"
-  Input:  "Sản phẩm tốt nhất."   → Output: "[confident] Sản phẩm tốt nhất!"
+Ví dụ (1 đoạn nhiều câu → tách từng câu, mỗi câu 1 dòng + thẻ riêng):
+  Input:  "We made this with one goal. To keep you cool. Grab yours now"
+  Output:
+[confident] We made this with one goal.
+[warm] To keep you cool.
+[excited] Grab yours now!
 
 Quy tắc output:
-- Trả về đúng ${lines.length} dòng, giữ nguyên thứ tự
-- Mỗi dòng BẮT BUỘC có tag [] ở đầu
-- Không thêm số thứ tự, gạch đầu dòng, hay bất kỳ text nào ngoài script
+- Mỗi câu một dòng; MỖI DÒNG bắt đầu bằng tag [] rồi tới câu.
+- Không thêm số thứ tự, gạch đầu dòng, markdown, hay bất kỳ text nào ngoài script.
 
-Script (${lines.length} dòng):
-${numberedInput}`;
+Script:
+${rawScript}`;
 
   try {
     const output = await callLLM(prompt, { provider: provider, model: model, apiKey: apiKey, maxTokens: 2048 });
 
-    // Parse output: strip leading numbers if Claude added them, drop blank lines
+    // Parse: bỏ số thứ tự lỡ thêm, bỏ dòng fence ```, bỏ dòng trống.
     const allLines = output.split('\n')
-      .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
+      .map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^\s*```[a-z]*\s*$/i, '').trim())
       .filter(Boolean);
 
-    // If all expected lines start with [tag], use them directly
-    const taggedLines = allLines.filter(l => /^\[.+?\]/.test(l));
-    if (taggedLines.length === lines.length) {
-      return res.json({ ok: true, lines: taggedLines });
+    if (!allLines.length) {
+      console.warn('[normalize] Empty output — fallback to originals');
+      return res.json({ ok: true, lines, warning: 'empty_output' });
     }
-    if (allLines.length === lines.length) {
-      return res.json({ ok: true, lines: allLines });
-    }
-    // Count mismatch: log and return originals as fallback
-    console.warn(`[normalize] Count mismatch: expected ${lines.length}, got ${allLines.length} (tagged: ${taggedLines.length})`);
-    res.json({ ok: true, lines, warning: 'count_mismatch' });
+    // Không ép số dòng = số block; trả về các dòng đã tách câu + gắn thẻ.
+    return res.json({ ok: true, lines: allLines });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.7.0';  // Organize provider: GPT removed → Gemini (gemini-3.5-flash / gemini-3.1-flash-lite); normalize-script gains mode:'paragraph' (VoiceGen) vs per-line 1:1 (Autocut)
+const BRIDGE_VERSION = '1.7.1';  // normalize-script per-sentence: tách mỗi câu 1 dòng + [emotion] ở đầu (Autocut gen-voice), bỏ ép 1:1; mode:'paragraph' (VoiceGen) giữ nguyên; Gemini provider
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

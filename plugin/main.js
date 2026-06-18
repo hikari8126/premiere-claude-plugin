@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.1';  // Remove redundant ⚙ gear from Voice Gen status bar (settings now only via main ⚙ → Voice Gen tab). On top of v4.8.0 settings overhaul + Gemini Organize + paragraph normalize
+var PLUGIN_VERSION = 'v4.8.2';  // Autocut gen-voice normalize: nhận script tách câu (mỗi câu 1 dòng + [emotion]) — bỏ ép số dòng = số block. On top of v4.8.1
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4025,7 +4025,10 @@ async function ppMoveToVOBin(item, proj) {
       if (myToken !== sacNormToken) return; // cancelled/superseded while fetching
       var d = await resp.json();
       if (myToken !== sacNormToken) return;
-      if (d.ok && Array.isArray(d.lines) && d.lines.length === lines.length) {
+      // Normalize giờ tách câu (mỗi câu 1 dòng + [emotion]) → số dòng KHÔNG bằng
+      // số block; chỉ là input cho ElevenLabs. Voice-align map block↔audio bằng
+      // block.texts riêng nên không cần khớp số dòng. Nhận mọi kết quả non-empty.
+      if (d.ok && Array.isArray(d.lines) && d.lines.length) {
         normalizedLines = d.lines;
         console.log('[SAC] Script normalized:', normalizedLines);
       } else {
