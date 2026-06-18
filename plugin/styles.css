@@ -2015,8 +2015,7 @@ div[role="button"] > .p-ic:only-child { margin-right: 0; }
   font-size: 11px;
   color: var(--text-dim);
 }
-#vgSettingsBtn { margin-left: auto; }
-#vgSettingsBtn.is-active { color: var(--accent-lighter); }
+#vgRefreshVoices { margin-left: auto; }
 /* Settings popup — overlay over the whole VoiceGen tab (mirrors .vg-save-modal,
    no z-index needed; absolute resolves to #tab-voicegen which is position:relative). */
 .vg-settingsPanel {
