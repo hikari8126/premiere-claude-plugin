@@ -2242,6 +2242,20 @@ ${text}
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
+// Tách output normalize thành 1 dòng / mỗi thẻ [emotion] — KHÔNG phụ thuộc model
+// có xuống dòng hay không. Bỏ ```fence, ép line-break TRƯỚC mọi thẻ [..], gom khoảng
+// trắng, bỏ số thứ tự lỡ thêm, drop dòng trống.
+function splitByEmotionTags(output) {
+  let s = String(output || '')
+    .replace(/```[a-z]*/gi, '')   // bỏ mọi marker code-fence
+    .trim();
+  // Chèn newline trước mỗi thẻ [..] (thẻ = [nội dung ngắn, không chứa ] hay xuống dòng]).
+  s = s.replace(/\s*(\[[^\]\n]{1,40}\])\s*/g, '\n$1 ');
+  return s.split('\n')
+    .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
+    .filter(Boolean);
+}
+
 // ── POST /superautocut/normalize-script ────────────────────────────────────
 // Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
 // Input:  { lines: string[] }   — mảng string, 1 phần tử / block
@@ -2272,22 +2286,25 @@ app.post('/superautocut/normalize-script', async (req, res) => {
 + Eliminate icons or emoji if there are any.
 + Translate acronyms/or special words to plain words (Example: OMG => Oh my god, 2X softer => 2 times softer, 65% off=> 65 percent off, 1000+ washes => more than 1000 washes, oz => ounce, 2026 => twenty twenty six, 2M+ => more than 2 millions, DESIGNED FOR 50+ => design for 50 plus, 9° => 9 degrees, Our #1 summer pants => Our top summer pants or Our best summer pants or Our number one summer pants)
 + Add emotions for every sentence (Eleventlabs v3 allow to add emotion for the voice in the form such as [...] => Ex: [Excited]. The emotion needs to be placed right in front of the sentence - EX: [Excited]We create this pants with ONE GOAL.
-+ Organize into a complete paragraph.
++ Organize the content into a complete, well-connected script (connect fragmented phrases).
 
-# Output rule:
-- Return ONLY the final organized paragraph. No preamble, no explanation, no markdown code fences, no numbering.
+# Output format (IMPORTANT):
+- Put EACH sentence on its OWN line, starting with its [emotion] tag.
+- There MUST be a line break BEFORE every [emotion] tag — never put two [emotion] tags on the same line, never run sentences together in one paragraph.
+- Example:
+[Reflective] Decades of bras that never quite fit.
+[Empathetic] You weren't the problem.
+[Confident] SonaShape was built around a different belief.
+- Return ONLY the final organized script. No preamble, no explanation, no markdown code fences, no numbering.
 
 # Raw voice over contents:
 ${rawText}`;
     try {
       const output = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
-      const cleaned = output
-        .replace(/^\s*```[a-z]*\s*/i, '')   // strip a leading ``` fence if the model added one
-        .replace(/\s*```\s*$/i, '')         // and a trailing fence
-        .trim();
-      if (!cleaned) return res.json({ ok: false, error: 'Model trả về rỗng' });
-      const outLines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
-      return res.json({ ok: true, lines: outLines.length ? outLines : [cleaned] });
+      // Post-process: ép mỗi thẻ [emotion] ra 1 dòng riêng (không phụ thuộc model).
+      const outLines = splitByEmotionTags(output);
+      if (!outLines.length) return res.json({ ok: false, error: 'Model trả về rỗng' });
+      return res.json({ ok: true, lines: outLines });
     } catch (e) {
       return res.json({ ok: false, error: e.message });
     }
@@ -2331,10 +2348,8 @@ ${rawScript}`;
   try {
     const output = await callLLM(prompt, { provider: provider, model: model, apiKey: apiKey, maxTokens: 2048 });
 
-    // Parse: bỏ số thứ tự lỡ thêm, bỏ dòng fence ```, bỏ dòng trống.
-    const allLines = output.split('\n')
-      .map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^\s*```[a-z]*\s*$/i, '').trim())
-      .filter(Boolean);
+    // Post-process: ép mỗi thẻ [emotion] ra 1 dòng riêng (không phụ thuộc model).
+    const allLines = splitByEmotionTags(output);
 
     if (!allLines.length) {
       console.warn('[normalize] Empty output — fallback to originals');
@@ -2348,7 +2363,7 @@ ${rawScript}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.7.1';  // normalize-script per-sentence: tách mỗi câu 1 dòng + [emotion] ở đầu (Autocut gen-voice), bỏ ép 1:1; mode:'paragraph' (VoiceGen) giữ nguyên; Gemini provider
+const BRIDGE_VERSION = '1.7.2';  // normalize-script: splitByEmotionTags ép mỗi thẻ [emotion] ra 1 dòng riêng (post-process, không phụ thuộc model) cho cả 2 mode paragraph + per-sentence
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
