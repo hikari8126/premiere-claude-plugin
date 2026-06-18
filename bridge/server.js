@@ -2154,22 +2154,39 @@ Return ONLY a JSON array, no markdown, no explanation:
   }
 });
 
-// Shared LLM call: provider 'openai' → OpenAI REST; else Anthropic SDK (request key
-// → bridge API_KEY) → claude CLI fallback. Returns the model's text output.
+// Shared LLM call: provider 'gemini' → Google Gemini REST; else Anthropic SDK (request
+// key → bridge API_KEY) → claude CLI fallback. Returns the model's text output.
 async function callLLM(prompt, opts) {
   opts = opts || {};
   var provider = opts.provider, model = opts.model, apiKey = opts.apiKey;
   var maxTokens = opts.maxTokens || 2048;
-  if (provider === 'openai') {
-    const oaKey = apiKey || process.env.OPENAI_API_KEY || '';
-    if (!oaKey) throw new Error('Chưa có OpenAI API key (Settings hoặc OPENAI_API_KEY trong bridge .env)');
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + oaKey },
-      body: JSON.stringify({ model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], temperature: 0.2 }),
-    });
-    const dj = await r.json();
-    if (!r.ok) throw new Error('OpenAI: ' + ((dj.error && dj.error.message) || ('HTTP ' + r.status)));
-    return ((dj.choices && dj.choices[0] && dj.choices[0].message && dj.choices[0].message.content) || '').trim();
+  if (provider === 'gemini') {
+    const gKey = apiKey || process.env.GEMINI_API_KEY || '';
+    if (!gKey) throw new Error('Chưa có Gemini API key (Settings hoặc GEMINI_API_KEY trong bridge .env)');
+    const gModel = model || 'gemini-3.5-flash';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+                encodeURIComponent(gModel) + ':generateContent?key=' + encodeURIComponent(gKey);
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      // thinkingBudget:0 → no "thinking" tokens, so the whole output budget is text
+      // (Flash 3.x have thinking on by default, which can otherwise return empty text).
+      generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, thinkingConfig: { thinkingBudget: 0 } },
+    };
+    // Gemini Flash 3.x occasionally returns 503 (high demand) — retry a few times.
+    let dj, r;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      r = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      dj = await r.json();
+      if (r.ok) break;
+      if (r.status === 503 && attempt < 2) { await new Promise(function(res){ setTimeout(res, 1500); }); continue; }
+      throw new Error('Gemini: ' + ((dj && dj.error && dj.error.message) || ('HTTP ' + r.status)));
+    }
+    const cand = dj && dj.candidates && dj.candidates[0];
+    const parts = (cand && cand.content && cand.content.parts) || [];
+    return parts.map(function(p) { return p.text || ''; }).join('').trim();
   }
   const anthKey = apiKey || API_KEY;
   if (anthKey) {
@@ -2230,9 +2247,51 @@ ${text}
 // Input:  { lines: string[] }   — mảng string, 1 phần tử / block
 // Output: { ok, lines: string[] }
 app.post('/superautocut/normalize-script', async (req, res) => {
-  const { lines, provider, model, apiKey } = req.body;
+  const { lines, provider, model, apiKey, mode } = req.body;
   if (!Array.isArray(lines) || lines.length === 0)
     return res.status(400).json({ ok: false, error: 'No lines provided' });
+
+  // ── PARAGRAPH mode (Voice Gen "Organize") ─────────────────────────────────
+  // Reorganize raw voice-over into one ElevenLabs-v3-ready paragraph: connects
+  // fragmented phrases, CAPS emphasis words, expands acronyms, adds [emotion]
+  // tags per sentence. Fragments get merged → output line count is NOT expected
+  // to match the input, so we do NOT enforce a 1:1 count here.
+  if (mode === 'paragraph') {
+    const rawText = lines.join('\n');
+    const prompt =
+`# Context:
+- I will provide the raw voice over contents for my video. The raw contents are not organized and optimized for generating EleventLab v3 voiceover. I need to organize those contents following my requirements. The final output will be used to generate ElevenLab voiceover.
+# Task:
+- Organize the content for my product video following the below requirements.
+# Requirements:
++ IMPORTANT 1: Do not change or alter the original contents I provided to you. (Only correct the grammar if there are huge mistakes)
++ IMPORTANT 2: Do not add new contents/words/linking phrases to the original contents I provided.
++ If the original contents have fragmented phrases of a complete sentence that divided by line breaks, identify and connect them if you could.
++ A sentence must always end using a punctuation or an exclamation mark (if it needs to emphasize emotion)
++ Capslock important or emphasis words. Eleventlabs will emphasize the word.
++ Eliminate icons or emoji if there are any.
++ Translate acronyms/or special words to plain words (Example: OMG => Oh my god, 2X softer => 2 times softer, 65% off=> 65 percent off, 1000+ washes => more than 1000 washes, oz => ounce, 2026 => twenty twenty six, 2M+ => more than 2 millions, DESIGNED FOR 50+ => design for 50 plus, 9° => 9 degrees, Our #1 summer pants => Our top summer pants or Our best summer pants or Our number one summer pants)
++ Add emotions for every sentence (Eleventlabs v3 allow to add emotion for the voice in the form such as [...] => Ex: [Excited]. The emotion needs to be placed right in front of the sentence - EX: [Excited]We create this pants with ONE GOAL.
++ Organize into a complete paragraph.
+
+# Output rule:
+- Return ONLY the final organized paragraph. No preamble, no explanation, no markdown code fences, no numbering.
+
+# Raw voice over contents:
+${rawText}`;
+    try {
+      const output = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
+      const cleaned = output
+        .replace(/^\s*```[a-z]*\s*/i, '')   // strip a leading ``` fence if the model added one
+        .replace(/\s*```\s*$/i, '')         // and a trailing fence
+        .trim();
+      if (!cleaned) return res.json({ ok: false, error: 'Model trả về rỗng' });
+      const outLines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
+      return res.json({ ok: true, lines: outLines.length ? outLines : [cleaned] });
+    } catch (e) {
+      return res.json({ ok: false, error: e.message });
+    }
+  }
 
   const numberedInput = lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
   const prompt =
@@ -2287,7 +2346,7 @@ ${numberedInput}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.6.5';  // subtext: AI segmentation endpoint (useAI) + phrase chunker
+const BRIDGE_VERSION = '1.7.0';  // Organize provider: GPT removed → Gemini (gemini-3.5-flash / gemini-3.1-flash-lite); normalize-script gains mode:'paragraph' (VoiceGen) vs per-line 1:1 (Autocut)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
