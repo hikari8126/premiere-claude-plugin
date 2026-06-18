@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.0';  // Settings overhaul: General/Voice Gen tabs (merged VoiceGen settings), Anthropic key hidden, GPT removed → Gemini (3.5 Flash / 3.1 Flash Lite) for Organize; VoiceGen Organize → paragraph-mode prompt (merges fragments)
+var PLUGIN_VERSION = 'v4.8.1';  // Remove redundant ⚙ gear from Voice Gen status bar (settings now only via main ⚙ → Voice Gen tab). On top of v4.8.0 settings overhaul + Gemini Organize + paragraph normalize
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -6495,14 +6495,8 @@ async function ppMoveToVOBin(item, proj) {
   // Wire events
   els.btnRefresh.addEventListener('click', loadVoices);
 
-  // ⚙ settings — Voice Gen settings now live in the unified Settings modal.
-  // The gear in the status bar opens that modal directly on the Voice Gen tab.
-  var vgSettingsBtn = $('vgSettingsBtn');
-  if (vgSettingsBtn) {
-    vgSettingsBtn.addEventListener('click', function() {
-      if (typeof openSettingsPanel === 'function') openSettingsPanel('voicegen');
-    });
-  }
+  // ⚙ Voice Gen settings live in the unified Settings modal (⚙ chính → tab Voice Gen).
+  // The status-bar gear was removed to avoid a duplicate entry point.
   els.voiceSelect.addEventListener('change', function() {
     els.customVoiceId.hidden = els.voiceSelect.value !== '__custom__';
     if (!els.customVoiceId.hidden) els.customVoiceId.focus();
