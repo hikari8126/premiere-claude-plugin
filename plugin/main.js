@@ -791,28 +791,28 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.7.1';  // Autocut cutsheet column-order preset (DOM reorder via sacOrderCells) — on top of v4.7.0 accent theming + tab reorder
+var PLUGIN_VERSION = 'v4.8.0';  // Settings overhaul: General/Voice Gen tabs (merged VoiceGen settings), Anthropic key hidden, GPT removed → Gemini (3.5 Flash / 3.1 Flash Lite) for Organize; VoiceGen Organize → paragraph-mode prompt (merges fragments)
 
 // ── State ──────────────────────────────────────────────────────────────────
 
 var BRIDGE_URL      = 'http://localhost:3030';
 var CLAUDE_MODEL    = 'claude-sonnet-4-6';
 var ANTHROPIC_KEY   = ''; // user-provided API key (optional)
-var OPENAI_KEY      = ''; // user-provided OpenAI key for Organize (optional; bridge .env is fallback)
+var GEMINI_KEY      = ''; // user-provided Gemini key for Organize (optional; bridge .env is fallback)
 var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || 'claude-sonnet-4-6'; // model for script Organize
 var ELEVENLABS_KEY  = ''; // no hardcoded key — user enters in Settings, or bridge .env (ELEVENLABS_API_KEY) provides the shared default
 var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
 var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
 
 // Resolve the provider/model/key for script "Organize" from the selected model.
-// gpt* → OpenAI (key = OPENAI_KEY or bridge .env); else Anthropic (key = ANTHROPIC_KEY or bridge).
+// gemini* → Gemini (key = GEMINI_KEY or bridge .env); else Anthropic (key = ANTHROPIC_KEY or bridge).
 window.sacOrganizeConfig = function() {
   var m = ORGANIZE_MODEL || 'claude-sonnet-4-6';
-  var isGpt = /^(gpt|o\d|chatgpt)/i.test(m);
+  var isGemini = /^gemini/i.test(m);
   return {
-    provider: isGpt ? 'openai' : 'anthropic',
+    provider: isGemini ? 'gemini' : 'anthropic',
     model: m,
-    apiKey: isGpt ? OPENAI_KEY : ANTHROPIC_KEY, // empty → bridge falls back to its .env / CLI
+    apiKey: isGemini ? GEMINI_KEY : ANTHROPIC_KEY, // empty → bridge falls back to its .env / CLI
   };
 };
 var RATE_LIMIT_UNTIL = 0; // epoch ms — until when we shouldn't retry CLI
@@ -1661,7 +1661,7 @@ function applySettings(s) {
   if (s.bridgeUrl)     BRIDGE_URL    = s.bridgeUrl;
   if (s.claudeModel)   CLAUDE_MODEL  = s.claudeModel;
   if (s.anthropicKey)  ANTHROPIC_KEY = s.anthropicKey;
-  if (s.openaiKey)     OPENAI_KEY    = s.openaiKey;
+  if (s.geminiKey)     GEMINI_KEY    = s.geminiKey;
   if (s.elevenlabsKey) ELEVENLABS_KEY = s.elevenlabsKey;
   // Load profiles; migrate legacy single-key to a Default profile
   if (Array.isArray(s.elevenlabsProfiles) && s.elevenlabsProfiles.length) {
@@ -1682,8 +1682,8 @@ function applySettings(s) {
   if (bridgeUrlInput) bridgeUrlInput.value = BRIDGE_URL;
   if (modelSelect)    modelSelect.value = CLAUDE_MODEL;
   if (apiKeyInput)    apiKeyInput.value = ANTHROPIC_KEY;
-  var oaInput = document.getElementById('openai-key-input');
-  if (oaInput)        oaInput.value = OPENAI_KEY;
+  var gemInput = document.getElementById('gemini-key-input');
+  if (gemInput)       gemInput.value = GEMINI_KEY;
   if (elKeyInput)     elKeyInput.value  = ELEVENLABS_KEY;
   updateApiKeyStatus();
   updateElStatus();
@@ -1786,7 +1786,17 @@ function populateBridgeInfo() {
 
 // Settings is a global overlay (reparented to <body>), opened from the ⚙ in the
 // version bar. It sits just below the version bar and covers the active tab.
-function openSettingsPanel() {
+// Switch the settings modal between its General / Voice Gen tabs.
+function setSettingsTab(which) {
+  document.querySelectorAll('.settings-tab').forEach(function(t) {
+    t.classList.toggle('is-active', t.getAttribute('data-stab') === which);
+  });
+  document.querySelectorAll('.settings-tabPanel').forEach(function(p) {
+    p.hidden = (p.getAttribute('data-stab') !== which);
+  });
+}
+
+function openSettingsPanel(tab) {
   var vb    = document.getElementById('versionBar');
   var topPx = vb ? (vb.offsetTop + vb.offsetHeight + 2) : 4;
   settingsModal.style.top = topPx + 'px';
@@ -1794,6 +1804,7 @@ function openSettingsPanel() {
   // UXP renders native <textarea>/<input>/<select> above everything, so the active
   // tab's fields would bleed over the overlay — hide all tab panels while open.
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = 'none'; });
+  setSettingsTab(tab || 'general');
   populateBridgeInfo();
   var spv = document.getElementById('settings-plugin-version');
   if (spv) spv.textContent = PLUGIN_VERSION;
@@ -1807,9 +1818,14 @@ function closeSettingsPanel() {
 document.getElementById('settings-btn').addEventListener('click', function(e) {
   e.stopPropagation();
   if (settingsModal.style.display === 'block') closeSettingsPanel();
-  else openSettingsPanel();
+  else openSettingsPanel('general');
 });
 document.getElementById('close-settings').addEventListener('click', closeSettingsPanel);
+
+// Settings tab bar (General / Voice Gen)
+document.querySelectorAll('.settings-tab').forEach(function(t) {
+  t.addEventListener('click', function() { setSettingsTab(t.getAttribute('data-stab')); });
+});
 
 // Click outside to close (check via DOM containment)
 document.addEventListener('click', function(e) {
@@ -1832,14 +1848,14 @@ document.getElementById('save-settings').addEventListener('click', function() {
   BRIDGE_URL     = readInput(bridgeUrlInput) || 'http://localhost:3030';
   CLAUDE_MODEL   = (modelSelect && modelSelect.value) || CLAUDE_MODEL;
   ANTHROPIC_KEY  = readInput(apiKeyInput);
-  OPENAI_KEY     = readInput(document.getElementById('openai-key-input'));
-  // ElevenLabs key is managed in Voice Gen tab — don't overwrite it here
-  console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | openai:', OPENAI_KEY.length, 'chars');
+  GEMINI_KEY     = readInput(document.getElementById('gemini-key-input'));
+  // ElevenLabs key is managed in the Voice Gen settings tab — don't overwrite it here
+  console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | gemini:', GEMINI_KEY.length, 'chars');
   var settingsObj = {
     bridgeUrl:                  BRIDGE_URL,
     claudeModel:                CLAUDE_MODEL,
     anthropicKey:               ANTHROPIC_KEY,
-    openaiKey:                  OPENAI_KEY,
+    geminiKey:                  GEMINI_KEY,
     elevenlabsKey:              ELEVENLABS_KEY,
     elevenlabsProfiles:         EL_PROFILES,
     elevenlabsActiveProfileId:  EL_ACTIVE_PROFILE_ID,
@@ -5074,7 +5090,7 @@ async function ppMoveToVOBin(item, proj) {
     ta.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
   });
   // Model picker (shared with VoiceGen Organize via ORGANIZE_MODEL). Claude → runs
-  // via CLI (no key needed); GPT → needs an OpenAI key.
+  // via CLI (no key needed); Gemini → needs a Gemini key.
   var sacAiModel = $('sacAiModel');
   if (sacAiModel) {
     sacAiModel.value = ORGANIZE_MODEL;
@@ -6479,22 +6495,14 @@ async function ppMoveToVOBin(item, proj) {
   // Wire events
   els.btnRefresh.addEventListener('click', loadVoices);
 
-  // ⚙ settings toggle — show/hide the API profiles + output format panel
-  var vgSettingsBtn = $('vgSettingsBtn'), vgSettingsPanel = $('vgSettingsPanel');
-  var vgSettingsClose = $('vgSettingsClose');
-  var vgBodyEl = document.querySelector('#tab-voicegen .vg-body');
-  // Open/close the settings popup. Hide the body while open so UXP text inputs
-  // underneath don't render on top of the overlay (known UXP z-order issue).
-  function vgSetSettingsOpen(open) {
-    if (!vgSettingsPanel) return;
-    vgSettingsPanel.hidden = !open;
-    if (vgSettingsBtn) vgSettingsBtn.classList.toggle('is-active', open);
-    if (vgBodyEl) vgBodyEl.style.visibility = open ? 'hidden' : '';
+  // ⚙ settings — Voice Gen settings now live in the unified Settings modal.
+  // The gear in the status bar opens that modal directly on the Voice Gen tab.
+  var vgSettingsBtn = $('vgSettingsBtn');
+  if (vgSettingsBtn) {
+    vgSettingsBtn.addEventListener('click', function() {
+      if (typeof openSettingsPanel === 'function') openSettingsPanel('voicegen');
+    });
   }
-  if (vgSettingsBtn && vgSettingsPanel) {
-    vgSettingsBtn.addEventListener('click', function() { vgSetSettingsOpen(vgSettingsPanel.hidden); });
-  }
-  if (vgSettingsClose) vgSettingsClose.addEventListener('click', function() { vgSetSettingsOpen(false); });
   els.voiceSelect.addEventListener('change', function() {
     els.customVoiceId.hidden = els.voiceSelect.value !== '__custom__';
     if (!els.customVoiceId.hidden) els.customVoiceId.focus();
@@ -6506,7 +6514,7 @@ async function ppMoveToVOBin(item, proj) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
-  // ── Organize script (normalize + emotion tags) — Claude or GPT ─────────────
+  // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
   var vgOrgModel = $('vgOrganizeModel');
   if (vgOrgModel) {
     vgOrgModel.value = ORGANIZE_MODEL;
@@ -6527,14 +6535,13 @@ async function ppMoveToVOBin(item, proj) {
     try {
       var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines: lines, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
+        body: JSON.stringify({ lines: lines, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey, mode: 'paragraph' }),
       });
       var d = await resp.json();
       if (d.ok && Array.isArray(d.lines) && d.lines.length) {
         ta.value = d.lines.join('\n');
         if (typeof updateCharCount === 'function') updateCharCount();
         vgAutoResize(ta);
-        if (d.warning === 'count_mismatch') vgOrgBtn.textContent = '⚠ Lệch số dòng — kiểm tra lại';
       } else {
         alert('Organize lỗi: ' + (d.error || 'không rõ'));
       }
