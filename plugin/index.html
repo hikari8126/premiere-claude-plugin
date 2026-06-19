@@ -340,11 +340,8 @@
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
               <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
-                <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                <option value="claude-opus-4-7">Claude Opus 4.7</option>
-                <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
-                <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
                 <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
               </select>
               <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
             </div>
@@ -680,12 +677,9 @@
           <textarea id="sacAiRaw" class="sac-aiRaw" spellcheck="false"
             placeholder="Dán NGUYÊN cutsheet copy từ Google Sheets (gồm cả cột lời thoại)…"></textarea>
           <div class="sac-aiRow">
-            <select id="sacAiModel" class="sac-aiModel" title="Model dùng để parse (Claude = chạy CLI, không cần key)">
-              <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-              <option value="claude-opus-4-7">Claude Opus 4.7</option>
-              <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <select id="sacAiModel" class="sac-aiModel" title="Model parse: Gemini (cần key) · Sonnet (chạy CLI, không cần key)">
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
             </select>
             <div id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Parse AI</div>
           </div>

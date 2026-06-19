@@ -73,9 +73,9 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
   <key>CFBundleExecutable</key>
     <string>Claude Bridge</string>
   <key>CFBundleVersion</key>
-    <string>2.33</string>
+    <string>2.34</string>
   <key>CFBundleShortVersionString</key>
-    <string>2.33</string>
+    <string>2.34</string>
   <key>PluginVersion</key>
     <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>

@@ -721,15 +721,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let currentPath = Bundle.main.bundlePath
         let scriptPath  = NSTemporaryDirectory() + "cb_relaunch_\(Int(Date().timeIntervalSince1970)).sh"
 
-        // Shell script: wait for this process to exit, swap bundles, relaunch
+        // Shell script: wait for this process to exit, swap bundles atomically-ish,
+        // dọn sạch bản cũ + bản trùng, refresh LaunchServices, rồi relaunch.
+        // Mục tiêu: KHÔNG bao giờ để lại bản cũ khiến lần mở sau chạy nhầm.
         let script = """
         #!/bin/bash
+        # Log để chẩn đoán update (xem ~/Library/Logs/claude-bridge-update.log)
+        exec >> "$HOME/Library/Logs/claude-bridge-update.log" 2>&1
+        echo "=== $(date) relaunch: \(currentPath) ==="
         sleep 2
-        rm   -rf '\(currentPath)'
-        mv   '\(newAppPath)' '\(currentPath)'
-        xattr -dr com.apple.quarantine '\(currentPath)' 2>/dev/null || true
+
+        CUR='\(currentPath)'
+        NEW='\(newAppPath)'
+        BAK="${CUR}.bak"
+
+        # Kill instance cũ còn chạy (tránh 'open' bám vào tiến trình cũ)
+        pkill -f "${CUR}/Contents/MacOS/" 2>/dev/null || true
         sleep 0.5
-        open '\(currentPath)'
+
+        # Backup bản cũ rồi đưa bản mới vào; nếu mv fail → khôi phục (không bao giờ mất app)
+        rm -rf "$BAK" 2>/dev/null || true
+        [ -d "$CUR" ] && mv "$CUR" "$BAK" 2>/dev/null || true
+        if mv "$NEW" "$CUR" 2>/dev/null; then
+          rm -rf "$BAK" 2>/dev/null || true
+          echo "moved new app into place OK"
+        else
+          echo "mv FAILED — restoring backup"
+          [ -d "$BAK" ] && mv "$BAK" "$CUR" 2>/dev/null || true
+        fi
+
+        # Dọn bản trùng ở nơi khác để macOS không mở nhầm bản cũ
+        for alt in "$HOME/Downloads/Claude Bridge.app" "$HOME/Desktop/Claude Bridge.app"; do
+          [ "$alt" != "$CUR" ] && [ -d "$alt" ] && rm -rf "$alt" && echo "removed dup: $alt"
+        done
+        if [ "$CUR" = "/Applications/Claude Bridge.app" ]; then
+          rm -rf "$HOME/Applications/Claude Bridge.app" 2>/dev/null || true
+        fi
+
+        xattr -dr com.apple.quarantine "$CUR" 2>/dev/null || true
+        # Cập nhật đăng ký LaunchServices → Spotlight/Finder trỏ đúng bản mới
+        LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        [ -x "$LSREG" ] && "$LSREG" -f "$CUR" 2>/dev/null || true
+
+        sleep 0.5
+        open "$CUR" || open -a "$CUR"
+        echo "relaunched"
         rm -- "$0"
         """
 

@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.2';  // Autocut gen-voice normalize: nhận script tách câu (mỗi câu 1 dòng + [emotion]) — bỏ ép số dòng = số block. On top of v4.8.1
+var PLUGIN_VERSION = 'v4.8.3';  // Organize model: chỉ Gemini 3.1 Flash Lite (default khi có key) + Sonnet 4.6 (backup); cancel Organize ở Voice Gen; guard NaN chống crash AutoCut. On top of v4.8.2
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -799,15 +799,32 @@ var BRIDGE_URL      = 'http://localhost:3030';
 var CLAUDE_MODEL    = 'claude-sonnet-4-6';
 var ANTHROPIC_KEY   = ''; // user-provided API key (optional)
 var GEMINI_KEY      = ''; // user-provided Gemini key for Organize (optional; bridge .env is fallback)
-var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || 'claude-sonnet-4-6'; // model for script Organize
+// Raw saved pick (rỗng nếu user chưa từng đổi dropdown). KHÔNG fallback ở đây —
+// giá trị mặc định được tính động trong sacResolveOrganizeModel() (phụ thuộc có key Gemini hay chưa).
+var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || '';
+var ORGANIZE_MODELS = ['gemini-3.1-flash-lite', 'claude-sonnet-4-6']; // chỉ 2 model: Gemini (default) + Sonnet (backup)
 var ELEVENLABS_KEY  = ''; // no hardcoded key — user enters in Settings, or bridge .env (ELEVENLABS_API_KEY) provides the shared default
 var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
 var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
 
+// Model dùng cho Organize. Ưu tiên lựa chọn thủ công còn hợp lệ của user; nếu chưa
+// chọn (hoặc giá trị cũ đã bị bỏ) → mặc định Gemini 3.1 Flash Lite CHỈ KHI đã có key
+// Gemini, ngược lại dùng Sonnet 4.6 (chạy qua CLI, không cần key).
+function sacResolveOrganizeModel() {
+  if (ORGANIZE_MODELS.indexOf(ORGANIZE_MODEL) >= 0) return ORGANIZE_MODEL;
+  return GEMINI_KEY ? 'gemini-3.1-flash-lite' : 'claude-sonnet-4-6';
+}
+// Đồng bộ 2 dropdown Organize về model đang hiệu lực (gọi khi load + khi đổi key).
+window.sacSyncOrganizeModelUI = function() {
+  var m = sacResolveOrganizeModel();
+  var a = document.getElementById('sacAiModel');      if (a) a.value = m;
+  var b = document.getElementById('vgOrganizeModel'); if (b) b.value = m;
+};
+
 // Resolve the provider/model/key for script "Organize" from the selected model.
 // gemini* → Gemini (key = GEMINI_KEY or bridge .env); else Anthropic (key = ANTHROPIC_KEY or bridge).
 window.sacOrganizeConfig = function() {
-  var m = ORGANIZE_MODEL || 'claude-sonnet-4-6';
+  var m = sacResolveOrganizeModel();
   var isGemini = /^gemini/i.test(m);
   return {
     provider: isGemini ? 'gemini' : 'anthropic',
@@ -1866,6 +1883,8 @@ document.getElementById('save-settings').addEventListener('click', function() {
   updateApiKeyStatus();
   updateElStatus();
   if (ANTHROPIC_KEY) RATE_LIMIT_UNTIL = 0;
+  // Vừa điền/xoá key Gemini → cập nhật model mặc định Organize cho khớp (nếu user chưa chọn tay).
+  if (typeof window.sacSyncOrganizeModelUI === 'function') window.sacSyncOrganizeModelUI();
   closeSettingsPanel();
   checkBridge();
   // Notify Voice Gen module to refresh
@@ -4680,6 +4699,11 @@ async function ppMoveToVOBin(item, proj) {
 
   // TickTime via ppro.TickTime.createWithSeconds (official UXP API).
   function sacMakeTime(seconds) {
+    // Guard NaN/Infinity/âm — TickTime.createWithSeconds(NaN) có thể làm Premiere crash (sync, không catch được).
+    if (!isFinite(seconds) || seconds < 0) {
+      console.warn('[SAC] sacMakeTime: invalid seconds', seconds, '→ dùng 0');
+      seconds = 0;
+    }
     if (ppro && ppro.TickTime) {
       try { return ppro.TickTime.createWithSeconds(seconds); } catch(e) {}
     }
@@ -4750,6 +4774,11 @@ async function ppMoveToVOBin(item, proj) {
       } catch(eC) {}
     }
 
+    // Guard: nếu mọi path trả giá trị lỗi (NaN/undefined) → 0, tránh cursor=NaN lan ra toàn assembly.
+    if (!isFinite(endRef.v) || endRef.v < 0) {
+      console.warn('[SAC] sacGetSequenceEnd: invalid end', endRef.v, '→ 0');
+      endRef.v = 0;
+    }
     console.log('[SAC] sacGetSequenceEnd =', endRef.v.toFixed(2) + 's');
     return endRef.v;
   }
@@ -4812,6 +4841,10 @@ async function ppMoveToVOBin(item, proj) {
   // separate commits ensures in/out is fully applied before the insert runs.
   // vIdx = video track (0=V1), 5 = far-away track (effectively skip). aIdx similar.
   async function sacInsertClipAt(project, seqEditor, item, atSec, inSec, outSec, vIdx, aIdx) {
+    // Guard NaN/Infinity trước mọi TickTime: atSec lỗi → 0; in/out lỗi → bỏ range (full clip).
+    if (!isFinite(atSec)) { console.warn('[SAC] insert atSec invalid', atSec, '→ 0'); atSec = 0; }
+    if (inSec  !== null && !isFinite(inSec))  { console.warn('[SAC] insert inSec invalid',  inSec);  inSec  = null; }
+    if (outSec !== null && !isFinite(outSec)) { console.warn('[SAC] insert outSec invalid', outSec); outSec = null; }
     var timeAt = sacMakeTime(atSec);
     // inSec/outSec null → full clip (skip setInOutPoints)
     var hasRange = (inSec !== null && outSec !== null);
@@ -5022,8 +5055,11 @@ async function ppMoveToVOBin(item, proj) {
             outSec = (full && full > 0.15) ? (full - 0.05) : 5; // tiny margin to stay in media
             label = (full && full > 0) ? ('[full ' + outSec.toFixed(1) + 's]') : '[full ~5s]';
           }
-          if (outSec <= inSec) outSec = inSec + 0.5; // guard inverted/zero range
+          // Guard NaN/Infinity/âm/inverted — chặn clipDur=NaN làm cursor=NaN lan ra toàn assembly.
+          if (!isFinite(inSec)  || inSec < 0)        inSec  = 0;
+          if (!isFinite(outSec) || outSec <= inSec)  outSec = inSec + 0.5;
           var clipDur = outSec - inSec;
+          if (!isFinite(clipDur) || clipDur < 0)      clipDur = 0.5;
 
           try {
             await sacInsertClipAt(project, seqEditor, srcItem, cursor, inSec, outSec, 0, 1);
@@ -5096,8 +5132,7 @@ async function ppMoveToVOBin(item, proj) {
   // via CLI (no key needed); Gemini → needs a Gemini key.
   var sacAiModel = $('sacAiModel');
   if (sacAiModel) {
-    sacAiModel.value = ORGANIZE_MODEL;
-    if (sacAiModel.value !== ORGANIZE_MODEL) sacAiModel.selectedIndex = 0; // unknown → Claude Sonnet
+    sacAiModel.value = sacResolveOrganizeModel(); // Gemini nếu có key, else Sonnet (hoặc pick của user)
     sacAiModel.addEventListener('change', function() {
       ORGANIZE_MODEL = sacAiModel.value;
       localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
@@ -6514,27 +6549,47 @@ async function ppMoveToVOBin(item, proj) {
   // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
   var vgOrgModel = $('vgOrganizeModel');
   if (vgOrgModel) {
-    vgOrgModel.value = ORGANIZE_MODEL;
-    if (vgOrgModel.value !== ORGANIZE_MODEL) vgOrgModel.selectedIndex = 0; // unknown saved value
+    vgOrgModel.value = sacResolveOrganizeModel(); // Gemini nếu có key, else Sonnet (hoặc pick của user)
     vgOrgModel.addEventListener('change', function() {
       ORGANIZE_MODEL = vgOrgModel.value;
       localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
+      var sa = document.getElementById('sacAiModel'); if (sa) sa.value = ORGANIZE_MODEL; // keep in sync
     });
   }
   var vgOrgBtn = $('vgOrganizeBtn');
+  // Cancel-able Organize: token + AbortController (giống luồng normalize của Autocut).
+  var vgOrgBusy = false, vgOrgAbort = null, vgOrgToken = 0;
+  function vgOrgSetIdle() {
+    vgOrgBusy = false; vgOrgAbort = null;
+    if (vgOrgBtn) { vgOrgBtn.classList.remove('is-cancel'); piSetBtn(vgOrgBtn, 'wand_magic_sparkles', 'Organize', null, 13); }
+  }
   if (vgOrgBtn) vgOrgBtn.addEventListener('click', async function() {
+    // Đang chạy → bấm lần nữa = Huỷ.
+    if (vgOrgBusy) {
+      vgOrgToken++;                                        // vô hiệu kết quả đang chờ
+      if (vgOrgAbort) { try { vgOrgAbort.abort(); } catch(e){} }
+      vgOrgSetIdle();
+      return;
+    }
     var ta = els.script;
     if (!ta) return;
     var lines = String(ta.value || '').split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
-    if (!lines.length) { piSetBtn(vgOrgBtn, 'wand_magic_sparkles', 'Organize', null, 13); return; }
+    if (!lines.length) { vgOrgSetIdle(); return; }
     var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider:'anthropic', model:null, apiKey:'' };
-    vgOrgBtn.disabled = true; piSetBtn(vgOrgBtn, 'rotate_right', 'Organizing…', null, 13);
+    var myToken = ++vgOrgToken;
+    vgOrgBusy = true;
+    vgOrgAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    vgOrgBtn.classList.add('is-cancel');
+    piSetBtn(vgOrgBtn, 'xmark', 'Huỷ', '#fca5a5', 13);
     try {
       var resp = await fetch(BRIDGE_URL + '/superautocut/normalize-script', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lines: lines, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey, mode: 'paragraph' }),
+        signal: vgOrgAbort ? vgOrgAbort.signal : undefined,
       });
+      if (myToken !== vgOrgToken) return;                  // đã huỷ/superseded khi đang fetch
       var d = await resp.json();
+      if (myToken !== vgOrgToken) return;
       if (d.ok && Array.isArray(d.lines) && d.lines.length) {
         ta.value = d.lines.join('\n');
         if (typeof updateCharCount === 'function') updateCharCount();
@@ -6543,10 +6598,10 @@ async function ppMoveToVOBin(item, proj) {
         alert('Organize lỗi: ' + (d.error || 'không rõ'));
       }
     } catch(e) {
+      if (myToken !== vgOrgToken || (e && e.name === 'AbortError')) return; // huỷ → im lặng
       alert('Organize lỗi: ' + e.message);
     } finally {
-      vgOrgBtn.disabled = false;
-      setTimeout(function(){ piSetBtn(vgOrgBtn, 'wand_magic_sparkles', 'Organize', null, 13); }, 1500);
+      if (myToken === vgOrgToken) vgOrgSetIdle();
     }
   });
 

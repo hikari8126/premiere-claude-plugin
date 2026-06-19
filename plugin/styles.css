@@ -2266,6 +2266,8 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 .vg-organizeBtn:hover { background: var(--accent-a30); color: #fff; }
 .vg-organizeBtn:disabled { opacity: 0.6; cursor: default; }
+.vg-organizeBtn.is-cancel { background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.55); color: #fca5a5; }
+.vg-organizeBtn.is-cancel:hover { background: rgba(239,68,68,0.28); color: #fff; }
 
 /* ── Generate bar ── */
 .vg-genBar {
