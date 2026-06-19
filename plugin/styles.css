@@ -852,6 +852,7 @@ body {
   font-family: ui-monospace, monospace;
 }
 .vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+#vgSaveChangeFolder { flex: 0 0 auto; width: auto; padding: 0 8px; gap: 4px; font-size: 11px; white-space: nowrap; }
 
 /* ── SAC bind-source modal (2 columns: 📁 Folder | 🎬 Source) ── */
 .sac-bind-modal {
