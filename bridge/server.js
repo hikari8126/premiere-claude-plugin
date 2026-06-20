@@ -2363,7 +2363,7 @@ ${rawScript}`;
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.7.2';  // normalize-script: splitByEmotionTags ép mỗi thẻ [emotion] ra 1 dòng riêng (post-process, không phụ thuộc model) cho cả 2 mode paragraph + per-sentence
+const BRIDGE_VERSION = '1.7.3';  // normalize-script: không thêm chủ ngữ vào câu viết không chủ ngữ có chủ đích (fix Gemini over-correction)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

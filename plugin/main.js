@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.3';  // Organize model: chỉ Gemini 3.1 Flash Lite (default khi có key) + Sonnet 4.6 (backup); cancel Organize ở Voice Gen; guard NaN chống crash AutoCut. On top of v4.8.2
+var PLUGIN_VERSION = 'v4.8.4';  // fix UI nút Đổi… bị cắt; normalize-script không thêm chủ ngữ vào câu viết không chủ ngữ có chủ đích (Gemini). On top of v4.8.3
 
 // ── State ──────────────────────────────────────────────────────────────────
 
