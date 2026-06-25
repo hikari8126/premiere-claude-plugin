@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.4';  // fix UI nút Đổi… bị cắt; normalize-script không thêm chủ ngữ vào câu viết không chủ ngữ có chủ đích (Gemini). On top of v4.8.3
+var PLUGIN_VERSION = 'v4.8.5';  // Autocut: hiện đường dẫn …/folder/clip khi source match + nút "Về block" sau success; Voice Gen: redesign Create Voice (2 thẻ Clone/Design + Clone 3 bước progressive). On top of v4.8.4
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2641,6 +2641,33 @@ async function ppMoveToVOBin(item, proj) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // Given a matched ProjectItem, return a short "…/folder/clipName" label showing
+  // WHERE in the bin the source actually matched (so the user can confirm it's the
+  // right clip). Looks the item up in the last bin scan; falls back to the bare
+  // clip name when it sits at the project root.
+  function sacMatchedPathLabel(item) {
+    if (!item) return '';
+    var items = sacBinItems || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].item === item) {
+        var rec = items[i];
+        return rec.parent ? ('…/' + rec.parent + '/' + rec.name) : rec.name;
+      }
+    }
+    return '';
+  }
+  // Set a found-source row's inline message to show which bin clip it matched.
+  function sacSetMatchMsg(msgEl, item) {
+    if (!msgEl) return;
+    var label = sacMatchedPathLabel(item);
+    if (label) {
+      msgEl.innerHTML = sacFolderIco() + '<span class="sac-srcMatchPath">' + sacEsc(label) + '</span>';
+      msgEl.className = 'sac-srcMsg is-match';
+    } else {
+      msgEl.textContent = ''; msgEl.className = 'sac-srcMsg';
+    }
+  }
+
   var rowSeq = 0;
   var parsedBlocks = [];
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
@@ -3382,7 +3409,7 @@ async function ppMoveToVOBin(item, proj) {
           statusEl.className = 'sac-srcStatus sac-srcOk';
           statusEl.textContent = '✓ Match';
           if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can be re-bound (e.g. reuse a clip that already has effects)
-          if (msgEl) { msgEl.textContent = ''; msgEl.className = 'sac-srcMsg'; }
+          sacSetMatchMsg(msgEl, sacSourceMap[name]); // show …/folder/clip it matched
           if (existingSkip) existingSkip.parentNode.removeChild(existingSkip);
         } else {  // missing ✗
           el.dataset.srcBaseKind = 'missing';
@@ -3458,7 +3485,7 @@ async function ppMoveToVOBin(item, proj) {
       } else if (item) {
         statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
         if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can still be re-bound
-        if (uMsg) { uMsg.textContent = ''; uMsg.className = 'sac-srcMsg'; }
+        sacSetMatchMsg(uMsg, item); // show …/folder/clip it matched
       } else {
         statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
         if (hintBtn) hintBtn.style.display = '';
@@ -3674,7 +3701,10 @@ async function ppMoveToVOBin(item, proj) {
       window.sacSourceMap = sacSourceMap;
       srcEl.dataset.srcBaseKind = c.item ? 'found' : 'missing'; // bound to a specific clip
       var bMsg = srcEl.querySelector('.sac-srcMsg');
-      if (bMsg) { bMsg.textContent = c.item ? '' : '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg' + (c.item ? '' : ' is-err'); }
+      if (bMsg) {
+        if (c.item) sacSetMatchMsg(bMsg, c.item); // show …/folder/clip it matched
+        else { bMsg.textContent = '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg is-err'; }
+      }
       var statusEl = srcEl.querySelector('.sac-srcStatus');
       if (statusEl) {
         if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; }
@@ -4619,11 +4649,13 @@ async function ppMoveToVOBin(item, proj) {
   if (sacBackToScriptBtn) sacBackToScriptBtn.addEventListener('click', function() {
     $('sacSuccessPanel').style.display = 'none';
     $('sacPanelManual').style.display = 'flex';
-    // Re-open the script editor (it was collapsed at validate time).
-    $('sacTableWrap').style.display = '';
-    $('sacTableFooter').style.display = '';
-    $('sacScriptChevron').textContent = '▾';
-    $('sacBlockSection').style.flex = '';
+    // Return to the BLOCK view, not the script editor: keep the script table
+    // collapsed (as it was at validate time) and let the block list fill the panel.
+    $('sacTableWrap').style.display = 'none';
+    $('sacTableFooter').style.display = 'none';
+    $('sacScriptChevron').textContent = '▸';
+    $('sacBlockSection').style.display = 'flex';
+    $('sacBlockSection').style.flex = '1 1 0';
   });
 
   var sacNewAutocutBtn = $('sacNewAutocut');
@@ -6667,7 +6699,8 @@ async function ppMoveToVOBin(item, proj) {
 
   // ── Voice Create (Clone + Design) ────────────────────────────────────────
   (function() {
-    var vcType           = document.getElementById('vcType');
+    var vcCloneCard      = document.getElementById('vcCloneCard');
+    var vcDesignCard     = document.getElementById('vcDesignCard');
     var vcCloneSection   = document.getElementById('vcCloneSection');
     var vcDesignSection  = document.getElementById('vcDesignSection');
     var vcCloneName      = document.getElementById('vcCloneName');
@@ -6677,6 +6710,9 @@ async function ppMoveToVOBin(item, proj) {
     var vcCloneStatus    = document.getElementById('vcCloneStatus');
     var vcFromSeqSection = document.getElementById('vcFromSequenceSection');
     var vcFromFileSection= document.getElementById('vcFromFileSection');
+    var vcCloneStep2     = document.getElementById('vcCloneStep2');
+    var vcCloneStep3     = document.getElementById('vcCloneStep3');
+    var vcCloneBtn       = document.getElementById('vcCloneBtn');
     var vcClipInfo       = document.getElementById('vcClipInfo');
     var vcFileInfo       = document.getElementById('vcFileInfo');
     var vcGetClip        = document.getElementById('vcGetClip');
@@ -6708,14 +6744,29 @@ async function ppMoveToVOBin(item, proj) {
     var vcPreviewPosition  = 0;
     var vcPreviewTimer     = null;
 
-    // ── Method selector toggle ──
-    if (vcType) {
-      vcType.addEventListener('change', function() {
-        var m = vcType.value;
-        if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
-        if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
-      });
+    // ── Method picker — two choice cards (Clone / Design) ──
+    function vcSelectMethod(m) {
+      if (vcCloneCard)    vcCloneCard.classList.toggle('is-active', m === 'clone');
+      if (vcDesignCard)   vcDesignCard.classList.toggle('is-active', m === 'design');
+      if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
+      if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
     }
+    if (vcCloneCard)  vcCloneCard.addEventListener('click',  function() { vcSelectMethod('clone'); });
+    if (vcDesignCard) vcDesignCard.addEventListener('click', function() { vcSelectMethod('design'); });
+
+    // ── Clone step machine ──────────────────────────────────────────────────
+    // Step 2 (Clone button) appears once an audio sample exists; Step 3 (name +
+    // description) appears only after the user clicks "Clone this voice". Changing
+    // source or re-extracting clears the sample and collapses Steps 2 & 3.
+    function vcRefreshCloneSteps() {
+      var hasAudio = !!vcSelectedFilePath;
+      if (vcCloneStep2) vcCloneStep2.hidden = !hasAudio;
+      if (!hasAudio && vcCloneStep3) vcCloneStep3.hidden = true; // sample gone → re-collapse details
+    }
+    if (vcCloneBtn) vcCloneBtn.addEventListener('click', function() {
+      if (vcCloneStep3) vcCloneStep3.hidden = false;
+      if (vcCloneName) { try { vcCloneName.focus(); } catch(e) {} }
+    });
 
     // ── Audio source radio toggle ──
     document.querySelectorAll('input[name="vcSource"]').forEach(function(radio) {
@@ -6724,8 +6775,9 @@ async function ppMoveToVOBin(item, proj) {
         if (vcFromSeqSection)  vcFromSeqSection.hidden  = !fromSeq;
         if (vcFromFileSection) vcFromFileSection.hidden = fromSeq;
         vcSelectedFilePath = '';
-        if (vcClipInfo) vcClipInfo.textContent = 'No clip selected — select a clip in the timeline first';
-        if (vcFileInfo) vcFileInfo.textContent = 'No file selected';
+        if (vcClipInfo) vcClipInfo.textContent = 'Grabs every clip on audio track A1 and joins them into one voice sample.';
+        if (vcFileInfo) vcFileInfo.textContent = 'Pick an MP3/WAV/M4A file of the voice to clone.';
+        vcRefreshCloneSteps(); // switching source collapses Steps 2 & 3
       });
     });
 
@@ -6737,6 +6789,7 @@ async function ppMoveToVOBin(item, proj) {
         if (vcClipInfo) vcClipInfo.textContent = 'Reading A1 clips…';
         vcGetClip.disabled = true;
         vcSelectedFilePath = '';
+        vcRefreshCloneSteps(); // collapse Steps 2 & 3 while re-extracting
         try {
           if (!ppro) throw new Error('Premiere Pro API not available');
           var seq = await getActiveSequence();
@@ -6826,6 +6879,7 @@ async function ppMoveToVOBin(item, proj) {
           console.error('[vcGetClip]', e);
         } finally {
           vcGetClip.disabled = false;
+          vcRefreshCloneSteps(); // reveal Step 2 (Clone button) when a sample is ready
         }
       });
     }
@@ -6839,13 +6893,17 @@ async function ppMoveToVOBin(item, proj) {
           var file = await uxp.storage.localFileSystem.getFileForOpening({
             types: ['mp3','wav','m4a','aac','ogg','flac'],
           });
-          if (!file) return; // cancelled
+          if (!file) return; // cancelled — keep whatever state we had
           var fp = file.nativePath || file.path || '';
           vcSelectedFilePath = fp;
           var shortName = fp.split('/').pop();
-          if (vcFileInfo) vcFileInfo.textContent = shortName + '\n' + fp;
+          if (vcFileInfo) vcFileInfo.textContent = '✓ ' + shortName;
+          if (vcFileInfo) vcFileInfo.title = fp;
+          vcRefreshCloneSteps(); // reveal Step 2 (Clone button)
         } catch(e) {
+          vcSelectedFilePath = '';
           if (vcFileInfo) vcFileInfo.textContent = '✗ ' + e.message;
+          vcRefreshCloneSteps();
         }
       });
     }
@@ -6877,7 +6935,7 @@ async function ppMoveToVOBin(item, proj) {
           showVcStatus(vcCloneStatus, '✗ ' + e.message, false);
         } finally {
           vcCloneSubmit.disabled = false;
-          piSetBtn(vcCloneSubmit, 'microphone_lines', 'CLONE VOICE', '#ffffff', 14);
+          piSetBtn(vcCloneSubmit, 'check', 'CREATE VOICE', '#ffffff', 14);
         }
       });
     }

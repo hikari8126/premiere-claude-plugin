@@ -3,6 +3,20 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.5 — 2026-06-25
+
+### ✅ Thêm mới / Cải tiến
+- **Autocut — hiện đường dẫn source khi match**: mỗi source khớp clip trong bin nay hiện dòng nhỏ `📁 …/folder/clip` (folder chứa nó / tên clip) để xác nhận đúng clip. Áp dụng cho cả validate thường, bind tay (modal 📁) và unbind.
+- **Autocut — nút "Về block" sau khi cut xong**: đổi tên "Back to script" → "Về block"; bấm nay trả về **block view** (script editor vẫn thu gọn) thay vì bung lại bảng script.
+- **Voice Gen — redesign Create Voice**: bỏ dropdown Method, thay bằng **2 thẻ** Clone Voice / Design Voice (có mô tả). Luồng Clone chia **3 bước progressive**: ① chọn nguồn + Extract/Browse → ② có audio mới hiện nút "Clone this voice" → ③ bấm mới hiện Voice Name + Description + Create.
+
+### 🔧 Kỹ thuật / Approach
+- Matched path lookup: dò `sacBinItems` (flat scan có `.parent`/`.name`/`.item`) tìm record có `.item === matchedItem` → label `…/parent/name`; helper `sacMatchedPathLabel()` + `sacSetMatchMsg()` dùng chung cho 3 nhánh "found ✓".
+- Clone step machine: `vcRefreshCloneSteps()` reveal/collapse Step 2/3 theo `vcSelectedFilePath`; gọi sau extract/browse (finally) và reset khi đổi tab nguồn. Chỉ dùng attribute `hidden` (tránh `position:fixed`/`grid`/`new Audio()` theo ràng buộc UXP).
+- Method picker chuyển từ `<select>` sang 2 `div.vc-choiceCard role=button` + `classList.toggle('is-active')`; segmented tabs = radio ẩn (`display:none`) + `input:checked + span`.
+
+---
+
 ## v4.7.1 — 2026-06-16
 
 ### ✅ Thêm mới / Cải tiến
