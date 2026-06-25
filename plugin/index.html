@@ -401,46 +401,69 @@
         <div class="vg-modeContent vc-panel" data-mode="create" hidden>
           <div class="vc-scroll">
 
-            <!-- Method selector -->
-            <div class="vc-field">
-              <label class="vc-label">Method</label>
-              <select id="vcType" class="vg-select">
-                <option value="" disabled selected>— Choose method —</option>
-                <option value="clone">&#127897; Clone Voice</option>
-                <option value="design">&#127912; Design Voice</option>
-              </select>
-            </div>
-
-            <!-- ── CLONE SECTION ── -->
-            <div id="vcCloneSection" hidden>
-              <div class="vc-field">
-                <label class="vc-label">Voice Name</label>
-                <input type="text" id="vcCloneName" class="vg-settingInput" placeholder="My Cloned Voice" />
-              </div>
-              <div class="vc-field">
-                <label class="vc-label">Audio Source</label>
-                <div class="vc-radioGroup">
-                  <label class="vc-radio"><input type="radio" name="vcSource" value="sequence" checked /> From Sequence</label>
-                  <label class="vc-radio"><input type="radio" name="vcSource" value="file" /> From File</label>
+            <!-- Method picker — two choice cards (replaces the old dropdown) -->
+            <div class="vc-methodCards">
+              <div id="vcCloneCard" class="vc-choiceCard" role="button">
+                <span class="vc-ccIcon" data-ic="microphone_lines" data-ic-size="18" data-ic-color="#a855f7"></span>
+                <div class="vc-ccText">
+                  <div class="vc-ccTitle">Clone Voice</div>
+                  <div class="vc-ccSub">Copy an existing voice from your audio</div>
                 </div>
               </div>
-              <div id="vcFromSequenceSection" class="vc-field">
-                <div class="vc-clipInfo" id="vcClipInfo">Click below to extract all clips from audio track A1</div>
-                <div id="vcGetClip" class="ac-secondaryButton" role="button" style="margin-top:5px;width:100%;"><span data-ic="play" data-ic-size="12"></span> Extract A1 Clips</div>
+              <div id="vcDesignCard" class="vc-choiceCard" role="button">
+                <span class="vc-ccIcon" data-ic="palette" data-ic-size="18" data-ic-color="#f59e0b"></span>
+                <div class="vc-ccText">
+                  <div class="vc-ccTitle">Design Voice</div>
+                  <div class="vc-ccSub">Generate a new voice from a description</div>
+                </div>
               </div>
-              <div id="vcFromFileSection" class="vc-field" hidden>
-                <div class="vc-clipInfo" id="vcFileInfo">No file selected</div>
-                <div id="vcBrowseFile" class="ac-secondaryButton" role="button" style="margin-top:5px;width:100%;"><span data-ic="folder_open" data-ic-size="12"></span> Browse File</div>
+            </div>
+
+            <!-- ── CLONE SECTION — 3-step guided flow ── -->
+            <div id="vcCloneSection" hidden>
+
+              <!-- Step 1 — choose source + extract -->
+              <div class="vc-step">
+                <div class="vc-stepHd"><span class="vc-stepNo">1</span> Choose audio source</div>
+                <div class="vc-segTabs">
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline A1</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="file" /><span>From File</span></label>
+                </div>
+                <div id="vcFromSequenceSection">
+                  <div id="vcGetClip" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Extract audio from Timeline A1</div>
+                  <div class="vc-clipInfo" id="vcClipInfo">Grabs every clip on audio track A1 and joins them into one voice sample.</div>
+                </div>
+                <div id="vcFromFileSection" hidden>
+                  <div id="vcBrowseFile" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13" data-ic-color="#ffffff"></span> Browse audio file</div>
+                  <div class="vc-clipInfo" id="vcFileInfo">Pick an MP3/WAV/M4A file of the voice to clone.</div>
+                </div>
               </div>
-              <div class="vc-field">
-                <label class="vc-label">Description <span class="vg-sm">optional</span></label>
-                <textarea id="vcCloneDesc" class="vg-settingInput" rows="2" style="resize:none;" placeholder="Describe the voice characteristics..."></textarea>
+
+              <!-- Step 2 — audio ready → clone (revealed after extract/browse) -->
+              <div id="vcCloneStep2" class="vc-step" hidden>
+                <div class="vc-stepHd"><span class="vc-stepNo">2</span> Clone this voice</div>
+                <div id="vcCloneBtn" class="vc-bigBtn vc-bigGo" role="button"><span data-ic="microphone_lines" data-ic-size="14" data-ic-color="#ffffff"></span> Clone this voice</div>
               </div>
-              <label class="vg-checkRow">
-                <input type="checkbox" id="vcDenoise" />
-                <span>Remove background noise</span>
-              </label>
-              <div id="vcCloneSubmit" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="microphone_lines" data-ic-size="14" data-ic-color="#ffffff"></span> CLONE VOICE</div>
+
+              <!-- Step 3 — details (revealed after clicking "Clone this voice") -->
+              <div id="vcCloneStep3" class="vc-step" hidden>
+                <div class="vc-stepHd"><span class="vc-stepNo">3</span> Voice details</div>
+                <div class="vc-field">
+                  <label class="vc-label">Voice Name</label>
+                  <input type="text" id="vcCloneName" class="vg-settingInput" placeholder="My Cloned Voice" />
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Description <span class="vg-sm">optional</span></label>
+                  <textarea id="vcCloneDesc" class="vg-settingInput" rows="2" style="resize:none;" placeholder="Describe the voice characteristics..."></textarea>
+                </div>
+                <label class="vg-checkRow">
+                  <input type="checkbox" id="vcDenoise" />
+                  <span>Remove background noise</span>
+                </label>
+                <div id="vcCloneSubmit" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="check" data-ic-size="14" data-ic-color="#ffffff"></span> CREATE VOICE</div>
+                <div class="vc-clipInfo" style="text-align:center;margin-top:6px;">When done, the voice appears in the Gen Voice list automatically.</div>
+              </div>
+
               <div id="vcCloneStatus" class="vc-status" hidden></div>
             </div>
 
@@ -775,7 +798,7 @@
       <div class="sac-successDivider"></div>
       <div class="sac-successActions">
         <div id="sacNewAutocut"   class="sac-successPrimaryBtn" role="button"><span data-ic="rotate_right" data-ic-size="13"></span> New AutoCut</div>
-        <div id="sacBackToScript" class="sac-successSecondaryBtn" role="button"><span data-ic="arrow_left" data-ic-size="13" data-ic-color="#94a3b8"></span> Back to script</div>
+        <div id="sacBackToScript" class="sac-successSecondaryBtn" role="button"><span data-ic="arrow_left" data-ic-size="13" data-ic-color="#94a3b8"></span> Về block</div>
       </div>
     </div>
 

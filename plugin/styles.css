@@ -2722,6 +2722,47 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vc-status.is-error { background: rgba(239,68,68,0.15); color: #fca5a5; }
 .vc-status.is-ok    { background: rgba(34,197,94,0.12);  color: #86efac; }
 
+/* ── Create Voice redesign: method cards + step flow ───────────────────── */
+.vc-methodCards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.vc-choiceCard {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 11px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface);
+}
+.vc-choiceCard:hover { border-color: var(--accent-a40); }
+.vc-choiceCard.is-active { border-color: var(--accent); background: var(--accent-a10); }
+.vc-ccIcon { flex: 0 0 auto; display: flex; }
+.vc-ccText { min-width: 0; }
+.vc-ccTitle { font-size: 12px; font-weight: 700; color: var(--text); }
+.vc-ccSub   { font-size: 10px; color: var(--text-dim); margin-top: 2px; line-height: 1.35; }
+
+/* Numbered steps */
+.vc-step { margin-bottom: 14px; }
+.vc-stepHd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  font-size: 11px; font-weight: 600; color: var(--text); }
+.vc-stepNo { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-fg);
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+/* Segmented source tabs (radios styled as a 2-up toggle) */
+.vc-segTabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.vc-seg { flex: 1; cursor: pointer; }
+.vc-seg input { display: none; }
+.vc-seg span { display: block; text-align: center; padding: 7px 6px;
+  font-size: 11px; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.vc-seg input:checked + span { border-color: var(--accent); background: var(--accent-a12);
+  color: var(--text); font-weight: 600; }
+
+/* Big full-width action buttons */
+.vc-bigBtn { display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 11px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 700; margin-top: 4px; }
+.vc-bigPrimary { background: var(--accent); color: var(--accent-fg); }
+.vc-bigPrimary:hover { background: var(--accent-dark); }
+.vc-bigGo { background: var(--success); color: #fff; }
+.vc-bigGo:hover { filter: brightness(1.08); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SUPER AUTO CUT (SAC) — Phase 1
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -3042,6 +3083,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-srcMsg.is-err  { color: #f87171; }
 .sac-srcMsg.is-warn { color: #f59e0b; }
 .sac-srcMsg.is-skip { color: #fbbf24; font-weight: 600; }
+/* Matched source — show which bin clip (…/folder/clip) the source bound to. */
+.sac-srcMsg.is-match { color: rgba(134,239,172,0.7); display: flex; align-items: center; gap: 3px; }
+.sac-srcMatchPath { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Skipped source row — clearly greyed out with a dashed "gap" look + left bar. */
 .sac-blockSrc.is-skipped {
   opacity: 0.7;

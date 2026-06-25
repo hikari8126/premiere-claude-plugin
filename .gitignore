@@ -32,3 +32,4 @@ bridge/bridge.log
 # Editor
 .vscode/
 *.swp
+.superpowers/
