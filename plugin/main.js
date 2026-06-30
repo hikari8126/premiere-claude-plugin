@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.6';  // Autocut bind: nhớ bind theo project (qua task); bind 1 source → mọi block cùng tên tự nhận; popup sort A→Z/1→99 (khớp nhất trên đầu); fix tên dài khớp 100% vẫn "không thấy" (NFC normalize NFD↔NFC). On top of v4.8.5
+var PLUGIN_VERSION = 'v4.8.7';  // Autocut timestamp: nhận diện chữ "và"/"and" (+ & + ,) giữa 2 timecode → tách 2 timestamp riêng; badge time hiển thị timecode chuẩn ("giây 18-19" → "0:18-0:19", chỉ đổi hiển thị, cut giữ nguyên). On top of v4.8.6
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2829,8 +2829,13 @@ async function ppMoveToVOBin(item, proj) {
   //   B) time cell has \n  → split time values into rows (first keeps text+src)
   //   C) time cell has space-separated timestamps like "0:04 0:07 0:13"
   var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
+  // Connector between two timestamps in ONE cell: the word "và"/"and" (needs
+  // surrounding spaces so it isn't matched inside a name) or the symbols & + , .
+  // NFC so a decomposed "và" (v + a + combining grave) still matches.
+  var TIME_CONNECTOR_RE = /\s+(?:và|and)\s+|\s*[&+,]\s*/i;
   function splitTimes(t) {
     if (!t) return [t];
+    t = String(t).normalize('NFC');
     if (t.indexOf('\n') !== -1) {
       // Multi-line time cell: keep only lines that START with a digit (a real
       // timecode). Descriptive lines like "lặp liên tục với 3 màu" — even though
@@ -2839,7 +2844,9 @@ async function ppMoveToVOBin(item, proj) {
         .filter(Boolean).filter(function(s){ return /^\d/.test(s); });
       return tcLines.length ? tcLines : [t];
     }
-    var parts = t.trim().split(/\s+/);
+    // Split on the connector ("0:02-0:08 và 0:10-0:15") OR plain whitespace, so two
+    // timecodes joined by "và"/"and"/&/+/, become two separate timestamps.
+    var parts = t.trim().split(/\s+(?:và|and)\s+|\s*[&+,]\s*|\s+/i).filter(Boolean);
     if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
     return [t];
   }
@@ -3188,7 +3195,10 @@ async function ppMoveToVOBin(item, proj) {
     // Bare numbers are seconds; decimals use a DOT ("1.5"), so splitting on comma is
     // safe in this convention. Empty / no separator → a single entry.
     function srcEntries(name, time) {
-      var segs = String(time || '').split(/[&+,]/).map(function(s) { return s.trim(); }).filter(Boolean);
+      // Also split on the word "và"/"and" (with spaces) so one source with two
+      // timestamps ("0:02-0:08 và 0:10-0:15") becomes two clip entries.
+      var segs = String(time || '').normalize('NFC')
+        .split(/\s+(?:và|and)\s+|[&+,]/i).map(function(s) { return s.trim(); }).filter(Boolean);
       if (segs.length <= 1) return [{ name: name, time: time }];
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
@@ -3331,7 +3341,10 @@ async function ppMoveToVOBin(item, proj) {
         if (s.time) {
           var badge = document.createElement('span');
           badge.className = 'sac-blockTimeBadge';
-          badge.textContent = s.time;
+          // Show a clean timecode (e.g. "giây 18-19" → "0:18-0:19"); falls back to
+          // the raw text if it has no parseable time. Display only — s.time (the cut
+          // source) is untouched, so the actual cut is unchanged.
+          badge.textContent = sacFmtTimeBadge(s.time);
           el.appendChild(badge);
         }
         // 📁 folder hint button — lets user fix source name from block card
@@ -4830,6 +4843,39 @@ async function ppMoveToVOBin(item, proj) {
     var outSec = tokens.length > 1 ? toSec(tokens[1]) : null;
     if (outSec === null) outSec = inSec + 3; // single time → default 3s window
     return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
+  }
+
+  // Format a raw cutsheet time string into a clean timecode for DISPLAY only.
+  // "giây số 5" → "0:05", "giây 18-19" → "0:18-0:19", "0:02-0:08" → "0:02-0:08".
+  // Single point shows just that point (no +3s default); unparseable → raw text back.
+  function sacFmtTimeBadge(raw) {
+    if (raw == null) return '';
+    var s = String(raw).normalize('NFC').trim();
+    if (!s) return '';
+    var tokens = s.match(/\d+(?::\d+){0,2}(?:\.\d+)?/g);
+    if (!tokens || !tokens.length) return s; // no time inside → keep original text
+    function toSec(t) {
+      var seg = t.split(':').map(function(x) { return parseFloat(x); });
+      if (seg.some(function(n) { return isNaN(n); })) return null;
+      if (seg.length === 1) return seg[0];
+      if (seg.length === 2) return seg[0] * 60 + seg[1];
+      return seg[0] * 3600 + seg[1] * 60 + seg[2];
+    }
+    function fmt(sec) {
+      if (sec == null) return '';
+      var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), ss = sec % 60;
+      var whole = Math.floor(ss);
+      var frac  = Math.round((ss - whole) * 1000) / 1000;
+      var secPart = (whole < 10 ? '0' : '') + whole + (frac ? ('.' + String(frac).slice(2)) : '');
+      return h > 0 ? (h + ':' + (m < 10 ? '0' : '') + m + ':' + secPart) : (m + ':' + secPart);
+    }
+    var inSec = toSec(tokens[0]);
+    if (inSec == null) return s;
+    if (tokens.length > 1) {
+      var outSec = toSec(tokens[1]);
+      if (outSec != null) return fmt(inSec) + '-' + fmt(outSec);
+    }
+    return fmt(inSec);
   }
 
   // TickTime via ppro.TickTime.createWithSeconds (official UXP API).
