@@ -3,6 +3,19 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.7 — 2026-06-30
+
+### ✅ Thêm mới / Cải tiến
+- **Autocut timestamp — nhận diện chữ "và"**: một ô time như `0:02-0:08 và 0:10-0:15` nay được hiểu là **2 timestamp khác nhau** (tách thành 2 cut riêng). Hỗ trợ cả `and`, và các ký hiệu `&` `+` `,` như trước.
+- **Badge time hiển thị timecode chuẩn**: ô time thô như `giây số 5` / `giây 18-19` nay hiện gọn thành `0:05` / `0:18-0:19`. Chỉ đổi **hiển thị** — `s.time` (nguồn cut) giữ nguyên nên cut chạy y hệt.
+
+### 🔧 Kỹ thuật / Approach
+- Thêm split trên connector `\s+(?:và|and)\s+` (cần khoảng trắng 2 bên để không khớp nhầm trong tên) ở cả `splitTimes()` (expandRows — tách ô time thành nhiều dòng) lẫn `srcEntries()` (1 source nhiều range → nhiều clip entry).
+- `.normalize('NFC')` trước khi split để "và" dạng decomposed (v + a + dấu huyền tổ hợp) vẫn khớp.
+- `sacFmtTimeBadge()`: tái dùng cùng regex token (`\d+(?::\d+){0,2}(?:\.\d+)?`) của `parseSourceTime`, format `M:SS` / `H:MM:SS` (1 điểm → không cộng +3s mặc định); text không có time → trả nguyên gốc. Gọi tại render badge trong `renderBlocks`, không sửa dữ liệu cut.
+
+---
+
 ## v4.8.6 — 2026-06-30
 
 ### ✅ Thêm mới / Cải tiến
