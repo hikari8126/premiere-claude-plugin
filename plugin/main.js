@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.5';  // Autocut: hiện đường dẫn …/folder/clip khi source match + nút "Về block" sau success; Voice Gen: redesign Create Voice (2 thẻ Clone/Design + Clone 3 bước progressive). On top of v4.8.4
+var PLUGIN_VERSION = 'v4.8.6';  // Autocut bind: nhớ bind theo project (qua task); bind 1 source → mọi block cùng tên tự nhận; popup sort A→Z/1→99 (khớp nhất trên đầu); fix tên dài khớp 100% vẫn "không thấy" (NFC normalize NFD↔NFC). On top of v4.8.5
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2412,7 +2412,11 @@ async function sacCollectBinItems(rootItem) {
 // This makes "K2 v4 - op1.mp4" == "K2 v4 op1" and "Frame v4 1-4x5" == "Frame v4 1 4x5",
 // fixing matches that failed before because hyphens/dashes were kept literally.
 function sacNorm(s) {
+  // NFC FIRST: macOS stores filenames decomposed (NFD) while pasted cutsheet text is
+  // usually composed (NFC). Without this, "diễn tả" from the bin ≠ "diễn tả" from the
+  // sheet byte-for-byte, so even a 100%-identical name fails to match. Unify both forms.
   return String(s || '')
+    .normalize('NFC')
     .toLowerCase()
     .replace(/\.[a-z0-9]{2,4}$/, '')      // strip trailing extension (.mp4/.mov/.png/...)
     .replace(/[-_.()\[\]/\\]+/g, ' ')     // separators → space
@@ -2436,6 +2440,20 @@ function sacLev(a, b) {
     for (j = 0; j <= n; j++) prev[j] = cur[j];
   }
   return prev[n];
+}
+
+// Natural comparator: "Clip 2" < "Clip 10" (numeric chunks compared as numbers),
+// case/diacritic-insensitive enough via sacNorm. Drives A→Z, 1→99 ordering.
+function sacNatCmp(a, b) {
+  var ax = sacNorm(a).match(/(\d+|\D+)/g) || [];
+  var bx = sacNorm(b).match(/(\d+|\D+)/g) || [];
+  for (var i = 0; i < Math.min(ax.length, bx.length); i++) {
+    if (ax[i] === bx[i]) continue;
+    var an = /^\d/.test(ax[i]), bn = /^\d/.test(bx[i]);
+    if (an && bn) { var d = parseInt(ax[i], 10) - parseInt(bx[i], 10); if (d) return d; }
+    else return ax[i] < bx[i] ? -1 : 1;
+  }
+  return ax.length - bx.length;
 }
 
 // Match a target name against collected items. Folders are NEVER matched (a folder
@@ -2673,6 +2691,45 @@ async function ppMoveToVOBin(item, proj) {
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
   var sacBindOverrides = {}; // sacNorm(originalCutsheetName) → bound display name (survives re-parse)
+
+  // ── Persistent binds (per open project) ───────────────────────────────────
+  // Binds are remembered in localStorage keyed by project name, so cutting task 2
+  // in the same project re-uses task 1's binds instead of re-binding every source.
+  var SAC_BINDS_LS = 'sac_binds_v1'; // { projKey: { normOrigName: label } }
+  var sacProjKey   = '';             // current project key (set on each validate)
+  function sacLoadBindStore() {
+    try { return JSON.parse(localStorage.getItem(SAC_BINDS_LS) || '{}') || {}; }
+    catch(e) { return {}; }
+  }
+  function sacSaveBindStore(store) {
+    try { localStorage.setItem(SAC_BINDS_LS, JSON.stringify(store)); } catch(e) {}
+  }
+  async function sacCurrentProjectKey() {
+    try {
+      var p = await getActiveProject();
+      var nm = p && p.name;
+      if (nm && typeof nm.then === 'function') nm = await nm;
+      return String(nm || (p && p.guid) || '');
+    } catch(e) { return ''; }
+  }
+  // Merge the open project's saved binds into the live override map.
+  function sacLoadProjectBinds(projKey) {
+    sacProjKey = projKey || '';
+    if (!sacProjKey) return;
+    var saved = sacLoadBindStore()[sacProjKey];
+    if (saved) for (var k in saved) if (saved.hasOwnProperty(k)) sacBindOverrides[k] = saved[k];
+  }
+  function sacPersistBind(normKey, label) {
+    if (!sacProjKey) return;
+    var store = sacLoadBindStore();
+    (store[sacProjKey] = store[sacProjKey] || {})[normKey] = label;
+    sacSaveBindStore(store);
+  }
+  function sacForgetBind(normKey) {
+    if (!sacProjKey) return;
+    var store = sacLoadBindStore();
+    if (store[sacProjKey]) { delete store[sacProjKey][normKey]; sacSaveBindStore(store); }
+  }
   var sacVoicePath  = null; // native path of the chosen/generated voice file
   var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
 
@@ -3448,11 +3505,38 @@ async function ppMoveToVOBin(item, proj) {
   // Clicking a candidate: updates parsedBlocks source name + re-validates that source.
   // Revert an accidental bind: drop the override, restore the original sheet name,
   // re-match against the bin, and refresh the row's status / buttons.
+  // Apply the "bound to a chosen clip" visual state to one source row element.
+  // Shared by bindTo (clicked row + same-name siblings) so propagation looks uniform.
+  function sacApplyBoundVisual(srcEl, label, item) {
+    srcEl.dataset.srcName = label;
+    var nameSpan = srcEl.querySelector('.sac-srcName');
+    if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, label); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+    var skipBtn = srcEl.querySelector('.sac-skipBtn');
+    if (skipBtn) skipBtn.parentNode.removeChild(skipBtn);
+    srcEl.dataset.srcBaseKind = item ? 'found' : 'missing';
+    var msg = srcEl.querySelector('.sac-srcMsg');
+    if (msg) {
+      if (item) sacSetMatchMsg(msg, item);
+      else { msg.textContent = '✗ vẫn không thấy'; msg.className = 'sac-srcMsg is-err'; }
+    }
+    var statusEl = srcEl.querySelector('.sac-srcStatus');
+    if (statusEl) {
+      if (item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; }
+      else { statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; sacAddSkipButton(srcEl); }
+    }
+    var hintBtn = srcEl.querySelector('.sac-blockHintBtn');
+    if (hintBtn) hintBtn.style.display = ''; // keep 📁 so a wrong bind can be re-bound
+    var ub = srcEl.querySelector('.sac-blockUnbindBtn');
+    if (ub) ub.style.display = ''; // bound → allow undo (↩)
+  }
+
   function sacUnbindSource(srcEl, bIdx, sIdx) {
     var src = parsedBlocks[bIdx] && parsedBlocks[bIdx].sources[sIdx];
     if (!src) return;
     var orig = src._orig || src.name;
-    delete sacBindOverrides[sacNorm(orig)];
+    var bindKey = sacNorm(orig);
+    delete sacBindOverrides[bindKey];
+    sacForgetBind(bindKey); // drop the persisted project bind too
     src.name = orig;
     src.skipped = false;
 
@@ -3464,37 +3548,54 @@ async function ppMoveToVOBin(item, proj) {
     sacSourceMap[orig] = item || null;
     window.sacSourceMap = sacSourceMap;
 
-    srcEl.dataset.srcName = orig;
-    var nameSpan = srcEl.querySelector('.sac-srcName');
-    if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, orig); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+    // Unbind propagates to every occurrence of the same source (mirror of bindTo).
+    parsedBlocks.forEach(function(b) {
+      (b.sources || []).forEach(function(s) {
+        if (sacNorm(s._orig || s.name) === bindKey) { s.name = orig; s.skipped = false; }
+      });
+    });
+    var _siblings = [];
+    document.querySelectorAll('#sacBlockList .sac-blockSrc').forEach(function(rEl) {
+      if (rEl === srcEl) return;
+      var sm = parsedBlocks[+rEl.dataset.blockIdx] && parsedBlocks[+rEl.dataset.blockIdx].sources[+rEl.dataset.srcIdx];
+      if (sm && sacNorm(sm._orig || sm.name) === bindKey) _siblings.push(rEl);
+    });
 
-    var statusEl = srcEl.querySelector('.sac-srcStatus');
-    var hintBtn  = srcEl.querySelector('.sac-blockHintBtn');
-    var oldSkip  = srcEl.querySelector('.sac-skipBtn');
-    var uMsg     = srcEl.querySelector('.sac-srcMsg');
-    if (oldSkip) oldSkip.parentNode.removeChild(oldSkip);
-    srcEl.dataset.srcBaseKind = isAmbiguous ? 'ambiguous' : (item ? 'found' : 'missing');
-    if (isAmbiguous) srcEl.dataset.srcBaseCount = String(count);
-    if (statusEl) {
-      if (isAmbiguous) {
-        statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
-        statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
-        if (hintBtn) hintBtn.style.display = '';
-        if (uMsg) { uMsg.innerHTML = '⚠ trùng ' + sacEsc(count) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
-        sacAddSkipButton(srcEl);
-      } else if (item) {
-        statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
-        if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can still be re-bound
-        sacSetMatchMsg(uMsg, item); // show …/folder/clip it matched
-      } else {
-        statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
-        if (hintBtn) hintBtn.style.display = '';
-        if (uMsg) { uMsg.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
-        sacAddSkipButton(srcEl);
+    // Restore one row to its pre-bind status (applied to clicked row + siblings).
+    function restoreRow(rEl) {
+      rEl.dataset.srcName = orig;
+      var nameSpan = rEl.querySelector('.sac-srcName');
+      if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, orig); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
+      var statusEl = rEl.querySelector('.sac-srcStatus');
+      var hintBtn  = rEl.querySelector('.sac-blockHintBtn');
+      var oldSkip  = rEl.querySelector('.sac-skipBtn');
+      var uMsg     = rEl.querySelector('.sac-srcMsg');
+      if (oldSkip) oldSkip.parentNode.removeChild(oldSkip);
+      rEl.dataset.srcBaseKind = isAmbiguous ? 'ambiguous' : (item ? 'found' : 'missing');
+      if (isAmbiguous) rEl.dataset.srcBaseCount = String(count);
+      if (statusEl) {
+        if (isAmbiguous) {
+          statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
+          statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
+          if (hintBtn) hintBtn.style.display = '';
+          if (uMsg) { uMsg.innerHTML = '⚠ trùng ' + sacEsc(count) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
+          sacAddSkipButton(rEl);
+        } else if (item) {
+          statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
+          if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can still be re-bound
+          sacSetMatchMsg(uMsg, item); // show …/folder/clip it matched
+        } else {
+          statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
+          if (hintBtn) hintBtn.style.display = '';
+          if (uMsg) { uMsg.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
+          sacAddSkipButton(rEl);
+        }
       }
+      var ub = rEl.querySelector('.sac-blockUnbindBtn');
+      if (ub) ub.style.display = 'none';
     }
-    var ub = srcEl.querySelector('.sac-blockUnbindBtn');
-    if (ub) ub.style.display = 'none';
+    restoreRow(srcEl);
+    _siblings.forEach(restoreRow);
     // No longer fully resolved → require a re-validate before Run.
     if (isAmbiguous || !item) { sacValidatePassed = false; if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility(); }
     sacCheckSkipGate();
@@ -3650,6 +3751,13 @@ async function ppMoveToVOBin(item, proj) {
         return true;
       });
       if (!base.length) { var n = document.createElement('div'); n.className = 'sac-bind-none'; n.textContent = '— không có —'; sourcesEl.appendChild(n); return; }
+      // Keep the single best-scoring match on top (pool is score-sorted → base[0]),
+      // then order the remainder naturally (A→Z, 1→99) for a stable, scannable list.
+      if (base.length > 1) {
+        base = [base[0]].concat(base.slice(1).sort(function(a, b) {
+          return sacNatCmp(dispName(a.clip), dispName(b.clip));
+        }));
+      }
       // When not filtering/picking, show only the closest TOP_N so the list isn't overwhelming.
       var showAll = !!q || selectedFolder !== '__all__' || typeFilter !== 'all';
       var rows = showAll ? base : base.slice(0, TOP_N);
@@ -3687,33 +3795,25 @@ async function ppMoveToVOBin(item, proj) {
       var clipDisp = dispName(c.clip);
       var label = c.folder ? (c.folder + ' ' + clipDisp) : clipDisp;
       var theSrc = parsedBlocks[bIdx].sources[sIdx];
-      // Record override keyed by the ORIGINAL sheet name so it survives re-parse.
-      sacBindOverrides[sacNorm(theSrc._orig || theSrc.name)] = label;
-      theSrc.name = label;
-      theSrc.skipped = false;
-      srcEl.dataset.srcName = label;
-      var nameSpan = srcEl.querySelector('.sac-srcName');
-      if (nameSpan) { sacLabelIcon(nameSpan, 'video', '#94a3b8', 12, label); nameSpan.style.opacity = ''; nameSpan.style.textDecoration = ''; }
-      var skipBtn2 = srcEl.querySelector('.sac-skipBtn');
-      if (skipBtn2) skipBtn2.parentNode.removeChild(skipBtn2);
+      // Record override keyed by the ORIGINAL sheet name so it survives re-parse,
+      // and persist it for the open project so future tasks re-use this bind.
+      var bindKey = sacNorm(theSrc._orig || theSrc.name);
+      sacBindOverrides[bindKey] = label;
+      sacPersistBind(bindKey, label);
       // Bind directly to the chosen clip — no name re-matching needed (robust).
       sacSourceMap[label] = c.item || null;
       window.sacSourceMap = sacSourceMap;
-      srcEl.dataset.srcBaseKind = c.item ? 'found' : 'missing'; // bound to a specific clip
-      var bMsg = srcEl.querySelector('.sac-srcMsg');
-      if (bMsg) {
-        if (c.item) sacSetMatchMsg(bMsg, c.item); // show …/folder/clip it matched
-        else { bMsg.textContent = '✗ vẫn không thấy'; bMsg.className = 'sac-srcMsg is-err'; }
-      }
-      var statusEl = srcEl.querySelector('.sac-srcStatus');
-      if (statusEl) {
-        if (c.item) { statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; }
-        else { statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; sacAddSkipButton(srcEl); }
-      }
-      var hintBtn2 = srcEl.querySelector('.sac-blockHintBtn');
-      if (hintBtn2) hintBtn2.style.display = ''; // keep 📁 visible so a wrong bind can be re-bound
-      var ub = srcEl.querySelector('.sac-blockUnbindBtn');
-      if (ub) ub.style.display = ''; // now bound → allow undo (↩)
+      // Propagate to EVERY source sharing this original name: bind one of the same
+      // source → all its other occurrences (different times/blocks) auto-resolve too.
+      parsedBlocks.forEach(function(b) {
+        (b.sources || []).forEach(function(s) {
+          if (sacNorm(s._orig || s.name) === bindKey) { s.name = label; s.skipped = false; }
+        });
+      });
+      document.querySelectorAll('#sacBlockList .sac-blockSrc').forEach(function(rEl) {
+        var sm = parsedBlocks[+rEl.dataset.blockIdx] && parsedBlocks[+rEl.dataset.blockIdx].sources[+rEl.dataset.srcIdx];
+        if (sm && sacNorm(sm._orig || sm.name) === bindKey) sacApplyBoundVisual(rEl, label, c.item);
+      });
       sacCheckSkipGate();
       closeModal();
     }
@@ -4348,6 +4448,9 @@ async function ppMoveToVOBin(item, proj) {
     opts = opts || {};
     var btn = $('sacPreviewBtn');
     var status = $('sacStatus');
+    // Pull this project's remembered binds BEFORE parsing, so saved overrides apply
+    // to the freshly parsed sources (no need to re-bind across tasks).
+    sacLoadProjectBinds(await sacCurrentProjectKey());
     var blocks = parseBlocks();
     if (blocks.length === 0) {
       status.textContent = 'Chưa có dữ liệu. Điền ít nhất 1 dòng có cả Script và Source.';

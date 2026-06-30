@@ -3,6 +3,23 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.6 — 2026-06-30
+
+### ✅ Thêm mới / Cải tiến
+- **Autocut bind — nhớ bind theo project**: bind source nay được lưu `localStorage` theo **tên project đang mở**. Cắt xong task 1, sang task 2 (cutsheet mới) cùng project → các source đã bind tự nhận lại, không phải bind lại từ đầu.
+- **Autocut bind — 1 source nhiều lần tự lan**: cùng một source dùng ở nhiều block/time, chỉ cần bind **1 lần** → mọi block còn lại cùng tên gốc tự cập nhật (cả khi bind lẫn unbind). Trước đây phải bind từng dòng.
+- **Popup bind — sắp xếp ổn định**: danh sách source nay xếp **natural A→Z, 1→99** ("Clip 2" trước "Clip 10"), giữ clip khớp nhất trên đầu.
+
+### 🐛 Bugs đã fix
+- **Tên dài khớp 100% vẫn "không thấy trong bin"** — Nguyên nhân: macOS lưu tên file **NFD** (decomposed) còn text cutsheet paste là **NFC** (composed) → `"43. Entry diễn tả mesh"` từ bin ≠ từ sheet ở mức byte dù nhìn giống hệt. Cách fix: thêm `.normalize('NFC')` ngay đầu `sacNorm()` để thống nhất 2 dạng Unicode trước mọi so khớp.
+
+### 🔧 Kỹ thuật / Approach
+- Binds persist: `SAC_BINDS_LS = 'sac_binds_v1'` → `{ projKey: { normOrigName: label } }`; `sacLoadProjectBinds()` merge vào `sacBindOverrides` đầu `sacValidateAll` (sau khi lấy `sacCurrentProjectKey()` từ `getActiveProject().name`).
+- Propagate: `bindTo`/`sacUnbindSource` lặp `parsedBlocks` theo `sacNorm(_orig)` rồi cập nhật mọi `.sac-blockSrc` row khớp; tách helper `sacApplyBoundVisual()` (bind) + `restoreRow()` (unbind) để DOM mutation đồng nhất.
+- Sort: `sacNatCmp()` so khớp từng chunk số/chữ; áp trong `renderSources` sau khi giữ `base[0]` (điểm relevance cao nhất) lên đầu.
+
+---
+
 ## v4.8.5 — 2026-06-25
 
 ### ✅ Thêm mới / Cải tiến
