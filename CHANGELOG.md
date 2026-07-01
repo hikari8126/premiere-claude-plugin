@@ -3,6 +3,13 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.10 — 2026-06-30
+
+### 🐛 Bugs đã fix
+- **Lệch thời gian khi ô time nhiều dòng có "Giây …"**: Ô time kiểu `6-9 / Giây 11 / 30-32 / 3-5` bị lệch — "Giây 11" (và "Giây 24, 26") **bị rớt** nên các dòng còn lại dồn lên, ghép sai với source. Nguyên nhân: bộ lọc dòng time trong `splitTimes()` chỉ giữ dòng **bắt đầu bằng chữ số** (`/^\d/`), loại mọi dòng mở đầu bằng "Giây". Cách fix: cho phép tiền tố giây (`/^(?:gi[aâ]y|giay|s)?\s*\d/i`) — parser vốn đã tự bỏ tiền tố này. Dòng mô tả thật (vd "lặp liên tục với 3 màu") vẫn bị loại đúng.
+
+---
+
 ## v4.8.9 — 2026-06-30
 
 ### 🐛 Bugs đã fix
