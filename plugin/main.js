@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.7';  // Autocut timestamp: nhận diện chữ "và"/"and" (+ & + ,) giữa 2 timecode → tách 2 timestamp riêng; badge time hiển thị timecode chuẩn ("giây 18-19" → "0:18-0:19", chỉ đổi hiển thị, cut giữ nguyên). On top of v4.8.6
+var PLUGIN_VERSION = 'v4.8.8';  // Bridge: hợp nhất 2 prompt Organize (Voice Gen + Autocut) dùng chung → 2 kết quả tương đồng; CAPS = ALL CAPS toàn bộ chữ. (Plugin không đổi logic, bump theo bridge.) On top of v4.8.7
 
 // ── State ──────────────────────────────────────────────────────────────────
 
