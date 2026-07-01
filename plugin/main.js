@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.9';  // Autocut: đưa lựa chọn "gen voice khi Validate" vào Settings (ask/auto/never, lưu localStorage bền qua cut/reload) — fix skip cũ không nhớ; bỏ checkbox trong popup. On top of v4.8.8
+var PLUGIN_VERSION = 'v4.8.10';  // Autocut: fix lệch thời gian — dòng time nhiều dòng ghi "Giây 11"/"Giây 24, 26" bị rớt (filter chỉ nhận dòng bắt đầu bằng số) làm lệch cặp time↔source; nay cho phép tiền tố Giây/giay/s. On top of v4.8.9
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2857,11 +2857,14 @@ async function ppMoveToVOBin(item, proj) {
     if (!t) return [t];
     t = String(t).normalize('NFC');
     if (t.indexOf('\n') !== -1) {
-      // Multi-line time cell: keep only lines that START with a digit (a real
-      // timecode). Descriptive lines like "lặp liên tục với 3 màu" — even though
-      // they contain a number — are dropped so they don't become a garbage clip.
+      // Multi-line time cell: keep lines that ARE a timecode — a digit at the start,
+      // OR an optional Vietnamese second-prefix ("Giây 11", "giay 24, 26", "s5")
+      // then a digit (the prefix is stripped later by parseSourceTime). Descriptive
+      // lines like "lặp liên tục với 3 màu" start with a word → dropped as before.
+      // NOTE: dropping a real time line shifts every following time↔source pair, so
+      // this filter must NOT lose "Giây …" lines (was causing time misalignment).
       var tcLines = t.split('\n').map(function(s){ return s.trim(); })
-        .filter(Boolean).filter(function(s){ return /^\d/.test(s); });
+        .filter(Boolean).filter(function(s){ return /^(?:gi[aâ]y|giay|s)?\s*\d/i.test(s); });
       return tcLines.length ? tcLines : [t];
     }
     // Split on the connector ("0:02-0:08 và 0:10-0:15") OR plain whitespace, so two
