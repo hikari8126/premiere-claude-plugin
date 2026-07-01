@@ -3,6 +3,19 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.8 — 2026-06-30
+
+### ✅ Thêm mới / Cải tiến
+- **Hợp nhất 2 prompt "Organize"**: nút **Organize** (Voice Gen) và **Gen voice** (Autocut) nay dùng **chung 1 prompt** (`buildOrganizePrompt()`) → cùng input cho **kết quả tương đồng**, không còn lệch luật giữa 2 nơi. Prompt hợp nhất là superset: nối câu vụn, bung viết tắt/ký hiệu, bỏ emoji, thẻ [emotion], sửa chính tả rõ ràng, giữ nguyên ngôn ngữ gốc — vẫn không đổi/thêm từ, không thêm chủ ngữ.
+- **Nhấn mạnh = ALL CAPS**: luật viết hoa nay rõ ràng là **viết hoa TOÀN BỘ chữ** (mọi ký tự, vd `one goal` → `ONE GOAL`), không phải chỉ chữ cái đầu — để ElevenLabs nhấn đúng.
+
+### 🔧 Kỹ thuật / Approach
+- `server.js`: gộp nhánh `mode:'paragraph'` và nhánh mặc định của `/superautocut/normalize-script` về 1 luồng gọi `buildOrganizePrompt(rawText)`; `mode` vẫn nhận để tương thích ngược nhưng không đổi xử lý. `maxTokens` thống nhất 4096.
+- Voice-align vẫn map block↔audio qua `block.texts` nên số dòng output khác block count không ảnh hưởng.
+- Bump: Bridge app **2.35 → 2.36**, server API **1.7.3 → 1.7.4** (prompt nằm trong server.js → cần bridge update để team nhận). Plugin bump theo (không đổi logic plugin).
+
+---
+
 ## v4.8.7 — 2026-06-30
 
 ### ✅ Thêm mới / Cải tiến

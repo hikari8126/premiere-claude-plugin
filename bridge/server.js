@@ -2256,37 +2256,28 @@ function splitByEmotionTags(output) {
     .filter(Boolean);
 }
 
-// ── POST /superautocut/normalize-script ────────────────────────────────────
-// Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
-// Input:  { lines: string[] }   — mảng string, 1 phần tử / block
-// Output: { ok, lines: string[] }
-app.post('/superautocut/normalize-script', async (req, res) => {
-  const { lines, provider, model, apiKey, mode } = req.body;
-  if (!Array.isArray(lines) || lines.length === 0)
-    return res.status(400).json({ ok: false, error: 'No lines provided' });
+// ── Unified "Organize" prompt ───────────────────────────────────────────────
+// ONE prompt shared by both entry points (Voice Gen "Organize" + Autocut "Gen
+// voice") so the SAME input always yields the SAME organized script. Both flows
+// join the output lines with \n and feed ElevenLabs; Autocut voice-align maps
+// block↔audio via block.texts separately, so a differing output line count here
+// never breaks alignment.
+function buildOrganizePrompt(rawText) {
+  return `# Context:
+- I will give you the raw voice-over content for my product video. It is not yet organized/optimized for generating an ElevenLabs v3 voiceover. Reorganize it following the requirements below. The final output is used to generate the ElevenLabs voiceover.
 
-  // ── PARAGRAPH mode (Voice Gen "Organize") ─────────────────────────────────
-  // Reorganize raw voice-over into one ElevenLabs-v3-ready paragraph: connects
-  // fragmented phrases, CAPS emphasis words, expands acronyms, adds [emotion]
-  // tags per sentence. Fragments get merged → output line count is NOT expected
-  // to match the input, so we do NOT enforce a 1:1 count here.
-  if (mode === 'paragraph') {
-    const rawText = lines.join('\n');
-    const prompt =
-`# Context:
-- I will provide the raw voice over contents for my video. The raw contents are not organized and optimized for generating EleventLab v3 voiceover. I need to organize those contents following my requirements. The final output will be used to generate ElevenLab voiceover.
-# Task:
-- Organize the content for my product video following the below requirements.
 # Requirements:
-+ IMPORTANT 1: Do not change or alter the original contents I provided to you. Do NOT correct grammar or add missing subjects — subjectless sentences are intentional stylistic choices, not mistakes.
-+ IMPORTANT 2: Do not add new contents/words/linking phrases to the original contents I provided. If a word or subject is not in the original, do NOT add it.
-+ If the original contents have fragmented phrases of a complete sentence that divided by line breaks, identify and connect them if you could.
-+ A sentence must always end using a punctuation or an exclamation mark (if it needs to emphasize emotion)
-+ Capslock important or emphasis words. Eleventlabs will emphasize the word.
-+ Eliminate icons or emoji if there are any.
-+ Translate acronyms/or special words to plain words (Example: OMG => Oh my god, 2X softer => 2 times softer, 65% off=> 65 percent off, 1000+ washes => more than 1000 washes, oz => ounce, 2026 => twenty twenty six, 2M+ => more than 2 millions, DESIGNED FOR 50+ => design for 50 plus, 9° => 9 degrees, Our #1 summer pants => Our top summer pants or Our best summer pants or Our number one summer pants)
-+ Add emotions for every sentence (Eleventlabs v3 allow to add emotion for the voice in the form such as [...] => Ex: [Excited]. The emotion needs to be placed right in front of the sentence - EX: [Excited]We create this pants with ONE GOAL.
-+ Organize the content into a complete, well-connected script (connect fragmented phrases).
++ IMPORTANT 1: Do NOT change or alter the original content. Do NOT correct grammar and do NOT add a missing subject — subjectless sentences are an intentional stylistic choice, not a mistake.
++ IMPORTANT 2: Do NOT add new content/words/linking phrases. If a word or subject is not in the original, do NOT add it.
++ Keep the ORIGINAL LANGUAGE of the script (Vietnamese stays Vietnamese, English stays English). Do not translate the content itself.
++ If the original has fragmented phrases of one complete sentence split by line breaks, identify and connect them when you can.
++ A sentence must always end with a punctuation mark (use "!" when it needs emotional emphasis).
++ Write the important / emphasis words in FULL UPPERCASE — ALL CAPS, every letter of the word (e.g. "one goal" => "ONE GOAL", "never" => "NEVER"). Not just the first letter. ElevenLabs will stress fully-uppercased words.
++ Remove any icons or emoji.
++ Only fix CLEAR spelling typos. Never rephrase, never change word choice or meaning.
++ Expand acronyms / symbols / numbers into plain spoken words. Examples: OMG => Oh my god, 2X softer => 2 times softer, 65% off => 65 percent off, 1000+ washes => more than 1000 washes, oz => ounce, 2026 => twenty twenty six, 2M+ => more than 2 millions, DESIGNED FOR 50+ => designed for 50 plus, 9° => 9 degrees, Our #1 summer pants => Our number one summer pants.
++ Add an emotion tag in [] at the FRONT of EVERY sentence to guide the ElevenLabs voice. Example: [Excited] We create this pants with ONE GOAL.
++ Suggested tags (pick the best fit per sentence; not limited to this list): [excited] [energetic] [warm] [friendly] [confident] [dramatic] [urgent] [whispering] [conversational] [serious] [calm] [reflective] [empathetic] [curious] [laughing]
 
 # Output format (IMPORTANT):
 - Put EACH sentence on its OWN line, starting with its [emotion] tag.
@@ -2299,71 +2290,41 @@ app.post('/superautocut/normalize-script', async (req, res) => {
 
 # Raw voice over contents:
 ${rawText}`;
-    try {
-      const output = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
-      // Post-process: ép mỗi thẻ [emotion] ra 1 dòng riêng (không phụ thuộc model).
-      const outLines = splitByEmotionTags(output);
-      if (!outLines.length) return res.json({ ok: false, error: 'Model trả về rỗng' });
-      return res.json({ ok: true, lines: outLines });
-    } catch (e) {
-      return res.json({ ok: false, error: e.message });
-    }
-  }
+}
 
-  // ── PER-SENTENCE mode (default — Autocut "Gen voice") ─────────────────────
-  // Tách script thành TỪNG CÂU, mỗi câu 1 dòng với [emotion] ở đầu (xuống dòng
-  // trước mỗi thẻ). Một block nhiều câu → nhiều dòng, nên số dòng output KHÔNG
-  // còn bằng input → KHÔNG ép 1:1. KHÔNG đổi từ ngữ (giữ để voice-align khớp lại
-  // với block text gốc — align dùng block.texts, độc lập số dòng normalize này).
-  const rawScript = lines.join('\n');
-  const prompt =
-`Bạn là chuyên gia hiệu đính script cho TTS (Text-to-Speech) ElevenLabs v3.
+// ── POST /superautocut/normalize-script ────────────────────────────────────
+// Chuẩn hóa script qua Claude: sửa dấu câu, chính tả — KHÔNG đổi nội dung.
+// Input:  { lines: string[] }   — mảng string, 1 phần tử / block
+// Output: { ok, lines: string[] }
+app.post('/superautocut/normalize-script', async (req, res) => {
+  const { lines, provider, model, apiKey, mode } = req.body;
+  if (!Array.isArray(lines) || lines.length === 0)
+    return res.status(400).json({ ok: false, error: 'No lines provided' });
 
-Phân tích toàn bộ script để xác định tone/mood tổng thể, sau đó:
-1. TÁCH script thành từng CÂU riêng — MỖI CÂU nằm trên MỘT DÒNG riêng.
-2. Đặt một tag cảm xúc trong [] ở ĐẦU mỗi câu để hướng dẫn giọng đọc ElevenLabs.
-   → BẮT BUỘC xuống dòng trước mỗi thẻ [] (mỗi dòng = 1 thẻ [] + 1 câu).
-3. Thêm hoặc thay dấu ! ? phù hợp với tone và cảm xúc của câu.
-4. Sửa lỗi chính tả rõ ràng nếu có. KHÔNG sửa ngữ pháp, KHÔNG thêm chủ ngữ — câu không có chủ ngữ là cố ý của tác giả.
-5. TUYỆT ĐỐI không thay đổi từ ngữ, không thêm/bớt nội dung hay ý nghĩa. Nếu từ/chủ ngữ không có trong bản gốc → KHÔNG thêm vào.
-
-Tags gợi ý (chọn tag phù hợp nhất từng câu, không bắt buộc dùng list này):
-[excited] [energetic] [warm] [friendly] [confident] [dramatic] [urgent]
-[whispering] [conversational] [serious] [calm] [laughing] [curious]
-
-Ví dụ (1 đoạn nhiều câu → tách từng câu, mỗi câu 1 dòng + thẻ riêng):
-  Input:  "We made this with one goal. To keep you cool. Grab yours now"
-  Output:
-[confident] We made this with one goal.
-[warm] To keep you cool.
-[excited] Grab yours now!
-
-Quy tắc output:
-- Mỗi câu một dòng; MỖI DÒNG bắt đầu bằng tag [] rồi tới câu.
-- Không thêm số thứ tự, gạch đầu dòng, markdown, hay bất kỳ text nào ngoài script.
-
-Script:
-${rawScript}`;
+  // UNIFIED: both entry points (Voice Gen "Organize" — mode:'paragraph' — and
+  // Autocut "Gen voice" — no mode) now use the SAME prompt, so identical input
+  // gives an identical organized script. The `mode` param is accepted for
+  // backward-compat but no longer changes the transformation. Output line count
+  // is NOT forced to match block count (Autocut voice-align uses block.texts).
+  const rawText = lines.join('\n');
+  const prompt = buildOrganizePrompt(rawText);
 
   try {
-    const output = await callLLM(prompt, { provider: provider, model: model, apiKey: apiKey, maxTokens: 2048 });
-
+    const output = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
     // Post-process: ép mỗi thẻ [emotion] ra 1 dòng riêng (không phụ thuộc model).
-    const allLines = splitByEmotionTags(output);
-
-    if (!allLines.length) {
+    const outLines = splitByEmotionTags(output);
+    if (!outLines.length) {
       console.warn('[normalize] Empty output — fallback to originals');
       return res.json({ ok: true, lines, warning: 'empty_output' });
     }
-    // Không ép số dòng = số block; trả về các dòng đã tách câu + gắn thẻ.
-    return res.json({ ok: true, lines: allLines });
+    return res.json({ ok: true, lines: outLines });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.7.3';  // normalize-script: không thêm chủ ngữ vào câu viết không chủ ngữ có chủ đích (fix Gemini over-correction)
+const BRIDGE_VERSION = '1.7.4';  // normalize-script: hop nhat 2 prompt Organize (Voice Gen + Autocut) dung chung buildOrganizePrompt() -> 2 ket qua tuong dong; CAPS = ALL CAPS toan bo chu
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
