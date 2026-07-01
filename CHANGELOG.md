@@ -3,6 +3,19 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.8.9 — 2026-06-30
+
+### 🐛 Bugs đã fix
+- **Popup "gen voice?" — "lần sau không hỏi nữa" không nhớ**: Nguyên nhân: cờ `sacGenVoiceAsk` bị gán lại `true` mỗi lần cut mới/clear và không lưu đâu → lựa chọn skip mất ngay. Cách fix: bỏ cờ session + checkbox, thay bằng **setting bền vững**.
+
+### ✅ Thêm mới / Cải tiến
+- **Đưa lựa chọn vào Settings**: **Settings → "Autocut — Chuẩn hoá & gen voice khi Validate"** với 3 chế độ: **Hỏi mỗi lần** (mặc định) / **Tự gen voice** / **Chỉ validate**. Lưu ngay khi đổi (`localStorage['sac_genvoice_mode']`), bền qua reload/cut mới. Bỏ checkbox "Lần sau không hỏi nữa" trong popup.
+
+### 🔧 Kỹ thuật / Approach
+- `sacGetGenVoiceMode()` đọc `sac_genvoice_mode` (ask|auto|never); `sacAskGenVoice()` resolve thẳng cho auto/never, chỉ hiện modal khi ask. Gỡ 2 dòng reset `sacGenVoiceAsk = true`. Dropdown `#sacGenVoiceMode` wire độc lập nút Save (đổi là lưu).
+
+---
+
 ## v4.8.8 — 2026-06-30
 
 ### ✅ Thêm mới / Cải tiến

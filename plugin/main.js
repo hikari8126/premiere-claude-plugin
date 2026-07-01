@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.8';  // Bridge: hợp nhất 2 prompt Organize (Voice Gen + Autocut) dùng chung → 2 kết quả tương đồng; CAPS = ALL CAPS toàn bộ chữ. (Plugin không đổi logic, bump theo bridge.) On top of v4.8.7
+var PLUGIN_VERSION = 'v4.8.9';  // Autocut: đưa lựa chọn "gen voice khi Validate" vào Settings (ask/auto/never, lưu localStorage bền qua cut/reload) — fix skip cũ không nhớ; bỏ checkbox trong popup. On top of v4.8.8
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1640,6 +1640,18 @@ document.getElementById('refresh-btn').addEventListener('click', function() {
 var modelSelect = document.getElementById('model-select');
 var apiKeyInput = document.getElementById('api-key-input');
 var apiKeyStatus = document.getElementById('apikey-status');
+
+// Autocut "gen voice on Validate" behaviour picker — persists to its own key so it
+// survives reloads/new cuts (independent of the main Save button).
+(function () {
+  var sel = document.getElementById('sacGenVoiceMode');
+  if (!sel) return;
+  var v = localStorage.getItem('sac_genvoice_mode');
+  sel.value = (v === 'auto' || v === 'never') ? v : 'ask';
+  sel.addEventListener('change', function () {
+    localStorage.setItem('sac_genvoice_mode', sel.value);
+  });
+})();
 // ElevenLabs key is now managed in the Voice Gen tab settings panel, not here.
 var elKeyInput = null; // removed from Claude Settings panel
 var elStatus   = null;
@@ -2739,8 +2751,16 @@ async function ppMoveToVOBin(item, proj) {
   var sacNormToken      = 0;     // bumped to invalidate an in-flight normalize (cancel)
   var sacNormAbort      = null;  // AbortController for the in-flight normalize fetch
   var sacValidateToken  = 0;     // bumped to invalidate an in-flight validate
-  var sacGenVoiceAsk    = true;  // show the "gen voice?" popup on Validate
-  var sacGenVoicePref   = true;  // remembered answer when the popup is skipped
+  // Persistent Autocut behaviour for the "gen voice?" step on Validate. Stored in
+  // localStorage (survives reloads / new cuts) instead of a session flag that used
+  // to be reset every cut — that reset was why "don't ask again" never stuck.
+  //   'ask'   → show the popup each Validate
+  //   'auto'  → always normalize + gen voice, no popup
+  //   'never' → validate only, never gen voice, no popup
+  function sacGetGenVoiceMode() {
+    var v = localStorage.getItem('sac_genvoice_mode');
+    return (v === 'auto' || v === 'never') ? v : 'ask';
+  }
   var sacNoVoiceMode    = false; // set by "Without voice" button
 
   // Show the cut panel (hides voice panel), update label
@@ -4221,22 +4241,21 @@ async function ppMoveToVOBin(item, proj) {
   // punch through the popup. Honors the "don't ask again" skip preference.
   function sacAskGenVoice() {
     return new Promise(function(resolve) {
-      if (!sacGenVoiceAsk) { resolve(sacGenVoicePref); return; } // skip popup, use remembered choice
+      // Persistent setting decides the behaviour (Settings → Autocut gen voice).
+      var mode = sacGetGenVoiceMode();
+      if (mode === 'auto')  { resolve(true);  return; } // always gen, no popup
+      if (mode === 'never') { resolve(false); return; } // validate only, no popup
       var modal  = $('sacGenConfirm');
       var yes    = $('sacGenConfirmYes');
       var no     = $('sacGenConfirmNo');
       var cancel = $('sacGenConfirmCancel');
-      var skip   = $('sacGenConfirmSkip');
       if (!modal || !yes || !no) { resolve(true); return; } // fail-open
       var app = document.querySelector('#tab-autocut .sac-app');
-      if (skip) skip.checked = false;
       function done(val) {
         modal.hidden = true;
         if (app) app.style.display = '';
         if (window.releaseKeyboard) window.releaseKeyboard();
         yes.onclick = null; no.onclick = null; if (cancel) cancel.onclick = null;
-        // Remember the choice + skip future popups (only for a real Có/Không, not cancel)
-        if (val !== 'cancel' && skip && skip.checked) { sacGenVoiceAsk = false; sacGenVoicePref = (val === true); }
         resolve(val);
       }
       yes.onclick = function() { done(true); };
@@ -4791,7 +4810,6 @@ async function ppMoveToVOBin(item, proj) {
     sacBindOverrides = {}; // forget manual binds on full reset
     sacMarkScriptPrepared(false);
     sacCancelNorm();
-    sacGenVoiceAsk = true; // re-enable the gen-voice prompt for the new cut
     $('sacBody').innerHTML = '';
     rowSeq = 0;
     createRow(); createRow(); createRow();
@@ -5397,7 +5415,6 @@ async function ppMoveToVOBin(item, proj) {
     sacVoiceReady = false;
     sacNoVoiceMode = false;
     sacVoicePath = null;
-    sacGenVoiceAsk = true; // bring back the gen-voice prompt
     sacMarkScriptPrepared(false);
     // Hide blocks + cut panel, reset voice
     $('sacBlockSection').style.display = 'none';
