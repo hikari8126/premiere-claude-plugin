@@ -162,6 +162,18 @@
       </div>
 
       <div class="setting-row">
+        <label>Autocut — Chuẩn hoá &amp; gen voice khi Validate</label>
+        <select id="sacGenVoiceMode">
+          <option value="ask">Hỏi mỗi lần (popup)</option>
+          <option value="auto">Tự gen voice — không hỏi</option>
+          <option value="never">Chỉ validate — không gen voice</option>
+        </select>
+        <div class="setting-hint-inline">
+          Điều khiển popup "Chuẩn hoá &amp; gen voice?" khi bấm Validate ở tab Autocut. Lưu ngay khi đổi.
+        </div>
+      </div>
+
+      <div class="setting-row">
         <label>Màu giao diện (accent)</label>
         <div class="accent-row">
           <div id="accentSwatches" class="accent-swatches"></div>
@@ -1010,8 +1022,7 @@
         <span class="sac-confirm-title">Chuẩn hoá &amp; gen voice?</span>
         <div id="sacGenConfirmCancel" class="sac-confirm-x" role="button" title="Huỷ"><span data-ic="xmark" data-ic-size="13"></span></div>
       </div>
-      <div class="sac-confirm-msg">Bấm "Có" để chuẩn hoá script + đẩy sang Voice Gen luôn. Bấm "Không" nếu bạn còn muốn sửa script.</div>
-      <label class="sac-confirm-skip"><input type="checkbox" id="sacGenConfirmSkip" /> Lần sau không hỏi nữa (nhớ lựa chọn)</label>
+      <div class="sac-confirm-msg">Bấm "Có" để chuẩn hoá script + đẩy sang Voice Gen luôn. Bấm "Không" nếu bạn còn muốn sửa script.<br><span style="opacity:0.6;font-size:11px;">Muốn tắt/bật popup này: Settings → "Autocut — Chuẩn hoá &amp; gen voice khi Validate".</span></div>
       <div class="sac-confirm-actions">
         <button id="sacGenConfirmNo" class="btn-secondary">Không, chỉ validate</button>
         <button id="sacGenConfirmYes" class="btn-primary">Có, gen voice</button>
