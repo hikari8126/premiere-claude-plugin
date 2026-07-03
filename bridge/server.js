@@ -2336,6 +2336,7 @@ app.get('/health', (_req, res) => {
       multimodal:  true,    // Accepts array content with images
       transcribe:  true,    // /transcribe endpoint
       align:       true,    // /align endpoint
+      hostKey:     process.platform === 'darwin', // /host-key (AppleScript copy/paste)
     },
     whisper: {
       bin:   WHISPER_BIN,
@@ -2394,6 +2395,45 @@ app.post('/superautocut/split-voice', async (req, res) => {
   } catch(e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// ── POST /host-key ─────────────────────────────────────────────────────────
+// macOS only. Drives Premiere's native Copy/Paste via AppleScript keystrokes so
+// the UN-NEST feature can copy real track items (effects intact) between
+// sequences. Requires Accessibility permission for the process running node.
+//   body: { action: 'copy' | 'paste' | 'selectAll' | 'activate' }
+app.post('/host-key', (req, res) => {
+  if (process.platform !== 'darwin')
+    return res.status(400).json({ ok: false, error: 'host-key chỉ hỗ trợ macOS' });
+
+  const action = String((req.body && req.body.action) || '').toLowerCase();
+  const KEY = { copy: 'c', paste: 'v', selectall: 'a' };
+  let keyLine = null;
+  if (action === 'copy' || action === 'paste' || action === 'selectall') {
+    keyLine = `tell application "System Events" to keystroke "${KEY[action]}" using {command down}`;
+  } else if (action !== 'activate') {
+    return res.status(400).json({ ok: false, error: 'action phải là copy | paste | selectAll | activate' });
+  }
+
+  const script = [
+    'tell application "System Events"',
+    '  set premList to (every application process whose name contains "Premiere")',
+    '  if (count of premList) is 0 then error "Premiere Pro không chạy"',
+    '  set frontmost of (item 1 of premList) to true',
+    'end tell',
+    'delay 0.12',
+    keyLine || '',
+  ].filter(Boolean).join('\n');
+
+  const { execFile } = require('child_process');
+  execFile('osascript', ['-e', script], { timeout: 8000 }, (err, _stdout, stderr) => {
+    if (err) {
+      const msg = (stderr || err.message || '').trim();
+      const needPerm = /assistive|accessibility|-?1719|not allowed|not authorized/i.test(msg);
+      return res.status(500).json({ ok: false, error: msg || 'osascript failed', needAccessibility: needPerm });
+    }
+    res.json({ ok: true, action });
+  });
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
