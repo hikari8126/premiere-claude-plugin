@@ -8393,17 +8393,16 @@ async function ppMoveToVOBin(item, proj) {
       for (var a = 0; a < vc.length; a++) {
         var s1 = await callSec(vc[a], 'getStartTime'), e1 = await callSec(vc[a], 'getEndTime');
         if (s1 == null || e1 == null) continue;
-        if (mode === 'video' && !(await isVideoLikeClip(vc[a]))) {
-          try { var dp = await un(vc[a].getProjectItem()); vfDropped.push(dp && dp.name || '?'); } catch (e) { vfDropped.push('?'); }
-          continue; // skip text/title graphics
+        if (mode === 'video') {
+          var cls = await classifyVideoClip(vc[a]);
+          if (!cls.keep) { vfDropped.push(cls.reason); continue; } // text/title graphic → skip
+          vfKept++;
         }
-        if (mode === 'video') vfKept++;
         consider(vc[a], s1, e1);
       }
     }
     if (mode === 'video') {
-      logLine('  [vf] video-only: giữ ' + vfKept + ' · bỏ ' + vfDropped.length
-        + (vfDropped.length ? ' [' + vfDropped.slice(0, 12).join(', ') + ']' : ''), 'warn');
+      logLine('  [vf] video-only: giữ ' + vfKept + ' clip · bỏ ' + vfDropped.length + ' graphic text/title', 'ok');
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
@@ -8655,21 +8654,20 @@ async function ppMoveToVOBin(item, proj) {
   var UNNEST_TEXT_PARAM_RE = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i;
   var UNNEST_TEXT_COMP_RE  = /text|title|caption/i;
 
-  // True if the clip is a text/title graphic. Signals (any hit → text):
-  //   • a component whose matchName mentions text/title/caption, OR
-  //   • any component param whose displayName is a typography name
-  //     (Main Text / Font size / Tracking / Leading / Paragraph / Text Box / …).
-  // Inspects ALL components (not just AE.ADBE Capsule) so non-mogrt text is caught.
-  async function clipHasText(clip) {
+  // Returns a non-empty REASON string if the clip is a text/title graphic, else ''.
+  // Signals (first hit wins): a component whose matchName mentions text/title/caption,
+  // or any component param whose displayName is a typography name. Inspects ALL
+  // components (not just AE.ADBE Capsule) so non-mogrt text is caught too.
+  async function clipTextReason(clip) {
     try {
       var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
-      if (!chain) return false;
+      if (!chain) return '';
       var cc = chain.getComponentCount ? await un(chain.getComponentCount()) : 0;
       for (var k = 0; k < cc; k++) {
         var comp = await un(chain.getComponentAtIndex(k));
         if (!comp) continue;
         var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
-        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) return true;
+        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) return 'comp:' + cmn;
         var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
         for (var pj = 0; pj < pc; pj++) {
           try {
@@ -8679,23 +8677,24 @@ async function ppMoveToVOBin(item, proj) {
               if (typeof prm.getDisplayName === 'function') { dn = await un(prm.getDisplayName()); }
               else if (prm.displayName) { dn = prm.displayName; }
             }
-            if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) return true;
+            if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) return 'param:' + dn;
           } catch (e) {}
         }
       }
-      return false;
-    } catch (e) { return false; }
+      return '';
+    } catch (e) { return ''; }
   }
 
-  // True → keep this clip in "video" mode. Keeps footage, nested sequences, AE
-  // dynamic-link comps, and text-free graphics/mogrt; drops text/title graphics.
-  async function isVideoLikeClip(clip) {
+  // Keep this clip in "video" mode? Keeps footage, nested sequences, AE dynamic-link
+  // comps, and text-free graphics/mogrt; drops text/title graphics. Returns
+  // { keep, reason } — reason is the text signal when dropped (for logging).
+  async function classifyVideoClip(clip) {
     try {
       var pi = await un(clip.getProjectItem ? clip.getProjectItem() : null);
-      if (pi) { var cp = asClipPI(pi); if (cp) { try { if (await un(cp.isSequence())) return true; } catch (e) {} } }
-      if (await clipHasText(clip)) return false; // text/title graphic → drop
-      return true;
-    } catch (e) { return true; } // unknown → don't silently drop
+      if (pi) { var cp = asClipPI(pi); if (cp) { try { if (await un(cp.isSequence())) return { keep: true, reason: '' }; } catch (e) {} } }
+      var reason = await clipTextReason(clip);
+      return { keep: !reason, reason: reason };
+    } catch (e) { return { keep: true, reason: '' }; } // unknown → don't silently drop
   }
 
   // ── auto-detect: poll the timeline selection while the tab is active ────────
