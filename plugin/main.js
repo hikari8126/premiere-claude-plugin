@@ -7935,3 +7935,751 @@ async function ppMoveToVOBin(item, proj) {
     if (panel && panel.classList.contains('active')) stScanTracks();
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN-NEST MODULE — expand selected nested sequences onto new tracks (1 click)
+// Uses global helpers: ppro, getActiveProject, getActiveSequence,
+//                      getClipItems, getTimeSec
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  var $ = function(id) { return document.getElementById(id); };
+  var els = {
+    refresh:     $('unRefresh'),
+    hint:        $('unHint'),
+    count:       $('unCount'),
+    list:        $('unList'),
+    disableOrig: $('unDisableOrig'),
+    run:         $('unRun'),
+    log:         $('unLog'),
+  };
+  if (!els.run) return; // tab not present
+
+  // Read the selected expand mode: 'video' | 'av' | 'avt'
+  function getMode() {
+    var r = document.querySelector('input[name="unMode"]:checked');
+    return r ? r.value : 'av';
+  }
+
+  var EPS = 0.0006;            // seconds tolerance for overlap math
+  var detected = [];           // unique nested clips
+  var rawSelected = [];        // every selected track item (for disabling originals)
+  var canRun = false;          // gates the run() handler (un-nest button is a <div>)
+  var busy = false;            // gates re-entry while a scan/run is in flight
+
+  // ── small helpers ─────────────────────────────────────────────────────────
+  function setRunEnabled(on) {
+    canRun = !!on;
+    els.run.setAttribute('aria-disabled', on ? 'false' : 'true');
+  }
+  function logLine(msg, cls) {
+    if (!els.log) return;
+    els.log.hidden = false;
+    var span = document.createElement('div');
+    if (cls) span.className = cls;
+    span.textContent = msg;
+    els.log.appendChild(span);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+  function clearLog() { if (els.log) { els.log.textContent = ''; els.log.hidden = true; } }
+
+  async function un(v) { return (v && typeof v.then === 'function') ? await v : v; }
+
+  async function callSec(obj, method) {
+    try {
+      if (!obj || typeof obj[method] !== 'function') return null;
+      var r = await un(obj[method]());
+      return getTimeSec(r);
+    } catch (e) { return null; }
+  }
+
+  async function awaitArray(v) {
+    v = await un(v);
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    var n = v.length || 0, out = [];
+    for (var i = 0; i < n; i++) out.push(v[i]);
+    return out;
+  }
+
+  function asClipPI(projItem) {
+    try {
+      if (ppro.ClipProjectItem && typeof ppro.ClipProjectItem.cast === 'function') {
+        return ppro.ClipProjectItem.cast(projItem) || null;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmt(sec) {
+    sec = sec || 0;
+    var m = Math.floor(sec / 60), s = sec - m * 60;
+    return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
+  }
+
+  // ── DETECT: read selection, find nested-sequence clips ──────────────────────
+  // opts.silent = true → triggered by auto-poll; don't flash UI / clear the log.
+  async function detect(opts) {
+    if (busy) return;
+    var silent = opts && opts.silent;
+    busy = true;
+    detected = [];
+    rawSelected = [];
+    if (!silent) {
+      clearLog();
+      els.count.textContent = 'đang quét…';
+      els.list.innerHTML = '<div class="un-empty">Đang quét vùng chọn…</div>';
+    }
+    setRunEnabled(false);
+
+    try {
+      if (!ppro) throw new Error('Premiere API không khả dụng.');
+      var seq = await getActiveSequence();
+      var sel = await un(seq.getSelection());
+      if (!sel) throw new Error('Không lấy được vùng chọn.');
+      rawSelected = await awaitArray(sel.getTrackItems());
+
+      if (rawSelected.length === 0) {
+        els.count.textContent = '0 clip';
+        els.list.innerHTML = '<div class="un-empty">Chưa chọn clip nào. Click chọn clip nested trên timeline — plugin sẽ tự nhận.</div>';
+        return;
+      }
+
+      var seenIds = {};
+      var nonNested = 0;
+      for (var i = 0; i < rawSelected.length; i++) {
+        var item = rawSelected[i];
+        var projItem = await un(item.getProjectItem ? item.getProjectItem() : null);
+        if (!projItem) continue;
+        var clipPI = asClipPI(projItem);
+        var isSeq = false;
+        try { isSeq = clipPI ? await un(clipPI.isSequence()) : false; } catch (e) {}
+        if (!isSeq) { nonNested++; continue; }
+
+        var id = '';
+        try { id = await un(projItem.getId()); } catch (e) {}
+        var startSec = await callSec(item, 'getStartTime');
+        var key = id + '@' + (startSec == null ? '?' : startSec.toFixed(3));
+        if (seenIds[key]) continue;   // dedupe linked V/A items of same nest
+        seenIds[key] = true;
+
+        var name = '';
+        try { name = await un(item.getName ? item.getName() : item.name); } catch (e) {}
+        var nestedSeq = null;
+        try { nestedSeq = await un(clipPI.getSequence()); } catch (e) {}
+
+        detected.push({
+          item: item,
+          name: name || ('Nested ' + (detected.length + 1)),
+          projItem: projItem,
+          nestedSeq: nestedSeq,
+          parentStart: startSec || 0,
+          nestIn:  await callSec(item, 'getInPoint'),
+          nestOut: await callSec(item, 'getOutPoint'),
+          ok: !!nestedSeq,
+        });
+      }
+
+      renderList(nonNested);
+    } catch (e) {
+      els.count.textContent = 'lỗi';
+      els.list.innerHTML = '<div class="un-empty">⚠ ' + escapeHtml(e.message || e) + '</div>';
+      console.error('[Un-nest] detect error:', e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function renderList(nonNested) {
+    els.count.textContent = detected.length + ' nested';
+    els.list.innerHTML = '';
+    if (detected.length === 0) {
+      var msg = nonNested > 0
+        ? ('Vùng chọn có ' + nonNested + ' clip nhưng không phải nested sequence.')
+        : 'Không tìm thấy nested sequence trong vùng chọn.';
+      els.list.innerHTML = '<div class="un-empty">' + msg + '</div>';
+      setRunEnabled(false);
+      return;
+    }
+    for (var i = 0; i < detected.length; i++) {
+      var d = detected[i];
+      var div = document.createElement('div');
+      div.className = 'un-item' + (d.ok ? '' : ' is-bad');
+      var inS  = (d.nestIn  == null) ? 0 : d.nestIn;
+      var outS = (d.nestOut == null) ? 0 : d.nestOut;
+      var html = '<div class="un-itemName">' + escapeHtml(d.name) + '</div>'
+        + '<div class="un-itemMeta">@ ' + fmt(d.parentStart) + ' trên timeline · đoạn cắt '
+        + fmt(inS) + '–' + fmt(outS) + ' (' + fmt(Math.max(0, outS - inS)) + ')</div>';
+      if (!d.ok) html += '<div class="un-itemBad">⚠ Không đọc được nội dung nested — sẽ bỏ qua.</div>';
+      div.innerHTML = html;
+      els.list.appendChild(div);
+    }
+    setRunEnabled(true);
+  }
+
+  // ── PLACE one inner clip onto a target (new) track via overwrite ────────────
+  async function placeClip(project, editor, projItem, timeSec, inSec, outSec, vIdx, aIdx) {
+    var TT = function(s) { return ppro.TickTime.createWithSeconds(s); };
+    var clipPI = asClipPI(projItem);
+    var savedIn  = clipPI ? await callSec(clipPI, 'getInPoint')  : null;
+    var savedOut = clipPI ? await callSec(clipPI, 'getOutPoint') : null;
+
+    await project.lockedAccess(function() {
+      project.executeTransaction(function(action) {
+        if (clipPI && typeof clipPI.createSetInOutPointsAction === 'function') {
+          action.addAction(clipPI.createSetInOutPointsAction(TT(inSec), TT(outSec)));
+        }
+        action.addAction(editor.createOverwriteItemAction(projItem, TT(timeSec), vIdx, aIdx));
+      }, 'Un-nest: place clip');
+    });
+
+    if (clipPI && typeof clipPI.createSetInOutPointsAction === 'function' && savedIn != null && savedOut != null) {
+      try {
+        await project.lockedAccess(function() {
+          project.executeTransaction(function(action) {
+            action.addAction(clipPI.createSetInOutPointsAction(TT(savedIn), TT(savedOut)));
+          }, 'Un-nest: restore in/out');
+        });
+      } catch (e) {}
+    }
+  }
+
+  // Disable every item on a (freshly created) track — used for video-only mode
+  async function disableTrackItems(project, track) {
+    if (!track) return 0;
+    var items = await getClipItems(track);
+    var n = 0;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it && typeof it.createSetDisabledAction === 'function') {
+        try {
+          await (function(node) {
+            return project.lockedAccess(function() {
+              project.executeTransaction(function(action) {
+                action.addAction(node.createSetDisabledAction(true));
+              }, 'Un-nest: mute linked audio');
+            });
+          })(it);
+          n++;
+        } catch (e) {}
+      }
+    }
+    return n;
+  }
+
+  // ── Expand the clips of ONE nested clip (only its cut range) ────────────────
+  // mode: 'video' = chỉ hình (audio liên kết bị tắt) · 'av' = hình + tiếng gốc
+  //       'avt'   = hình + tiếng + phụ đề
+  async function expandOne(seq, project, editor, d, vBase, aBase, mode) {
+    if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
+    var nested = d.nestedSeq;
+    var nestIn  = d.nestIn  || 0;
+    var nestOut = d.nestOut || 0;
+    var parentStart = d.parentStart || 0;
+    var placed = 0;
+
+    var nvCount = 0;
+    try { nvCount = await un(nested.getVideoTrackCount()); } catch (e) {}
+    for (var vi = 0; vi < nvCount; vi++) {
+      var vtrack = await un(nested.getVideoTrack(vi));
+      var clips = await getClipItems(vtrack);
+      var rows = [];
+      for (var c = 0; c < clips.length; c++) {
+        var st = await callSec(clips[c], 'getStartTime');
+        rows.push({ clip: clips[c], start: st == null ? 0 : st });
+      }
+      rows.sort(function(a, b) { return a.start - b.start; });
+
+      for (var r = 0; r < rows.length; r++) {
+        var clip = rows[r].clip;
+        var iStart = rows[r].start;
+        var iEnd   = await callSec(clip, 'getEndTime');   if (iEnd == null) continue;
+        var segStart = Math.max(iStart, nestIn);
+        var segEnd   = Math.min(iEnd, nestOut);
+        if (segEnd - segStart <= EPS) continue;
+
+        var iIn = await callSec(clip, 'getInPoint'); if (iIn == null) iIn = 0;
+        var mediaIn  = iIn + (segStart - iStart);
+        var mediaOut = iIn + (segEnd  - iStart);
+        var parentTime = parentStart + (segStart - nestIn);
+        var cpItem = await un(clip.getProjectItem());
+        if (!cpItem) continue;
+
+        try {
+          await placeClip(project, editor, cpItem, parentTime, mediaIn, mediaOut, vBase + vi, aBase + vi);
+          placed++;
+        } catch (e) {
+          logLine('  ✗ lỗi đặt clip V' + (vi + 1) + ' @' + fmt(parentTime) + ': ' + e.message, 'err');
+        }
+      }
+    }
+
+    // Video-only → mute the linked audio that overwrite() dropped on the new audio tracks
+    if (mode === 'video' && nvCount > 0) {
+      var muted = 0;
+      for (var mvi = 0; mvi < nvCount; mvi++) {
+        try {
+          var at = await un(seq.getAudioTrack(aBase + mvi));
+          muted += await disableTrackItems(project, at);
+        } catch (e) {}
+      }
+      if (muted) logLine('  · đã tắt ' + muted + ' audio liên kết (chế độ chỉ clip)', 'warn');
+    }
+
+    // Captions / text (avt)
+    if (mode === 'avt') {
+      try { placed += await expandCaptions(seq, project, d, nestIn, nestOut, parentStart); }
+      catch (e) { logLine('  ✗ lỗi phụ đề: ' + e.message, 'err'); }
+    }
+
+    logLine('✓ "' + d.name + '" → đã bung ' + placed + ' mục', 'ok');
+    return placed;
+  }
+
+  // ── Copy captions inside the cut range → a parent caption track (best effort)
+  async function expandCaptions(seq, project, d, nestIn, nestOut, parentStart) {
+    var nested = d.nestedSeq;
+    var ncCount = 0;
+    try { ncCount = await un(typeof nested.getCaptionTrackCount === 'function' ? nested.getCaptionTrackCount() : 0); } catch (e) {}
+    if (!ncCount) return 0;
+
+    // Find a parent caption track to write into
+    var destCT = null;
+    try { var pcts = collectionToArray(seq.captionTracks); if (pcts && pcts.length) destCT = pcts[0]; } catch (e) {}
+    if (!destCT && typeof seq.getCaptionTrack === 'function') {
+      try { destCT = await un(seq.getCaptionTrack(0)); } catch (e) {}
+    }
+    if (!destCT || typeof destCT.createCaption !== 'function') {
+      logLine('  ⚠ Timeline đích chưa có caption track — bỏ qua phụ đề. Tạo 1 caption track trong Premiere rồi chạy lại.', 'warn');
+      return 0;
+    }
+
+    var made = 0;
+    for (var ci = 0; ci < ncCount; ci++) {
+      var ctrack = await un(nested.getCaptionTrack(ci));
+      if (!ctrack) continue;
+      var caps = await getClipItems(ctrack);   // caption items (best effort)
+      for (var k = 0; k < caps.length; k++) {
+        var cap = caps[k];
+        var cStart = await callSec(cap, 'getStartTime'); if (cStart == null) continue;
+        var cEnd   = await callSec(cap, 'getEndTime');   if (cEnd == null) continue;
+        var segStart = Math.max(cStart, nestIn);
+        var segEnd   = Math.min(cEnd, nestOut);
+        if (segEnd - segStart <= EPS) continue;
+
+        var text = '';
+        try {
+          text = (cap.text != null) ? cap.text
+               : (typeof cap.getText === 'function' ? await un(cap.getText()) : '');
+        } catch (e) {}
+
+        var pStart = parentStart + (segStart - nestIn);
+        var pEnd   = parentStart + (segEnd  - nestIn);
+        try {
+          var el = await destCT.createCaption({ ticks: secToTicks(pStart) }, { ticks: secToTicks(pEnd) });
+          if (el && text) el.text = text;
+          made++;
+        } catch (e) {
+          logLine('  ✗ lỗi tạo caption @' + fmt(pStart) + ': ' + e.message, 'err');
+        }
+      }
+    }
+    if (made) logLine('  · thêm ' + made + ' phụ đề', 'ok');
+    return made;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NATIVE COPY-PASTE PATH (preserves effects) — drives Premiere via the bridge
+  // ═══════════════════════════════════════════════════════════════════════════
+  var SETTLE = 650, SETTLE_SHORT = 280;
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+  // Ask the bridge to send a native keystroke to Premiere (copy/paste/selectAll)
+  async function hostKey(action) {
+    try {
+      var res = await fetch(BRIDGE_URL + '/host-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action }),
+      });
+      var j = {};
+      try { j = await res.json(); } catch (e) {}
+      if (!res.ok || !j.ok) {
+        var err = new Error(j.error || ('host-key ' + action + ' lỗi (HTTP ' + res.status + ')'));
+        err.needAccessibility = !!j.needAccessibility;
+        throw err;
+      }
+      return j;
+    } catch (e) {
+      if (e.needAccessibility) throw e;
+      // network / bridge offline
+      var ne = new Error('Không gọi được Bridge (' + (e.message || e) + '). Bridge có đang chạy không?');
+      throw ne;
+    }
+  }
+
+  async function openAndActivate(project, seq) {
+    try { if (typeof project.openSequence === 'function') await un(project.openSequence(seq)); } catch (e) {}
+    try { if (typeof project.setActiveSequence === 'function') await un(project.setActiveSequence(seq)); } catch (e) {}
+  }
+  async function setPlayhead(seq, sec) {
+    try {
+      var tt = ppro.TickTime.createWithSeconds(Math.max(0, sec));
+      if (typeof seq.setPlayerPosition === 'function') { await un(seq.setPlayerPosition(tt)); return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  // ── reliability helpers: condition-based waiting + verification ─────────────
+  // Poll fn() up to `tries` times with `gap` ms between; true as soon as it holds.
+  async function waitUntil(fn, tries, gap) {
+    for (var i = 0; i < tries; i++) {
+      try { if (await fn()) return true; } catch (e) {}
+      await sleep(gap);
+    }
+    return false;
+  }
+  // Stable identity for a sequence (guid preferred, else name) to compare which
+  // sequence is actually active — setActiveSequence is async and not instant.
+  async function seqIdent(seq) {
+    if (!seq) return '';
+    try { var g = seq.guid; if (g && g.then) g = await g; if (g) return 'g:' + g; } catch (e) {}
+    try { var n = seq.name; if (n && n.then) n = await n; if (n) return 'n:' + n; } catch (e) {}
+    return '';
+  }
+  // Wait until Premiere's ACTIVE sequence == target (so copy/paste hits it, not
+  // the previously-focused one). Returns true if confirmed active in time.
+  async function waitActive(target, tries, gap) {
+    var want = await seqIdent(target);
+    if (!want) { await sleep(gap * 3); return false; }
+    return await waitUntil(async function () {
+      return (await seqIdent(await getActiveSequence())) === want;
+    }, tries, gap);
+  }
+  // Count all CLIP items across every video+audio track of a sequence. Used to
+  // verify a paste actually landed (count grows) rather than trusting the keystroke.
+  async function countSeqItems(seq) {
+    var n = 0;
+    try {
+      var nv = await un(seq.getVideoTrackCount());
+      for (var i = 0; i < nv; i++) { var vt = await un(seq.getVideoTrack(i)); n += (await getClipItems(vt)).length; }
+    } catch (e) {}
+    try {
+      var na = await un(seq.getAudioTrackCount());
+      for (var j = 0; j < na; j++) { var at = await un(seq.getAudioTrack(j)); n += (await getClipItems(at)).length; }
+    } catch (e) {}
+    return n;
+  }
+
+  // Gather whole track items in [nestIn,nestOut] of the nested seq, by mode.
+  async function collectCutRangeItems(nested, nestIn, nestOut, mode) {
+    var items = [], earliest = Infinity, total = 0;
+    function consider(clip, s, e) {
+      total++;
+      var segStart = Math.max(s, nestIn), segEnd = Math.min(e, nestOut);
+      if (segEnd - segStart <= EPS) return;
+      items.push(clip);
+      if (s < earliest) earliest = s;
+    }
+    var nv = 0; try { nv = await un(nested.getVideoTrackCount()); } catch (e) {}
+    for (var vi = 0; vi < nv; vi++) {
+      var vt = await un(nested.getVideoTrack(vi));
+      var vc = await getClipItems(vt);
+      for (var a = 0; a < vc.length; a++) {
+        var s1 = await callSec(vc[a], 'getStartTime'), e1 = await callSec(vc[a], 'getEndTime');
+        if (s1 != null && e1 != null) consider(vc[a], s1, e1);
+      }
+    }
+    if (mode === 'av' || mode === 'avt') {
+      var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
+      for (var ai = 0; ai < na; ai++) {
+        var at = await un(nested.getAudioTrack(ai));
+        var acs = await getClipItems(at);
+        for (var b = 0; b < acs.length; b++) {
+          var s2 = await callSec(acs[b], 'getStartTime'), e2 = await callSec(acs[b], 'getEndTime');
+          if (s2 != null && e2 != null) consider(acs[b], s2, e2);
+        }
+      }
+    }
+    if (mode === 'avt') {
+      var nc = 0; try { nc = await un(typeof nested.getCaptionTrackCount === 'function' ? nested.getCaptionTrackCount() : 0); } catch (e) {}
+      for (var ci = 0; ci < nc; ci++) {
+        try {
+          var ct = await un(nested.getCaptionTrack(ci));
+          var ccs = await getClipItems(ct);
+          for (var k = 0; k < ccs.length; k++) {
+            var s3 = await callSec(ccs[k], 'getStartTime'), e3 = await callSec(ccs[k], 'getEndTime');
+            if (s3 != null && e3 != null) consider(ccs[k], s3, e3);
+          }
+        } catch (e) {}
+      }
+    }
+    return { items: items, earliest: isFinite(earliest) ? earliest : nestIn, total: total };
+  }
+
+  // Pull a real message out of a UXP-thrown value (often an object w/o .message)
+  function errStr(e) {
+    if (e === undefined) return 'undefined';
+    if (e === null) return 'null';
+    var parts = [];
+    try { if (e.message) parts.push('msg=' + e.message); } catch (_) {}
+    try { if (e.name) parts.push('name=' + e.name); } catch (_) {}
+    try { if (e.code !== undefined && e.code !== null) parts.push('code=' + e.code); } catch (_) {}
+    try { var s = String(e); if (s && s !== '[object Object]') parts.push('str=' + s); } catch (_) {}
+    try { var j = JSON.stringify(e); if (j && j !== '{}') parts.push('json=' + j); } catch (_) {}
+    return parts.length ? parts.join(' ') : '(không có thông tin)';
+  }
+
+  // Build a TrackItemSelection of the given items and apply it to a sequence.
+  // The empty-selection object is created via the REQUIRED callback form, and we
+  // populate + apply it INSIDE the callback (it may not survive past the callback).
+  // Returns true on success; false → caller should fall back to native Select-All.
+  async function applySelection(seq, items) {
+    function dbg(m) { logLine('  [sel] ' + m, 'warn'); console.log('[Un-nest][sel] ' + m); }
+    var TIS = ppro.TrackItemSelection;
+    if (!TIS || typeof TIS.createEmptySelection !== 'function') { dbg('TrackItemSelection.createEmptySelection không có'); return false; }
+
+    var capturedSel = null;   // selection kept for the outside-callback fallback
+    var insideResult = '';    // '', 'ok', or 'THROW ...'
+
+    // ── Attempt A: do everything (addItem + setSelection) inside the callback ──
+    try {
+      var retCb = TIS.createEmptySelection(function(selection) {
+        capturedSel = selection;
+        var add = 0, addErr = '';
+        for (var i = 0; i < items.length; i++) {
+          try { selection.addItem(items[i], true); add++; }
+          catch (e) { if (!addErr) addErr = errStr(e); }
+        }
+        try {
+          seq.setSelection(selection);     // apply while the object is "live"
+          insideResult = 'ok';
+        } catch (e) { insideResult = 'THROW ' + errStr(e); }
+        dbg('trong-callback: addItem ' + add + '/' + items.length
+          + (addErr ? ' (addErr: ' + addErr + ')' : '')
+          + ' · setSelection ' + insideResult);
+      });
+      if (retCb && typeof retCb.then === 'function') await retCb;
+    } catch (e) { dbg('createEmptySelection(cb) THROW: ' + errStr(e)); }
+
+    if (insideResult === 'ok') { await sleep(120); return true; }
+
+    // ── Attempt B: apply outside the callback (in case it's async / deferred) ──
+    if (capturedSel && typeof capturedSel.addItem === 'function') {
+      try {
+        var rs = seq.setSelection(capturedSel);
+        if (rs && typeof rs.then === 'function') rs = await rs;
+        dbg('ngoài-callback: setSelection → ' + rs);
+        await sleep(120);
+        return true;
+      } catch (e) { dbg('ngoài-callback: setSelection THROW: ' + errStr(e)); }
+    }
+
+    return false;
+  }
+
+  // Copy-paste ONE nested clip's cut range into the parent sequence (effects kept).
+  // Reliability: wait until the target sequence is really active before each
+  // keystroke (setActiveSequence is async), then VERIFY the paste actually added
+  // clips (count grows) and RETRY the whole copy→paste if it didn't — turning the
+  // old silent failure ("nothing pasted") into a real retry, then a clear error.
+  async function copyPasteOne(project, parentSeq, d, mode) {
+    if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
+    var nested = d.nestedSeq;
+    var nestIn = d.nestIn || 0, nestOut = d.nestOut || 0, parentStart = d.parentStart || 0;
+    logLine('  [diag] nestIn=' + fmt(nestIn) + ' nestOut=' + fmt(nestOut)
+      + ' · cửa-sổ-cắt=' + fmt(Math.max(0, nestOut - nestIn))
+      + ' · parentStart=' + fmt(parentStart)
+      + ' · (raw d.nestIn=' + d.nestIn + ' d.nestOut=' + d.nestOut + ')', 'warn');
+
+    var MAX_TRIES = 3;
+    for (var attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      // 1. activate the nested sequence, then give focus a moment to settle.
+      // waitActive is best-effort (returns fast once active); the paste-verify
+      // below is the real safety net, so we never abort just because the
+      // active-sequence probe couldn't read an identity.
+      await openAndActivate(project, nested);
+      await waitActive(nested, 20, 100);
+      await sleep(SETTLE_SHORT);
+
+      // 2. gather + select the cut-range items
+      var picked = await collectCutRangeItems(nested, nestIn, nestOut, mode);
+      if (attempt === 1) {
+        logLine('  [diag] chọn ' + picked.items.length + '/' + picked.total
+          + ' clip trong nested · earliest=' + fmt(picked.earliest)
+          + (picked.items.length === picked.total ? ' ⚠ CHỌN HẾT (cửa sổ = full nested)' : ' ✓ chọn 1 phần'), 'warn');
+      }
+      if (!picked.items.length) { logLine('· "' + d.name + '": không có clip trong đoạn cắt', 'warn'); return 0; }
+      var earliest = picked.earliest;
+      var selOk = await applySelection(nested, picked.items);
+      if (!selOk) {
+        if (attempt === 1) logLine('  [diag] SELECTION=FALLBACK → Select-All (copy CẢ nested, bỏ qua đoạn cắt)', 'err');
+        await hostKey('selectAll');
+        earliest = 0; // whole nested copied
+      } else if (attempt === 1) {
+        logLine('  [diag] SELECTION=OK (đã set đúng ' + picked.items.length + ' clip)', 'warn');
+      }
+      await sleep(SETTLE_SHORT);
+
+      // 3. native copy
+      await hostKey('copy');
+      await sleep(SETTLE_SHORT);
+
+      // 4. switch to parent, wait until it's active, then park the playhead
+      await openAndActivate(project, parentSeq);
+      await waitActive(parentSeq, 20, 100);
+      var phSec = Math.max(0, parentStart + (earliest - nestIn));
+      await setPlayhead(parentSeq, phSec);
+      await sleep(SETTLE_SHORT);
+
+      // 5. native paste. Verify by clip-count growth so a silent no-op retries.
+      var before = await countSeqItems(parentSeq);
+      if (before <= 0) {
+        // Counting looks unreliable (parent must hold at least the nested clip).
+        // Don't verify — a false "0" would trigger retries that DUPLICATE the
+        // paste. Fall back to a single best-effort paste, old-style.
+        await hostKey('paste');
+        await sleep(SETTLE);
+        logLine('✓ "' + d.name + '": paste @ ' + fmt(phSec) + ' (không verify được số clip)', 'ok');
+        return picked.items.length;
+      }
+      await hostKey('paste');
+      var grew = await waitUntil(async function () {
+        return (await countSeqItems(parentSeq)) > before;
+      }, 16, 150);
+      var after = await countSeqItems(parentSeq);
+
+      if (grew && after > before) {
+        logLine('✓ "' + d.name + '": paste ' + (after - before) + ' item @ ' + fmt(phSec)
+          + (attempt > 1 ? ' (lần ' + attempt + ')' : '') + ' — giữ effect', 'ok');
+        return picked.items.length;
+      }
+      logLine('  ⚠ lần ' + attempt + '/' + MAX_TRIES + ': paste không thêm clip (before=' + before
+        + ' after=' + after + ')' + (attempt < MAX_TRIES ? ' → thử lại' : ''), 'warn');
+    }
+
+    // All attempts failed — paste never landed. Surface an actionable cause.
+    throw new Error('Paste không rớt clip sau ' + MAX_TRIES + ' lần. Kiểm tra trên timeline CHA: '
+      + '(1) bật Track Targeting (nút V1/A1 sáng xanh ở đầu track), '
+      + '(2) panel Timeline đang được chọn (click vào nó). Rồi chạy lại.');
+  }
+
+  // ── RUN ─────────────────────────────────────────────────────────────────────
+  async function run() {
+    if (!canRun || busy || detected.length === 0) return;
+    busy = true;
+    setRunEnabled(false);
+    clearLog();
+    var mode = getMode();                       // 'video' | 'av' | 'avt'
+    var disableOrig = !!els.disableOrig.checked;
+    var totalPlaced = 0;
+    var MODE_LABEL = { video: 'chỉ clip', av: 'clip + audio', avt: 'clip + audio + text' };
+
+    // Snapshot the originals NOW — we're about to switch sequences around.
+    var origItems = rawSelected.slice();
+
+    try {
+      var project = await getActiveProject();
+      var parentSeq = await getActiveSequence();   // the sequence holding the nested clips
+
+      logLine('Un-nest (copy-paste, giữ effect) · build: sel-callback-v2 · ' + detected.length
+        + ' clip · chế độ: ' + (MODE_LABEL[mode] || mode));
+
+      for (var i = 0; i < detected.length; i++) {
+        try {
+          totalPlaced += await copyPasteOne(project, parentSeq, detected[i], mode);
+        } catch (e) {
+          if (e.needAccessibility) {
+            logLine('✗ Bridge thiếu quyền Accessibility. Mở System Settings → Privacy & Security → '
+              + 'Accessibility → bật cho app chạy Bridge (Terminal / Claude Bridge), rồi chạy lại.', 'err');
+            throw e; // stop the whole run — every paste will fail the same way
+          }
+          logLine('✗ "' + detected[i].name + '": ' + (e.message || e), 'err');
+        }
+      }
+
+      // Disable the original nested clip(s) so playback isn't doubled
+      if (disableOrig && origItems.length) {
+        await openAndActivate(project, parentSeq);
+        await sleep(SETTLE_SHORT);
+        var disabledCount = 0;
+        for (var k = 0; k < origItems.length; k++) {
+          var it = origItems[k];
+          if (it && typeof it.createSetDisabledAction === 'function') {
+            try {
+              await (function(node) {
+                return project.lockedAccess(function() {
+                  project.executeTransaction(function(action) {
+                    action.addAction(node.createSetDisabledAction(true));
+                  }, 'Un-nest: disable original');
+                });
+              })(it);
+              disabledCount++;
+            } catch (e) {}
+          }
+        }
+        if (disabledCount) logLine('✓ đã tắt ' + disabledCount + ' clip nested gốc', 'ok');
+      }
+
+      logLine('—');
+      logLine('HOÀN TẤT · tổng ' + totalPlaced + ' clip đã copy-paste. Kiểm tra timeline & Cmd+Z nếu cần.', 'ok');
+    } catch (e) {
+      logLine('✗ LỖI: ' + (e.message || e), 'err');
+      console.error('[Un-nest] run error:', e);
+    } finally {
+      busy = false;
+      setRunEnabled(detected.length > 0);
+    }
+  }
+
+  // ── auto-detect: poll the timeline selection while the tab is active ────────
+  var lastFingerprint = '';
+  function tabActive() {
+    var panel = document.getElementById('tab-unnest');
+    return panel && panel.classList.contains('active');
+  }
+  async function selectionFingerprint() {
+    try {
+      var seq = await getActiveSequence();
+      var sel = await un(seq.getSelection());
+      if (!sel) return 'none';
+      var items = await awaitArray(sel.getTrackItems());
+      if (!items.length) return 'empty';
+      var parts = [];
+      for (var i = 0; i < items.length; i++) {
+        var s = await callSec(items[i], 'getStartTime');
+        var e = await callSec(items[i], 'getEndTime');
+        parts.push((s == null ? '?' : s.toFixed(2)) + '-' + (e == null ? '?' : e.toFixed(2)));
+      }
+      return items.length + ':' + parts.sort().join(',');
+    } catch (e) { return 'err'; }
+  }
+  var polling = false;
+  async function poll() {
+    if (!tabActive() || busy || polling) return;
+    polling = true;
+    try {
+      var fp = await selectionFingerprint();
+      if (fp !== lastFingerprint) {
+        lastFingerprint = fp;
+        await detect({ silent: true });
+      }
+    } catch (e) {} finally { polling = false; }
+  }
+  setInterval(poll, 800);
+
+  // ── wire events ─────────────────────────────────────────────────────────────
+  els.refresh.addEventListener('click', function() { lastFingerprint = '__force__'; detect(); });
+  els.run.addEventListener('click', run);
+
+  // Detect right away when the Un-nest tab is opened
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    if (btn.dataset.tab === 'unnest') {
+      btn.addEventListener('click', function() { lastFingerprint = '__open__'; setTimeout(poll, 80); });
+    }
+  });
+})();
