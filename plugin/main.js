@@ -8398,7 +8398,8 @@ async function ppMoveToVOBin(item, proj) {
       for (var a = 0; a < vc.length; a++) {
         var s1 = await callSec(vc[a], 'getStartTime'), e1 = await callSec(vc[a], 'getEndTime');
         if (s1 == null || e1 == null) continue;
-        if (mode === 'video') {
+        // 'video' and 'av' exclude text/title graphics; only 'avt' keeps them.
+        if (mode === 'video' || mode === 'av') {
           var cls = await classifyVideoClip(vc[a]);
           if (!cls.keep) { vfDropped.push(cls.reason); continue; } // text/title graphic → skip
           vfKept++;
@@ -8406,8 +8407,8 @@ async function ppMoveToVOBin(item, proj) {
         consider(vc[a], s1, e1);
       }
     }
-    if (mode === 'video') {
-      logLine('  [vf] video-only: giữ ' + vfKept + ' clip · bỏ ' + vfDropped.length + ' graphic text/title', 'ok');
+    if (mode === 'video' || mode === 'av') {
+      logLine('  [vf] lọc video: giữ ' + vfKept + ' clip · bỏ ' + vfDropped.length + ' graphic text/title', 'ok');
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
@@ -8600,7 +8601,7 @@ async function ppMoveToVOBin(item, proj) {
     var mode = getMode();                       // 'video' | 'av' | 'avt'
     var disableOrig = !!els.disableOrig.checked;
     var totalPlaced = 0;
-    var MODE_LABEL = { video: 'chỉ clip', av: 'clip + audio', avt: 'clip + audio + text' };
+    var MODE_LABEL = { video: 'chỉ video (bỏ text)', av: 'video + audio', avt: 'video + audio + text' };
 
     // Snapshot the originals NOW — we're about to switch sequences around.
     var origItems = rawSelected.slice();
@@ -8755,10 +8756,13 @@ async function ppMoveToVOBin(item, proj) {
   async function saveHotkey(mode, cfg) {
     hotkeysCfg = hotkeysCfg || {};
     hotkeysCfg[mode] = cfg;
-    var dupe = Object.keys(hotkeysCfg).filter(function (m) {
-      return m !== mode && comboLabel(hotkeysCfg[m]) === comboLabel(cfg);
-    });
-    if (dupe.length) logLine('⚠ Phím tắt trùng với: ' + dupe.join(', '), 'warn');
+    // Cleared (no code) → no duplicate check (many can be "off" at once).
+    if (cfg && cfg.code) {
+      var dupe = Object.keys(hotkeysCfg).filter(function (m) {
+        return m !== mode && hotkeysCfg[m] && hotkeysCfg[m].code && comboLabel(hotkeysCfg[m]) === comboLabel(cfg);
+      });
+      if (dupe.length) logLine('⚠ Phím tắt trùng với: ' + dupe.join(', '), 'warn');
+    }
     try {
       await fetch(BRIDGE_URL + '/unnest/hotkeys', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -8794,6 +8798,15 @@ async function ppMoveToVOBin(item, proj) {
       var mode = btn.getAttribute('data-mode');
       var el = $(HK_IDS[mode]);
       if (el) captureCombo(el, mode);
+    });
+  });
+  // Clear (✕) → remove the hotkey for that mode (no global key; manual run only).
+  document.querySelectorAll('.un-hkClear').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.getAttribute('data-mode');
+      var el = $(HK_IDS[mode]);
+      if (el) el.textContent = '—';
+      saveHotkey(mode, { code: '', cmd: false, opt: false, ctrl: false, shift: false });
     });
   });
   loadHotkeys(); // populate labels from the bridge (defaults if unreachable)
