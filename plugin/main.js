@@ -8712,9 +8712,92 @@ async function ppMoveToVOBin(item, proj) {
     } catch (e) { return { keep: true, reason: '' }; } // unknown → don't silently drop
   }
 
+  // ── global hotkey trigger: poll the bridge, run on the current selection ────
+  // The Swift app registers OS-global hotkeys and POSTs /unnest/trigger; we poll
+  // and run — works regardless of which tab/panel is active.
+  async function runMode(mode) {
+    var r = document.querySelector('input[name="unMode"][value="' + mode + '"]');
+    if (r) r.checked = true;
+    await run();
+  }
+  var trigPolling = false;
+  async function pollTrigger() {
+    if (busy || trigPolling) return;
+    trigPolling = true;
+    try {
+      var res = await fetch(BRIDGE_URL + '/unnest/poll');
+      var j = await res.json();
+      if (j && j.pending && j.pending.mode) await runMode(j.pending.mode);
+    } catch (e) {} finally { trigPolling = false; }
+  }
+  setInterval(pollTrigger, 400);
+
+  // ── hotkey config (click-to-capture, like Premiere's shortcut editor) ───────
+  var HK_IDS = { video: 'unHkVideo', av: 'unHkAv', avt: 'unHkAvt' };
+  var hotkeysCfg = null;
+  function comboLabel(c) {
+    if (!c || !c.code) return '—';
+    return (c.ctrl ? '⌃' : '') + (c.opt ? '⌥' : '') + (c.shift ? '⇧' : '') + (c.cmd ? '⌘' : '')
+      + String(c.code).replace(/^Key/, '').replace(/^Digit/, '');
+  }
+  async function loadHotkeys() {
+    try {
+      var res = await fetch(BRIDGE_URL + '/unnest/hotkeys');
+      var j = await res.json();
+      hotkeysCfg = (j && j.hotkeys) || {};
+    } catch (e) { hotkeysCfg = hotkeysCfg || {}; }
+    for (var mode in HK_IDS) {
+      if (!HK_IDS.hasOwnProperty(mode)) continue;
+      var el = $(HK_IDS[mode]);
+      if (el && hotkeysCfg[mode]) el.textContent = comboLabel(hotkeysCfg[mode]);
+    }
+  }
+  async function saveHotkey(mode, cfg) {
+    hotkeysCfg = hotkeysCfg || {};
+    hotkeysCfg[mode] = cfg;
+    var dupe = Object.keys(hotkeysCfg).filter(function (m) {
+      return m !== mode && comboLabel(hotkeysCfg[m]) === comboLabel(cfg);
+    });
+    if (dupe.length) logLine('⚠ Phím tắt trùng với: ' + dupe.join(', '), 'warn');
+    try {
+      await fetch(BRIDGE_URL + '/unnest/hotkeys', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hotkeys: hotkeysCfg }),
+      });
+    } catch (e) { logLine('Lưu phím tắt lỗi: ' + (e.message || e), 'err'); }
+  }
+  function captureCombo(labelEl, mode) {
+    var prev = labelEl.textContent;
+    labelEl.textContent = 'Bấm tổ hợp…';
+    labelEl.classList.add('is-listening');
+    function cleanup() { labelEl.classList.remove('is-listening'); document.removeEventListener('keydown', onKey, true); }
+    function onKey(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') { labelEl.textContent = prev; cleanup(); return; }
+      if (['Meta', 'Alt', 'Control', 'Shift', 'CapsLock'].indexOf(e.key) !== -1) return; // wait for a real key
+      var cfg = { code: e.code, cmd: !!e.metaKey, opt: !!e.altKey, ctrl: !!e.ctrlKey, shift: !!e.shiftKey };
+      if (!(cfg.cmd || cfg.opt || cfg.ctrl)) { labelEl.textContent = 'Cần ⌘/⌥/⌃ + phím…'; return; }
+      labelEl.textContent = comboLabel(cfg);
+      cleanup();
+      saveHotkey(mode, cfg);
+    }
+    document.addEventListener('keydown', onKey, true);
+  }
+
   // ── wire events ─────────────────────────────────────────────────────────────
   // No live selection list anymore (Un-nest lives in Settings). run() self-detects
   // the current selection, and the optional Quét-lại button just previews it.
   if (els.refresh) els.refresh.addEventListener('click', function() { detect(); });
   els.run.addEventListener('click', run);
+  document.querySelectorAll('.un-hkSet').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.getAttribute('data-mode');
+      var el = $(HK_IDS[mode]);
+      if (el) captureCombo(el, mode);
+    });
+  });
+  loadHotkeys(); // populate labels from the bridge (defaults if unreachable)
+  document.querySelectorAll('.settings-tab').forEach(function (t) {
+    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', loadHotkeys);
+  });
 })();

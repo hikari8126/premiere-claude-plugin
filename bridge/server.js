@@ -2324,7 +2324,7 @@ app.post('/superautocut/normalize-script', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.7.4';  // normalize-script: hop nhat 2 prompt Organize (Voice Gen + Autocut) dung chung buildOrganizePrompt() -> 2 ket qua tuong dong; CAPS = ALL CAPS toan bo chu
+const BRIDGE_VERSION = '1.8.0';  // + /unnest/{trigger,poll,hotkeys} for global un-nest hotkeys (Swift app owns keys, config in ~/Library/Application Support/ClaudeBridge/hotkeys.json)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -2434,6 +2434,46 @@ app.post('/host-key', (req, res) => {
     }
     res.json({ ok: true, action });
   });
+});
+
+// ── UN-NEST global-hotkey plumbing ───────────────────────────────────────────
+// The Swift host app owns the OS-global hotkeys (it has Accessibility). On a
+// hotkey it POSTs /unnest/trigger; the plugin polls /unnest/poll and runs on the
+// current selection. Key combos are edited in the plugin and stored OUTSIDE the
+// app bundle (editing the bundle would break its code seal) at:
+//   ~/Library/Application Support/ClaudeBridge/hotkeys.json
+const UNNEST_MODES = ['video', 'av', 'avt'];
+let unnestPending = null; // { mode, ts } — one-shot, consumed by first poll
+const HK_DIR  = path.join(os.homedir(), 'Library', 'Application Support', 'ClaudeBridge');
+const HK_FILE = path.join(HK_DIR, 'hotkeys.json');
+const HK_DEFAULT = {
+  video: { code: 'Digit1', cmd: true, opt: true, ctrl: true, shift: false },
+  av:    { code: 'Digit2', cmd: true, opt: true, ctrl: true, shift: false },
+  avt:   { code: 'Digit3', cmd: true, opt: true, ctrl: true, shift: false },
+};
+function readHotkeys() {
+  try { return Object.assign({}, HK_DEFAULT, JSON.parse(fs.readFileSync(HK_FILE, 'utf8'))); }
+  catch (e) { return Object.assign({}, HK_DEFAULT); }
+}
+
+app.post('/unnest/trigger', (req, res) => {
+  const mode = String((req.body && req.body.mode) || '');
+  if (UNNEST_MODES.indexOf(mode) === -1) return res.status(400).json({ ok: false, error: 'mode không hợp lệ' });
+  unnestPending = { mode, ts: Date.now() };
+  res.json({ ok: true });
+});
+app.get('/unnest/poll', (_req, res) => {
+  const p = unnestPending; unnestPending = null; // one-shot
+  res.json({ ok: true, pending: p ? { mode: p.mode } : null });
+});
+app.get('/unnest/hotkeys', (_req, res) => res.json({ ok: true, hotkeys: readHotkeys() }));
+app.post('/unnest/hotkeys', (req, res) => {
+  try {
+    const hk = (req.body && req.body.hotkeys) ? req.body.hotkeys : (req.body || {});
+    fs.mkdirSync(HK_DIR, { recursive: true });
+    fs.writeFileSync(HK_FILE, JSON.stringify(Object.assign({}, HK_DEFAULT, hk), null, 2));
+    res.json({ ok: true, hotkeys: readHotkeys() });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
