@@ -8647,53 +8647,55 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   // ── Clip-type classification for "video-only" mode ─────────────────────────
-  // A text/title graphic is an Essential-Graphics / mogrt clip whose "AE.ADBE Capsule"
-  // component exposes typography params (Main Text / Font size / Tracking / …). A
-  // video-like mogrt (e.g. a light leak) has only Transform/Color params. Signals
-  // confirmed via probe on this Premiere build (see 2026-07-03 spec).
-  var UNNEST_TEXT_PARAM_RE = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i;
-  var UNNEST_TEXT_COMP_RE  = /text|title|caption/i;
+  // Goal: drop ONLY pure-text subtitle layers, keep everything with real visuals —
+  // including graphics that also carry text (e.g. a badge = Text + Shape).
+  // Confirmed component signatures on this build (probe v4):
+  //   pure-text sub → Opacity, Motion, Graphic Group, Text            (Text, no Shape)
+  //   visual badge  → Opacity, Motion, Graphic Group, Text, Shape     (Text + Shape → KEEP)
+  //   footage       → Opacity, Motion, Ultra Key                      (no Text)
+  //   text mogrt    → Capsule with typography params (Main Text/Font size/…)
+  //   visual mogrt  → Capsule with Transform/Color params only (no text)
+  var UNNEST_TEXT_COMP_RE   = /text|title|caption/i;                 // component = text
+  var UNNEST_VISUAL_COMP_RE = /shape|image|media|solid|vector|ellipse|rectangle|footage|video/i; // component = real visual
+  var UNNEST_TEXT_PARAM_RE  = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i; // Capsule typography param
 
-  // Returns a non-empty REASON string if the clip is a text/title graphic, else ''.
-  // Signals (first hit wins): a component whose matchName mentions text/title/caption,
-  // or any component param whose displayName is a typography name. Inspects ALL
-  // components (not just AE.ADBE Capsule) so non-mogrt text is caught too.
-  async function clipTextReason(clip) {
-    try {
-      var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
-      if (!chain) return '';
-      var cc = chain.getComponentCount ? await un(chain.getComponentCount()) : 0;
-      for (var k = 0; k < cc; k++) {
-        var comp = await un(chain.getComponentAtIndex(k));
-        if (!comp) continue;
-        var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
-        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) return 'comp:' + cmn;
-        var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
-        for (var pj = 0; pj < pc; pj++) {
-          try {
-            var prm = await un(comp.getParam(pj));
-            var dn = '';
-            if (prm) {
-              if (typeof prm.getDisplayName === 'function') { dn = await un(prm.getDisplayName()); }
-              else if (prm.displayName) { dn = prm.displayName; }
-            }
-            if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) return 'param:' + dn;
-          } catch (e) {}
-        }
-      }
-      return '';
-    } catch (e) { return ''; }
-  }
-
-  // Keep this clip in "video" mode? Keeps footage, nested sequences, AE dynamic-link
-  // comps, and text-free graphics/mogrt; drops text/title graphics. Returns
-  // { keep, reason } — reason is the text signal when dropped (for logging).
+  // Classify a video-track clip. Returns { keep, reason }.
+  // DROP only when the clip has text content AND no real visual component
+  // (a pure subtitle). Footage, nested, AE comps, and text+visual graphics are kept.
   async function classifyVideoClip(clip) {
     try {
       var pi = await un(clip.getProjectItem ? clip.getProjectItem() : null);
       if (pi) { var cp = asClipPI(pi); if (cp) { try { if (await un(cp.isSequence())) return { keep: true, reason: '' }; } catch (e) {} } }
-      var reason = await clipTextReason(clip);
-      return { keep: !reason, reason: reason };
+
+      var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
+      if (!chain) return { keep: true, reason: '' };
+      var cc = chain.getComponentCount ? await un(chain.getComponentCount()) : 0;
+      var hasText = false, hasVisual = false, textSig = '';
+      for (var k = 0; k < cc; k++) {
+        var comp = await un(chain.getComponentAtIndex(k));
+        if (!comp) continue;
+        var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
+        if (cmn && UNNEST_VISUAL_COMP_RE.test(cmn)) { hasVisual = true; continue; }
+        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) { hasText = true; if (!textSig) textSig = 'comp:' + cmn; continue; }
+        // Capsule (mogrt / Essential-Graphics container): inspect params for text.
+        if (cmn && /capsule/i.test(cmn)) {
+          var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
+          for (var pj = 0; pj < pc; pj++) {
+            try {
+              var prm = await un(comp.getParam(pj));
+              var dn = '';
+              if (prm) {
+                if (typeof prm.getDisplayName === 'function') { dn = await un(prm.getDisplayName()); }
+                else if (prm.displayName) { dn = prm.displayName; }
+              }
+              if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) { hasText = true; if (!textSig) textSig = 'param:' + dn; }
+            } catch (e) {}
+          }
+        }
+      }
+      // Pure text (text present, no visual component) → drop; otherwise keep.
+      if (hasText && !hasVisual) return { keep: false, reason: textSig || 'text-only' };
+      return { keep: true, reason: '' };
     } catch (e) { return { keep: true, reason: '' }; } // unknown → don't silently drop
   }
 
