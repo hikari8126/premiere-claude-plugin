@@ -8386,15 +8386,24 @@ async function ppMoveToVOBin(item, proj) {
       if (s < earliest) earliest = s;
     }
     var nv = 0; try { nv = await un(nested.getVideoTrackCount()); } catch (e) {}
+    var vfDropped = [], vfKept = 0;
     for (var vi = 0; vi < nv; vi++) {
       var vt = await un(nested.getVideoTrack(vi));
       var vc = await getClipItems(vt);
       for (var a = 0; a < vc.length; a++) {
         var s1 = await callSec(vc[a], 'getStartTime'), e1 = await callSec(vc[a], 'getEndTime');
         if (s1 == null || e1 == null) continue;
-        if (mode === 'video' && !(await isVideoLikeClip(vc[a]))) continue; // skip text/title graphics
+        if (mode === 'video' && !(await isVideoLikeClip(vc[a]))) {
+          try { var dp = await un(vc[a].getProjectItem()); vfDropped.push(dp && dp.name || '?'); } catch (e) { vfDropped.push('?'); }
+          continue; // skip text/title graphics
+        }
+        if (mode === 'video') vfKept++;
         consider(vc[a], s1, e1);
       }
+    }
+    if (mode === 'video') {
+      logLine('  [vf] video-only: giữ ' + vfKept + ' · bỏ ' + vfDropped.length
+        + (vfDropped.length ? ' [' + vfDropped.slice(0, 12).join(', ') + ']' : ''), 'warn');
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
@@ -8588,7 +8597,7 @@ async function ppMoveToVOBin(item, proj) {
       var project = await getActiveProject();
       var parentSeq = await getActiveSequence();   // the sequence holding the nested clips
 
-      logLine('Un-nest (copy-paste, giữ effect) · build: sel-callback-v2 · ' + detected.length
+      logLine('Un-nest (copy-paste, giữ effect) · build: vfilter2 · ' + detected.length
         + ' clip · chế độ: ' + (MODE_LABEL[mode] || mode));
 
       for (var i = 0; i < detected.length; i++) {
@@ -8643,9 +8652,14 @@ async function ppMoveToVOBin(item, proj) {
   // component exposes typography params (Main Text / Font size / Tracking / …). A
   // video-like mogrt (e.g. a light leak) has only Transform/Color params. Signals
   // confirmed via probe on this Premiere build (see 2026-07-03 spec).
-  var UNNEST_TEXT_PARAM_RE = /(main text|source text|font\s?size|tracking|leading|paragraph|highlight text|text box)/i;
+  var UNNEST_TEXT_PARAM_RE = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i;
+  var UNNEST_TEXT_COMP_RE  = /text|title|caption/i;
 
-  // True if the clip is an Essential-Graphics/mogrt whose Capsule holds text params.
+  // True if the clip is a text/title graphic. Signals (any hit → text):
+  //   • a component whose matchName mentions text/title/caption, OR
+  //   • any component param whose displayName is a typography name
+  //     (Main Text / Font size / Tracking / Leading / Paragraph / Text Box / …).
+  // Inspects ALL components (not just AE.ADBE Capsule) so non-mogrt text is caught.
   async function clipHasText(clip) {
     try {
       var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
@@ -8655,7 +8669,7 @@ async function ppMoveToVOBin(item, proj) {
         var comp = await un(chain.getComponentAtIndex(k));
         if (!comp) continue;
         var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
-        if (!/capsule/i.test(cmn)) continue; // only the mogrt / Essential-Graphics container
+        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) return true;
         var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
         for (var pj = 0; pj < pc; pj++) {
           try {
