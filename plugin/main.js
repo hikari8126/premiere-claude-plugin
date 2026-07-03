@@ -8391,7 +8391,9 @@ async function ppMoveToVOBin(item, proj) {
       var vc = await getClipItems(vt);
       for (var a = 0; a < vc.length; a++) {
         var s1 = await callSec(vc[a], 'getStartTime'), e1 = await callSec(vc[a], 'getEndTime');
-        if (s1 != null && e1 != null) consider(vc[a], s1, e1);
+        if (s1 == null || e1 == null) continue;
+        if (mode === 'video' && !(await isVideoLikeClip(vc[a]))) continue; // skip text/title graphics
+        consider(vc[a], s1, e1);
       }
     }
     if (mode === 'av' || mode === 'avt') {
@@ -8634,6 +8636,52 @@ async function ppMoveToVOBin(item, proj) {
       busy = false;
       setRunEnabled(detected.length > 0);
     }
+  }
+
+  // ── Clip-type classification for "video-only" mode ─────────────────────────
+  // A text/title graphic is an Essential-Graphics / mogrt clip whose "AE.ADBE Capsule"
+  // component exposes typography params (Main Text / Font size / Tracking / …). A
+  // video-like mogrt (e.g. a light leak) has only Transform/Color params. Signals
+  // confirmed via probe on this Premiere build (see 2026-07-03 spec).
+  var UNNEST_TEXT_PARAM_RE = /(main text|source text|font\s?size|tracking|leading|paragraph|highlight text|text box)/i;
+
+  // True if the clip is an Essential-Graphics/mogrt whose Capsule holds text params.
+  async function clipHasText(clip) {
+    try {
+      var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
+      if (!chain) return false;
+      var cc = chain.getComponentCount ? await un(chain.getComponentCount()) : 0;
+      for (var k = 0; k < cc; k++) {
+        var comp = await un(chain.getComponentAtIndex(k));
+        if (!comp) continue;
+        var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
+        if (!/capsule/i.test(cmn)) continue; // only the mogrt / Essential-Graphics container
+        var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
+        for (var pj = 0; pj < pc; pj++) {
+          try {
+            var prm = await un(comp.getParam(pj));
+            var dn = '';
+            if (prm) {
+              if (typeof prm.getDisplayName === 'function') { dn = await un(prm.getDisplayName()); }
+              else if (prm.displayName) { dn = prm.displayName; }
+            }
+            if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) return true;
+          } catch (e) {}
+        }
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  // True → keep this clip in "video" mode. Keeps footage, nested sequences, AE
+  // dynamic-link comps, and text-free graphics/mogrt; drops text/title graphics.
+  async function isVideoLikeClip(clip) {
+    try {
+      var pi = await un(clip.getProjectItem ? clip.getProjectItem() : null);
+      if (pi) { var cp = asClipPI(pi); if (cp) { try { if (await un(cp.isSequence())) return true; } catch (e) {} } }
+      if (await clipHasText(clip)) return false; // text/title graphic → drop
+      return true;
+    } catch (e) { return true; } // unknown → don't silently drop
   }
 
   // ── auto-detect: poll the timeline selection while the tab is active ────────
