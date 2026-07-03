@@ -8023,6 +8023,9 @@ async function ppMoveToVOBin(item, proj) {
 
   // ── DETECT: read selection, find nested-sequence clips ──────────────────────
   // opts.silent = true → triggered by auto-poll; don't flash UI / clear the log.
+  function setCount(t) { if (els.count) els.count.textContent = t; }
+  function setList(html) { if (els.list) els.list.innerHTML = html; }
+
   async function detect(opts) {
     if (busy) return;
     var silent = opts && opts.silent;
@@ -8031,8 +8034,8 @@ async function ppMoveToVOBin(item, proj) {
     rawSelected = [];
     if (!silent) {
       clearLog();
-      els.count.textContent = 'đang quét…';
-      els.list.innerHTML = '<div class="un-empty">Đang quét vùng chọn…</div>';
+      setCount('đang quét…');
+      setList('<div class="un-empty">Đang quét vùng chọn…</div>');
     }
     setRunEnabled(false);
 
@@ -8044,8 +8047,8 @@ async function ppMoveToVOBin(item, proj) {
       rawSelected = await awaitArray(sel.getTrackItems());
 
       if (rawSelected.length === 0) {
-        els.count.textContent = '0 clip';
-        els.list.innerHTML = '<div class="un-empty">Chưa chọn clip nào. Click chọn clip nested trên timeline — plugin sẽ tự nhận.</div>';
+        setCount('0 clip');
+        setList('<div class="un-empty">Chưa chọn clip nào. Click chọn clip nested trên timeline — plugin sẽ tự nhận.</div>');
         return;
       }
 
@@ -8086,8 +8089,8 @@ async function ppMoveToVOBin(item, proj) {
 
       renderList(nonNested);
     } catch (e) {
-      els.count.textContent = 'lỗi';
-      els.list.innerHTML = '<div class="un-empty">⚠ ' + escapeHtml(e.message || e) + '</div>';
+      setCount('lỗi');
+      setList('<div class="un-empty">⚠ ' + escapeHtml(e.message || e) + '</div>');
       console.error('[Un-nest] detect error:', e);
     } finally {
       busy = false;
@@ -8095,28 +8098,30 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   function renderList(nonNested) {
-    els.count.textContent = detected.length + ' nested';
-    els.list.innerHTML = '';
+    setCount(detected.length + ' nested');
     if (detected.length === 0) {
       var msg = nonNested > 0
         ? ('Vùng chọn có ' + nonNested + ' clip nhưng không phải nested sequence.')
         : 'Không tìm thấy nested sequence trong vùng chọn.';
-      els.list.innerHTML = '<div class="un-empty">' + msg + '</div>';
+      setList('<div class="un-empty">' + msg + '</div>');
       setRunEnabled(false);
       return;
     }
-    for (var i = 0; i < detected.length; i++) {
-      var d = detected[i];
-      var div = document.createElement('div');
-      div.className = 'un-item' + (d.ok ? '' : ' is-bad');
-      var inS  = (d.nestIn  == null) ? 0 : d.nestIn;
-      var outS = (d.nestOut == null) ? 0 : d.nestOut;
-      var html = '<div class="un-itemName">' + escapeHtml(d.name) + '</div>'
-        + '<div class="un-itemMeta">@ ' + fmt(d.parentStart) + ' trên timeline · đoạn cắt '
-        + fmt(inS) + '–' + fmt(outS) + ' (' + fmt(Math.max(0, outS - inS)) + ')</div>';
-      if (!d.ok) html += '<div class="un-itemBad">⚠ Không đọc được nội dung nested — sẽ bỏ qua.</div>';
-      div.innerHTML = html;
-      els.list.appendChild(div);
+    if (els.list) {
+      els.list.innerHTML = '';
+      for (var i = 0; i < detected.length; i++) {
+        var d = detected[i];
+        var div = document.createElement('div');
+        div.className = 'un-item' + (d.ok ? '' : ' is-bad');
+        var inS  = (d.nestIn  == null) ? 0 : d.nestIn;
+        var outS = (d.nestOut == null) ? 0 : d.nestOut;
+        var html = '<div class="un-itemName">' + escapeHtml(d.name) + '</div>'
+          + '<div class="un-itemMeta">@ ' + fmt(d.parentStart) + ' trên timeline · đoạn cắt '
+          + fmt(inS) + '–' + fmt(outS) + ' (' + fmt(Math.max(0, outS - inS)) + ')</div>';
+        if (!d.ok) html += '<div class="un-itemBad">⚠ Không đọc được nội dung nested — sẽ bỏ qua.</div>';
+        div.innerHTML = html;
+        els.list.appendChild(div);
+      }
     }
     setRunEnabled(true);
   }
@@ -8580,7 +8585,15 @@ async function ppMoveToVOBin(item, proj) {
 
   // ── RUN ─────────────────────────────────────────────────────────────────────
   async function run() {
-    if (!canRun || busy || detected.length === 0) return;
+    if (busy) return;
+    // Self-detect the current selection (no live list UI anymore). detect()
+    // manages its own busy flag, so call it BEFORE we take busy here.
+    await detect({ silent: true });
+    if (!detected.length) {
+      clearLog();
+      logLine('Không tìm thấy nested sequence trong vùng chọn. Chọn 1 clip nested rồi chạy lại.', 'warn');
+      return;
+    }
     busy = true;
     setRunEnabled(false);
     clearLog();
@@ -8699,50 +8712,9 @@ async function ppMoveToVOBin(item, proj) {
     } catch (e) { return { keep: true, reason: '' }; } // unknown → don't silently drop
   }
 
-  // ── auto-detect: poll the timeline selection while the tab is active ────────
-  var lastFingerprint = '';
-  function tabActive() {
-    var panel = document.getElementById('tab-unnest');
-    return panel && panel.classList.contains('active');
-  }
-  async function selectionFingerprint() {
-    try {
-      var seq = await getActiveSequence();
-      var sel = await un(seq.getSelection());
-      if (!sel) return 'none';
-      var items = await awaitArray(sel.getTrackItems());
-      if (!items.length) return 'empty';
-      var parts = [];
-      for (var i = 0; i < items.length; i++) {
-        var s = await callSec(items[i], 'getStartTime');
-        var e = await callSec(items[i], 'getEndTime');
-        parts.push((s == null ? '?' : s.toFixed(2)) + '-' + (e == null ? '?' : e.toFixed(2)));
-      }
-      return items.length + ':' + parts.sort().join(',');
-    } catch (e) { return 'err'; }
-  }
-  var polling = false;
-  async function poll() {
-    if (!tabActive() || busy || polling) return;
-    polling = true;
-    try {
-      var fp = await selectionFingerprint();
-      if (fp !== lastFingerprint) {
-        lastFingerprint = fp;
-        await detect({ silent: true });
-      }
-    } catch (e) {} finally { polling = false; }
-  }
-  setInterval(poll, 800);
-
   // ── wire events ─────────────────────────────────────────────────────────────
-  els.refresh.addEventListener('click', function() { lastFingerprint = '__force__'; detect(); });
+  // No live selection list anymore (Un-nest lives in Settings). run() self-detects
+  // the current selection, and the optional Quét-lại button just previews it.
+  if (els.refresh) els.refresh.addEventListener('click', function() { detect(); });
   els.run.addEventListener('click', run);
-
-  // Detect right away when the Un-nest tab is opened
-  document.querySelectorAll('.tab-btn').forEach(function(btn) {
-    if (btn.dataset.tab === 'unnest') {
-      btn.addEventListener('click', function() { lastFingerprint = '__open__'; setTimeout(poll, 80); });
-    }
-  });
 })();
