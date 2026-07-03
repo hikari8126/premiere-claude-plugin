@@ -962,19 +962,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 // (written by the plugin, OUTSIDE the app bundle) and are re-registered when it changes.
 // Carbon hotkeys do NOT need Accessibility — only the un-nest keystrokes (osascript) do.
 
-// JS KeyboardEvent.code → macOS virtual keycode (layout-independent).
-let kVKByCode: [String: UInt32] = [
-  "Digit0": 0x1D, "Digit1": 0x12, "Digit2": 0x13, "Digit3": 0x14, "Digit4": 0x15,
-  "Digit5": 0x17, "Digit6": 0x16, "Digit7": 0x1A, "Digit8": 0x1C, "Digit9": 0x19,
-  "KeyA": 0x00, "KeyB": 0x0B, "KeyC": 0x08, "KeyD": 0x02, "KeyE": 0x0E, "KeyF": 0x03,
-  "KeyG": 0x05, "KeyH": 0x04, "KeyI": 0x22, "KeyJ": 0x26, "KeyK": 0x28, "KeyL": 0x25,
-  "KeyM": 0x2E, "KeyN": 0x2D, "KeyO": 0x1F, "KeyP": 0x23, "KeyQ": 0x0C, "KeyR": 0x0F,
-  "KeyS": 0x01, "KeyT": 0x11, "KeyU": 0x20, "KeyV": 0x09, "KeyW": 0x0D, "KeyX": 0x07,
-  "KeyY": 0x10, "KeyZ": 0x06,
-  "F1": 0x7A, "F2": 0x78, "F3": 0x63, "F4": 0x76, "F5": 0x60, "F6": 0x61,
-  "F7": 0x62, "F8": 0x64, "F9": 0x65, "F10": 0x6D, "F11": 0x67, "F12": 0x6F,
-]
-
 // C-compatible Carbon callback (no context capture) → dispatch to the shared manager.
 private func unnestHotKeyHandler(_ next: EventHandlerCallRef?, _ ev: EventRef?,
                                  _ userData: UnsafeMutableRawPointer?) -> OSStatus {
@@ -987,6 +974,20 @@ private func unnestHotKeyHandler(_ next: EventHandlerCallRef?, _ ev: EventRef?,
 
 final class UnnestHotkeys {
     static let shared = UnnestHotkeys()
+    // JS KeyboardEvent.code → macOS virtual keycode (layout-independent). Static so
+    // it is lazily initialised on first use (a top-level global would never init:
+    // the entry point's app.run() blocks before reaching later top-level lets).
+    static let kVKByCode: [String: UInt32] = [
+      "Digit0": 0x1D, "Digit1": 0x12, "Digit2": 0x13, "Digit3": 0x14, "Digit4": 0x15,
+      "Digit5": 0x17, "Digit6": 0x16, "Digit7": 0x1A, "Digit8": 0x1C, "Digit9": 0x19,
+      "KeyA": 0x00, "KeyB": 0x0B, "KeyC": 0x08, "KeyD": 0x02, "KeyE": 0x0E, "KeyF": 0x03,
+      "KeyG": 0x05, "KeyH": 0x04, "KeyI": 0x22, "KeyJ": 0x26, "KeyK": 0x28, "KeyL": 0x25,
+      "KeyM": 0x2E, "KeyN": 0x2D, "KeyO": 0x1F, "KeyP": 0x23, "KeyQ": 0x0C, "KeyR": 0x0F,
+      "KeyS": 0x01, "KeyT": 0x11, "KeyU": 0x20, "KeyV": 0x09, "KeyW": 0x0D, "KeyX": 0x07,
+      "KeyY": 0x10, "KeyZ": 0x06,
+      "F1": 0x7A, "F2": 0x78, "F3": 0x63, "F4": 0x76, "F5": 0x60, "F6": 0x61,
+      "F7": 0x62, "F8": 0x64, "F9": 0x65, "F10": 0x6D, "F11": 0x67, "F12": 0x6F,
+    ]
     private var refs: [EventHotKeyRef?] = []
     private var idToMode: [UInt32: String] = [:]
     private var handlerInstalled = false
@@ -1034,7 +1035,7 @@ final class UnnestHotkeys {
         refs.removeAll(); idToMode.removeAll()
         let cfg = readConfig()
         for (i, mode) in modes.enumerated() {
-            guard let e = cfg[mode], let code = e["code"] as? String, let kc = kVKByCode[code] else { continue }
+            guard let e = cfg[mode], let code = e["code"] as? String, let kc = UnnestHotkeys.kVKByCode[code] else { continue }
             var mods: UInt32 = 0
             if (e["cmd"]   as? Bool) == true { mods |= UInt32(cmdKey) }
             if (e["opt"]   as? Bool) == true { mods |= UInt32(optionKey) }
