@@ -3614,3 +3614,29 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .un-radio input { margin-top: 2px; flex: 0 0 auto; }
 .un-radio b { font-weight: 600; }
 .un-radio i { color: var(--text-dim); font-style: italic; }
+
+/* Un-nest inside Settings: hint + mode-row with inline shortcut picker */
+.un-settingsHint {
+  font-size: 11px; line-height: 1.5; color: var(--text-dim);
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border-radius: 6px; padding: 8px 10px;
+}
+.un-modeRow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 0;
+}
+.un-modeRow .un-radio { flex: 1 1 auto; padding: 3px 0; }
+.un-hk { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.un-hkLabel {
+  font-size: 11px; font-weight: 700; color: var(--text);
+  background: rgba(255,255,255,0.07); border-radius: 5px;
+  padding: 3px 8px; min-width: 44px; text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.un-hkLabel.is-listening { color: #fbbf24; background: rgba(251,191,36,0.14); }
+.un-hkSet {
+  font-size: 11px; color: var(--text-dim); cursor: pointer;
+  background: transparent; border: 1px solid var(--border, rgba(255,255,255,0.15));
+  border-radius: 5px; padding: 3px 8px;
+}
+.un-hkSet:hover { color: var(--text); border-color: var(--text-dim); }

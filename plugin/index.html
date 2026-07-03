@@ -30,7 +30,6 @@
   <div class="tab-btn active" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
   <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
   <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
-  <div class="tab-btn" role="button" data-tab="unnest"><span data-ic="layer_group" data-ic-size="14"></span> UN-NEST</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -116,6 +115,7 @@
       <div class="settings-tabs">
         <div class="settings-tab is-active" role="button" data-stab="general">General</div>
         <div class="settings-tab" role="button" data-stab="voicegen">Voice Gen</div>
+        <div class="settings-tab" role="button" data-stab="unnest">Un-nest</div>
       </div>
 
       <!-- ── GENERAL tab ── -->
@@ -298,6 +298,40 @@
         </div>
 
       </div><!-- /settings-tabPanel voicegen -->
+
+      <!-- ── UN-NEST tab ── -->
+      <div class="settings-tabPanel" data-stab="unnest" hidden>
+        <div class="un-settingsHint">
+          Chọn <b>nested sequence</b> trên timeline rồi bấm nút bên dưới (hoặc phím tắt).
+          Bung bằng <b>copy-paste thật</b> nên giữ nguyên effect. Cần Bridge + quyền <b>Accessibility</b>.
+        </div>
+
+        <div class="un-sectionTitle" style="margin:10px 0 4px;">Bung những gì · phím tắt</div>
+
+        <div class="un-modeRow">
+          <label class="un-radio"><input type="radio" name="unMode" value="video" />
+            <span><b>Chỉ element video</b> — bỏ text/title</span></label>
+          <div class="un-hk"><span class="un-hkLabel" id="unHkVideo">⌃⌥⌘1</span><button class="un-hkSet" type="button" data-mode="video">Đổi…</button></div>
+        </div>
+        <div class="un-modeRow">
+          <label class="un-radio"><input type="radio" name="unMode" value="av" checked />
+            <span><b>Clip + audio</b> — hình kèm tiếng gốc</span></label>
+          <div class="un-hk"><span class="un-hkLabel" id="unHkAv">⌃⌥⌘2</span><button class="un-hkSet" type="button" data-mode="av">Đổi…</button></div>
+        </div>
+        <div class="un-modeRow">
+          <label class="un-radio"><input type="radio" name="unMode" value="avt" />
+            <span><b>Clip + audio + text</b> <i>(thử nghiệm)</i></span></label>
+          <div class="un-hk"><span class="un-hkLabel" id="unHkAvt">⌃⌥⌘3</span><button class="un-hkSet" type="button" data-mode="avt">Đổi…</button></div>
+        </div>
+
+        <label class="un-check" style="margin-top:8px;">
+          <input type="checkbox" id="unDisableOrig" checked />
+          <span>Tắt (disable) clip nested gốc sau khi bung — tránh phát đè</span>
+        </label>
+
+        <div id="unRun" class="un-runBtn" role="button" aria-disabled="false" style="margin-top:10px;"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
+        <div id="unLog" class="un-log" hidden></div>
+      </div><!-- /settings-tabPanel unnest -->
 
       <div class="settings-actions">
         <button class="btn-secondary" id="close-settings">Cancel</button>
@@ -1125,69 +1159,6 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- TAB: UN-NEST  (expand nested sequences in 1 click)     -->
-<!-- ═══════════════════════════════════════════════════════ -->
-<div class="tab-panel" id="tab-unnest">
-  <div class="un-app">
-
-    <!-- Header -->
-    <div class="un-header">
-      <h1><span data-ic="layer_group" data-ic-size="16"></span> Un-nest</h1>
-      <div class="un-refreshBtn" id="unRefresh" role="button"><span data-ic="rotate_right" data-ic-size="13"></span> Quét lại</div>
-    </div>
-
-    <!-- Status / hint -->
-    <div class="un-hint" id="unHint">
-      Chọn clip <b>nested sequence</b> trên timeline — plugin <b>tự nhận</b>.
-      Un-nest bằng <b>copy-paste thật</b> của Premiere nên <b>giữ nguyên effect</b>.
-      Cần Bridge đang chạy + cấp quyền <b>Accessibility</b> 1 lần.
-    </div>
-
-    <!-- Detected nested clips -->
-    <div class="un-section">
-      <div class="un-sectionHead">
-        <span class="un-sectionTitle">Nested clip đang chọn</span>
-        <span class="un-sectionMeta" id="unCount">— chưa quét —</span>
-      </div>
-      <div id="unList" class="un-list">
-        <div class="un-empty">Chọn nested sequence trên timeline để plugin tự nhận.</div>
-      </div>
-    </div>
-
-    <!-- Options: what to expand -->
-    <div class="un-section">
-      <div class="un-sectionTitle" style="margin-bottom:6px;">Bung những gì</div>
-      <label class="un-radio">
-        <input type="radio" name="unMode" value="video" />
-        <span><b>Chỉ element video</b> — bỏ text / title (giữ footage, nested, mogrt hình)</span>
-      </label>
-      <label class="un-radio">
-        <input type="radio" name="unMode" value="av" checked />
-        <span><b>Clip + audio</b> — hình kèm tiếng gốc của clip</span>
-      </label>
-      <label class="un-radio">
-        <input type="radio" name="unMode" value="avt" />
-        <span><b>Clip + audio + text</b> — kèm cả phụ đề / caption <i>(thử nghiệm)</i></span>
-      </label>
-    </div>
-
-    <!-- Options: misc -->
-    <div class="un-section">
-      <label class="un-check">
-        <input type="checkbox" id="unDisableOrig" checked />
-        <span>Tắt (disable) clip nested gốc sau khi bung — tránh phát đè</span>
-      </label>
-    </div>
-
-    <!-- Action -->
-    <div id="unRun" class="un-runBtn" role="button" aria-disabled="true"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
-
-    <!-- Log -->
-    <div id="unLog" class="un-log" hidden></div>
-
-  </div><!-- /un-app -->
-</div><!-- /tab-unnest -->
-
 <!-- Single non-module script -->
 <script src="main.js"></script>
 </body>
