@@ -1,5 +1,6 @@
 import Cocoa
 import Foundation
+import Carbon.HIToolbox   // RegisterEventHotKey + kVK/modifier constants (global hotkeys)
 
 // ── Entry point ────────────────────────────────────────────────────────────
 let app = NSApplication.shared
@@ -33,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Lifecycle
     func applicationDidFinishLaunching(_ n: Notification) {
         setupMenuBar()
+        UnnestHotkeys.shared.start()   // register global un-nest hotkeys + watch config
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
         // Auto-check for updates so the "⬆️ Có bản cập nhật" item appears on its own.
         // Runs independently of whether the bundled bridge process managed to start.
@@ -950,5 +952,111 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if sem.wait(timeout: .now() + timeout) == .timedOut { p.terminate() }
         return (out, status)
+    }
+}
+
+// ── UN-NEST global hotkeys (Carbon RegisterEventHotKey) ──────────────────────
+// Owns 3 OS-global hotkeys (one per un-nest mode). On press → POST the mode to the
+// local bridge; the UXP plugin polls /unnest/poll and runs on the current
+// selection. Combos come from ~/Library/Application Support/ClaudeBridge/hotkeys.json
+// (written by the plugin, OUTSIDE the app bundle) and are re-registered when it changes.
+// Carbon hotkeys do NOT need Accessibility — only the un-nest keystrokes (osascript) do.
+
+// JS KeyboardEvent.code → macOS virtual keycode (layout-independent).
+let kVKByCode: [String: UInt32] = [
+  "Digit0": 0x1D, "Digit1": 0x12, "Digit2": 0x13, "Digit3": 0x14, "Digit4": 0x15,
+  "Digit5": 0x17, "Digit6": 0x16, "Digit7": 0x1A, "Digit8": 0x1C, "Digit9": 0x19,
+  "KeyA": 0x00, "KeyB": 0x0B, "KeyC": 0x08, "KeyD": 0x02, "KeyE": 0x0E, "KeyF": 0x03,
+  "KeyG": 0x05, "KeyH": 0x04, "KeyI": 0x22, "KeyJ": 0x26, "KeyK": 0x28, "KeyL": 0x25,
+  "KeyM": 0x2E, "KeyN": 0x2D, "KeyO": 0x1F, "KeyP": 0x23, "KeyQ": 0x0C, "KeyR": 0x0F,
+  "KeyS": 0x01, "KeyT": 0x11, "KeyU": 0x20, "KeyV": 0x09, "KeyW": 0x0D, "KeyX": 0x07,
+  "KeyY": 0x10, "KeyZ": 0x06,
+  "F1": 0x7A, "F2": 0x78, "F3": 0x63, "F4": 0x76, "F5": 0x60, "F6": 0x61,
+  "F7": 0x62, "F8": 0x64, "F9": 0x65, "F10": 0x6D, "F11": 0x67, "F12": 0x6F,
+]
+
+// C-compatible Carbon callback (no context capture) → dispatch to the shared manager.
+private func unnestHotKeyHandler(_ next: EventHandlerCallRef?, _ ev: EventRef?,
+                                 _ userData: UnsafeMutableRawPointer?) -> OSStatus {
+    var hkID = EventHotKeyID()
+    GetEventParameter(ev, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                      nil, MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+    UnnestHotkeys.shared.fire(id: hkID.id)
+    return noErr
+}
+
+final class UnnestHotkeys {
+    static let shared = UnnestHotkeys()
+    private var refs: [EventHotKeyRef?] = []
+    private var idToMode: [UInt32: String] = [:]
+    private var handlerInstalled = false
+    private var lastConfig = ""
+    private let modes = ["video", "av", "avt"]   // hotkey id = index + 1
+    private let sig: OSType = 0x554E5354         // 'UNST'
+    private var hkFile: String {
+        (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/ClaudeBridge/hotkeys.json")
+    }
+    private let defaults: [String: [String: Any]] = [
+        "video": ["code": "Digit1", "cmd": true, "opt": true, "ctrl": true, "shift": false],
+        "av":    ["code": "Digit2", "cmd": true, "opt": true, "ctrl": true, "shift": false],
+        "avt":   ["code": "Digit3", "cmd": true, "opt": true, "ctrl": true, "shift": false],
+    ]
+
+    func start() {
+        installHandlerIfNeeded()
+        reloadAndRegister()
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
+    }
+
+    private func installHandlerIfNeeded() {
+        guard !handlerInstalled else { return }
+        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), unnestHotKeyHandler, 1, &spec, nil, nil)
+        handlerInstalled = true
+    }
+
+    private func readConfig() -> [String: [String: Any]] {
+        guard let data = FileManager.default.contents(atPath: hkFile),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return defaults }
+        var out = defaults
+        for m in modes { if let e = obj[m] as? [String: Any] { out[m] = e } }
+        return out
+    }
+
+    private func reloadIfChanged() {
+        let cur = (try? String(contentsOfFile: hkFile, encoding: .utf8)) ?? ""
+        if cur != lastConfig { reloadAndRegister() }
+    }
+
+    private func reloadAndRegister() {
+        lastConfig = (try? String(contentsOfFile: hkFile, encoding: .utf8)) ?? ""
+        for r in refs { if let r = r { UnregisterEventHotKey(r) } }
+        refs.removeAll(); idToMode.removeAll()
+        let cfg = readConfig()
+        for (i, mode) in modes.enumerated() {
+            guard let e = cfg[mode], let code = e["code"] as? String, let kc = kVKByCode[code] else { continue }
+            var mods: UInt32 = 0
+            if (e["cmd"]   as? Bool) == true { mods |= UInt32(cmdKey) }
+            if (e["opt"]   as? Bool) == true { mods |= UInt32(optionKey) }
+            if (e["ctrl"]  as? Bool) == true { mods |= UInt32(controlKey) }
+            if (e["shift"] as? Bool) == true { mods |= UInt32(shiftKey) }
+            if mods == 0 { continue }   // require at least one modifier
+            let id = UInt32(i + 1)
+            var ref: EventHotKeyRef?
+            let hotID = EventHotKeyID(signature: sig, id: id)
+            if RegisterEventHotKey(kc, mods, hotID, GetApplicationEventTarget(), 0, &ref) == noErr {
+                refs.append(ref); idToMode[id] = mode
+            }
+        }
+    }
+
+    func fire(id: UInt32) {
+        guard let mode = idToMode[id] else { return }
+        guard let url = URL(string: "http://localhost:3030/unnest/trigger") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["mode": mode])
+        URLSession.shared.dataTask(with: req).resume()
     }
 }
