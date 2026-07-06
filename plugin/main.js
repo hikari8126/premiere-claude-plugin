@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.10';  // Autocut: fix lệch thời gian — dòng time nhiều dòng ghi "Giây 11"/"Giây 24, 26" bị rớt (filter chỉ nhận dòng bắt đầu bằng số) làm lệch cặp time↔source; nay cho phép tiền tố Giây/giay/s. On top of v4.8.9
+var PLUGIN_VERSION = 'v4.8.11';  // Autocut parse: (1) "3p49-3p52" (p/phút/' = dấu phút) nay đọc đúng 3:49-3:52 thay vì 3s-49s; (2) ô time+source cùng nhiều dòng: căn theo dòng gốc (dòng trống là đệm), source trống kế thừa dòng TRÊN — hết cảnh cut nhảy xuống source dưới; (3) thêm ";" vào bộ tách timecode. On top of v4.8.10
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2850,9 +2850,9 @@ async function ppMoveToVOBin(item, proj) {
   //   C) time cell has space-separated timestamps like "0:04 0:07 0:13"
   var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
   // Connector between two timestamps in ONE cell: the word "và"/"and" (needs
-  // surrounding spaces so it isn't matched inside a name) or the symbols & + , .
+  // surrounding spaces so it isn't matched inside a name) or the symbols & + , ; .
   // NFC so a decomposed "và" (v + a + combining grave) still matches.
-  var TIME_CONNECTOR_RE = /\s+(?:và|and)\s+|\s*[&+,]\s*/i;
+  var TIME_CONNECTOR_RE = /\s+(?:và|and)\s+|\s*[&+,;]\s*/i;
   function splitTimes(t) {
     if (!t) return [t];
     t = String(t).normalize('NFC');
@@ -2868,8 +2868,8 @@ async function ppMoveToVOBin(item, proj) {
       return tcLines.length ? tcLines : [t];
     }
     // Split on the connector ("0:02-0:08 và 0:10-0:15") OR plain whitespace, so two
-    // timecodes joined by "và"/"and"/&/+/, become two separate timestamps.
-    var parts = t.trim().split(/\s+(?:và|and)\s+|\s*[&+,]\s*|\s+/i).filter(Boolean);
+    // timecodes joined by "và"/"and"/&/+/,/; become two separate timestamps.
+    var parts = t.trim().split(/\s+(?:và|and)\s+|\s*[&+,;]\s*|\s+/i).filter(Boolean);
     if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
     return [t];
   }
@@ -2883,6 +2883,30 @@ async function ppMoveToVOBin(item, proj) {
       // Text col: ALWAYS flatten to 1 line (join \n with space)
       if (text.indexOf('\n') !== -1) {
         text = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean).join(' ');
+      }
+
+      // When BOTH time and source cells are multi-line, the blank lines are ALIGNMENT
+      // padding that keeps each timecode lined up with its source. Filtering blanks out
+      // of each column independently (the generic path below) collapses the two columns
+      // by DIFFERENT amounts and mis-pairs them — a cut then jumps to the source BELOW
+      // it. So zip by RAW line index instead: a blank source line inherits the source
+      // ABOVE (merged/continued source), and lines with no real timecode are skipped.
+      if (time.indexOf('\n') !== -1 && src.indexOf('\n') !== -1) {
+        var tLines = time.split('\n').map(function(s){ return s.trim(); });
+        var sLines = src.split('\n').map(function(s){ return s.trim(); });
+        var n = Math.max(tLines.length, sLines.length);
+        var lastSrc = '', firstEmit = true;
+        for (var k = 0; k < n; k++) {
+          var tl = tLines[k] || '';
+          if (sLines[k]) lastSrc = sLines[k]; // non-blank source → update inheritance
+          // Only emit for a real timecode line (digit / "Giây …" prefix). Blank or
+          // descriptive lines are padding/notes → must NOT create a bogus clip.
+          if (!/^(?:gi[aâ]y|giay|s)?\s*\d/i.test(tl)) continue;
+          out.push([firstEmit ? text : '', tl, lastSrc]);
+          firstEmit = false;
+        }
+        i++;
+        continue;
       }
 
       // Split time and source into arrays
@@ -3213,7 +3237,7 @@ async function ppMoveToVOBin(item, proj) {
     var blocks  = [];
     var current = null;
 
-    // Split a time cell on "&", "+" or "," → one clip per segment from the SAME
+    // Split a time cell on "&", "+", "," or ";" → one clip per segment from the SAME
     // source, placed consecutively. "3-4 & 5-6", "1-2 + 2-3 + 3-4" → multiple clips.
     // Bare numbers are seconds; decimals use a DOT ("1.5"), so splitting on comma is
     // safe in this convention. Empty / no separator → a single entry.
@@ -3221,7 +3245,7 @@ async function ppMoveToVOBin(item, proj) {
       // Also split on the word "và"/"and" (with spaces) so one source with two
       // timestamps ("0:02-0:08 và 0:10-0:15") becomes two clip entries.
       var segs = String(time || '').normalize('NFC')
-        .split(/\s+(?:và|and)\s+|[&+,]/i).map(function(s) { return s.trim(); }).filter(Boolean);
+        .split(/\s+(?:và|and)\s+|[&+,;]/i).map(function(s) { return s.trim(); }).filter(Boolean);
       if (segs.length <= 1) return [{ name: name, time: time }];
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
@@ -4846,6 +4870,11 @@ async function ppMoveToVOBin(item, proj) {
     if (str == null) return { inSec: null, outSec: null };
     var s = String(str).trim();
     if (!s) return { inSec: null, outSec: null };
+    // Minute marker: "3p49" / "3 phút 49" / "3'49" mean 3 min 49 sec. Normalize the
+    // minute→second separator to ":" BEFORE tokenizing, otherwise the "p" splits it
+    // into two bare-second tokens ("3","49") and "3p49-3p52" wrongly reads as 3s→49s.
+    // Only fires when a digit sits on BOTH sides, so it never touches source names.
+    s = s.replace(/(\d+)\s*(?:ph[uú]t|p|['′])\s*(\d+)/gi, '$1:$2');
     // Separator-agnostic: pull out the time-like tokens (H:MM:SS / M:SS / bare
     // seconds, optional decimals) no matter what joins them — hyphen, en/em/figure
     // dash, minus sign, "to", spaces, etc. This is why a cutsheet whose dash got
