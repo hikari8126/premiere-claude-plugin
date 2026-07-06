@@ -8770,18 +8770,20 @@ async function ppMoveToVOBin(item, proj) {
       });
     } catch (e) { logLine('Lưu phím tắt lỗi: ' + (e.message || e), 'err'); }
   }
-  function captureCombo(labelEl, mode) {
-    var prev = labelEl.textContent;
-    labelEl.textContent = 'Bấm tổ hợp…';
-    labelEl.classList.add('is-listening');
-    function cleanup() { labelEl.classList.remove('is-listening'); document.removeEventListener('keydown', onKey, true); }
+  // Double-click a shortcut chip → capture a new combo. textEl holds the label
+  // text; containerEl (the chip) gets the listening highlight and holds the ✕.
+  function captureCombo(textEl, containerEl, mode) {
+    var prev = textEl.textContent;
+    textEl.textContent = 'Bấm tổ hợp…';
+    containerEl.classList.add('is-listening');
+    function cleanup() { containerEl.classList.remove('is-listening'); document.removeEventListener('keydown', onKey, true); }
     function onKey(e) {
       e.preventDefault(); e.stopPropagation();
-      if (e.key === 'Escape') { labelEl.textContent = prev; cleanup(); return; }
+      if (e.key === 'Escape') { textEl.textContent = prev; cleanup(); return; }
       if (['Meta', 'Alt', 'Control', 'Shift', 'CapsLock'].indexOf(e.key) !== -1) return; // wait for a real key
       var cfg = { code: e.code, cmd: !!e.metaKey, opt: !!e.altKey, ctrl: !!e.ctrlKey, shift: !!e.shiftKey };
-      if (!(cfg.cmd || cfg.opt || cfg.ctrl)) { labelEl.textContent = 'Cần ⌘/⌥/⌃ + phím…'; return; }
-      labelEl.textContent = comboLabel(cfg);
+      if (!(cfg.cmd || cfg.opt || cfg.ctrl)) { textEl.textContent = 'Cần ⌘/⌥/⌃ + phím…'; return; }
+      textEl.textContent = comboLabel(cfg);
       cleanup();
       saveHotkey(mode, cfg);
     }
@@ -8793,19 +8795,20 @@ async function ppMoveToVOBin(item, proj) {
   // the current selection, and the optional Quét-lại button just previews it.
   if (els.refresh) els.refresh.addEventListener('click', function() { detect(); });
   els.run.addEventListener('click', run);
-  document.querySelectorAll('.un-hkSet').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var mode = btn.getAttribute('data-mode');
-      var el = $(HK_IDS[mode]);
-      if (el) captureCombo(el, mode);
+  // Double-click the chip → re-assign; the small ✕ (shown on hover) → clear.
+  document.querySelectorAll('.un-hkLabel').forEach(function (lbl) {
+    lbl.addEventListener('dblclick', function () {
+      var mode = lbl.getAttribute('data-mode');
+      var textEl = $(HK_IDS[mode]);
+      if (textEl) captureCombo(textEl, lbl, mode);
     });
   });
-  // Clear (✕) → remove the hotkey for that mode (no global key; manual run only).
-  document.querySelectorAll('.un-hkClear').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var mode = btn.getAttribute('data-mode');
-      var el = $(HK_IDS[mode]);
-      if (el) el.textContent = '—';
+  document.querySelectorAll('.un-hkX').forEach(function (x) {
+    x.addEventListener('click', function (e) {
+      e.stopPropagation(); // don't trigger the chip's dblclick capture
+      var mode = x.getAttribute('data-mode');
+      var textEl = $(HK_IDS[mode]);
+      if (textEl) textEl.textContent = '—';
       saveHotkey(mode, { code: '', cmd: false, opt: false, ctrl: false, shift: false });
     });
   });
