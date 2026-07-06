@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.10';  // Autocut: fix lệch thời gian — dòng time nhiều dòng ghi "Giây 11"/"Giây 24, 26" bị rớt (filter chỉ nhận dòng bắt đầu bằng số) làm lệch cặp time↔source; nay cho phép tiền tố Giây/giay/s. On top of v4.8.9
+var PLUGIN_VERSION = 'v4.8.11';  // Autocut parse: (1) "3p49-3p52" (p/phút/' = dấu phút) nay đọc đúng 3:49-3:52 thay vì 3s-49s; (2) ô time+source cùng nhiều dòng: căn theo dòng gốc (dòng trống là đệm), source trống kế thừa dòng TRÊN — hết cảnh cut nhảy xuống source dưới; (3) thêm ";" vào bộ tách timecode. On top of v4.8.10
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2850,9 +2850,9 @@ async function ppMoveToVOBin(item, proj) {
   //   C) time cell has space-separated timestamps like "0:04 0:07 0:13"
   var TS_RE = /^\d+:\d+(?:-\d+:\d+)?$/; // e.g. "0:04" or "0:01-0:08"
   // Connector between two timestamps in ONE cell: the word "và"/"and" (needs
-  // surrounding spaces so it isn't matched inside a name) or the symbols & + , .
+  // surrounding spaces so it isn't matched inside a name) or the symbols & + , ; .
   // NFC so a decomposed "và" (v + a + combining grave) still matches.
-  var TIME_CONNECTOR_RE = /\s+(?:và|and)\s+|\s*[&+,]\s*/i;
+  var TIME_CONNECTOR_RE = /\s+(?:và|and)\s+|\s*[&+,;]\s*/i;
   function splitTimes(t) {
     if (!t) return [t];
     t = String(t).normalize('NFC');
@@ -2868,8 +2868,8 @@ async function ppMoveToVOBin(item, proj) {
       return tcLines.length ? tcLines : [t];
     }
     // Split on the connector ("0:02-0:08 và 0:10-0:15") OR plain whitespace, so two
-    // timecodes joined by "và"/"and"/&/+/, become two separate timestamps.
-    var parts = t.trim().split(/\s+(?:và|and)\s+|\s*[&+,]\s*|\s+/i).filter(Boolean);
+    // timecodes joined by "và"/"and"/&/+/,/; become two separate timestamps.
+    var parts = t.trim().split(/\s+(?:và|and)\s+|\s*[&+,;]\s*|\s+/i).filter(Boolean);
     if (parts.length > 1 && parts.every(function(p){ return TS_RE.test(p); })) return parts;
     return [t];
   }
@@ -2883,6 +2883,30 @@ async function ppMoveToVOBin(item, proj) {
       // Text col: ALWAYS flatten to 1 line (join \n with space)
       if (text.indexOf('\n') !== -1) {
         text = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean).join(' ');
+      }
+
+      // When BOTH time and source cells are multi-line, the blank lines are ALIGNMENT
+      // padding that keeps each timecode lined up with its source. Filtering blanks out
+      // of each column independently (the generic path below) collapses the two columns
+      // by DIFFERENT amounts and mis-pairs them — a cut then jumps to the source BELOW
+      // it. So zip by RAW line index instead: a blank source line inherits the source
+      // ABOVE (merged/continued source), and lines with no real timecode are skipped.
+      if (time.indexOf('\n') !== -1 && src.indexOf('\n') !== -1) {
+        var tLines = time.split('\n').map(function(s){ return s.trim(); });
+        var sLines = src.split('\n').map(function(s){ return s.trim(); });
+        var n = Math.max(tLines.length, sLines.length);
+        var lastSrc = '', firstEmit = true;
+        for (var k = 0; k < n; k++) {
+          var tl = tLines[k] || '';
+          if (sLines[k]) lastSrc = sLines[k]; // non-blank source → update inheritance
+          // Only emit for a real timecode line (digit / "Giây …" prefix). Blank or
+          // descriptive lines are padding/notes → must NOT create a bogus clip.
+          if (!/^(?:gi[aâ]y|giay|s)?\s*\d/i.test(tl)) continue;
+          out.push([firstEmit ? text : '', tl, lastSrc]);
+          firstEmit = false;
+        }
+        i++;
+        continue;
       }
 
       // Split time and source into arrays
@@ -3213,7 +3237,7 @@ async function ppMoveToVOBin(item, proj) {
     var blocks  = [];
     var current = null;
 
-    // Split a time cell on "&", "+" or "," → one clip per segment from the SAME
+    // Split a time cell on "&", "+", "," or ";" → one clip per segment from the SAME
     // source, placed consecutively. "3-4 & 5-6", "1-2 + 2-3 + 3-4" → multiple clips.
     // Bare numbers are seconds; decimals use a DOT ("1.5"), so splitting on comma is
     // safe in this convention. Empty / no separator → a single entry.
@@ -3221,7 +3245,7 @@ async function ppMoveToVOBin(item, proj) {
       // Also split on the word "và"/"and" (with spaces) so one source with two
       // timestamps ("0:02-0:08 và 0:10-0:15") becomes two clip entries.
       var segs = String(time || '').normalize('NFC')
-        .split(/\s+(?:và|and)\s+|[&+,]/i).map(function(s) { return s.trim(); }).filter(Boolean);
+        .split(/\s+(?:và|and)\s+|[&+,;]/i).map(function(s) { return s.trim(); }).filter(Boolean);
       if (segs.length <= 1) return [{ name: name, time: time }];
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
@@ -4846,6 +4870,11 @@ async function ppMoveToVOBin(item, proj) {
     if (str == null) return { inSec: null, outSec: null };
     var s = String(str).trim();
     if (!s) return { inSec: null, outSec: null };
+    // Minute marker: "3p49" / "3 phút 49" / "3'49" mean 3 min 49 sec. Normalize the
+    // minute→second separator to ":" BEFORE tokenizing, otherwise the "p" splits it
+    // into two bare-second tokens ("3","49") and "3p49-3p52" wrongly reads as 3s→49s.
+    // Only fires when a digit sits on BOTH sides, so it never touches source names.
+    s = s.replace(/(\d+)\s*(?:ph[uú]t|p|['′])\s*(\d+)/gi, '$1:$2');
     // Separator-agnostic: pull out the time-like tokens (H:MM:SS / M:SS / bare
     // seconds, optional decimals) no matter what joins them — hyphen, en/em/figure
     // dash, minus sign, "to", spaces, etc. This is why a cutsheet whose dash got
@@ -7934,4 +7963,501 @@ async function ppMoveToVOBin(item, proj) {
     var panel = document.getElementById('tab-subtext');
     if (panel && panel.classList.contains('active')) stScanTracks();
   };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN-NEST MODULE — expand selected nested sequences onto new tracks (1 click)
+// Uses global helpers: ppro, getActiveProject, getActiveSequence,
+//                      getClipItems, getTimeSec
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  var $ = function(id) { return document.getElementById(id); };
+  var els = {
+    refresh:     $('unRefresh'),
+    hint:        $('unHint'),
+    count:       $('unCount'),
+    list:        $('unList'),
+    disableOrig: $('unDisableOrig'),
+    run:         $('unRun'),
+    log:         $('unLog'),
+  };
+  if (!els.run) return; // tab not present
+
+  // Read the selected expand mode: 'video' | 'av' | 'avt'
+  function getMode() {
+    var r = document.querySelector('input[name="unMode"]:checked');
+    return r ? r.value : 'av';
+  }
+
+  var EPS = 0.0006;            // seconds tolerance for overlap math
+  var detected = [];           // unique nested clips
+  var rawSelected = [];        // every selected track item (for disabling originals)
+  var canRun = false;          // gates the run() handler (un-nest button is a <div>)
+  var busy = false;            // gates re-entry while a scan/run is in flight
+
+  // ── small helpers ─────────────────────────────────────────────────────────
+  function setRunEnabled(on) {
+    canRun = !!on;
+    els.run.setAttribute('aria-disabled', on ? 'false' : 'true');
+  }
+  function logLine(msg, cls) {
+    if (!els.log) return;
+    els.log.hidden = false;
+    var span = document.createElement('div');
+    if (cls) span.className = cls;
+    span.textContent = msg;
+    els.log.appendChild(span);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+  function clearLog() { if (els.log) { els.log.textContent = ''; els.log.hidden = true; } }
+
+  async function un(v) { return (v && typeof v.then === 'function') ? await v : v; }
+
+  async function callSec(obj, method) {
+    try {
+      if (!obj || typeof obj[method] !== 'function') return null;
+      var r = await un(obj[method]());
+      return getTimeSec(r);
+    } catch (e) { return null; }
+  }
+
+  async function awaitArray(v) {
+    v = await un(v);
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    var n = v.length || 0, out = [];
+    for (var i = 0; i < n; i++) out.push(v[i]);
+    return out;
+  }
+
+  function asClipPI(projItem) {
+    try {
+      if (ppro.ClipProjectItem && typeof ppro.ClipProjectItem.cast === 'function') {
+        return ppro.ClipProjectItem.cast(projItem) || null;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function fmt(sec) {
+    sec = sec || 0;
+    var m = Math.floor(sec / 60), s = sec - m * 60;
+    return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
+  }
+
+  // ── DETECT: read selection, find nested-sequence clips ──────────────────────
+  // opts.silent = true → triggered by auto-poll; don't flash UI / clear the log.
+  function setCount(t) { if (els.count) els.count.textContent = t; }
+  function setList(html) { if (els.list) els.list.innerHTML = html; }
+
+  async function detect(opts) {
+    if (busy) return;
+    var silent = opts && opts.silent;
+    busy = true;
+    detected = [];
+    rawSelected = [];
+    if (!silent) {
+      clearLog();
+      setCount('đang quét…');
+      setList('<div class="un-empty">Đang quét vùng chọn…</div>');
+    }
+    setRunEnabled(false);
+
+    try {
+      if (!ppro) throw new Error('Premiere API không khả dụng.');
+      var seq = await getActiveSequence();
+      var sel = await un(seq.getSelection());
+      if (!sel) throw new Error('Không lấy được vùng chọn.');
+      rawSelected = await awaitArray(sel.getTrackItems());
+
+      if (rawSelected.length === 0) {
+        setCount('0 clip');
+        setList('<div class="un-empty">Chưa chọn clip nào. Click chọn clip nested trên timeline — plugin sẽ tự nhận.</div>');
+        return;
+      }
+
+      var seenIds = {};
+      var nonNested = 0;
+      for (var i = 0; i < rawSelected.length; i++) {
+        var item = rawSelected[i];
+        var projItem = await un(item.getProjectItem ? item.getProjectItem() : null);
+        if (!projItem) continue;
+        var clipPI = asClipPI(projItem);
+        var isSeq = false;
+        try { isSeq = clipPI ? await un(clipPI.isSequence()) : false; } catch (e) {}
+        if (!isSeq) { nonNested++; continue; }
+
+        var id = '';
+        try { id = await un(projItem.getId()); } catch (e) {}
+        var startSec = await callSec(item, 'getStartTime');
+        var key = id + '@' + (startSec == null ? '?' : startSec.toFixed(3));
+        if (seenIds[key]) continue;   // dedupe linked V/A items of same nest
+        seenIds[key] = true;
+
+        var name = '';
+        try { name = await un(item.getName ? item.getName() : item.name); } catch (e) {}
+        var nestedSeq = null;
+        try { nestedSeq = await un(clipPI.getSequence()); } catch (e) {}
+
+        detected.push({
+          item: item,
+          name: name || ('Nested ' + (detected.length + 1)),
+          projItem: projItem,
+          nestedSeq: nestedSeq,
+          parentStart: startSec || 0,
+          nestIn:  await callSec(item, 'getInPoint'),
+          nestOut: await callSec(item, 'getOutPoint'),
+          ok: !!nestedSeq,
+        });
+      }
+
+      renderList(nonNested);
+    } catch (e) {
+      setCount('lỗi');
+      setList('<div class="un-empty">⚠ ' + escapeHtml(e.message || e) + '</div>');
+      console.error('[Un-nest] detect error:', e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function renderList(nonNested) {
+    setCount(detected.length + ' nested');
+    if (detected.length === 0) {
+      var msg = nonNested > 0
+        ? ('Vùng chọn có ' + nonNested + ' clip nhưng không phải nested sequence.')
+        : 'Không tìm thấy nested sequence trong vùng chọn.';
+      setList('<div class="un-empty">' + msg + '</div>');
+      setRunEnabled(false);
+      return;
+    }
+    if (els.list) {
+      els.list.innerHTML = '';
+      for (var i = 0; i < detected.length; i++) {
+        var d = detected[i];
+        var div = document.createElement('div');
+        div.className = 'un-item' + (d.ok ? '' : ' is-bad');
+        var inS  = (d.nestIn  == null) ? 0 : d.nestIn;
+        var outS = (d.nestOut == null) ? 0 : d.nestOut;
+        var html = '<div class="un-itemName">' + escapeHtml(d.name) + '</div>'
+          + '<div class="un-itemMeta">@ ' + fmt(d.parentStart) + ' trên timeline · đoạn cắt '
+          + fmt(inS) + '–' + fmt(outS) + ' (' + fmt(Math.max(0, outS - inS)) + ')</div>';
+        if (!d.ok) html += '<div class="un-itemBad">⚠ Không đọc được nội dung nested — sẽ bỏ qua.</div>';
+        div.innerHTML = html;
+        els.list.appendChild(div);
+      }
+    }
+    setRunEnabled(true);
+  }
+
+
+  // ── small timing helpers (used when re-focusing the parent to disable originals) ──
+  var SETTLE_SHORT = 280;
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+  async function openAndActivate(project, seq) {
+    try { if (typeof project.openSequence === 'function') await un(project.openSequence(seq)); } catch (e) {}
+    try { if (typeof project.setActiveSequence === 'function') await un(project.setActiveSequence(seq)); } catch (e) {}
+  }
+  // ── EXPAND via API clone (no sequence switch, no overwrite, keeps effects) ──
+  // Clones each inner clip of the nested's cut range onto NEW parent tracks
+  // (above existing content) using SequenceEditor.createCloneTrackItemAction —
+  // which preserves effects. One transaction = one undo step. Track index is
+  // absolute (auto-creates high tracks); time is an offset added to each item's
+  // own start, so item at nested-time T lands at parentStart + (T - nestIn).
+  async function expandViaClone(project, parentSeq, d, mode) {
+    if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
+    var nested = d.nestedSeq;
+    var nestIn = d.nestIn || 0, nestOut = d.nestOut || 0, parentStart = d.parentStart || 0;
+    var ed = ppro.SequenceEditor.getEditor(parentSeq);
+    var TT = function (s) { return ppro.TickTime.createWithSeconds(Math.max(0, s)); };
+    var timeOffset = parentStart - nestIn;
+
+    var pv = 0, pa = 0;
+    try { pv = await un(parentSeq.getVideoTrackCount()); } catch (e) {}
+    try { pa = await un(parentSeq.getAudioTrackCount()); } catch (e) {}
+
+    // Gather clone targets (async) first, then apply in ONE transaction.
+    var targets = []; // { item, vIdx, aIdx, align }
+    var inRange = function (s, e) { return (Math.min(e, nestOut) - Math.max(s, nestIn)) > EPS; };
+    var vfDropped = 0;
+
+    var nv = 0; try { nv = await un(nested.getVideoTrackCount()); } catch (e) {}
+    for (var vi = 0; vi < nv; vi++) {
+      var vt = await un(nested.getVideoTrack(vi));
+      var vc = await getClipItems(vt);
+      for (var c = 0; c < vc.length; c++) {
+        var s1 = await callSec(vc[c], 'getStartTime'), e1 = await callSec(vc[c], 'getEndTime');
+        if (s1 == null || e1 == null || !inRange(s1, e1)) continue;
+        if (mode === 'video' || mode === 'av') {
+          var cls = await classifyVideoClip(vc[c]);
+          if (!cls.keep) { vfDropped++; continue; } // pure text/title → skip
+        }
+        targets.push({ item: vc[c], vIdx: pv + vi, aIdx: 0, align: true });
+      }
+    }
+    if (mode === 'av' || mode === 'avt') {
+      var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
+      for (var ai = 0; ai < na; ai++) {
+        var at = await un(nested.getAudioTrack(ai));
+        var ac = await getClipItems(at);
+        for (var b = 0; b < ac.length; b++) {
+          var s2 = await callSec(ac[b], 'getStartTime'), e2 = await callSec(ac[b], 'getEndTime');
+          if (s2 == null || e2 == null || !inRange(s2, e2)) continue;
+          targets.push({ item: ac[b], vIdx: 0, aIdx: pa + ai, align: false });
+        }
+      }
+    }
+
+    if (!targets.length) { logLine('· "' + d.name + '": không có clip trong đoạn cắt', 'warn'); return 0; }
+
+    var done = 0;
+    await project.lockedAccess(function () {
+      project.executeTransaction(function (action) {
+        for (var t = 0; t < targets.length; t++) {
+          try {
+            action.addAction(ed.createCloneTrackItemAction(targets[t].item, TT(timeOffset), targets[t].vIdx, targets[t].aIdx, targets[t].align, false));
+            done++;
+          } catch (e) { logLine('  ✗ clone lỗi: ' + (e.message || e), 'err'); }
+        }
+      }, 'Un-nest: clone ' + targets.length + ' clip');
+    });
+
+    logLine('✓ "' + d.name + '": clone ' + done + ' clip lên track mới (V' + (pv + 1) + '+ / A' + (pa + 1) + '+) — giữ effect'
+      + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : ''), 'ok');
+    return done;
+  }
+
+  // ── RUN ─────────────────────────────────────────────────────────────────────
+  async function run() {
+    if (busy) return;
+    // Self-detect the current selection (no live list UI anymore). detect()
+    // manages its own busy flag, so call it BEFORE we take busy here.
+    await detect({ silent: true });
+    if (!detected.length) {
+      clearLog();
+      logLine('Không tìm thấy nested sequence trong vùng chọn. Chọn 1 clip nested rồi chạy lại.', 'warn');
+      return;
+    }
+    busy = true;
+    setRunEnabled(false);
+    clearLog();
+    var mode = getMode();                       // 'video' | 'av' | 'avt'
+    var disableOrig = !!els.disableOrig.checked;
+    var totalPlaced = 0;
+    var MODE_LABEL = { video: 'chỉ video (bỏ text)', av: 'video + audio', avt: 'video + audio + text' };
+
+    // Snapshot the originals NOW — we're about to switch sequences around.
+    var origItems = rawSelected.slice();
+
+    try {
+      var project = await getActiveProject();
+      var parentSeq = await getActiveSequence();   // the sequence holding the nested clips
+
+      logLine('Un-nest (API clone, giữ effect) · build: clone1 · ' + detected.length
+        + ' clip · chế độ: ' + (MODE_LABEL[mode] || mode));
+
+      for (var i = 0; i < detected.length; i++) {
+        try {
+          totalPlaced += await expandViaClone(project, parentSeq, detected[i], mode);
+        } catch (e) {
+          logLine('✗ "' + detected[i].name + '": ' + (e.message || e), 'err');
+        }
+      }
+
+      // Disable the original nested clip(s) so playback isn't doubled
+      if (disableOrig && origItems.length) {
+        await openAndActivate(project, parentSeq);
+        await sleep(SETTLE_SHORT);
+        var disabledCount = 0;
+        for (var k = 0; k < origItems.length; k++) {
+          var it = origItems[k];
+          if (it && typeof it.createSetDisabledAction === 'function') {
+            try {
+              await (function(node) {
+                return project.lockedAccess(function() {
+                  project.executeTransaction(function(action) {
+                    action.addAction(node.createSetDisabledAction(true));
+                  }, 'Un-nest: disable original');
+                });
+              })(it);
+              disabledCount++;
+            } catch (e) {}
+          }
+        }
+        if (disabledCount) logLine('✓ đã tắt ' + disabledCount + ' clip nested gốc', 'ok');
+      }
+
+      logLine('—');
+      logLine('HOÀN TẤT · tổng ' + totalPlaced + ' clip đã copy-paste. Kiểm tra timeline & Cmd+Z nếu cần.', 'ok');
+    } catch (e) {
+      logLine('✗ LỖI: ' + (e.message || e), 'err');
+      console.error('[Un-nest] run error:', e);
+    } finally {
+      busy = false;
+      setRunEnabled(detected.length > 0);
+    }
+  }
+
+  // ── Clip-type classification for "video-only" mode ─────────────────────────
+  // Goal: drop ONLY pure-text subtitle layers, keep everything with real visuals —
+  // including graphics that also carry text (e.g. a badge = Text + Shape).
+  // Confirmed component signatures on this build (probe v4):
+  //   pure-text sub → Opacity, Motion, Graphic Group, Text            (Text, no Shape)
+  //   visual badge  → Opacity, Motion, Graphic Group, Text, Shape     (Text + Shape → KEEP)
+  //   footage       → Opacity, Motion, Ultra Key                      (no Text)
+  //   text mogrt    → Capsule with typography params (Main Text/Font size/…)
+  //   visual mogrt  → Capsule with Transform/Color params only (no text)
+  var UNNEST_TEXT_COMP_RE   = /text|title|caption/i;                 // component = text
+  var UNNEST_VISUAL_COMP_RE = /shape|image|media|solid|vector|ellipse|rectangle|footage|video/i; // component = real visual
+  var UNNEST_TEXT_PARAM_RE  = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i; // Capsule typography param
+
+  // Classify a video-track clip. Returns { keep, reason }.
+  // DROP only when the clip has text content AND no real visual component
+  // (a pure subtitle). Footage, nested, AE comps, and text+visual graphics are kept.
+  async function classifyVideoClip(clip) {
+    try {
+      var pi = await un(clip.getProjectItem ? clip.getProjectItem() : null);
+      if (pi) { var cp = asClipPI(pi); if (cp) { try { if (await un(cp.isSequence())) return { keep: true, reason: '' }; } catch (e) {} } }
+
+      var chain = clip.getComponentChain ? await un(clip.getComponentChain()) : null;
+      if (!chain) return { keep: true, reason: '' };
+      var cc = chain.getComponentCount ? await un(chain.getComponentCount()) : 0;
+      var hasText = false, hasVisual = false, textSig = '';
+      for (var k = 0; k < cc; k++) {
+        var comp = await un(chain.getComponentAtIndex(k));
+        if (!comp) continue;
+        var cmn = ''; try { cmn = comp.getMatchName ? await un(comp.getMatchName()) : ''; } catch (e) {}
+        if (cmn && UNNEST_VISUAL_COMP_RE.test(cmn)) { hasVisual = true; continue; }
+        if (cmn && UNNEST_TEXT_COMP_RE.test(cmn)) { hasText = true; if (!textSig) textSig = 'comp:' + cmn; continue; }
+        // Capsule (mogrt / Essential-Graphics container): inspect params for text.
+        if (cmn && /capsule/i.test(cmn)) {
+          var pc = comp.getParamCount ? await un(comp.getParamCount()) : 0;
+          for (var pj = 0; pj < pc; pj++) {
+            try {
+              var prm = await un(comp.getParam(pj));
+              var dn = '';
+              if (prm) {
+                if (typeof prm.getDisplayName === 'function') { dn = await un(prm.getDisplayName()); }
+                else if (prm.displayName) { dn = prm.displayName; }
+              }
+              if (dn && UNNEST_TEXT_PARAM_RE.test(dn)) { hasText = true; if (!textSig) textSig = 'param:' + dn; }
+            } catch (e) {}
+          }
+        }
+      }
+      // Pure text (text present, no visual component) → drop; otherwise keep.
+      if (hasText && !hasVisual) return { keep: false, reason: textSig || 'text-only' };
+      return { keep: true, reason: '' };
+    } catch (e) { return { keep: true, reason: '' }; } // unknown → don't silently drop
+  }
+
+  // ── global hotkey trigger: poll the bridge, run on the current selection ────
+  // The Swift app registers OS-global hotkeys and POSTs /unnest/trigger; we poll
+  // and run — works regardless of which tab/panel is active.
+  async function runMode(mode) {
+    var r = document.querySelector('input[name="unMode"][value="' + mode + '"]');
+    if (r) r.checked = true;
+    await run();
+  }
+  var trigPolling = false;
+  async function pollTrigger() {
+    if (busy || trigPolling) return;
+    trigPolling = true;
+    try {
+      var res = await fetch(BRIDGE_URL + '/unnest/poll');
+      var j = await res.json();
+      if (j && j.pending && j.pending.mode) await runMode(j.pending.mode);
+    } catch (e) {} finally { trigPolling = false; }
+  }
+  setInterval(pollTrigger, 400);
+
+  // ── hotkey config (click-to-capture, like Premiere's shortcut editor) ───────
+  var HK_IDS = { video: 'unHkVideo', av: 'unHkAv', avt: 'unHkAvt' };
+  var hotkeysCfg = null;
+  function comboLabel(c) {
+    if (!c || !c.code) return '—';
+    return (c.ctrl ? '⌃' : '') + (c.opt ? '⌥' : '') + (c.shift ? '⇧' : '') + (c.cmd ? '⌘' : '')
+      + String(c.code).replace(/^Key/, '').replace(/^Digit/, '');
+  }
+  async function loadHotkeys() {
+    try {
+      var res = await fetch(BRIDGE_URL + '/unnest/hotkeys');
+      var j = await res.json();
+      hotkeysCfg = (j && j.hotkeys) || {};
+    } catch (e) { hotkeysCfg = hotkeysCfg || {}; }
+    for (var mode in HK_IDS) {
+      if (!HK_IDS.hasOwnProperty(mode)) continue;
+      var el = $(HK_IDS[mode]);
+      if (el && hotkeysCfg[mode]) el.textContent = comboLabel(hotkeysCfg[mode]);
+    }
+  }
+  async function saveHotkey(mode, cfg) {
+    hotkeysCfg = hotkeysCfg || {};
+    hotkeysCfg[mode] = cfg;
+    // Cleared (no code) → no duplicate check (many can be "off" at once).
+    if (cfg && cfg.code) {
+      var dupe = Object.keys(hotkeysCfg).filter(function (m) {
+        return m !== mode && hotkeysCfg[m] && hotkeysCfg[m].code && comboLabel(hotkeysCfg[m]) === comboLabel(cfg);
+      });
+      if (dupe.length) logLine('⚠ Phím tắt trùng với: ' + dupe.join(', '), 'warn');
+    }
+    try {
+      await fetch(BRIDGE_URL + '/unnest/hotkeys', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hotkeys: hotkeysCfg }),
+      });
+    } catch (e) { logLine('Lưu phím tắt lỗi: ' + (e.message || e), 'err'); }
+  }
+  // Double-click a shortcut chip → capture a new combo. textEl holds the label
+  // text; containerEl (the chip) gets the listening highlight and holds the ✕.
+  function captureCombo(textEl, containerEl, mode) {
+    var prev = textEl.textContent;
+    textEl.textContent = 'Bấm tổ hợp…';
+    containerEl.classList.add('is-listening');
+    function cleanup() { containerEl.classList.remove('is-listening'); document.removeEventListener('keydown', onKey, true); }
+    function onKey(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') { textEl.textContent = prev; cleanup(); return; }
+      if (['Meta', 'Alt', 'Control', 'Shift', 'CapsLock'].indexOf(e.key) !== -1) return; // wait for a real key
+      var cfg = { code: e.code, cmd: !!e.metaKey, opt: !!e.altKey, ctrl: !!e.ctrlKey, shift: !!e.shiftKey };
+      if (!(cfg.cmd || cfg.opt || cfg.ctrl)) { textEl.textContent = 'Cần ⌘/⌥/⌃ + phím…'; return; }
+      textEl.textContent = comboLabel(cfg);
+      cleanup();
+      saveHotkey(mode, cfg);
+    }
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  // ── wire events ─────────────────────────────────────────────────────────────
+  // No live selection list anymore (Un-nest lives in Settings). run() self-detects
+  // the current selection, and the optional Quét-lại button just previews it.
+  if (els.refresh) els.refresh.addEventListener('click', function() { detect(); });
+  els.run.addEventListener('click', run);
+  // Double-click the chip → re-assign; the small ✕ (shown on hover) → clear.
+  document.querySelectorAll('.un-hkLabel').forEach(function (lbl) {
+    lbl.addEventListener('dblclick', function () {
+      var mode = lbl.getAttribute('data-mode');
+      var textEl = $(HK_IDS[mode]);
+      if (textEl) captureCombo(textEl, lbl, mode);
+    });
+  });
+  document.querySelectorAll('.un-hkX').forEach(function (x) {
+    x.addEventListener('click', function (e) {
+      e.stopPropagation(); // don't trigger the chip's dblclick capture
+      var mode = x.getAttribute('data-mode');
+      var textEl = $(HK_IDS[mode]);
+      if (textEl) textEl.textContent = '—';
+      saveHotkey(mode, { code: '', cmd: false, opt: false, ctrl: false, shift: false });
+    });
+  });
+  loadHotkeys(); // populate labels from the bridge (defaults if unreachable)
+  document.querySelectorAll('.settings-tab').forEach(function (t) {
+    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', loadHotkeys);
+  });
 })();
