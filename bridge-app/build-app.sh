@@ -29,7 +29,7 @@ echo "  📁 App bundle structure created"
 echo ""
 echo "  🔨 Compiling Swift app..."
 
-SWIFT_FLAGS="-framework Cocoa -framework Foundation -sdk ${SDK} -Onone -Xfrontend -strict-concurrency=minimal"
+SWIFT_FLAGS="-framework Cocoa -framework Foundation -framework Carbon -sdk ${SDK} -Onone -Xfrontend -strict-concurrency=minimal"
 
 echo "     → arm64..."
 swiftc bridge-app/main.swift -o /tmp/cb-arm64 \
