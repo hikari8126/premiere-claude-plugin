@@ -3627,22 +3627,19 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 .un-modeRow .un-radio { flex: 1 1 auto; padding: 3px 0; }
 .un-hk { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+/* Shortcut chip: double-click to re-assign, hover shows a small ✕ to clear. */
 .un-hkLabel {
-  font-size: 11px; font-weight: 700; color: var(--text);
+  position: relative; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; color: var(--text); cursor: pointer;
   background: rgba(255,255,255,0.07); border-radius: 5px;
-  padding: 3px 8px; min-width: 44px; text-align: center;
+  padding: 3px 8px; min-width: 44px; justify-content: center;
   font-family: ui-monospace, Menlo, monospace;
 }
+.un-hkLabel:hover { background: rgba(255,255,255,0.12); }
 .un-hkLabel.is-listening { color: #fbbf24; background: rgba(251,191,36,0.14); }
-.un-hkSet {
-  font-size: 11px; color: var(--text-dim); cursor: pointer;
-  background: transparent; border: 1px solid var(--border, rgba(255,255,255,0.15));
-  border-radius: 5px; padding: 3px 8px;
+.un-hkX {
+  display: none; font-size: 10px; font-weight: 700; line-height: 1;
+  color: var(--text-dim); cursor: pointer;
 }
-.un-hkSet:hover { color: var(--text); border-color: var(--text-dim); }
-.un-hkClear {
-  font-size: 11px; color: var(--text-dim); cursor: pointer; line-height: 1;
-  background: transparent; border: 1px solid var(--border, rgba(255,255,255,0.15));
-  border-radius: 5px; padding: 3px 6px;
-}
-.un-hkClear:hover { color: var(--error, #f87171); border-color: var(--error, #f87171); }
+.un-hkLabel:hover .un-hkX { display: inline; }
+.un-hkX:hover { color: var(--error, #f87171); }
