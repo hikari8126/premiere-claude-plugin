@@ -3619,27 +3619,43 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .un-settingsHint {
   font-size: 11px; line-height: 1.5; color: var(--text-dim);
   background: var(--surface-2, rgba(255,255,255,0.04));
-  border-radius: 6px; padding: 8px 10px;
+  border-radius: 6px; padding: 8px 10px; margin-bottom: 16px;
+}
+/* Un-nest disable-original checkbox: match the mode rows (same left edge, height,
+   gap) with a small separation above. */
+.settings-tabPanel[data-stab="unnest"] .un-check {
+  align-items: center; gap: 12px; height: 24px; padding: 0; margin: 12px 0 0;
+}
+/* Equal-size radio/checkbox boxes so every label starts at the same x (one column). */
+.un-modeRow .un-radio input,
+.settings-tabPanel[data-stab="unnest"] .un-check input {
+  width: 15px; height: 15px; margin: 0; flex: 0 0 auto;
 }
 .un-modeRow {
-  display: flex; align-items: center; gap: 8px;
-  padding: 3px 0;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 24px; padding: 3px 0;
 }
-.un-modeRow .un-radio { flex: 1 1 auto; padding: 3px 0; }
-.un-hk { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-/* Shortcut chip: double-click to re-assign, hover shows a small ✕ to clear. */
+.un-modeRow .un-radio {
+  flex: 1 1 auto; padding: 0; margin: 0; align-items: center; gap: 12px;
+  height: 24px; line-height: 24px;
+}
+.un-modeRow .un-radio span { line-height: 1; }
+/* Shortcut chip: fixed-size monospace box (right-aligned column), text vertically
+   centred; double-click to re-assign; a small ✕ badge appears at the corner on hover. */
 .un-hkLabel {
-  position: relative; display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 700; color: var(--text); cursor: pointer;
+  position: relative; flex: 0 0 auto; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 24px; cursor: pointer;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: var(--text);
   background: rgba(255,255,255,0.07); border-radius: 5px;
-  padding: 3px 8px; min-width: 44px; justify-content: center;
   font-family: ui-monospace, Menlo, monospace;
 }
-.un-hkLabel:hover { background: rgba(255,255,255,0.12); }
-.un-hkLabel.is-listening { color: #fbbf24; background: rgba(251,191,36,0.14); }
+.un-hkLabel:hover { background: rgba(255,255,255,0.13); }
+.un-hkLabel.is-listening { color: #fbbf24; background: rgba(251,191,36,0.16); letter-spacing: 0; font-size: 10px; }
 .un-hkX {
-  display: none; font-size: 10px; font-weight: 700; line-height: 1;
-  color: var(--text-dim); cursor: pointer;
+  position: absolute; top: -6px; right: -6px; display: none;
+  width: 15px; height: 15px; line-height: 15px; text-align: center;
+  font-size: 9px; font-weight: 700; border-radius: 50%;
+  background: var(--error, #f87171); color: #fff; cursor: pointer;
 }
-.un-hkLabel:hover .un-hkX { display: inline; }
-.un-hkX:hover { color: var(--error, #f87171); }
+.un-hkLabel:hover .un-hkX { display: block; }
