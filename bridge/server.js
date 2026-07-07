@@ -2324,7 +2324,7 @@ app.post('/superautocut/normalize-script', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.8.0';  // + /unnest/{trigger,poll,hotkeys} for global un-nest hotkeys (Swift app owns keys, config in ~/Library/Application Support/ClaudeBridge/hotkeys.json)
+const BRIDGE_VERSION = '1.9.1';  // unnest trigger routing: /unnest/poll?host=<major> consumes only for focused Premiere (2025+2026 song song) + trigger expiry. Prior 1.9.0: /unnest/premiere-shortcuts (.kys conflict warnings)
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -2459,12 +2459,26 @@ function readHotkeys() {
 app.post('/unnest/trigger', (req, res) => {
   const mode = String((req.body && req.body.mode) || '');
   if (UNNEST_MODES.indexOf(mode) === -1) return res.status(400).json({ ok: false, error: 'mode không hợp lệ' });
-  unnestPending = { mode, ts: Date.now() };
+  // target = Premiere major version of the focused app ('25'/'26'), or '' if the
+  // frontmost app isn't Premiere → any plugin may consume it.
+  const target = String((req.body && req.body.target) || '');
+  unnestPending = { mode, target, ts: Date.now() };
   res.json({ ok: true });
 });
-app.get('/unnest/poll', (_req, res) => {
-  const p = unnestPending; unnestPending = null; // one-shot
-  res.json({ ok: true, pending: p ? { mode: p.mode } : null });
+app.get('/unnest/poll', (req, res) => {
+  const host = String((req.query && req.query.host) || '');
+  const p = unnestPending;
+  if (!p) return res.json({ ok: true, pending: null });
+  // Expire stale triggers so a trigger aimed at a Premiere with no plugin open
+  // doesn't linger and later fire in the wrong place.
+  if (Date.now() - p.ts > 2500) { unnestPending = null; return res.json({ ok: true, pending: null }); }
+  // Consume only if untargeted or this poller is the focused Premiere; otherwise
+  // leave it for the matching instance.
+  if (!p.target || p.target === host) {
+    unnestPending = null;
+    return res.json({ ok: true, pending: { mode: p.mode } });
+  }
+  res.json({ ok: true, pending: null });
 });
 app.get('/unnest/hotkeys', (_req, res) => res.json({ ok: true, hotkeys: readHotkeys() }));
 app.post('/unnest/hotkeys', (req, res) => {
@@ -2474,6 +2488,118 @@ app.post('/unnest/hotkeys', (req, res) => {
     fs.writeFileSync(HK_FILE, JSON.stringify(Object.assign({}, HK_DEFAULT, hk), null, 2));
     res.json({ ok: true, hotkeys: readHotkeys() });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── Premiere keyboard-shortcut conflict lookup ──────────────────────────────
+// Read the user's active .kys keymap (or the bundled default) so the plugin can
+// warn when an un-nest hotkey collides with a Premiere shortcut. Adobe encodes
+// character keys as (0x80000000 | ASCII) in <virtualkey>; other keys use a
+// different low-number scheme we skip (no false warnings).
+const KYS_BASE = 0x80000000;
+
+// Resolve which .kys to read: newest custom keymap first, else bundled default.
+function resolveKysFile() {
+  // 1. User custom: ~/Documents/Adobe/Premiere Pro/<ver>/Profile-*/Mac/*.kys
+  try {
+    const root = path.join(os.homedir(), 'Documents', 'Adobe', 'Premiere Pro');
+    let best = null;
+    for (const ver of fs.readdirSync(root)) {
+      const profRoot = path.join(root, ver);
+      let profs = [];
+      try { profs = fs.readdirSync(profRoot); } catch (e) { continue; }
+      for (const prof of profs) {
+        if (!/^Profile-/.test(prof)) continue;
+        const macDir = path.join(profRoot, prof, 'Mac');
+        let files = [];
+        try { files = fs.readdirSync(macDir); } catch (e) { continue; }
+        for (const f of files) {
+          if (!/\.kys$/i.test(f)) continue;
+          const fp = path.join(macDir, f);
+          try {
+            const m = fs.statSync(fp).mtimeMs;
+            if (!best || m > best.mtime) best = { file: fp, mtime: m, source: 'custom' };
+          } catch (e) {}
+        }
+      }
+    }
+    if (best) return best;
+  } catch (e) {}
+
+  // 2. Bundled default: /Applications/Adobe Premiere Pro <ver>/…/Keyboard Shortcuts/<locale>/Adobe Premiere Pro Defaults.kys
+  try {
+    const apps = fs.readdirSync('/Applications')
+      .filter(n => /^Adobe Premiere Pro/i.test(n))
+      .sort().reverse(); // highest version first
+    for (const app of apps) {
+      const ksRoot = path.join('/Applications', app, app + '.app', 'Contents', 'Keyboard Shortcuts');
+      let locales = [];
+      try { locales = fs.readdirSync(ksRoot); } catch (e) { continue; }
+      // prefer English, then whatever is present
+      locales.sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : 0));
+      for (const loc of locales) {
+        const fp = path.join(ksRoot, loc, 'Adobe Premiere Pro Defaults.kys');
+        if (fs.existsSync(fp)) {
+          try { return { file: fp, mtime: fs.statSync(fp).mtimeMs, source: 'default' }; } catch (e) {}
+        }
+      }
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+// Parse a .kys XML string into [{ char, cmd, opt, shift, ctrl, commandname, context }].
+function parseKys(xml) {
+  const out = [];
+  // Split by context so each shortcut carries its panel name.
+  const parts = xml.split(/<context\.([\w.]+) Version/);
+  // parts[0] = preamble; then repeating [name, body, name, body, ...]
+  for (let i = 1; i < parts.length; i += 2) {
+    const ctx = parts[i];
+    const body = parts[i + 1] || '';
+    const items = body.match(/<item\.\d+ Version="1">[\s\S]*?<\/item\.\d+>/g) || [];
+    for (const b of items) {
+      const vkM = b.match(/<virtualkey>(\d+)<\/virtualkey>/);
+      if (!vkM) continue;
+      const vk = parseInt(vkM[1], 10);
+      if (vk < KYS_BASE) continue;              // non-character key scheme → skip
+      const c = vk - KYS_BASE;
+      if (c < 32 || c > 126) continue;          // not printable ASCII → skip
+      const cnM = b.match(/<commandname>([\s\S]*?)<\/commandname>/);
+      const flag = (t) => new RegExp('<modifier\\.' + t + '>true</modifier\\.' + t + '>').test(b);
+      out.push({
+        char: String.fromCharCode(c).toUpperCase(),
+        cmd: flag('command'), opt: flag('opt'), shift: flag('shift'), ctrl: flag('ctrl'),
+        commandname: cnM ? cnM[1] : '',
+        context: ctx,
+      });
+    }
+  }
+  return out;
+}
+
+let kysCache = null; // { file, mtime, source, shortcuts }
+function getPremiereShortcuts() {
+  const res = resolveKysFile();
+  if (!res) { kysCache = null; return { source: 'none', shortcuts: [] }; }
+  if (kysCache && kysCache.file === res.file && kysCache.mtime === res.mtime) {
+    return { source: kysCache.source, shortcuts: kysCache.shortcuts };
+  }
+  try {
+    const xml = fs.readFileSync(res.file, 'utf8');
+    const shortcuts = parseKys(xml);
+    kysCache = { file: res.file, mtime: res.mtime, source: res.source, shortcuts };
+    return { source: res.source, shortcuts };
+  } catch (e) {
+    return { source: 'none', shortcuts: [] };
+  }
+}
+
+app.get('/unnest/premiere-shortcuts', (_req, res) => {
+  try {
+    const r = getPremiereShortcuts();
+    res.json({ ok: true, source: r.source, shortcuts: r.shortcuts });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message, shortcuts: [] }); }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────

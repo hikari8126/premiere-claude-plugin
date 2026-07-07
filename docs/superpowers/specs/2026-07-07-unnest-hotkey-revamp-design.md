@@ -42,8 +42,16 @@ Escape still cancels; modifier-only presses still ignored (wait for a real key).
 
 ### Part 3 — Premiere-shortcut conflict warning (read real .kys)
 **Bridge — new `GET /unnest/premiere-shortcuts`:**
-- Scan `~/Documents/Adobe/Premiere Pro/*/Profile-*/Mac/*.kys`; pick the file with
-  the newest mtime (the active/last-edited keymap).
+- Resolve the keymap source in order:
+  1. Newest-mtime `~/Documents/Adobe/Premiere Pro/*/Profile-*/Mac/*.kys` (user's
+     active custom keymap).
+  2. **Fallback — bundled default** when no custom file exists:
+     `/Applications/Adobe Premiere Pro */…/Contents/Keyboard Shortcuts/<locale>/Adobe Premiere Pro Defaults.kys`,
+     preferring locale `en`, from the highest Premiere version folder. (Shortcuts /
+     virtualkeys are identical across locales; only display names differ.)
+  3. None found → empty list.
+- Response includes `source: "custom" | "default" | "none"` so the plugin can note
+  which keymap it compared against.
 - Parse XML `<item.N>` blocks → `{ char, cmd, opt, shift, ctrl, commandname, context }`.
   - `char`: decode `virtualkey`. Adobe encodes character keys as `0x80000000 | ASCII`
     (verified: `V`=2147483734=`0x80000056`, `C`=Razor, `B`=Ripple, digits, punctuation).
