@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.11';  // Autocut parse: (1) "3p49-3p52" (p/phút/' = dấu phút) nay đọc đúng 3:49-3:52 thay vì 3s-49s; (2) ô time+source cùng nhiều dòng: căn theo dòng gốc (dòng trống là đệm), source trống kế thừa dòng TRÊN — hết cảnh cut nhảy xuống source dưới; (3) thêm ";" vào bộ tách timecode. On top of v4.8.10
+var PLUGIN_VERSION = 'v4.9.1';  // Un-nest (API clone → tận dụng track trống rồi mới tạo track mới, giữ effect, phím tắt) + Autocut parse fixes. On top of v4.8.11
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8182,7 +8182,34 @@ async function ppMoveToVOBin(item, proj) {
     try { pv = await un(parentSeq.getVideoTrackCount()); } catch (e) {}
     try { pa = await un(parentSeq.getAudioTrackCount()); } catch (e) {}
 
-    // Gather clone targets (async) first, then apply in ONE transaction.
+    // Paste window on the parent timeline (whole clips can overflow a bit — matches
+    // the cut-range mapping). A parent track with NO clip overlapping this window is
+    // reusable; we fill those first (ascending, preserving layer order) before adding
+    // new tracks on top.
+    var winStart = parentStart, winEnd = parentStart + Math.max(0, nestOut - nestIn);
+    var overlapsWin = function (s, e) { return s < winEnd - EPS && e > winStart + EPS; };
+    async function freeTracks(count, getTrack) {
+      var free = [];
+      for (var t = 0; t < count; t++) {
+        var trk = await un(getTrack(t));
+        var clips = await getClipItems(trk);
+        var busyTrk = false;
+        for (var i = 0; i < clips.length; i++) {
+          var cs = await callSec(clips[i], 'getStartTime'), ce = await callSec(clips[i], 'getEndTime');
+          if (cs != null && ce != null && overlapsWin(cs, ce)) { busyTrk = true; break; }
+        }
+        if (!busyTrk) free.push(t);
+      }
+      return free;
+    }
+    var freeV = await freeTracks(pv, function (t) { return parentSeq.getVideoTrack(t); });
+    var freeA = (mode === 'av' || mode === 'avt') ? await freeTracks(pa, function (t) { return parentSeq.getAudioTrack(t); }) : [];
+    var newV = pv, newA = pa, reusedV = 0, reusedA = 0;
+    var nextV = function () { if (freeV.length) { reusedV++; return freeV.shift(); } return newV++; };
+    var nextA = function () { if (freeA.length) { reusedA++; return freeA.shift(); } return newA++; };
+
+    // Gather clone targets (async) first, then apply in ONE transaction. Each nested
+    // track that contributes clips gets its OWN parent target track (reused or new).
     var targets = []; // { item, vIdx, aIdx, align }
     var inRange = function (s, e) { return (Math.min(e, nestOut) - Math.max(s, nestIn)) > EPS; };
     var vfDropped = 0;
@@ -8191,6 +8218,7 @@ async function ppMoveToVOBin(item, proj) {
     for (var vi = 0; vi < nv; vi++) {
       var vt = await un(nested.getVideoTrack(vi));
       var vc = await getClipItems(vt);
+      var picked = [];
       for (var c = 0; c < vc.length; c++) {
         var s1 = await callSec(vc[c], 'getStartTime'), e1 = await callSec(vc[c], 'getEndTime');
         if (s1 == null || e1 == null || !inRange(s1, e1)) continue;
@@ -8198,19 +8226,26 @@ async function ppMoveToVOBin(item, proj) {
           var cls = await classifyVideoClip(vc[c]);
           if (!cls.keep) { vfDropped++; continue; } // pure text/title → skip
         }
-        targets.push({ item: vc[c], vIdx: pv + vi, aIdx: 0, align: true });
+        picked.push(vc[c]);
       }
+      if (!picked.length) continue;
+      var vIdx = nextV();
+      for (var pk = 0; pk < picked.length; pk++) targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true });
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
       for (var ai = 0; ai < na; ai++) {
         var at = await un(nested.getAudioTrack(ai));
         var ac = await getClipItems(at);
+        var apick = [];
         for (var b = 0; b < ac.length; b++) {
           var s2 = await callSec(ac[b], 'getStartTime'), e2 = await callSec(ac[b], 'getEndTime');
           if (s2 == null || e2 == null || !inRange(s2, e2)) continue;
-          targets.push({ item: ac[b], vIdx: 0, aIdx: pa + ai, align: false });
+          apick.push(ac[b]);
         }
+        if (!apick.length) continue;
+        var aIdx = nextA();
+        for (var qk = 0; qk < apick.length; qk++) targets.push({ item: apick[qk], vIdx: 0, aIdx: aIdx, align: false });
       }
     }
 
@@ -8228,7 +8263,8 @@ async function ppMoveToVOBin(item, proj) {
       }, 'Un-nest: clone ' + targets.length + ' clip');
     });
 
-    logLine('✓ "' + d.name + '": clone ' + done + ' clip lên track mới (V' + (pv + 1) + '+ / A' + (pa + 1) + '+) — giữ effect'
+    logLine('✓ "' + d.name + '": clone ' + done + ' clip (giữ effect) · video: dùng lại ' + reusedV + ' track trống + ' + (newV - pv) + ' track mới'
+      + ((mode === 'av' || mode === 'avt') ? ' · audio: ' + reusedA + ' trống + ' + (newA - pa) + ' mới' : '')
       + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : ''), 'ok');
     return done;
   }
