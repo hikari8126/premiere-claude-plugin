@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.8.11';  // Autocut parse: (1) "3p49-3p52" (p/phút/' = dấu phút) nay đọc đúng 3:49-3:52 thay vì 3s-49s; (2) ô time+source cùng nhiều dòng: căn theo dòng gốc (dòng trống là đệm), source trống kế thừa dòng TRÊN — hết cảnh cut nhảy xuống source dưới; (3) thêm ";" vào bộ tách timecode. On top of v4.8.10
+var PLUGIN_VERSION = 'v4.9.0';  // Un-nest (API clone) + Autocut parse fixes: (1) "3p49-3p52" (p/phút/' = dấu phút) đọc đúng 3:49-3:52; (2) ô time+source cùng nhiều dòng: căn theo dòng gốc, source trống kế thừa dòng TRÊN; (3) thêm ";" vào bộ tách timecode. On top of v4.8.11
 
 // ── State ──────────────────────────────────────────────────────────────────
 
