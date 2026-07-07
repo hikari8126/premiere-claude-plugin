@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.1';  // Un-nest (API clone → tận dụng track trống rồi mới tạo track mới, giữ effect, phím tắt) + Autocut parse fixes. On top of v4.8.11
+var PLUGIN_VERSION = 'v4.9.2';  // Un-nest: clone LÊN TRÊN CÙNG — chỉ tái dùng track trống nằm trên nội dung tại khoảng clone, hết thì tạo track mới (giữ effect, phím tắt). On top of v4.9.1
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8183,13 +8183,16 @@ async function ppMoveToVOBin(item, proj) {
     try { pa = await un(parentSeq.getAudioTrackCount()); } catch (e) {}
 
     // Paste window on the parent timeline (whole clips can overflow a bit — matches
-    // the cut-range mapping). A parent track with NO clip overlapping this window is
-    // reusable; we fill those first (ascending, preserving layer order) before adding
-    // new tracks on top.
+    // the cut-range mapping). Clones must always land ON TOP of whatever is at this
+    // window: a track is reusable only if it (a) has no clip overlapping the window
+    // AND (b) sits ABOVE the highest track that DOES have content in the window. Such
+    // a track may still hold clips elsewhere on the timeline — only the window matters.
+    // We fill those (ascending, preserving layer order) before adding new tracks on top.
     var winStart = parentStart, winEnd = parentStart + Math.max(0, nestOut - nestIn);
     var overlapsWin = function (s, e) { return s < winEnd - EPS && e > winStart + EPS; };
     async function freeTracks(count, getTrack) {
-      var free = [];
+      // First pass: mark which tracks are busy in the window and find the topmost busy one.
+      var busyMap = [], topBusy = -1;
       for (var t = 0; t < count; t++) {
         var trk = await un(getTrack(t));
         var clips = await getClipItems(trk);
@@ -8198,8 +8201,13 @@ async function ppMoveToVOBin(item, proj) {
           var cs = await callSec(clips[i], 'getStartTime'), ce = await callSec(clips[i], 'getEndTime');
           if (cs != null && ce != null && overlapsWin(cs, ce)) { busyTrk = true; break; }
         }
-        if (!busyTrk) free.push(t);
+        busyMap[t] = busyTrk;
+        if (busyTrk) topBusy = t;
       }
+      // Reusable = every track above the topmost busy one (all free in the window by
+      // definition). Tracks below/at content in the window are skipped → clone goes on top.
+      var free = [];
+      for (var t2 = topBusy + 1; t2 < count; t2++) free.push(t2);
       return free;
     }
     var freeV = await freeTracks(pv, function (t) { return parentSeq.getVideoTrack(t); });
