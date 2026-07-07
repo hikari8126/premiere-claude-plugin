@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.2';  // Un-nest: clone LÊN TRÊN CÙNG — chỉ tái dùng track trống nằm trên nội dung tại khoảng clone, hết thì tạo track mới (giữ effect, phím tắt). On top of v4.9.1
+var PLUGIN_VERSION = 'v4.9.6';  // Hotkey: bắt buộc ≥1 modifier (⌘/⌥/⌃) — bỏ AX/Accessibility; chỉ đăng ký khi Premiere frontmost + định tuyến đa phiên bản + cảnh báo trùng. On top of v4.9.2
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8409,12 +8409,20 @@ async function ppMoveToVOBin(item, proj) {
     if (r) r.checked = true;
     await run();
   }
+  // Host Premiere major version ('25'/'26') so the bridge can route a hotkey trigger
+  // to the FOCUSED Premiere when 2025 and 2026 are open at once (both instances poll
+  // the same bridge; without this the first poller wins regardless of focus).
+  var HOST_VER = '';
+  try {
+    var _uh = window.require && window.require('uxp');
+    if (_uh && _uh.host && _uh.host.version) HOST_VER = String(_uh.host.version).split('.')[0];
+  } catch (e) {}
   var trigPolling = false;
   async function pollTrigger() {
     if (busy || trigPolling) return;
     trigPolling = true;
     try {
-      var res = await fetch(BRIDGE_URL + '/unnest/poll');
+      var res = await fetch(BRIDGE_URL + '/unnest/poll?host=' + encodeURIComponent(HOST_VER));
       var j = await res.json();
       if (j && j.pending && j.pending.mode) await runMode(j.pending.mode);
     } catch (e) {} finally { trigPolling = false; }
@@ -8429,6 +8437,84 @@ async function ppMoveToVOBin(item, proj) {
     return (c.ctrl ? '⌃' : '') + (c.opt ? '⌥' : '') + (c.shift ? '⇧' : '') + (c.cmd ? '⌘' : '')
       + String(c.code).replace(/^Key/, '').replace(/^Digit/, '');
   }
+
+  // ── Premiere-shortcut conflict detection ────────────────────────────────────
+  // The bridge parses the active (or default) .kys keymap; we compare each bound
+  // combo against it and flag collisions with a ⚠ badge + hover tooltip.
+  var premiereShortcuts = null; // { source: 'custom'|'default'|'none', list: [...] }
+  var PUNCT_CODE = {
+    Minus: '-', Equal: '=', Slash: '/', Backslash: '\\', Backquote: '`',
+    Comma: ',', Period: '.', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']',
+  };
+  function codeToChar(code) {
+    if (!code) return '';
+    var m = /^Key([A-Z])$/.exec(code); if (m) return m[1];
+    m = /^Digit([0-9])$/.exec(code);   if (m) return m[1];
+    return PUNCT_CODE[code] || '';
+  }
+  var CMD_NAMES = {
+    'cmd.tools.01pointer': 'Selection Tool', 'cmd.tools.02trackselectforward': 'Track Select Forward',
+    'cmd.tools.03ripple': 'Ripple Edit Tool', 'cmd.tools.04roll': 'Rolling Edit Tool',
+    'cmd.tools.05ratestretch': 'Rate Stretch Tool', 'cmd.tools.06razor': 'Razor Tool',
+    'cmd.tools.07slip': 'Slip Tool', 'cmd.tools.08slide': 'Slide Tool',
+    'cmd.tools.09pen': 'Pen Tool', 'cmd.tools.10hand': 'Hand Tool',
+    'cmd.tools.11zoom': 'Zoom Tool', 'cmd.tools.12text': 'Type Tool',
+    'cmd.set.marker': 'Add Marker', 'cmd.edit.rippledelete': 'Ripple Delete',
+    'cmd.sequence.razorateditline': 'Razor at Playhead',
+  };
+  function prettyCmd(cn) {
+    if (CMD_NAMES[cn]) return CMD_NAMES[cn];
+    var seg = String(cn || '').replace(/^cmd\./, '').split('.').pop() || cn;
+    seg = seg.replace(/^\d+/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+    if (!seg) return cn;
+    return seg.charAt(0).toUpperCase() + seg.slice(1);
+  }
+  async function loadPremiereShortcuts() {
+    try {
+      var res = await fetch(BRIDGE_URL + '/unnest/premiere-shortcuts');
+      var j = await res.json();
+      premiereShortcuts = { source: (j && j.source) || 'none', list: (j && j.shortcuts) || [] };
+    } catch (e) { premiereShortcuts = premiereShortcuts || { source: 'none', list: [] }; }
+  }
+  function conflictsFor(cfg) {
+    if (!cfg || !cfg.code || !premiereShortcuts) return [];
+    var ch = codeToChar(cfg.code);
+    if (!ch) return [];
+    return premiereShortcuts.list.filter(function (s) {
+      return s.char === ch && !!s.cmd === !!cfg.cmd && !!s.opt === !!cfg.opt
+        && !!s.shift === !!cfg.shift && !!s.ctrl === !!cfg.ctrl;
+    });
+  }
+  var _curTip = null;
+  function hideTip() { if (_curTip && _curTip.parentNode) _curTip.parentNode.removeChild(_curTip); _curTip = null; }
+  function showTip(badge) {
+    hideTip();
+    var hits = badge._hits;
+    if (!hits || !hits.length) return;
+    var names = [];
+    hits.forEach(function (h) { var n = prettyCmd(h.commandname); if (names.indexOf(n) === -1) names.push(n); });
+    var srcTag = premiereShortcuts && premiereShortcuts.source === 'default' ? ' (mặc định)' : '';
+    var tip = document.createElement('div');
+    tip.className = 'un-hkTip';
+    tip.innerHTML = '<b>⚠ Trùng shortcut Premiere' + srcTag + '</b>'
+      + names.slice(0, 6).map(function (n) { return '<span class="un-tipCmd">• ' + escapeHtml(n) + '</span>'; }).join('')
+      + (names.length > 6 ? '<span class="un-tipCmd">…+' + (names.length - 6) + ' lệnh khác</span>' : '');
+    document.body.appendChild(tip);
+    var r = badge.getBoundingClientRect();
+    var maxW = (document.body && document.body.clientWidth) || 380;
+    var left = Math.max(6, Math.min(r.left, maxW - 230));
+    tip.style.left = left + 'px';
+    tip.style.top = (r.bottom + 5) + 'px';
+    _curTip = tip;
+  }
+  function refreshWarnings() {
+    document.querySelectorAll('.un-hkWarn').forEach(function (w) {
+      var mode = w.getAttribute('data-mode');
+      var hits = conflictsFor(hotkeysCfg && hotkeysCfg[mode]);
+      w._hits = hits.length ? hits : null;
+      w.hidden = !hits.length;
+    });
+  }
   async function loadHotkeys() {
     try {
       var res = await fetch(BRIDGE_URL + '/unnest/hotkeys');
@@ -8440,10 +8526,13 @@ async function ppMoveToVOBin(item, proj) {
       var el = $(HK_IDS[mode]);
       if (el && hotkeysCfg[mode]) el.textContent = comboLabel(hotkeysCfg[mode]);
     }
+    await loadPremiereShortcuts();
+    refreshWarnings();
   }
   async function saveHotkey(mode, cfg) {
     hotkeysCfg = hotkeysCfg || {};
     hotkeysCfg[mode] = cfg;
+    refreshWarnings();
     // Cleared (no code) → no duplicate check (many can be "off" at once).
     if (cfg && cfg.code) {
       var dupe = Object.keys(hotkeysCfg).filter(function (m) {
@@ -8464,18 +8553,42 @@ async function ppMoveToVOBin(item, proj) {
     var prev = textEl.textContent;
     textEl.textContent = 'Bấm tổ hợp…';
     containerEl.classList.add('is-listening');
-    function cleanup() { containerEl.classList.remove('is-listening'); document.removeEventListener('keydown', onKey, true); }
+    // UXP (Premiere 25+) only delivers keydown to a FOCUSED focusable element — a
+    // document listener on a <span> never fires and Premiere handles the key itself.
+    // So we overlay a transparent, focusable <input>, focus it, and listen on IT
+    // (same pattern as the Autocut bind modal: focus input + claimKeyboard).
+    var trap = document.createElement('input');
+    trap.type = 'text';
+    trap.className = 'un-hkTrap';
+    trap.setAttribute('aria-hidden', 'true');
+    containerEl.appendChild(trap);
+    var done = false;
+    function cleanup() {
+      if (done) return; done = true;
+      containerEl.classList.remove('is-listening');
+      trap.removeEventListener('keydown', onKey, true);
+      trap.removeEventListener('blur', onBlur);
+      if (trap.parentNode) trap.parentNode.removeChild(trap);
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    }
+    function onBlur() { if (done) return; textEl.textContent = prev; cleanup(); } // clicked away → cancel
     function onKey(e) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { textEl.textContent = prev; cleanup(); return; }
       if (['Meta', 'Alt', 'Control', 'Shift', 'CapsLock'].indexOf(e.key) !== -1) return; // wait for a real key
       var cfg = { code: e.code, cmd: !!e.metaKey, opt: !!e.altKey, ctrl: !!e.ctrlKey, shift: !!e.shiftKey };
+      // Require ⌘/⌥/⌃ (shift alone still types a character): a bare key would hijack
+      // typing in Premiere (rename fields, Essential Graphics text) which we can't
+      // detect reliably. Modifier combos never clash with text entry.
       if (!(cfg.cmd || cfg.opt || cfg.ctrl)) { textEl.textContent = 'Cần ⌘/⌥/⌃ + phím…'; return; }
       textEl.textContent = comboLabel(cfg);
       cleanup();
       saveHotkey(mode, cfg);
     }
-    document.addEventListener('keydown', onKey, true);
+    trap.addEventListener('keydown', onKey, true);
+    trap.addEventListener('blur', onBlur);
+    try { trap.focus(); } catch (e) {}
+    if (window.claimKeyboard) window.claimKeyboard();
   }
 
   // ── wire events ─────────────────────────────────────────────────────────────
@@ -8500,7 +8613,12 @@ async function ppMoveToVOBin(item, proj) {
       saveHotkey(mode, { code: '', cmd: false, opt: false, ctrl: false, shift: false });
     });
   });
-  loadHotkeys(); // populate labels from the bridge (defaults if unreachable)
+  // Conflict-warning badge: hover shows a custom tooltip (UXP has no title="").
+  document.querySelectorAll('.un-hkWarn').forEach(function (w) {
+    w.addEventListener('mouseenter', function () { showTip(w); });
+    w.addEventListener('mouseleave', hideTip);
+  });
+  loadHotkeys(); // populate labels + premiere-shortcut conflicts (defaults if unreachable)
   document.querySelectorAll('.settings-tab').forEach(function (t) {
     if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', loadHotkeys);
   });
