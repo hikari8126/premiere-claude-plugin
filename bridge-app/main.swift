@@ -1,6 +1,6 @@
 import Cocoa
 import Foundation
-import Carbon.HIToolbox   // RegisterEventHotKey + kVK/modifier constants (global hotkeys)
+import Carbon.HIToolbox      // RegisterEventHotKey + kVK/modifier constants (global hotkeys)
 
 // ── Entry point ────────────────────────────────────────────────────────────
 let app = NSApplication.shared
@@ -991,6 +991,7 @@ final class UnnestHotkeys {
     private var refs: [EventHotKeyRef?] = []
     private var idToMode: [UInt32: String] = [:]
     private var handlerInstalled = false
+    private var registered = false          // are hotkeys currently registered?
     private var lastConfig = ""
     private let modes = ["video", "av", "avt"]   // hotkey id = index + 1
     private let sig: OSType = 0x554E5354         // 'UNST'
@@ -1005,8 +1006,25 @@ final class UnnestHotkeys {
 
     func start() {
         installHandlerIfNeeded()
-        reloadAndRegister()
+        // Hotkeys require at least one modifier (enforced in the plugin + registration
+        // below), so they never clash with typing. We gate on the frontmost app.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] _ in self?.updateRegistration() }
+        updateRegistration()
         Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
+    }
+
+    private func isPremiereFront() -> Bool {
+        let bid = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        return bid.hasPrefix("com.adobe.PremierePro.")
+    }
+
+    // Register while a Premiere is frontmost; idempotent so repeated calls don't churn.
+    private func updateRegistration() {
+        let want = isPremiereFront()
+        if want && !registered { registerHotkeys(); registered = true }
+        else if !want && registered { unregisterHotkeys(); registered = false }
     }
 
     private func installHandlerIfNeeded() {
@@ -1026,10 +1044,19 @@ final class UnnestHotkeys {
 
     private func reloadIfChanged() {
         let cur = (try? String(contentsOfFile: hkFile, encoding: .utf8)) ?? ""
-        if cur != lastConfig { reloadAndRegister() }
+        if cur != lastConfig {
+            lastConfig = cur
+            if registered { registerHotkeys() } // apply new combos live only when active
+        }
     }
 
-    private func reloadAndRegister() {
+    private func unregisterHotkeys() {
+        if refs.isEmpty && idToMode.isEmpty { return }
+        for r in refs { if let r = r { UnregisterEventHotKey(r) } }
+        refs.removeAll(); idToMode.removeAll()
+    }
+
+    private func registerHotkeys() {
         lastConfig = (try? String(contentsOfFile: hkFile, encoding: .utf8)) ?? ""
         for r in refs { if let r = r { UnregisterEventHotKey(r) } }
         refs.removeAll(); idToMode.removeAll()
@@ -1041,7 +1068,7 @@ final class UnnestHotkeys {
             if (e["opt"]   as? Bool) == true { mods |= UInt32(optionKey) }
             if (e["ctrl"]  as? Bool) == true { mods |= UInt32(controlKey) }
             if (e["shift"] as? Bool) == true { mods |= UInt32(shiftKey) }
-            if mods == 0 { continue }   // require at least one modifier
+            if mods == 0 { continue }   // require ≥1 modifier (single keys clash with typing)
             let id = UInt32(i + 1)
             var ref: EventHotKeyRef?
             let hotID = EventHotKeyID(signature: sig, id: id)
@@ -1054,10 +1081,19 @@ final class UnnestHotkeys {
     func fire(id: UInt32) {
         guard let mode = idToMode[id] else { return }
         guard let url = URL(string: "http://localhost:3030/unnest/trigger") else { return }
+        // Route to the Premiere that's actually focused (user may run 2025 + 2026 at
+        // once). bundleIdentifier is com.adobe.PremierePro.<major> (e.g. ...25 / ...26);
+        // pass that major as target so only the matching plugin consumes the trigger.
+        var body: [String: Any] = ["mode": mode]
+        if let front = NSWorkspace.shared.frontmostApplication,
+           let bid = front.bundleIdentifier,
+           bid.hasPrefix("com.adobe.PremierePro.") {
+            body["target"] = String(bid.dropFirst("com.adobe.PremierePro.".count))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["mode": mode])
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         URLSession.shared.dataTask(with: req).resume()
     }
 }
