@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.6';  // Hotkey: bắt buộc ≥1 modifier (⌘/⌥/⌃) — bỏ AX/Accessibility; chỉ đăng ký khi Premiere frontmost + định tuyến đa phiên bản + cảnh báo trùng. On top of v4.9.2
+var PLUGIN_VERSION = 'v4.9.3';  // Hotkey: bắt buộc ≥1 modifier (⌘/⌥/⌃) — bỏ AX/Accessibility; chỉ đăng ký khi Premiere frontmost + định tuyến đa phiên bản + cảnh báo trùng. On top of v4.9.2
 
 // ── State ──────────────────────────────────────────────────────────────────
 
