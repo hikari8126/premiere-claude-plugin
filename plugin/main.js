@@ -7665,13 +7665,18 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     if (!ids.length || elvBusy) return;
     elvBusy = true; elvArmed = false; if (elvArmTimer) { clearTimeout(elvArmTimer); elvArmTimer = null; }
     elvUpdateDeleteBtn();
-    var ok = 0, fail = 0;
+    var ok = 0, fail = 0, gone = {};
     for (var i = 0; i < ids.length; i++) {
-      try { await elvApi('DELETE', '/v1/voices/' + ids[i]); ok++; } catch (e) { fail++; }
+      try { await elvApi('DELETE', '/v1/voices/' + ids[i]); ok++; gone[ids[i]] = 1; } catch (e) { fail++; }
     }
+    // Optimistic update — ElevenLabs' voice list is eventually-consistent, so an
+    // immediate re-GET can still return the just-deleted voices. Drop them locally
+    // and re-render now for instant feedback (Làm mới does a full server refresh).
+    elvVoices = elvVoices.filter(function (v) { return !gone[v.id]; });
+    ids.forEach(function (id) { delete elvSelected[id]; });
     var st = $('elvDelStatus'); if (st) st.textContent = 'Đã xoá ' + ok + (fail ? (' • Lỗi ' + fail) : '');
     elvBusy = false;
-    await elvFetchState();                       // refresh count + list
+    elvRenderSlots(); elvRenderList();
     try { if (typeof loadVoices === 'function') await loadVoices(); } catch (e) {} // refresh main dropdown
   }
   function elvOnDeleteClick() {
