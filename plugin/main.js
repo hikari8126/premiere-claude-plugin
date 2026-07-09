@@ -7576,6 +7576,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   // ── ElevenLabs clone manager (direct API; current ELEVENLABS_KEY) ──────────
   var elvVoices = [];    // [{ id, name, category }] custom (non-premade) voices
   var elvLimit = 0;      // subscription.voice_limit
+  var elvLimitKnown = false; // whether the subscription (limit) read succeeded
   var elvSelected = {};  // voice_id → 1
   var elvBusy = false;
   var elvArmed = false, elvArmTimer = null;
@@ -7595,26 +7596,34 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     var slot = $('elvSlotLine');
     if (!ELEVENLABS_KEY) { if (slot) { slot.textContent = 'Chưa có API key'; slot.className = 'elv-slot'; } elvVoices = []; elvLimit = 0; elvSelected = {}; elvRenderList(); return; }
     if (slot) { slot.textContent = 'Đang tải…'; slot.className = 'elv-slot'; }
+    // 1) Voices — required (the manager works even if the key lacks other scopes).
     try {
-      var sub = await elvApi('GET', '/v1/user/subscription');
-      var vd  = await elvApi('GET', '/v1/voices');
-      elvLimit = (sub && sub.voice_limit) || 0;
+      var vd = await elvApi('GET', '/v1/voices');
       var voices = (vd && vd.voices) || [];
       elvVoices = voices.filter(function (v) { return v.category !== 'premade'; })
         .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
       elvSelected = {};
-      elvRenderSlots();
-      elvRenderList();
     } catch (e) {
-      if (slot) { slot.textContent = 'Không đọc được (kiểm tra API key)'; slot.className = 'elv-slot elv-err'; }
-      elvVoices = []; elvSelected = {}; elvRenderList();
+      if (slot) { slot.textContent = 'Lỗi tải voices: ' + (e && e.message ? e.message : String(e)); slot.className = 'elv-slot elv-err'; }
+      elvVoices = []; elvSelected = {}; elvRenderList(); return;
     }
+    // 2) Subscription — optional; the key may lack the "User" read scope (→ 401).
+    //    Without it we still show the count as X / ? (limit unknown).
+    elvLimit = 0; elvLimitKnown = false;
+    try { var sub = await elvApi('GET', '/v1/user/subscription'); elvLimit = (sub && sub.voice_limit) || 0; elvLimitKnown = true; }
+    catch (e) { elvLimit = 0; elvLimitKnown = false; }
+    elvRenderSlots();
+    elvRenderList();
   }
   function elvRenderSlots() {
     var slot = $('elvSlotLine'); if (!slot) return;
     var x = elvVoices.length, y = elvLimit;
-    var full = y > 0 && x >= y;
-    slot.textContent = 'Đã dùng ' + x + ' / ' + (y || '?') + ' slot clone' + (full ? ' — ĐẦY' : '');
+    var full = elvLimitKnown && y > 0 && x >= y;
+    if (elvLimitKnown) {
+      slot.textContent = 'Đã dùng ' + x + ' / ' + (y || '?') + ' slot clone' + (full ? ' — ĐẦY' : '');
+    } else {
+      slot.textContent = 'Có ' + x + ' voice clone (không đọc được giới hạn — key thiếu quyền User)';
+    }
     slot.className = 'elv-slot' + (full ? ' is-full' : '');
   }
   function elvUpdateDeleteBtn() {
