@@ -8226,6 +8226,143 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   }
   function clearLog() { if (els.log) { els.log.textContent = ''; els.log.hidden = true; } }
 
+  // ── Exclude-from-un-nest list (per-project, by project-item id) ──────────────
+  var UNNEST_EXCLUDE_LS = 'unnest_exclude_v1'; // { projKey: [ {id, name}, … ] }
+  var unnestItemCache = null; // cached [{id, name}] of project media+sequences (session)
+  async function unnestProjKey() {
+    try {
+      var p = await getActiveProject(); var nm = p && p.name;
+      if (nm && typeof nm.then === 'function') nm = await nm;
+      return String(nm || (p && p.guid) || '');
+    } catch (e) { return ''; }
+  }
+  function unnestLoadStore() {
+    try { var o = JSON.parse(localStorage.getItem(UNNEST_EXCLUDE_LS) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e) { return {}; }
+  }
+  function unnestLoadExcludes(projKey) {
+    var a = unnestLoadStore()[projKey]; return Array.isArray(a) ? a : [];
+  }
+  function unnestSaveExcludes(projKey, arr) {
+    var store = unnestLoadStore(); store[projKey] = arr;
+    try { localStorage.setItem(UNNEST_EXCLUDE_LS, JSON.stringify(store)); } catch (e) {}
+  }
+  async function unnestExcludeIdSet() {
+    var key = await unnestProjKey(); var arr = unnestLoadExcludes(key); var set = {};
+    for (var i = 0; i < arr.length; i++) if (arr[i] && arr[i].id != null) set[String(arr[i].id)] = 1;
+    return set;
+  }
+  // Build (and cache) the list of project media items + sequences (id + name).
+  async function unnestBuildItemList(force) {
+    if (unnestItemCache && !force) return unnestItemCache;
+    var out = [];
+    try {
+      var proj = await getActiveProject();
+      var root = proj && (proj.getRootItem ? await un(proj.getRootItem()) : proj.rootItem);
+      if (root && typeof sacCollectBinItems === 'function') {
+        var items = await sacCollectBinItems(root);
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].isFolder) continue; // skip bins/folders
+          var id = null;
+          try { id = await un(items[i].item.getId()); } catch (e) {}
+          if (id == null) continue;
+          out.push({ id: String(id), name: items[i].name || '(không tên)' });
+        }
+      }
+    } catch (e) {}
+    out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
+    unnestItemCache = out; return out;
+  }
+  function unnestRenderCount(projKey) {
+    var el = document.getElementById('unExcludeCount');
+    if (el) el.textContent = String(unnestLoadExcludes(projKey).length);
+  }
+  function unnestRenderList(projKey) {
+    var panel = document.getElementById('unExcludeListPanel');
+    if (!panel) return;
+    panel.innerHTML = '';
+    var arr = unnestLoadExcludes(projKey);
+    if (!arr.length) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa loại trừ item nào)</div>'; return; }
+    arr.forEach(function (it) {
+      var row = document.createElement('div'); row.className = 'vg-nameRow';
+      var label = document.createElement('span'); label.className = 'vg-nameRowLabel'; label.textContent = it.name;
+      var del = document.createElement('span'); del.className = 'vg-nameRowDel'; del.setAttribute('role', 'button');
+      del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+      del.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        var cur = unnestLoadExcludes(projKey).filter(function (x) { return String(x.id) !== String(it.id); });
+        unnestSaveExcludes(projKey, cur); unnestRenderList(projKey); unnestRenderCount(projKey);
+      };
+      row.appendChild(label); row.appendChild(del); panel.appendChild(row);
+    });
+  }
+  function unnestRenderSearch(projKey, query) {
+    var list = document.getElementById('unExcludeSearchList');
+    if (!list) return;
+    list.innerHTML = '';
+    var items = unnestItemCache || [];
+    var q = (query || '').trim().toLowerCase();
+    var excluded = {}; unnestLoadExcludes(projKey).forEach(function (x) { excluded[String(x.id)] = 1; });
+    var matches = items.filter(function (it) {
+      return !excluded[String(it.id)] && (!q || String(it.name).toLowerCase().indexOf(q) !== -1);
+    }).slice(0, 40); // cap the rendered rows; the search narrows further
+    if (!matches.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">' + (items.length ? '(không khớp)' : '(bấm Làm mới danh sách)') + '</div>'; return; }
+    matches.forEach(function (it) {
+      var row = document.createElement('div'); row.className = 'vg-nameRow';
+      row.textContent = it.name;
+      row.onclick = function () {
+        var cur = unnestLoadExcludes(projKey);
+        if (!cur.some(function (x) { return String(x.id) === String(it.id); })) { cur.push({ id: String(it.id), name: it.name }); unnestSaveExcludes(projKey, cur); }
+        unnestRenderCount(projKey); unnestRenderList(projKey); unnestRenderSearch(projKey, document.getElementById('unExcludeSearch').value);
+      };
+      list.appendChild(row);
+    });
+  }
+  var unnestExcludeWired = false;
+  async function unnestInitExclude() {
+    var projKey = await unnestProjKey();
+    var addBtn = document.getElementById('unExcludeAddBtn');
+    var listBtn = document.getElementById('unExcludeListBtn');
+    var addPanel = document.getElementById('unExcludeAddPanel');
+    var listPanel = document.getElementById('unExcludeListPanel');
+    var search = document.getElementById('unExcludeSearch');
+    var refresh = document.getElementById('unExcludeRefresh');
+    if (!addBtn || !listBtn) return;
+    unnestRenderCount(projKey); unnestRenderList(projKey);
+    if (unnestExcludeWired) return; // wire click handlers once
+    unnestExcludeWired = true;
+    function closeP() { if (addPanel) addPanel.hidden = true; if (listPanel) listPanel.hidden = true; }
+    addBtn.onclick = async function () {
+      var show = addPanel && addPanel.hidden; closeP();
+      if (show) {
+        if (!unnestItemCache) await unnestBuildItemList(false);
+        unnestRenderSearch(await unnestProjKey(), search ? search.value : ''); addPanel.hidden = false;
+        try { search.focus(); } catch (e) {}
+        if (window.claimKeyboard) window.claimKeyboard();
+      } else if (window.releaseKeyboard) window.releaseKeyboard();
+    };
+    listBtn.onclick = function () {
+      var show = listPanel && listPanel.hidden; closeP();
+      if (show) { unnestRenderList(projKey); listPanel.hidden = false; }
+    };
+    if (search) {
+      var composing = false;
+      search.addEventListener('compositionstart', function () { composing = true; });
+      search.addEventListener('compositionend', function () { composing = false; unnestRenderSearch(projKey, search.value); });
+      search.addEventListener('input', function () { if (!composing) unnestRenderSearch(projKey, search.value); });
+    }
+    if (refresh) refresh.onclick = async function () {
+      await unnestBuildItemList(true);
+      // prune saved ids no longer in the project; refresh saved names to current.
+      var live = {}; unnestItemCache.forEach(function (it) { live[String(it.id)] = it.name; });
+      var pk = await unnestProjKey();
+      var pruned = unnestLoadExcludes(pk).filter(function (x) { return live[String(x.id)]; })
+        .map(function (x) { return { id: String(x.id), name: live[String(x.id)] }; });
+      unnestSaveExcludes(pk, pruned);
+      unnestRenderCount(pk); unnestRenderList(pk); unnestRenderSearch(pk, search ? search.value : '');
+    };
+  }
+
   async function un(v) { return (v && typeof v.then === 'function') ? await v : v; }
 
   async function callSec(obj, method) {
@@ -8906,7 +9043,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     w.addEventListener('mouseleave', hideTip);
   });
   loadHotkeys(); // populate labels + premiere-shortcut conflicts (defaults if unreachable)
+  unnestInitExclude();
   document.querySelectorAll('.settings-tab').forEach(function (t) {
-    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', loadHotkeys);
+    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
   });
 })();

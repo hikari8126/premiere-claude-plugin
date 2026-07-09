@@ -3735,3 +3735,14 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 .un-hkTip b { color: #fbbf24; font-weight: 700; }
 .un-hkTip .un-tipCmd { display: block; margin-top: 3px; opacity: 0.9; }
+
+.un-excludeWrap { margin-top: 12px; }
+.un-excludeTools { display: flex; align-items: center; margin-top: 6px; }
+.un-excludeTools .vg-nameToolBtn { margin-right: 8px; }
+.un-excludeTools .vg-nameToolBtn:last-child { margin-right: 0; }
+.un-excludeRefresh {
+  display: flex; align-items: center; gap: 4px; justify-content: center;
+  font-size: 10px; color: var(--text-dim); cursor: pointer;
+  padding: 6px 8px; border-top: 1px solid rgba(255,255,255,0.06);
+}
+.un-excludeRefresh:hover { color: var(--text); }
