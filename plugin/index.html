@@ -324,6 +324,20 @@
           <span>Tắt sequence gốc sau khi bung</span>
         </label>
 
+        <div class="un-excludeWrap">
+          <label class="vg-save-label" style="margin-top:2px;">Loại trừ khi bung</label>
+          <div class="un-excludeTools">
+            <div id="unExcludeAddBtn" class="vg-nameToolBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Thêm item loại trừ <span class="vg-caret">▾</span></div>
+            <div id="unExcludeListBtn" class="vg-nameToolBtn" role="button"><span data-ic="layer_group" data-ic-size="12"></span> Đã loại trừ (<span id="unExcludeCount">0</span>) <span class="vg-caret">▾</span></div>
+          </div>
+          <div id="unExcludeAddPanel" class="vg-namePanel" hidden>
+            <input id="unExcludeSearch" type="text" class="vg-dropSearchInput" placeholder="Tìm theo tên…" />
+            <div id="unExcludeSearchList"></div>
+            <div id="unExcludeRefresh" class="un-excludeRefresh" role="button"><span data-ic="rotate_right" data-ic-size="11"></span> Làm mới danh sách</div>
+          </div>
+          <div id="unExcludeListPanel" class="vg-namePanel" hidden></div>
+        </div>
+
         <div id="unRun" class="un-runBtn" role="button" aria-disabled="false" style="margin-top:10px;"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
       </div><!-- /settings-tabPanel unnest -->
 
