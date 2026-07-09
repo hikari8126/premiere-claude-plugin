@@ -481,10 +481,14 @@
               <div class="vc-step">
                 <div class="vc-stepHd"><span class="vc-stepNo">1</span> Choose audio source</div>
                 <div class="vc-segTabs">
-                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline A1</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline</span></label>
                   <label class="vc-seg"><input type="radio" name="vcSource" value="file" /><span>From File</span></label>
                 </div>
                 <div id="vcFromSequenceSection">
+                  <div class="vc-trackSel">
+                    <div id="vcTrackSelBtn" class="vg-nameToolBtn" role="button">Track: A1 <span class="vg-caret">▾</span></div>
+                    <div id="vcTrackSelPanel" class="vg-namePanel" hidden></div>
+                  </div>
                   <div id="vcGetClip" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Extract audio from Timeline A1</div>
                   <div class="vc-clipInfo" id="vcClipInfo">Grabs every clip on audio track A1 and joins them into one voice sample.</div>
                 </div>
