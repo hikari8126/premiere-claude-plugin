@@ -7573,6 +7573,126 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   var vgAddProfileBtn    = $('vgAddProfile');
   var vgDeleteProfileBtn = $('vgDeleteProfile');
 
+  // ── ElevenLabs clone manager (direct API; current ELEVENLABS_KEY) ──────────
+  var elvVoices = [];    // [{ id, name, category }] custom (non-premade) voices
+  var elvLimit = 0;      // subscription.voice_limit
+  var elvSelected = {};  // voice_id → 1
+  var elvBusy = false;
+  var elvArmed = false, elvArmTimer = null;
+
+  async function elvApi(method, path) {
+    if (!ELEVENLABS_KEY) throw new Error('no-key');
+    var res = await fetch('https://api.elevenlabs.io' + path, {
+      method: method,
+      headers: { 'xi-api-key': ELEVENLABS_KEY, 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (method === 'DELETE') return true;
+    return await res.json();
+  }
+
+  async function elvFetchState() {
+    var slot = $('elvSlotLine');
+    if (!ELEVENLABS_KEY) { if (slot) { slot.textContent = 'Chưa có API key'; slot.className = 'elv-slot'; } elvVoices = []; elvLimit = 0; elvSelected = {}; elvRenderList(); return; }
+    if (slot) { slot.textContent = 'Đang tải…'; slot.className = 'elv-slot'; }
+    try {
+      var sub = await elvApi('GET', '/v1/user/subscription');
+      var vd  = await elvApi('GET', '/v1/voices');
+      elvLimit = (sub && sub.voice_limit) || 0;
+      var voices = (vd && vd.voices) || [];
+      elvVoices = voices.filter(function (v) { return v.category !== 'premade'; })
+        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
+      elvSelected = {};
+      elvRenderSlots();
+      elvRenderList();
+    } catch (e) {
+      if (slot) { slot.textContent = 'Không đọc được (kiểm tra API key)'; slot.className = 'elv-slot elv-err'; }
+      elvVoices = []; elvSelected = {}; elvRenderList();
+    }
+  }
+  function elvRenderSlots() {
+    var slot = $('elvSlotLine'); if (!slot) return;
+    var x = elvVoices.length, y = elvLimit;
+    var full = y > 0 && x >= y;
+    slot.textContent = 'Đã dùng ' + x + ' / ' + (y || '?') + ' slot clone' + (full ? ' — ĐẦY' : '');
+    slot.className = 'elv-slot' + (full ? ' is-full' : '');
+  }
+  function elvUpdateDeleteBtn() {
+    var btn = $('elvDeleteBtn'); if (!btn) return;
+    var n = Object.keys(elvSelected).length;
+    btn.classList.toggle('is-disabled', n === 0 || elvBusy);
+    if (elvArmed) { btn.textContent = 'Xác nhận xoá ' + n + ' voice?'; btn.classList.add('is-armed'); }
+    else { btn.textContent = 'Xoá đã chọn (' + n + ')'; btn.classList.remove('is-armed'); }
+  }
+  // Rebuilt only on fetch/delete (never on keystroke) — search uses elvFilterRows.
+  function elvRenderList() {
+    var list = $('elvVoiceList'); if (!list) return;
+    list.innerHTML = '';
+    if (!elvVoices.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có voice clone)</div>'; elvUpdateDeleteBtn(); return; }
+    elvVoices.forEach(function (v) {
+      var row = document.createElement('label'); row.className = 'elv-row';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'elv-cb'; cb.checked = !!elvSelected[v.id];
+      cb.onchange = function () { if (cb.checked) elvSelected[v.id] = 1; else delete elvSelected[v.id]; elvUpdateDeleteBtn(); };
+      var nm = document.createElement('span'); nm.className = 'elv-rowName'; nm.textContent = v.name;
+      var tag = document.createElement('span'); tag.className = 'elv-rowTag'; tag.textContent = v.category;
+      row.appendChild(cb); row.appendChild(nm); row.appendChild(tag);
+      row.setAttribute('data-name', String(v.name).toLowerCase());
+      list.appendChild(row);
+    });
+    elvUpdateDeleteBtn();
+    var s = $('elvVoiceSearch'); elvFilterRows(s ? s.value : '');
+  }
+  function elvFilterRows(query) {
+    var list = $('elvVoiceList'); if (!list) return;
+    var q = (query || '').trim().toLowerCase();
+    var rows = list.querySelectorAll('.elv-row');
+    for (var i = 0; i < rows.length; i++) {
+      var nm = rows[i].getAttribute('data-name') || '';
+      rows[i].style.display = (!q || nm.indexOf(q) !== -1) ? '' : 'none';
+    }
+  }
+  async function elvDoDelete() {
+    var ids = Object.keys(elvSelected);
+    if (!ids.length || elvBusy) return;
+    elvBusy = true; elvArmed = false; if (elvArmTimer) { clearTimeout(elvArmTimer); elvArmTimer = null; }
+    elvUpdateDeleteBtn();
+    var ok = 0, fail = 0;
+    for (var i = 0; i < ids.length; i++) {
+      try { await elvApi('DELETE', '/v1/voices/' + ids[i]); ok++; } catch (e) { fail++; }
+    }
+    var st = $('elvDelStatus'); if (st) st.textContent = 'Đã xoá ' + ok + (fail ? (' • Lỗi ' + fail) : '');
+    elvBusy = false;
+    await elvFetchState();                       // refresh count + list
+    try { if (typeof loadVoices === 'function') await loadVoices(); } catch (e) {} // refresh main dropdown
+  }
+  function elvOnDeleteClick() {
+    var n = Object.keys(elvSelected).length;
+    if (!n || elvBusy) return;
+    if (!elvArmed) {
+      elvArmed = true; elvUpdateDeleteBtn();
+      if (elvArmTimer) clearTimeout(elvArmTimer);
+      elvArmTimer = setTimeout(function () { elvArmed = false; elvUpdateDeleteBtn(); }, 4000);
+      return;
+    }
+    elvDoDelete();
+  }
+  (function elvWire() {
+    var rb = $('elvRefresh'); if (rb) rb.addEventListener('click', function () { elvFetchState(); });
+    var db = $('elvDeleteBtn'); if (db) db.addEventListener('click', elvOnDeleteClick);
+    var es = $('elvVoiceSearch');
+    if (es) {
+      es.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      es.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
+      var composing = false;
+      es.addEventListener('compositionstart', function () { composing = true; });
+      es.addEventListener('compositionend', function () { composing = false; elvFilterRows(es.value); });
+      es.addEventListener('input', function () { if (!composing) elvFilterRows(es.value); });
+    }
+    document.querySelectorAll('.settings-tab').forEach(function (t) {
+      if (t.getAttribute('data-stab') === 'voicegen') t.addEventListener('click', function () { elvFetchState(); });
+    });
+  })();
+
   function vgPersistProfiles() {
     var stored = {};
     try { stored = JSON.parse(localStorage.getItem('claude-plugin-settings') || '{}'); } catch(e) {}

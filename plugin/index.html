@@ -224,6 +224,21 @@
           </div>
         </div>
 
+        <!-- ElevenLabs clone-slot count + delete manager -->
+        <div class="vg-sg elv-manageSection">
+          <div class="vg-sl">Voice clone (ElevenLabs)</div>
+          <div class="elv-slotRow">
+            <span id="elvSlotLine" class="elv-slot">—</span>
+            <div id="elvRefresh" class="vg-profileBtn" role="button"><span data-ic="rotate_right" data-ic-size="12"></span> Làm mới</div>
+          </div>
+          <input type="text" id="elvVoiceSearch" class="vg-settingInput" placeholder="Tìm voice theo tên…" autocomplete="off" />
+          <div id="elvVoiceList" class="elv-list"></div>
+          <div class="elv-delRow">
+            <div id="elvDeleteBtn" class="vg-deleteProfileBtn is-disabled" role="button">Xoá đã chọn (0)</div>
+            <span id="elvDelStatus" class="elv-delStatus"></span>
+          </div>
+        </div>
+
         <!-- Output Format — hidden; fixed default MP3 192kbps (JS reads vgOutputFormat.value) -->
         <div class="vg-sg" style="display:none">
           <div class="vg-sl">Output Format</div>
