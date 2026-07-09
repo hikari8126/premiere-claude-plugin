@@ -8319,8 +8319,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     });
   }
   var unnestExcludeWired = false;
+  var unnestCurProjKey = '';
   async function unnestInitExclude() {
     var projKey = await unnestProjKey();
+    if (projKey !== unnestCurProjKey) unnestItemCache = null; // project changed → rebuild item list
+    unnestCurProjKey = projKey;
     var addBtn = document.getElementById('unExcludeAddBtn');
     var listBtn = document.getElementById('unExcludeListBtn');
     var addPanel = document.getElementById('unExcludeAddPanel');
@@ -8336,20 +8339,20 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       var show = addPanel && addPanel.hidden; closeP();
       if (show) {
         if (!unnestItemCache) await unnestBuildItemList(false);
-        unnestRenderSearch(await unnestProjKey(), search ? search.value : ''); addPanel.hidden = false;
+        unnestRenderSearch(unnestCurProjKey, search ? search.value : ''); addPanel.hidden = false;
         try { search.focus(); } catch (e) {}
         if (window.claimKeyboard) window.claimKeyboard();
       } else if (window.releaseKeyboard) window.releaseKeyboard();
     };
     listBtn.onclick = function () {
       var show = listPanel && listPanel.hidden; closeP();
-      if (show) { unnestRenderList(projKey); listPanel.hidden = false; }
+      if (show) { unnestRenderList(unnestCurProjKey); listPanel.hidden = false; }
     };
     if (search) {
       var composing = false;
       search.addEventListener('compositionstart', function () { composing = true; });
-      search.addEventListener('compositionend', function () { composing = false; unnestRenderSearch(projKey, search.value); });
-      search.addEventListener('input', function () { if (!composing) unnestRenderSearch(projKey, search.value); });
+      search.addEventListener('compositionend', function () { composing = false; unnestRenderSearch(unnestCurProjKey, search.value); });
+      search.addEventListener('input', function () { if (!composing) unnestRenderSearch(unnestCurProjKey, search.value); });
     }
     if (refresh) refresh.onclick = async function () {
       await unnestBuildItemList(true);
