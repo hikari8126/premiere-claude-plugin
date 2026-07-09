@@ -7600,7 +7600,9 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     try {
       var vd = await elvApi('GET', '/v1/voices');
       var voices = (vd && vd.voices) || [];
-      elvVoices = voices.filter(function (v) { return v.category !== 'premade'; })
+      // Own clones only: exclude premade AND library/shared voices (they carry a
+      // `sharing` object and don't occupy your clone slots).
+      elvVoices = voices.filter(function (v) { return v.category !== 'premade' && !v.sharing; })
         .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
       elvSelected = {};
     } catch (e) {

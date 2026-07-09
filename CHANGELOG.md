@@ -12,6 +12,7 @@
 - **Un-nest — giới hạn phần tràn ±2s** — Sau khi bung, mỗi element chỉ được dài tối đa **2 giây** trước/sau vùng in-out của sequence (thay vì giữ nguyên độ dài gốc quá dài). Nếu sequence nằm sát đầu timeline (<2s), phần đầu được cắt ngay tại mốc 0 để **giữ alignment** với các element khác, không bị đẩy lệch.
 - **Un-nest — loại trừ item khi bung** — Trong Settings → Un-nest có ô tìm kiếm để **chọn các item không muốn bung** (giữ lại trong nest). Danh sách lưu **theo từng project**, có popup xem/xoá riêng, search theo tên để không bị danh sách dài.
 - **Voice Clone — chọn track audio nguồn** — Khi clone giọng "From Timeline", có dropdown chọn **track audio bất kỳ** (chỉ hiện track có clip, kèm số lượng) thay vì mặc định luôn A1.
+- **Quản lý voice clone ElevenLabs** — Trong Settings → Voice Gen có mục **"Voice clone (ElevenLabs)"**: hiển thị **số slot clone đã dùng / giới hạn** của tài khoản API hiện tại (đỏ + "ĐẦY" khi hết slot), và cho phép **tìm kiếm + tick nhiều + xoá** các voice clone ngay trong plugin (xoá 2 bước arm→xác nhận). Danh sách cập nhật ngay sau khi xoá.
 
 ### 🐛 Bugs đã fix
 - **Un-nest không cắt bớt element quá dài** — Element bung ra giữ nguyên độ dài, tràn dài quá vùng sequence. Nguyên nhân: dùng sai API trim (`createSetInOutPointsAction`/`createMoveTrackItemAction` không tồn tại trên track item của bản Premiere này) + không định vị được clone (khớp theo thời điểm start hỏng với ảnh tĩnh, clip trùng start, offset âm) + không quét track mới tạo (V11+). Cách fix: trim bằng `createSetStartAction`/`createSetEndAction`; định vị clone bằng **snapshot-diff toàn bộ track trước/sau clone** (bắt được cả clone trên track mới tạo); truyền **offset clone âm thật** thay vì kẹp về 0 để giữ alignment khi nest sát đầu timeline.
@@ -24,6 +25,7 @@
 - **Un-nest trim**: cắt bằng `createSetStartAction`/`createSetEndAction` (track item bản này không có `createSetInOutPointsAction`/`createMoveTrackItemAction`); định vị clone bằng snapshot-diff toàn bộ track theo `getVideoTrackCount()` sau clone (co giãn theo số track, không hardcode); `TickTime.createWithSeconds(offset)` cho phép offset âm.
 - **Loại trừ item**: match theo **project-item id** (`getProjectItem().getId()`), lưu `{id,name}` per-project trong `localStorage['unnest_exclude_v1']`; fail-open nếu không đọc được id. Dropdown search **pre-render một lần, lọc bằng display toggle** (không rebuild innerHTML mỗi keystroke) để không nuốt chữ tiếng Việt và không đóng modal khi click.
 - **Voice Clone track**: `vcSelectedTrackIdx` (0-based) áp cho cả 2 path `trackGroup.getTrack()` và `getAudioTrack()`; dropdown custom toggle-panel liệt kê track có clip.
+- **ElevenLabs manager**: plugin gọi thẳng `api.elevenlabs.io` (thêm domain vào `manifest.json`, **không sửa bridge → không cần re-sign app**); `GET /v1/voices` + `DELETE /v1/voices/{id}`; đọc `voice_limit` từ `/v1/user/subscription` (không bắt buộc — key thiếu quyền User thì hiện "X / ?"). Đếm slot lọc voice **của mình** (`category≠premade && !sharing`) để không tính nhầm voice thư viện. Xoá cập nhật lạc quan (ElevenLabs eventually-consistent nên không re-fetch ngay).
 
 ---
 
