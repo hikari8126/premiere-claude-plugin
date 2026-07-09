@@ -3749,3 +3749,20 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   padding: 6px 8px; border-top: 1px solid rgba(255,255,255,0.06);
 }
 .un-excludeRefresh:hover { color: var(--text); }
+
+.elv-manageSection { margin-top: 10px; }
+.elv-slotRow { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
+.elv-slot { font-size: 11px; color: var(--text-dim); }
+.elv-slot.is-full, .elv-slot.elv-err { color: #fca5a5; font-weight: 600; }
+.elv-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 4px; }
+.elv-row { display: flex; align-items: center; padding: 5px 8px; font-size: 11px; color: var(--text); border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; }
+.elv-row:last-child { border-bottom: none; }
+.elv-row:hover { background: rgba(255,255,255,0.06); }
+.elv-cb { width: 13px; height: 13px; margin-right: 8px; flex: 0 0 auto; }
+.elv-rowName { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+.elv-rowTag { flex: 0 0 auto; font-size: 9px; color: var(--text-dim); }
+.elv-delRow { display: flex; align-items: center; margin-top: 6px; }
+.elv-delRow #elvDeleteBtn { margin-right: 8px; }
+.elv-delStatus { font-size: 10px; color: var(--text-dim); }
+.vg-deleteProfileBtn.is-armed { background: #dc2626; color: #fff; }
+.vg-deleteProfileBtn.is-disabled { opacity: 0.5; pointer-events: none; }

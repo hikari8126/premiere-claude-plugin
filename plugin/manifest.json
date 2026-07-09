@@ -24,7 +24,8 @@
     "network": {
       "domains": [
         "http://localhost:3030",
-        "http://127.0.0.1:3030"
+        "http://127.0.0.1:3030",
+        "https://api.elevenlabs.io"
       ]
     }
   }
