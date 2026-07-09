@@ -7261,7 +7261,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     // concatenates them into a single MP3, and sets vcSelectedFilePath to result.
     if (vcGetClip) {
       vcGetClip.addEventListener('click', async function() {
-        if (vcClipInfo) vcClipInfo.textContent = 'Reading A1 clips…';
+        var vcTrkLabel = 'A' + (vcSelectedTrackIdx + 1);
+        if (vcClipInfo) vcClipInfo.textContent = 'Reading ' + vcTrkLabel + ' clips…';
         vcGetClip.disabled = true;
         vcSelectedFilePath = '';
         vcRefreshCloneSteps(); // collapse Steps 2 & 3 while re-extracting
@@ -7274,7 +7275,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
           try {
             if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_AUDIO !== undefined) {
               var aGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_AUDIO);
-              if (aGroup && aGroup.numTracks > 0) track = aGroup.getTrack(0);
+              if (aGroup && aGroup.numTracks > vcSelectedTrackIdx) track = aGroup.getTrack(vcSelectedTrackIdx);
             }
           } catch(eA) {}
 
@@ -7283,17 +7284,17 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
             try {
               var cnt = seq.getAudioTrackCount && seq.getAudioTrackCount();
               if (cnt && typeof cnt.then === 'function') cnt = await cnt;
-              if (cnt > 0) {
-                track = seq.getAudioTrack && seq.getAudioTrack(0);
+              if (cnt > vcSelectedTrackIdx) {
+                track = seq.getAudioTrack && seq.getAudioTrack(vcSelectedTrackIdx);
                 if (track && typeof track.then === 'function') track = await track;
               }
             } catch(eB) {}
           }
 
-          if (!track) throw new Error('Cannot access audio track A1');
+          if (!track) throw new Error('Cannot access audio track ' + vcTrkLabel);
 
           var items = await getClipItems(track);
-          if (!items.length) throw new Error('No clips on audio track A1');
+          if (!items.length) throw new Error('No clips on audio track ' + vcTrkLabel);
 
           if (vcClipInfo) vcClipInfo.textContent = 'Found ' + items.length + ' clip(s), reading paths…';
 
