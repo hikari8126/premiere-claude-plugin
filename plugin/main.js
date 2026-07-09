@@ -8204,6 +8204,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   }
 
   var EPS = 0.0006;            // seconds tolerance for overlap math
+  var UNNEST_PAD = 2.0;        // seconds: max overflow kept beyond the nested region
   var detected = [];           // unique nested clips
   var rawSelected = [];        // every selected track item (for disabling originals)
   var canRun = false;          // gates the run() handler (un-nest button is a <div>)
@@ -8384,6 +8385,9 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   // which preserves effects. One transaction = one undo step. Track index is
   // absolute (auto-creates high tracks); time is an offset added to each item's
   // own start, so item at nested-time T lands at parentStart + (T - nestIn).
+  // Overflow trim: feature-detected at runtime (no console probe available).
+  //   TAIL → trackItem.createSetInOutPointsAction(inPt, outPt) when present.
+  //   HEAD → trackItem.createMoveTrackItemAction(startTT, false) when present; else tail-only + log.
   async function expandViaClone(project, parentSeq, d, mode) {
     if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
     var nested = d.nestedSeq;
@@ -8452,7 +8456,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       }
       if (!picked.length) continue;
       var vIdx = nextV();
-      for (var pk = 0; pk < picked.length; pk++) targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true });
+      for (var pk = 0; pk < picked.length; pk++) {
+        var vps = await callSec(picked[pk], 'getStartTime');
+        targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true,
+          isVideo: true, expStart: Math.max(0, timeOffset + (vps || 0)) });
+      }
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
@@ -8467,7 +8475,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         }
         if (!apick.length) continue;
         var aIdx = nextA();
-        for (var qk = 0; qk < apick.length; qk++) targets.push({ item: apick[qk], vIdx: 0, aIdx: aIdx, align: false });
+        for (var qk = 0; qk < apick.length; qk++) {
+          var aps = await callSec(apick[qk], 'getStartTime');
+          targets.push({ item: apick[qk], vIdx: 0, aIdx: aIdx, align: false,
+            isVideo: false, expStart: Math.max(0, timeOffset + (aps || 0)) });
+        }
       }
     }
 
@@ -8484,6 +8496,74 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         }
       }, 'Un-nest: clone ' + targets.length + ' clip');
     });
+
+    // ── Clamp overflow: trim each clone to [Hlo, Hhi] on the parent timeline ──
+    var Hlo = Math.max(winStart - UNNEST_PAD, 0);   // head never before timeline 0
+    var Hhi = winEnd + UNNEST_PAD;
+    var trims = [];   // { item, newIn, newStart, newOut, doHead }
+    var headSkipped = 0, tailSkipped = 0, tailTrimmed = 0, headTrimmed = 0;
+
+    for (var ti = 0; ti < targets.length; ti++) {
+      var tg = targets[ti];
+      // Locate the clone on its target track by matching expected start.
+      var trk = await un(tg.isVideo ? parentSeq.getVideoTrack(tg.vIdx) : parentSeq.getAudioTrack(tg.aIdx));
+      if (!trk) continue;
+      var clips = await getClipItems(trk);
+      var clone = null;
+      for (var ci = 0; ci < clips.length; ci++) {
+        var cst = await callSec(clips[ci], 'getStartTime');
+        if (cst != null && Math.abs(cst - tg.expStart) < EPS) { clone = clips[ci]; break; }
+      }
+      if (!clone) { logLine('  · không tìm thấy clone để trim (bỏ qua)', 'warn'); continue; }
+
+      var cS = await callSec(clone, 'getStartTime');
+      var cE = await callSec(clone, 'getEndTime');
+      var cIn = await callSec(clone, 'getInPoint');
+      var cOut = await callSec(clone, 'getOutPoint');
+      if (cS == null || cE == null || cIn == null || cOut == null) continue;
+
+      var newStart = cS, newIn = cIn, newOut = cOut, changed = false;
+      // Tail overflow → reduce outPoint so end lands at Hhi.
+      if (cE > Hhi + EPS) { newOut = cOut - (cE - Hhi); changed = true; tailTrimmed++; }
+      // Head overflow → advance start to Hlo and inPoint by the same delta.
+      if (cS < Hlo - EPS) {
+        var dHead = Hlo - cS;
+        newStart = Hlo; newIn = cIn + dHead; changed = true; headTrimmed++;
+      }
+      if (changed) trims.push({ item: clone, newIn: newIn, newStart: newStart, newOut: newOut,
+        doHead: (cS < Hlo - EPS), doTail: (cE > Hhi + EPS) });
+    }
+
+    if (trims.length) {
+      await project.lockedAccess(function () {
+        project.executeTransaction(function (action) {
+          for (var q = 0; q < trims.length; q++) {
+            var t = trims[q];
+            try {
+              // TAIL (and HEAD in-point via the same call): feature-detected —
+              // only call when createSetInOutPointsAction exists on this build.
+              if (typeof t.item.createSetInOutPointsAction === 'function') {
+                action.addAction(t.item.createSetInOutPointsAction(
+                  ppro.TickTime.createWithSeconds(Math.max(0, t.newIn)),
+                  ppro.TickTime.createWithSeconds(Math.max(0, t.newOut))));
+              } else if (t.doTail) {
+                tailSkipped++;
+              }
+              // HEAD: move the clip's start to Hlo (only when head was trimmed).
+              if (t.doHead && typeof t.item.createMoveTrackItemAction === 'function') {
+                action.addAction(t.item.createMoveTrackItemAction(
+                  ppro.TickTime.createWithSeconds(Math.max(0, t.newStart)), false));
+              } else if (t.doHead) {
+                headSkipped++;
+              }
+            } catch (e) { logLine('  ✗ trim lỗi: ' + (e.message || e), 'err'); }
+          }
+        }, 'Un-nest: trim overflow ' + trims.length + ' clip');
+      });
+      logLine('✂ trim overflow: ' + tailTrimmed + ' tail + ' + headTrimmed + ' head (pad ' + UNNEST_PAD + 's)'
+        + (headSkipped ? ' · ⚠ ' + headSkipped + ' head không trim được (API n/a)' : '')
+        + (tailSkipped ? ' · ⚠ ' + tailSkipped + ' tail không trim được (API n/a)' : ''), 'ok');
+    }
 
     logLine('✓ "' + d.name + '": clone ' + done + ' clip (giữ effect) · video: dùng lại ' + reusedV + ' track trống + ' + (newV - pv) + ' track mới'
       + ((mode === 'av' || mode === 'avt') ? ' · audio: ' + reusedA + ' trống + ' + (newA - pa) + ' mới' : '')
