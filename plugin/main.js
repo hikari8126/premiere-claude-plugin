@@ -8527,6 +8527,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   //   HEAD → trackItem.createMoveTrackItemAction(startTT, false) when present; else tail-only + log.
   async function expandViaClone(project, parentSeq, d, mode) {
     if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
+    var excludeIds = await unnestExcludeIdSet();
+    var excludedCount = 0;
     var nested = d.nestedSeq;
     var nestIn = d.nestIn || 0, nestOut = d.nestOut || 0, parentStart = d.parentStart || 0;
     var ed = ppro.SequenceEditor.getEditor(parentSeq);
@@ -8585,6 +8587,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       for (var c = 0; c < vc.length; c++) {
         var s1 = await callSec(vc[c], 'getStartTime'), e1 = await callSec(vc[c], 'getEndTime');
         if (s1 == null || e1 == null || !inRange(s1, e1)) continue;
+        var vpi = await un(vc[c].getProjectItem ? vc[c].getProjectItem() : null);
+        if (vpi) { var vpid = null; try { vpid = await un(vpi.getId()); } catch (e) {} if (vpid != null && excludeIds[String(vpid)]) { excludedCount++; continue; } }
         if (mode === 'video' || mode === 'av') {
           var cls = await classifyVideoClip(vc[c]);
           if (!cls.keep) { vfDropped++; continue; } // pure text/title → skip
@@ -8604,6 +8608,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         for (var b = 0; b < ac.length; b++) {
           var s2 = await callSec(ac[b], 'getStartTime'), e2 = await callSec(ac[b], 'getEndTime');
           if (s2 == null || e2 == null || !inRange(s2, e2)) continue;
+          var api2 = await un(ac[b].getProjectItem ? ac[b].getProjectItem() : null);
+          if (api2) { var apid = null; try { apid = await un(api2.getId()); } catch (e) {} if (apid != null && excludeIds[String(apid)]) { excludedCount++; continue; } }
           apick.push(ac[b]);
         }
         if (!apick.length) continue;
@@ -8697,7 +8703,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
 
     logLine('✓ "' + d.name + '": clone ' + done + ' clip (giữ effect) · video: dùng lại ' + reusedV + ' track trống + ' + (newV - pv) + ' track mới'
       + ((mode === 'av' || mode === 'avt') ? ' · audio: ' + reusedA + ' trống + ' + (newA - pa) + ' mới' : '')
-      + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : ''), 'ok');
+      + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : '')
+      + (excludedCount ? ' · bỏ ' + excludedCount + ' item loại trừ' : ''), 'ok');
     return done;
   }
 
