@@ -8456,11 +8456,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       }
       if (!picked.length) continue;
       var vIdx = nextV();
-      for (var pk = 0; pk < picked.length; pk++) {
-        var vps = await callSec(picked[pk], 'getStartTime');
-        targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true,
-          isVideo: true, expStart: Math.max(0, timeOffset + (vps || 0)) });
-      }
+      for (var pk = 0; pk < picked.length; pk++) targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true });
     }
     if (mode === 'av' || mode === 'avt') {
       var na = 0; try { na = await un(nested.getAudioTrackCount()); } catch (e) {}
@@ -8475,64 +8471,75 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         }
         if (!apick.length) continue;
         var aIdx = nextA();
-        for (var qk = 0; qk < apick.length; qk++) {
-          var aps = await callSec(apick[qk], 'getStartTime');
-          targets.push({ item: apick[qk], vIdx: 0, aIdx: aIdx, align: false,
-            isVideo: false, expStart: Math.max(0, timeOffset + (aps || 0)) });
-        }
+        for (var qk = 0; qk < apick.length; qk++) targets.push({ item: apick[qk], vIdx: 0, aIdx: aIdx, align: false });
       }
     }
 
     if (!targets.length) { logLine('· "' + d.name + '": không có clip trong đoạn cắt', 'warn'); return 0; }
 
+    // Snapshot every existing track's clips BEFORE cloning, so the new clones can be
+    // found by set-difference afterward. We scan ALL tracks (not just our requested
+    // target indices) because the clone action can place clips on tracks that don't
+    // match the requested vIdx and can create extra high tracks. This is robust vs
+    // matching by start time (which breaks on stills, duplicate starts, negative offsets).
+    async function _clipKey(c) {
+      try { if (typeof c.getGuid === 'function') { var g = await un(c.getGuid()); if (g != null) return 'g:' + (g.toString ? g.toString() : g); } } catch (e) {}
+      var s = await callSec(c, 'getStartTime'); return 's:' + (s == null ? '?' : s.toFixed(3));
+    }
+    var beforeV = {}, beforeA = {};
+    for (var bv = 0; bv < pv; bv++) {
+      var bvt = await un(parentSeq.getVideoTrack(bv)); var bvs = {};
+      var bvc = bvt ? await getClipItems(bvt) : []; for (var bx = 0; bx < bvc.length; bx++) bvs[await _clipKey(bvc[bx])] = 1;
+      beforeV[bv] = bvs;
+    }
+    for (var ba = 0; ba < pa; ba++) {
+      var bat = await un(parentSeq.getAudioTrack(ba)); var bas = {};
+      var bac = bat ? await getClipItems(bat) : []; for (var by = 0; by < bac.length; by++) bas[await _clipKey(bac[by])] = 1;
+      beforeA[ba] = bas;
+    }
+
     var done = 0;
+    // Use the real (possibly negative) clone offset. TT() clamps to ≥0, which shifted
+    // all clips right when the nested clip sits near the timeline start (parentStart <
+    // nestIn); passing the true offset keeps them aligned (Premiere clamps any clip that
+    // would land before 0). Fall back to the clamped offset if TickTime rejects negatives.
+    var offTick;
+    try { offTick = ppro.TickTime.createWithSeconds(timeOffset); } catch (e) { offTick = TT(timeOffset); }
     await project.lockedAccess(function () {
       project.executeTransaction(function (action) {
         for (var t = 0; t < targets.length; t++) {
           try {
-            action.addAction(ed.createCloneTrackItemAction(targets[t].item, TT(timeOffset), targets[t].vIdx, targets[t].aIdx, targets[t].align, false));
+            action.addAction(ed.createCloneTrackItemAction(targets[t].item, offTick, targets[t].vIdx, targets[t].aIdx, targets[t].align, false));
             done++;
           } catch (e) { logLine('  ✗ clone lỗi: ' + (e.message || e), 'err'); }
         }
       }, 'Un-nest: clone ' + targets.length + ' clip');
     });
 
-    // ── Clamp overflow: trim each clone to [Hlo, Hhi] on the parent timeline ──
-    var Hlo = Math.max(winStart - UNNEST_PAD, 0);   // head never before timeline 0
+    // ── Clamp overflow: trim every NEW clone to at most UNNEST_PAD seconds beyond the
+    //    nested region [winStart, winEnd]. Head never goes before timeline 0. ──
+    var Hlo = Math.max(winStart - UNNEST_PAD, 0);
     var Hhi = winEnd + UNNEST_PAD;
-    var trims = [];   // { item, newIn, newStart, newOut, doHead }
-    var headSkipped = 0, tailSkipped = 0, tailTrimmed = 0, headTrimmed = 0;
-
-    for (var ti = 0; ti < targets.length; ti++) {
-      var tg = targets[ti];
-      // Locate the clone on its target track by matching expected start.
-      var trk = await un(tg.isVideo ? parentSeq.getVideoTrack(tg.vIdx) : parentSeq.getAudioTrack(tg.aIdx));
-      if (!trk) continue;
+    var trims = [];   // { item, doHead, doTail }
+    var cntV = pv, cntA = pa;
+    try { cntV = await un(parentSeq.getVideoTrackCount()); } catch (e) {}
+    try { cntA = await un(parentSeq.getAudioTrackCount()); } catch (e) {}
+    async function _collectNew(idx, isVideo) {
+      var trk = await un(isVideo ? parentSeq.getVideoTrack(idx) : parentSeq.getAudioTrack(idx));
+      if (!trk) return;
+      var before = isVideo ? beforeV[idx] : beforeA[idx];
       var clips = await getClipItems(trk);
-      var clone = null;
-      for (var ci = 0; ci < clips.length; ci++) {
-        var cst = await callSec(clips[ci], 'getStartTime');
-        if (cst != null && Math.abs(cst - tg.expStart) < EPS) { clone = clips[ci]; break; }
+      for (var i = 0; i < clips.length; i++) {
+        var key = await _clipKey(clips[i]);
+        if (before && before[key]) continue; // pre-existing clip → leave it
+        var cS = await callSec(clips[i], 'getStartTime'), cE = await callSec(clips[i], 'getEndTime');
+        if (cS == null || cE == null) continue;
+        var doHead = cS < Hlo - EPS, doTail = cE > Hhi + EPS;
+        if (doHead || doTail) trims.push({ item: clips[i], doHead: doHead, doTail: doTail });
       }
-      if (!clone) { logLine('  · không tìm thấy clone để trim (bỏ qua)', 'warn'); continue; }
-
-      var cS = await callSec(clone, 'getStartTime');
-      var cE = await callSec(clone, 'getEndTime');
-      var cIn = await callSec(clone, 'getInPoint');
-      var cOut = await callSec(clone, 'getOutPoint');
-      if (cS == null || cE == null || cIn == null || cOut == null) continue;
-
-      var newStart = cS, newIn = cIn, newOut = cOut, changed = false;
-      // Tail overflow → reduce outPoint so end lands at Hhi.
-      if (cE > Hhi + EPS) { newOut = cOut - (cE - Hhi); changed = true; tailTrimmed++; }
-      // Head overflow → advance start to Hlo and inPoint by the same delta.
-      if (cS < Hlo - EPS) {
-        var dHead = Hlo - cS;
-        newStart = Hlo; newIn = cIn + dHead; changed = true; headTrimmed++;
-      }
-      if (changed) trims.push({ item: clone, cIn: cIn, cOut: cOut, newIn: newIn, newStart: newStart, newOut: newOut,
-        doHead: (cS < Hlo - EPS), doTail: (cE > Hhi + EPS) });
     }
+    for (var vv = 0; vv < cntV; vv++) await _collectNew(vv, true);
+    for (var aa = 0; aa < cntA; aa++) await _collectNew(aa, false);
 
     if (trims.length) {
       await project.lockedAccess(function () {
@@ -8540,32 +8547,15 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
           for (var q = 0; q < trims.length; q++) {
             var t = trims[q];
             try {
-              var TTs = function (s) { return ppro.TickTime.createWithSeconds(Math.max(0, s)); };
-              var setOK  = (typeof t.item.createSetInOutPointsAction === 'function');
-              var moveOK = (typeof t.item.createMoveTrackItemAction === 'function');
-              // A head trim needs BOTH: advance inPoint (setInOut) AND move the start
-              // (move). If either API is missing we cannot trim the head without
-              // shifting the clip, so skip the head entirely (no partial trim).
-              var headFeasible = t.doHead && setOK && moveOK;
-              if (t.doHead && !headFeasible) headSkipped++;
-              // in-point advances only for a feasible head trim; out-point reduces
-              // only for a tail trim when the API exists — otherwise keep originals.
-              var inToSet  = headFeasible ? t.newIn : t.cIn;
-              var outToSet = (t.doTail && setOK) ? t.newOut : t.cOut;
-              if (t.doTail && !setOK) tailSkipped++;
-              if (setOK && (headFeasible || t.doTail)) {
-                action.addAction(t.item.createSetInOutPointsAction(TTs(inToSet), TTs(outToSet)));
-              }
-              if (headFeasible) {
-                action.addAction(t.item.createMoveTrackItemAction(TTs(t.newStart), false));
-              }
+              // Trim the overflowing timeline edge(s) — createSetEndAction / createSetStartAction
+              // move the clip's end/start (and adjust its source point) without shifting the rest.
+              if (t.doTail && typeof t.item.createSetEndAction === 'function') action.addAction(t.item.createSetEndAction(TT(Hhi)));
+              if (t.doHead && typeof t.item.createSetStartAction === 'function') action.addAction(t.item.createSetStartAction(TT(Hlo)));
             } catch (e) { logLine('  ✗ trim lỗi: ' + (e.message || e), 'err'); }
           }
         }, 'Un-nest: trim overflow ' + trims.length + ' clip');
       });
-      logLine('✂ trim overflow: ' + tailTrimmed + ' tail + ' + headTrimmed + ' head (pad ' + UNNEST_PAD + 's)'
-        + (headSkipped ? ' · ⚠ ' + headSkipped + ' head không trim được (API n/a)' : '')
-        + (tailSkipped ? ' · ⚠ ' + tailSkipped + ' tail không trim được (API n/a)' : ''), 'ok');
+      logLine('✂ trim tràn: ' + trims.length + ' clip (±' + UNNEST_PAD + 's)', 'ok');
     }
 
     logLine('✓ "' + d.name + '": clone ' + done + ' clip (giữ effect) · video: dùng lại ' + reusedV + ' track trống + ' + (newV - pv) + ' track mới'
