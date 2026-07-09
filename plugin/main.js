@@ -8296,27 +8296,56 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       row.appendChild(label); row.appendChild(del); panel.appendChild(row);
     });
   }
-  function unnestRenderSearch(projKey, query) {
+  // Search rows are pre-rendered ONCE and filtered by toggling display — never
+  // rebuilt on each keystroke/click. Rebuilding innerHTML on a keystroke resets the
+  // input focus (drops Vietnamese IME composition), and rebuilding on a click detaches
+  // the clicked row so the Settings modal's outside-click handler fires and closes it.
+  var unnestSearchRows = [];       // [{ el, id, name }]
+  var unnestSearchBuiltFor = null; // the unnestItemCache array these rows were built from
+  function unnestBuildSearchRows() {
     var list = document.getElementById('unExcludeSearchList');
     if (!list) return;
-    list.innerHTML = '';
+    list.innerHTML = ''; unnestSearchRows = [];
     var items = unnestItemCache || [];
-    var q = (query || '').trim().toLowerCase();
-    var excluded = {}; unnestLoadExcludes(projKey).forEach(function (x) { excluded[String(x.id)] = 1; });
-    var matches = items.filter(function (it) {
-      return !excluded[String(it.id)] && (!q || String(it.name).toLowerCase().indexOf(q) !== -1);
-    }).slice(0, 40); // cap the rendered rows; the search narrows further
-    if (!matches.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">' + (items.length ? '(không khớp)' : '(bấm Làm mới danh sách)') + '</div>'; return; }
-    matches.forEach(function (it) {
+    items.forEach(function (it) {
       var row = document.createElement('div'); row.className = 'vg-nameRow';
       row.textContent = it.name;
-      row.onclick = function () {
-        var cur = unnestLoadExcludes(projKey);
-        if (!cur.some(function (x) { return String(x.id) === String(it.id); })) { cur.push({ id: String(it.id), name: it.name }); unnestSaveExcludes(projKey, cur); }
-        unnestRenderCount(projKey); unnestRenderList(projKey); unnestRenderSearch(projKey, document.getElementById('unExcludeSearch').value);
+      row.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation(); // keep the Settings modal open
+        var cur = unnestLoadExcludes(unnestCurProjKey);
+        if (!cur.some(function (x) { return String(x.id) === String(it.id); })) { cur.push({ id: String(it.id), name: it.name }); unnestSaveExcludes(unnestCurProjKey, cur); }
+        unnestRenderCount(unnestCurProjKey); unnestRenderList(unnestCurProjKey);
+        var s = document.getElementById('unExcludeSearch');
+        unnestFilterSearchRows(unnestCurProjKey, s ? s.value : '');
       };
       list.appendChild(row);
+      unnestSearchRows.push({ el: row, id: String(it.id), name: String(it.name).toLowerCase() });
     });
+    unnestSearchBuiltFor = items;
+  }
+  function unnestFilterSearchRows(projKey, query) {
+    var list = document.getElementById('unExcludeSearchList');
+    if (!list) return;
+    var q = (query || '').trim().toLowerCase();
+    var excluded = {}; unnestLoadExcludes(projKey).forEach(function (x) { excluded[String(x.id)] = 1; });
+    var shown = 0;
+    for (var i = 0; i < unnestSearchRows.length; i++) {
+      var r = unnestSearchRows[i];
+      var ok = !excluded[r.id] && (!q || r.name.indexOf(q) !== -1) && shown < 40; // cap rendered
+      r.el.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    }
+    var hint = list.querySelector('.un-searchHint');
+    if (!shown) {
+      if (!hint) { hint = document.createElement('div'); hint.className = 'vg-nameRow vg-nameRow--empty un-searchHint'; list.appendChild(hint); }
+      hint.textContent = unnestSearchRows.length ? '(không khớp)' : '(bấm Làm mới danh sách)';
+      hint.style.display = '';
+    } else if (hint) { hint.style.display = 'none'; }
+  }
+  // Build rows once (or after the item cache changed), then filter by display toggle.
+  function unnestRenderSearch(projKey, query) {
+    if (unnestSearchBuiltFor !== unnestItemCache) unnestBuildSearchRows();
+    unnestFilterSearchRows(projKey, query);
   }
   var unnestExcludeWired = false;
   var unnestCurProjKey = '';
