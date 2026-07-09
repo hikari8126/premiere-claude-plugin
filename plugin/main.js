@@ -7149,6 +7149,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     var vcDesignStatus   = document.getElementById('vcDesignStatus');
 
     var vcSelectedFilePath = ''; // for clone: current audio file path
+    var vcSelectedTrackIdx = 0;  // 0-based source audio track for Clone Voice (first non-empty by default)
+    var vcTrackList = [];        // cached [{ index, label, count }] of non-empty audio tracks
     var vcGenerationId     = ''; // for design: generationId from preview
     var vcPreviewAudioUrl  = ''; // for design preview player
     var vcPreviewIsPlaying = false;
@@ -7162,6 +7164,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       if (vcDesignCard)   vcDesignCard.classList.toggle('is-active', m === 'design');
       if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
       if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
+      if (m === 'clone') { try { vcRefreshTrackList(); } catch (e) {} }
     }
     if (vcCloneCard)  vcCloneCard.addEventListener('click',  function() { vcSelectMethod('clone'); });
     if (vcDesignCard) vcDesignCard.addEventListener('click', function() { vcSelectMethod('design'); });
@@ -7175,6 +7178,59 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       if (vcCloneStep2) vcCloneStep2.hidden = !hasAudio;
       if (!hasAudio && vcCloneStep3) vcCloneStep3.hidden = true; // sample gone → re-collapse details
     }
+
+    // List non-empty audio tracks of the active sequence → [{ index, label, count }].
+    async function vcListAudioTracks() {
+      var out = [];
+      try {
+        var seq = await getActiveSequence();
+        if (!seq) return out;
+        var cnt = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
+        if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+        cnt = cnt || 0;
+        for (var i = 0; i < cnt; i++) {
+          var trk = null;
+          try { trk = seq.getAudioTrack(i); if (trk && typeof trk.then === 'function') trk = await trk; } catch (e) {}
+          if (!trk) continue;
+          var items = []; try { items = await getClipItems(trk); } catch (e) {}
+          if (items && items.length) out.push({ index: i, label: 'A' + (i + 1), count: items.length });
+        }
+      } catch (e) {}
+      return out;
+    }
+    function vcRenderTrackSel() {
+      var btn = document.getElementById('vcTrackSelBtn');
+      var panel = document.getElementById('vcTrackSelPanel');
+      var sel = null;
+      for (var i = 0; i < vcTrackList.length; i++) if (vcTrackList[i].index === vcSelectedTrackIdx) sel = vcTrackList[i];
+      var hasAny = vcTrackList.length > 0;
+      if (btn) btn.innerHTML = 'Track: ' + (sel ? (sel.label + ' (' + sel.count + ' clip)') : '(không có clip audio)') + ' <span class="vg-caret">▾</span>';
+      if (vcGetClip) {
+        vcGetClip.setAttribute('aria-disabled', hasAny ? 'false' : 'true');
+        vcGetClip.classList.toggle('is-disabled', !hasAny);
+        vcGetClip.innerHTML = window.pluginIconSVG('download', 13, '#ffffff') + ' ' + (hasAny && sel ? ('Extract audio from ' + sel.label) : 'Không có clip audio');
+      }
+      if (vcClipInfo) vcClipInfo.textContent = (hasAny && sel)
+        ? ('Grabs every clip on audio track ' + sel.label + ' and joins them into one voice sample.')
+        : 'Không có clip audio nào trên timeline.';
+      if (panel) {
+        panel.innerHTML = '';
+        if (!hasAny) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có clip audio)</div>'; }
+        else vcTrackList.forEach(function (t) {
+          var row = document.createElement('div'); row.className = 'vg-nameRow';
+          row.textContent = t.label + ' (' + t.count + ' clip)';
+          row.onclick = function (e) { if (e && e.stopPropagation) e.stopPropagation(); vcSelectedTrackIdx = t.index; if (panel) panel.hidden = true; vcRenderTrackSel(); };
+          panel.appendChild(row);
+        });
+      }
+    }
+    async function vcRefreshTrackList() {
+      vcTrackList = await vcListAudioTracks();
+      var found = false;
+      for (var i = 0; i < vcTrackList.length; i++) if (vcTrackList[i].index === vcSelectedTrackIdx) found = true;
+      if (!found) vcSelectedTrackIdx = vcTrackList.length ? vcTrackList[0].index : 0;
+      vcRenderTrackSel();
+    }
     if (vcCloneBtn) vcCloneBtn.addEventListener('click', function() {
       if (vcCloneStep3) vcCloneStep3.hidden = false;
       if (vcCloneName) { try { vcCloneName.focus(); } catch(e) {} }
@@ -7187,11 +7243,18 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         if (vcFromSeqSection)  vcFromSeqSection.hidden  = !fromSeq;
         if (vcFromFileSection) vcFromFileSection.hidden = fromSeq;
         vcSelectedFilePath = '';
-        if (vcClipInfo) vcClipInfo.textContent = 'Grabs every clip on audio track A1 and joins them into one voice sample.';
+        if (fromSeq) { try { vcRefreshTrackList(); } catch (e) {} }
         if (vcFileInfo) vcFileInfo.textContent = 'Pick an MP3/WAV/M4A file of the voice to clone.';
         vcRefreshCloneSteps(); // switching source collapses Steps 2 & 3
       });
     });
+
+    (function () {
+      var tb = document.getElementById('vcTrackSelBtn');
+      var tp = document.getElementById('vcTrackSelPanel');
+      if (tb) tb.addEventListener('click', function () { if (tp) tp.hidden = !tp.hidden; });
+    })();
+    try { vcRefreshTrackList(); } catch (e) {}
 
     // ── Get from Sequence ──
     // Reads all clips from audio track A1, extracts each segment via ffmpeg,

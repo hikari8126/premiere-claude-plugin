@@ -2813,6 +2813,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vc-bigPrimary:hover { background: var(--accent-dark); }
 .vc-bigGo { background: var(--success); color: #fff; }
 .vc-bigGo:hover { filter: brightness(1.08); }
+.vc-trackSel { margin-bottom: 8px; }
+.vc-trackSel .vg-nameToolBtn { width: 100%; justify-content: center; box-sizing: border-box; }
+.vc-bigBtn.is-disabled { opacity: 0.5; pointer-events: none; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SUPER AUTO CUT (SAC) — Phase 1
