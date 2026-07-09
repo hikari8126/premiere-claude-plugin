@@ -8530,7 +8530,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         var dHead = Hlo - cS;
         newStart = Hlo; newIn = cIn + dHead; changed = true; headTrimmed++;
       }
-      if (changed) trims.push({ item: clone, newIn: newIn, newStart: newStart, newOut: newOut,
+      if (changed) trims.push({ item: clone, cIn: cIn, cOut: cOut, newIn: newIn, newStart: newStart, newOut: newOut,
         doHead: (cS < Hlo - EPS), doTail: (cE > Hhi + EPS) });
     }
 
@@ -8540,21 +8540,24 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
           for (var q = 0; q < trims.length; q++) {
             var t = trims[q];
             try {
-              // TAIL (and HEAD in-point via the same call): feature-detected —
-              // only call when createSetInOutPointsAction exists on this build.
-              if (typeof t.item.createSetInOutPointsAction === 'function') {
-                action.addAction(t.item.createSetInOutPointsAction(
-                  ppro.TickTime.createWithSeconds(Math.max(0, t.newIn)),
-                  ppro.TickTime.createWithSeconds(Math.max(0, t.newOut))));
-              } else if (t.doTail) {
-                tailSkipped++;
+              var TTs = function (s) { return ppro.TickTime.createWithSeconds(Math.max(0, s)); };
+              var setOK  = (typeof t.item.createSetInOutPointsAction === 'function');
+              var moveOK = (typeof t.item.createMoveTrackItemAction === 'function');
+              // A head trim needs BOTH: advance inPoint (setInOut) AND move the start
+              // (move). If either API is missing we cannot trim the head without
+              // shifting the clip, so skip the head entirely (no partial trim).
+              var headFeasible = t.doHead && setOK && moveOK;
+              if (t.doHead && !headFeasible) headSkipped++;
+              // in-point advances only for a feasible head trim; out-point reduces
+              // only for a tail trim when the API exists — otherwise keep originals.
+              var inToSet  = headFeasible ? t.newIn : t.cIn;
+              var outToSet = (t.doTail && setOK) ? t.newOut : t.cOut;
+              if (t.doTail && !setOK) tailSkipped++;
+              if (setOK && (headFeasible || t.doTail)) {
+                action.addAction(t.item.createSetInOutPointsAction(TTs(inToSet), TTs(outToSet)));
               }
-              // HEAD: move the clip's start to Hlo (only when head was trimmed).
-              if (t.doHead && typeof t.item.createMoveTrackItemAction === 'function') {
-                action.addAction(t.item.createMoveTrackItemAction(
-                  ppro.TickTime.createWithSeconds(Math.max(0, t.newStart)), false));
-              } else if (t.doHead) {
-                headSkipped++;
+              if (headFeasible) {
+                action.addAction(t.item.createMoveTrackItemAction(TTs(t.newStart), false));
               }
             } catch (e) { logLine('  ✗ trim lỗi: ' + (e.message || e), 'err'); }
           }
