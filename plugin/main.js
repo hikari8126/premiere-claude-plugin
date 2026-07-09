@@ -2628,6 +2628,18 @@ async function ppMoveToVOBin(item, proj) {
   } catch(e) { console.warn('[ppVO] ppMoveToVOBin failed:', e.message); }
 }
 
+// Single source of truth for the "Move to Voice Over bin" toggle. Every import
+// path must gate the VO-bin move through this so the checkbox is always honored.
+function ppShouldMoveToVOBin() {
+  var cb = document.getElementById('vgMoveToVOBin');
+  return !!(cb && cb.checked);
+}
+// Move only when the toggle is on.
+async function ppMoveToVOBinIfEnabled(item, proj) {
+  if (!ppShouldMoveToVOBin()) return;
+  await ppMoveToVOBin(item, proj);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // SUPER AUTO CUT MODULE — Phase 1: Spreadsheet UI + Block Parsing
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5046,8 +5058,8 @@ async function ppMoveToVOBin(item, proj) {
     // Re-scan bin to find the newly imported item
     var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
     var found2 = binItems2.find(function(b) { return b.name === fname; });
-    // Move to "voice over" bin
-    if (found2) await ppMoveToVOBin(found2.item, proj);
+    // Move to "voice over" bin — only if the toggle is on (was unconditional).
+    if (found2) await ppMoveToVOBinIfEnabled(found2.item, proj);
     return found2 ? found2.item : null;
   }
 
@@ -6562,8 +6574,7 @@ async function ppMoveToVOBin(item, proj) {
       els.importStatus.className = 'ac-manualStatus is-ok';
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       // Move to "Voice Over" bin only if checkbox is checked
-      var moveToVO = $('vgMoveToVOBin') && $('vgMoveToVOBin').checked;
-      if (moveToVO) {
+      if (ppShouldMoveToVOBin()) {
         try {
           var rootItem = null;
           if (typeof project.getRootItem === 'function') {
@@ -6665,11 +6676,48 @@ async function ppMoveToVOBin(item, proj) {
       if (r && typeof r.then === 'function') await r;
       if (txErr) throw txErr;
 
-      if ($('vgMoveToVOBin') && $('vgMoveToVOBin').checked) { try { await ppMoveToVOBin(item, project); } catch (e) {} }
+      try { await ppMoveToVOBinIfEnabled(item, project); } catch (e) {}
       setMsg('is-ok', '✓ Đã đặt "' + fname + '" lên A' + (targetA + 1) + ' tại ' + atSec.toFixed(2) + 's');
     } catch (e) {
       setMsg('is-err', '✗ Timeline: ' + e.message);
     }
+  }
+
+  // ── Save-name history & presets ────────────────────────────────────────────
+  // localStorage helpers (tolerant of missing / malformed JSON).
+  function vgGetNameList(key) {
+    try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a : []; }
+    catch (e) { return []; }
+  }
+  function vgSetNameList(key, arr) {
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+  }
+  // Build the default suggested name: v{lastVersion} - {currentVoiceName}
+  // (no extension — okB appends the ext automatically on save).
+  function vgBuildDefaultName() {
+    var ver = '';
+    try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
+    if (!ver) ver = '1.0';
+    var voice = 'Voice';
+    try { voice = vgVoiceName() || 'Voice'; } catch (e) {}
+    return 'v' + ver + ' - ' + voice;
+  }
+  // On a successful save: remember the version and push the name into recents (cap 5).
+  function vgRememberSavedName(finalName) {
+    var m = /^v\s*([0-9]+(?:\.[0-9x]+)?)/i.exec(finalName);
+    if (m) { try { localStorage.setItem('vg_last_version', m[1]); } catch (e) {} }
+    var r = vgGetNameList('vg_recent_names').filter(function (n) { return n !== finalName; });
+    r.unshift(finalName);
+    if (r.length > 5) r = r.slice(0, 5);
+    vgSetNameList('vg_recent_names', r);
+  }
+  // On a successful save: push the folder into recent folders (cap 5, newest first).
+  function vgRememberSavedFolder(dir) {
+    if (!dir) return;
+    var r = vgGetNameList('vg_recent_folders').filter(function (d) { return d !== dir; });
+    r.unshift(dir);
+    if (r.length > 5) r = r.slice(0, 5);
+    vgSetNameList('vg_recent_folders', r);
   }
 
   // Custom save modal: lets the user type a filename while showing (and remembering)
@@ -6683,12 +6731,23 @@ async function ppMoveToVOBin(item, proj) {
       var changeB  = $('vgSaveChangeFolder');
       var cancelB  = $('vgSaveCancel');
       var okB      = $('vgSaveConfirm');
+      var recentBtn   = $('vgSaveRecentBtn');
+      var presetBtn   = $('vgSavePresetBtn');
+      var presetAddB  = $('vgSavePresetAdd');
+      var recentPanel = $('vgSaveRecentPanel');
+      var presetPanel = $('vgSavePresetPanel');
+      var fRecentBtn   = $('vgSaveFolderRecentBtn');
+      var fBmBtn       = $('vgSaveFolderBmBtn');
+      var fBmToggle    = $('vgSaveFolderBmToggle');
+      var fRecentPanel = $('vgSaveFolderRecentPanel');
+      var fBmPanel     = $('vgSaveFolderBmPanel');
       if (!modal || !nameInp || !okB) { resolve(null); return; }
 
       suggestedName = suggestedName || 'voice.mp3';
-      nameInp.value = suggestedName;
       var dot = suggestedName.lastIndexOf('.');
-      var ext = dot >= 0 ? suggestedName.substring(dot) : '';
+      var ext = dot >= 0 ? suggestedName.substring(dot) : '.mp3';
+      // Smart default: v{lastVersion} - {currentVoiceName} (ext added on save).
+      nameInp.value = vgBuildDefaultName();
 
       // Hide the rest of the VoiceGen UI while the modal is open. UXP renders native
       // <input>/<textarea> on top of everything regardless of DOM order, so the
@@ -6701,6 +6760,151 @@ async function ppMoveToVOBin(item, proj) {
         else { folderEl.innerHTML = '(chưa chọn — bấm <span class="p-ic" style="margin:0 2px;vertical-align:-2px">' + window.pluginIconSVG('folder_open', 11, '#cbd5e1') + '</span> Đổi…)'; }
       }
       renderFolder();
+
+      // ── Recent / preset dropdowns (custom toggle-panels; native <select> is
+      //    unreliable in UXP and would punch through the modal). ──────────────
+      function closePanels() {
+        if (recentPanel) recentPanel.hidden = true;
+        if (presetPanel) presetPanel.hidden = true;
+        if (fRecentPanel) fRecentPanel.hidden = true;
+        if (fBmPanel) fBmPanel.hidden = true;
+      }
+      function fillName(n) {
+        nameInp.value = n;
+        closePanels();
+        try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch (e) {}
+      }
+      function renderRecent() {
+        if (!recentPanel) return;
+        recentPanel.innerHTML = '';
+        var list = vgGetNameList('vg_recent_names');
+        if (!list.length) { recentPanel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa có tên nào)</div>'; return; }
+        list.forEach(function (n) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          row.textContent = n;
+          row.onclick = function () { fillName(n); };
+          recentPanel.appendChild(row);
+        });
+      }
+      function renderPresets() {
+        if (!presetPanel) return;
+        presetPanel.innerHTML = '';
+        var list = vgGetNameList('vg_name_presets');
+        if (!list.length) { presetPanel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa có preset)</div>'; return; }
+        list.forEach(function (n) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          var label = document.createElement('span');
+          label.className = 'vg-nameRowLabel';
+          label.textContent = n;
+          label.onclick = function () { fillName(n); };
+          var del = document.createElement('span');
+          del.className = 'vg-nameRowDel';
+          del.setAttribute('role', 'button');
+          del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+          del.onclick = function (e) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            var arr = vgGetNameList('vg_name_presets').filter(function (x) { return x !== n; });
+            vgSetNameList('vg_name_presets', arr);
+            renderPresets();
+          };
+          row.appendChild(label); row.appendChild(del);
+          presetPanel.appendChild(row);
+        });
+      }
+      if (recentBtn) recentBtn.onclick = function () {
+        var show = recentPanel && recentPanel.hidden;
+        closePanels();
+        if (show) { renderRecent(); recentPanel.hidden = false; }
+      };
+      if (presetBtn) presetBtn.onclick = function () {
+        var show = presetPanel && presetPanel.hidden;
+        closePanels();
+        if (show) { renderPresets(); presetPanel.hidden = false; }
+      };
+      if (presetAddB) presetAddB.onclick = function () {
+        var name = (nameInp.value || '').trim();
+        if (!name) { try { nameInp.focus(); } catch (e) {} return; }
+        var arr = vgGetNameList('vg_name_presets');
+        if (arr.indexOf(name) === -1) { arr.push(name); vgSetNameList('vg_name_presets', arr); }
+        renderPresets();
+        closePanels();
+        if (presetPanel) presetPanel.hidden = false; // show the updated list
+      };
+
+      // ── Folder recent / bookmark dropdowns (same pattern; path strings are
+      //    reused directly via the bridge, so no UXP folder token needed). ────
+      function isFolderBookmarked() {
+        return !!customOutputFolder && vgGetNameList('vg_folder_bookmarks').indexOf(customOutputFolder) !== -1;
+      }
+      function renderBmToggle() {
+        if (!fBmToggle) return;
+        var on = isFolderBookmarked();
+        fBmToggle.classList.toggle('is-on', on);
+        fBmToggle.innerHTML = window.pluginIconSVG('floppy_disk', 13, on ? '#3b82f6' : '#94a3b8');
+      }
+      function setFolder(dir) {
+        if (!dir) return;
+        customOutputFolder = dir;
+        if (els.outputFolder) els.outputFolder.value = dir;
+        try { localStorage.setItem('vg_last_save_folder', dir); } catch (e) {}
+        renderFolder();
+        renderBmToggle();
+        closePanels();
+      }
+      function renderFolderList(panel, key, emptyMsg, withDelete) {
+        if (!panel) return;
+        panel.innerHTML = '';
+        var list = vgGetNameList(key);
+        if (!list.length) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">' + emptyMsg + '</div>'; return; }
+        list.forEach(function (d) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          var label = document.createElement('span');
+          label.className = 'vg-nameRowLabel';
+          label.textContent = d;
+          label.onclick = function () { setFolder(d); };
+          row.appendChild(label);
+          if (withDelete) {
+            var del = document.createElement('span');
+            del.className = 'vg-nameRowDel';
+            del.setAttribute('role', 'button');
+            del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+            del.onclick = function (e) {
+              if (e && e.stopPropagation) e.stopPropagation();
+              var arr = vgGetNameList(key).filter(function (x) { return x !== d; });
+              vgSetNameList(key, arr);
+              renderFolderList(panel, key, emptyMsg, withDelete);
+              renderBmToggle(); // active folder may have just been un-bookmarked
+            };
+            row.appendChild(del);
+          }
+          panel.appendChild(row);
+        });
+      }
+      if (fRecentBtn) fRecentBtn.onclick = function () {
+        var show = fRecentPanel && fRecentPanel.hidden;
+        closePanels();
+        if (show) { renderFolderList(fRecentPanel, 'vg_recent_folders', '(chưa có thư mục nào)', false); fRecentPanel.hidden = false; }
+      };
+      if (fBmBtn) fBmBtn.onclick = function () {
+        var show = fBmPanel && fBmPanel.hidden;
+        closePanels();
+        if (show) { renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true); fBmPanel.hidden = false; }
+      };
+      if (fBmToggle) fBmToggle.onclick = function () {
+        if (!customOutputFolder) { if (changeB.onclick) changeB.onclick(); return; } // pick one first
+        var arr = vgGetNameList('vg_folder_bookmarks');
+        var i = arr.indexOf(customOutputFolder);
+        if (i === -1) arr.push(customOutputFolder); else arr.splice(i, 1); // toggle save/unsave
+        vgSetNameList('vg_folder_bookmarks', arr);
+        renderBmToggle();
+        if (fBmPanel && !fBmPanel.hidden) renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true);
+      };
+      renderBmToggle();
+      closePanels();
+
       if (vgApp) vgApp.style.display = 'none';
       modal.hidden = false;
       try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch(e) {}
@@ -6710,12 +6914,20 @@ async function ppMoveToVOBin(item, proj) {
         modal.hidden = true;
         if (vgApp) vgApp.style.display = '';
         if (window.releaseKeyboard) window.releaseKeyboard();
+        closePanels();
         changeB.onclick = null; cancelB.onclick = null; okB.onclick = null;
         nameInp.onkeydown = null;
+        if (recentBtn) recentBtn.onclick = null;
+        if (presetBtn) presetBtn.onclick = null;
+        if (presetAddB) presetAddB.onclick = null;
+        if (fRecentBtn) fRecentBtn.onclick = null;
+        if (fBmBtn) fBmBtn.onclick = null;
+        if (fBmToggle) fBmToggle.onclick = null;
       }
       changeB.onclick = async function() {
         await pickOutputFolder(); // updates + persists customOutputFolder
         renderFolder();
+        renderBmToggle();
         try { nameInp.focus(); } catch(e) {}
       };
       cancelB.onclick = function() { cleanup(); resolve(null); };
@@ -6725,6 +6937,8 @@ async function ppMoveToVOBin(item, proj) {
         if (!customOutputFolder) { changeB.onclick(); return; } // must pick a folder first
         if (ext && name.toLowerCase().slice(-ext.length) !== ext.toLowerCase()) name += ext;
         var dir = customOutputFolder;
+        vgRememberSavedName(name);   // persist version + push to recent names
+        vgRememberSavedFolder(dir);  // push to recent folders
         cleanup();
         resolve({ dir: dir, name: name });
       };

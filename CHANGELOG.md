@@ -3,6 +3,23 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v4.9.7 — 2026-07-09
+
+### ✅ Thêm mới / Cải tiến
+- **Lưu file VO thông minh** — Dialog "Lưu audio" (Voice Gen) giờ tự gợi ý tên theo dạng `v{version} - {tên voice}` (vd `v14.3 - Rachel`): version nhớ chính xác từ lần lưu trước, tên voice tự điền từ voice đang chọn.
+- **Lịch sử + preset tên file** — Nút "Gần đây" xổ 5 tên lưu gần nhất; nút "Preset" xổ các tên đã lưu (bấm × để xoá); nút "Lưu preset" lưu tên hiện tại.
+- **Lịch sử + bookmark thư mục** — Dưới ô "Thư mục lưu" có nút "Gần đây" (5 thư mục gần nhất) và "Bookmark" (thư mục đã đánh dấu). Icon 💾 cạnh đường dẫn để lưu/bỏ lưu nhanh thư mục hiện tại (sáng xanh khi đã bookmark).
+
+### 🐛 Bugs đã fix
+- **"Move to Voice Over bin" bỏ qua checkbox** — Nguyên nhân: luồng import của AutoCut (`sacFindOrImportFile`) gọi `ppMoveToVOBin` vô điều kiện, không đọc trạng thái checkbox — nên dù tick hay bỏ tick clip vẫn luôn bị chuyển vào bin "Voice Over". Cách fix: gom toàn bộ điểm gọi về 1 helper `ppMoveToVOBinIfEnabled()` (kiểm tra `ppShouldMoveToVOBin()` trước khi move), đảm bảo mọi luồng import (Import / Import to timeline / AutoCut) đều tôn trọng checkbox.
+
+### 🔧 Kỹ thuật / Approach
+- UXP flexbox **không hỗ trợ `gap`** → thay bằng `margin` tường minh; căn thẳng hàng các nút bằng `box-sizing: border-box` + `flex: 1` + `:last-child { margin-right: 0 }`.
+- Dropdown dùng **custom toggle-panel** (không dùng `<select>` native vì render không ổn định và đè xuyên modal trong UXP).
+- Lưu trữ bằng `localStorage`: `vg_last_version`, `vg_recent_names`, `vg_name_presets`, `vg_recent_folders`, `vg_folder_bookmarks`. Path thư mục tái dùng trực tiếp qua bridge nên không cần UXP folder token.
+
+---
+
 ## v4.8.10 — 2026-06-30
 
 ### 🐛 Bugs đã fix
