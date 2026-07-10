@@ -1289,7 +1289,7 @@
         </div>
         <div class="vgm-group" data-group="instruments">
           <div class="vgm-groupHead">Nhạc cụ <span class="vgm-limit">chọn thoải mái</span></div>
-          <div class="vgm-chips" id="vgmInstruments"></div>
+          <div class="vgm-instr" id="vgmInstruments"></div>
         </div>
         <div class="vgm-group" data-group="tempo">
           <div class="vgm-groupHead">Nhịp độ <span class="vgm-limit">chọn 1</span></div>
@@ -1312,7 +1312,10 @@
         </div>
       </div>
 
-      <div class="vgm-preview" id="vgmPreview"></div>
+      <div class="vgm-previewWrap">
+        <div class="vgm-previewLbl">Prompt ghép từ lựa chọn</div>
+        <div class="vgm-preview" id="vgmPreview"></div>
+      </div>
       <div class="vgm-status" id="vgmStatus" hidden></div>
 
       <!-- Preset row. UXP chặn window.prompt() nên tên preset nhập inline ở đây. -->
