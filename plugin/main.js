@@ -2616,37 +2616,56 @@ async function ppGetOrCreateBin(proj, binName) {
   } catch(e) { return null; }
   if (!root) return null;
 
-  // So khớp tên bin. Bin "Voice Over" cũ có thể đang mang tên "VO" — vẫn nhận,
-  // nếu không mỗi project cũ sẽ mọc thêm một bin trùng vai.
-  function binMatches(name) {
+  // binName có thể là đường dẫn lồng nhau: "Sequence / FB / OLD" (cùng dấu phân
+  // cách ' / ' với modal bind của Autocut). Đi xuống từng cấp, tạo cấp nào thiếu.
+  var segs = String(binName).split(' / ')
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+  if (!segs.length) return null;
+
+  // Bin "Voice Over" ở gốc có thể đang mang tên "VO" — vẫn nhận, nếu không mỗi
+  // project cũ sẽ mọc thêm một bin trùng vai.
+  function matches(name, want) {
     var n = String(name || '').trim().toLowerCase();
-    var want = binName.trim().toLowerCase();
-    if (n === want) return true;
-    return (want === 'voice over' && /^(voice\s*over|vo)$/.test(n));
+    var w = want.toLowerCase();
+    if (n === w) return true;
+    return (w === 'voice over' && /^(voice\s*over|vo)$/.test(n));
+  }
+  async function findChild(parent, want) {
+    var children = await sacGetFolderChildren(parent);
+    for (var i = 0; i < children.length; i++) {
+      var isFolder = false;
+      try { if (ppro && ppro.FolderItem && ppro.FolderItem.cast) isFolder = !!ppro.FolderItem.cast(children[i]); } catch (e) {}
+      if (!isFolder) continue;
+      if (matches(await sacGetItemName(children[i]), want)) return children[i];
+    }
+    return null;
   }
 
-  // Search direct children of root (1 level)
-  try {
-    var children = await sacGetFolderChildren(root);
-    for (var i = 0; i < children.length; i++) {
-      if (binMatches(await sacGetItemName(children[i]))) return children[i];
+  var node = root;
+  for (var s = 0; s < segs.length; s++) {
+    var want = segs[s];
+    var hit = null;
+    try { hit = await findChild(node, want); } catch (e) {}
+    if (!hit) {
+      try {
+        var parent = node;   // capture — the transaction callback runs later
+        var createAction = parent.createBinAction(want, false);
+        var r = proj.lockedAccess(function () {
+          proj.executeTransaction(function (ca) { ca.addAction(createAction); }, 'Create bin');
+        });
+        if (r && typeof r.then === 'function') await r;
+        hit = await findChild(parent, want);
+      } catch (e) { console.warn('[ppVO] createBin "' + want + '" failed:', e.message); }
     }
-  } catch(e) {}
-
-  // Not found — create the bin at root via Action + transaction
-  try {
-    var createAction = root.createBinAction(binName, false);
-    var r = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(createAction); }, 'Create bin');
-    });
-    if (r && typeof r.then === 'function') await r;
-    // Re-scan to find the newly created bin
-    var children2 = await sacGetFolderChildren(root);
-    for (var j = 0; j < children2.length; j++) {
-      if (binMatches(await sacGetItemName(children2[j]))) return children2[j];
-    }
-  } catch(e) { console.warn('[ppVO] createBin failed:', e.message); }
-  return null;
+    if (!hit) return null;
+    // createBinAction chỉ tồn tại trên FolderItem — cast trước khi dùng làm cha
+    // cho cấp kế tiếp, nếu không vòng lặp sau sẽ ném ở createBinAction.
+    var cast = null;
+    try { cast = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(hit) : null; } catch (e) {}
+    node = cast || hit;
+  }
+  return node;
 }
 
 // Move a ProjectItem into a bin by name (find or create it).
@@ -5775,12 +5794,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return String(nm || (p && p.guid) || '');
     } catch (e) { return ''; }
   }
+  var VG_MODE_LABEL = { tts: 'Voice', sfx: 'SFX', music: 'BGM' };
+  // Một dòng duy nhất trong Settings, phản ánh mode đang mở.
   function vgRenderBinNames() {
-    var ids = { tts: 'vgBinNameTts', sfx: 'vgBinNameSfx', music: 'vgBinNameMusic' };
-    Object.keys(ids).forEach(function (m) {
-      var el = document.getElementById(ids[m]);
-      if (el) el.textContent = vgBins[m] || VG_BIN_DEFAULTS[m];
-    });
+    var m = (currentMode === 'create') ? 'tts' : currentMode;
+    var lbl = document.getElementById('vgBinMode');
+    var nm  = document.getElementById('vgBinName');
+    if (lbl) lbl.textContent = VG_MODE_LABEL[m] || 'Voice';
+    if (nm)  nm.textContent  = vgBins[m] || VG_BIN_DEFAULTS[m];
   }
   // Đọc bin đã lưu của project đang mở. Gọi lúc khởi động và mỗi lần mở Settings,
   // vì user có thể đổi project mà plugin không được báo.
@@ -6621,6 +6642,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Row 1 carries the variations toggle, which all three gen modes use.
     if (footRow) footRow.style.display = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
+    vgRenderBinNames();   // Settings hiển thị bin của mode đang mở
     if (els.resultSection) els.resultSection.hidden = true;
     var genLabels = {
       tts:   { ic: 'bolt',        label: 'GENERATE VOICE' },
@@ -8488,8 +8510,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     el.className = 'vgm-status' + (cls ? ' ' + cls : '');
   }
 
+  var vgBinExpanded = {};   // fullPath → true
+
   // Folder list comes from sacCollectBinItems(), which already tags each node with
-  // isFolder + its full branch path.
+  // isFolder + its parent branch path. Full path uses the same ' / ' separator as
+  // the Autocut bind modal.
   async function vgBinScanFolders() {
     vgBinFolders = [];
     var proj = await getActiveProject();
@@ -8498,9 +8523,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!root) throw new Error('Không đọc được root của project');
     var items = await sacCollectBinItems(root);
     items.forEach(function (b) {
-      if (b.isFolder) vgBinFolders.push({ name: b.name, path: b.path || '' });
+      if (!b.isFolder) return;
+      var full = b.path ? (b.path + ' / ' + b.name) : b.name;
+      vgBinFolders.push({ name: b.name, path: b.path || '', full: full });
     });
-    vgBinFolders.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    vgBinFolders.sort(function (a, b) { return a.full.localeCompare(b.full); });
+  }
+
+  function vgBinHasChildren(full) {
+    return vgBinFolders.some(function (f) { return f.path === full; });
+  }
+  // Hiện khi mọi tổ tiên đều đang mở. Khi đang lọc thì bung phẳng toàn bộ.
+  function vgBinVisible(f) {
+    if (!f.path) return true;
+    var segs = f.path.split(' / ');
+    for (var i = 1; i <= segs.length; i++) {
+      if (!vgBinExpanded[segs.slice(0, i).join(' / ')]) return false;
+    }
+    return true;
   }
 
   function vgBinRenderList() {
@@ -8508,30 +8548,49 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var filt = document.getElementById('vgBinFilter');
     if (!host) return;
     var q = (filt && filt.value || '').trim().toLowerCase();
-    host.textContent = '';
-    var shown = vgBinFolders.filter(function (f) {
-      return !q || f.name.toLowerCase().indexOf(q) >= 0 || f.path.toLowerCase().indexOf(q) >= 0;
-    });
-    if (!shown.length) {
+    host.innerHTML = '';
+
+    var rows = q
+      ? vgBinFolders.filter(function (f) { return f.full.toLowerCase().indexOf(q) >= 0; })
+      : vgBinFolders.filter(vgBinVisible);
+
+    if (!rows.length) {
       var empty = document.createElement('div');
       empty.className = 'vg-binItemPath';
-      empty.textContent = vgBinFolders.length ? 'Không có bin khớp bộ lọc.' : 'Project chưa có bin nào — gõ tên bin mới bên dưới.';
+      empty.textContent = vgBinFolders.length
+        ? 'Không có bin khớp bộ lọc.'
+        : 'Project chưa có bin nào — gõ tên bin mới bên dưới.';
       host.appendChild(empty);
       return;
     }
-    shown.forEach(function (f) {
+
+    rows.forEach(function (f) {
+      var segs  = f.full.split(' / ');
+      var depth = q ? 0 : segs.length - 1;   // lọc → danh sách phẳng
+      var kids  = vgBinHasChildren(f.full);
+
       var row = document.createElement('div');
-      row.className = 'vg-binItem' + (f.name === vgBinChosen ? ' is-on' : '');
-      row.setAttribute('role', 'button');
-      row.textContent = f.name;
-      if (f.path) {
-        var p = document.createElement('div');
-        p.className = 'vg-binItemPath';
-        p.textContent = f.path;
-        row.appendChild(p);
+      row.className = 'sac-bind-row' + (f.full === vgBinChosen ? ' is-active' : '');
+      row.style.paddingLeft = (8 + depth * 16) + 'px';
+
+      var caret = document.createElement('span');
+      caret.className = 'sac-bind-caret';
+      caret.textContent = (kids && !q) ? (vgBinExpanded[f.full] ? '▾' : '▸') : '';
+      if (kids && !q) {
+        caret.addEventListener('click', function (e) {
+          e.stopPropagation();
+          vgBinExpanded[f.full] = !vgBinExpanded[f.full];
+          vgBinRenderList();
+        });
       }
+      row.appendChild(caret);
+
+      var lbl = document.createElement('span');
+      lbl.textContent = q ? f.full : f.name;
+      row.appendChild(lbl);
+
       row.addEventListener('click', function () {
-        vgBinChosen = f.name;
+        vgBinChosen = f.full;   // giữ full path để hiển thị; tên bin lấy leaf khi lưu
         var ni = document.getElementById('vgBinNew');
         if (ni) ni.value = '';
         vgBinRenderList();
@@ -8543,13 +8602,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   async function vgBinOpen(mode) {
     vgBinMode = mode;
     vgBinChosen = vgBins[mode] || VG_BIN_DEFAULTS[mode];
+    vgBinExpanded = {};
     var modal = document.getElementById('vgBinModal');
     var title = document.getElementById('vgBinTitle');
     var filt  = document.getElementById('vgBinFilter');
     var neu   = document.getElementById('vgBinNew');
     if (filt) filt.value = '';
     if (neu)  neu.value = '';
-    if (title) title.textContent = 'Chọn bin cho ' + (mode === 'tts' ? 'Voice' : mode === 'sfx' ? 'SFX' : 'Music');
+    if (title) title.textContent = 'Chọn bin cho ' + (VG_MODE_LABEL[mode] || 'Voice');
+    // UXP has no z-index and native inputs paint over overlays — hide the panel
+    // behind the modal, exactly as sacBindModal does.
+    var app = document.getElementById('vgApp');
+    if (app) app.style.display = 'none';
     if (modal) modal.hidden = false;
     vgBinStatus('⏳ Đang quét bin trong project...', '');
     try {
@@ -8564,11 +8628,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function vgBinClose() {
     var m = document.getElementById('vgBinModal');
     if (m) m.hidden = true;
+    var app = document.getElementById('vgApp');
+    if (app) app.style.display = '';
   }
 
   (function vgBinWire() {
-    document.querySelectorAll('.vg-binPick').forEach(function (btn) {
-      btn.addEventListener('click', function () { vgBinOpen(btn.getAttribute('data-binmode')); });
+    var pick = document.getElementById('vgBinPick');
+    if (pick) pick.addEventListener('click', function () {
+      vgBinOpen(currentMode === 'create' ? 'tts' : currentMode);
     });
     var close = document.getElementById('vgBinClose');
     if (close) close.addEventListener('click', vgBinClose);
