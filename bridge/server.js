@@ -2344,8 +2344,39 @@ app.post('/sac/log', (req, res) => {
   }
 });
 
+// ── POST /music/prompt ─────────────────────────────────────────────────────
+// Dựng prompt nhạc từ các tag người dùng chọn trong modal. Trả về văn xuôi ngắn
+// cho Suno/Udio. Plugin tự fallback về chính chuỗi `tags` nếu endpoint này lỗi.
+app.post('/music/prompt', async (req, res) => {
+  try {
+    const { tags, freeText, provider, model, apiKey } = req.body || {};
+    if (!tags || !String(tags).trim()) throw new Error('Cần ít nhất một lựa chọn');
+
+    const sys = [
+      'You write prompts for AI music generators (Suno, Udio).',
+      'Turn the tag list below into ONE vivid English prompt, max 2 sentences, under 300 characters.',
+      'Keep every musical attribute from the tags. Do not add vocals unless the tags say so.',
+      'Do not name real artists, bands, or songs.',
+      'Output the prompt text only — no quotes, no preamble, no explanation.',
+      '',
+      'Tags: ' + String(tags).trim(),
+    ];
+    if (freeText && String(freeText).trim()) {
+      sys.push('Extra direction from the user: ' + String(freeText).trim());
+    }
+
+    const prompt = await callLLM(sys.join('\n'), { provider, model, apiKey, maxTokens: 300 });
+    if (!prompt || !prompt.trim()) throw new Error('AI trả về rỗng');
+    console.log('[music/prompt] ' + prompt.slice(0, 80));
+    res.json({ ok: true, prompt: prompt.trim() });
+  } catch (e) {
+    console.error('[music/prompt]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.10.0';  // + POST /sac/log diagnostic sink (autocut source-audio investigation). Prior 1.9.1: unnest trigger routing /unnest/poll?host=<major> + trigger expiry
+const BRIDGE_VERSION = '1.11.0';  // + POST /music/prompt (AI dựng prompt nhạc từ tag). Prior 1.10.0: POST /sac/log
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
