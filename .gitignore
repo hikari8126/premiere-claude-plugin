@@ -33,3 +33,4 @@ bridge/bridge.log
 .vscode/
 *.swp
 .superpowers/
+bridge/sac-debug.log

@@ -2323,8 +2323,29 @@ app.post('/superautocut/normalize-script', async (req, res) => {
   }
 });
 
+// ── POST /sac/log ──────────────────────────────────────────────────────────
+// Diagnostic sink: the plugin runs inside Premiere's UXP sandbox where console
+// output only reaches the UXP Developer Tool. Mirroring it to a file lets the
+// assembly run be inspected after the fact.
+const SAC_LOG_PATH = path.join(__dirname, 'sac-debug.log');
+app.post('/sac/log', (req, res) => {
+  try {
+    const { tag, data } = req.body || {};
+    if (tag === '__clear__') {
+      fs.writeFileSync(SAC_LOG_PATH, '');
+      return res.json({ ok: true, cleared: true });
+    }
+    const line = new Date().toISOString() + ' [' + (tag || '?') + '] ' +
+      (typeof data === 'string' ? data : JSON.stringify(data)) + '\n';
+    fs.appendFileSync(SAC_LOG_PATH, line);
+    res.json({ ok: true });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.9.1';  // unnest trigger routing: /unnest/poll?host=<major> consumes only for focused Premiere (2025+2026 song song) + trigger expiry. Prior 1.9.0: /unnest/premiere-shortcuts (.kys conflict warnings)
+const BRIDGE_VERSION = '1.10.0';  // + POST /sac/log diagnostic sink (autocut source-audio investigation). Prior 1.9.1: unnest trigger routing /unnest/poll?host=<major> + trigger expiry
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
