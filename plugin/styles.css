@@ -2345,7 +2345,6 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;   /* model + Organize hug the right edge */
   padding: 9px 10px 0;
   border-top: 1px solid rgba(255,255,255,0.08);
   background: var(--bg);
@@ -2353,8 +2352,12 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 /* display:flex above beats the UA [hidden]{display:none}, so hide explicitly —
    otherwise the Organize row stays visible in SFX/Music/Create. */
 .vg-footRow[hidden] { display: none; }
-/* First child must not carry the 6px margin-left meant to separate the controls. */
-.vg-footRow > :first-child { margin-left: 0; }
+/* UXP ignores justify-content:flex-end here (same class of gap/justify no-ops).
+   An auto left margin on the first child pushes the whole group right instead. */
+.vg-footRow > :first-child { margin-left: auto; }
+/* Don't let the select stretch — it must keep its natural width so the auto
+   margin above has free space to consume. */
+.vg-footRow .vg-organizeModel { flex: 0 0 auto; }
 
 .vg-genBar {
   flex: 0 0 auto;
@@ -2379,6 +2382,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   cursor: pointer;
 }
 .vg-varToggle input { margin-right: 5px; }
+/* UXP does not inherit `color` from a <label> down into its child <span>, so the
+   text stays dim unless the span is targeted directly. */
+.vg-varToggle span { color: var(--text); }
 .vg-genButton {
   flex: 1 1 auto;
   min-width: 0;              /* let it shrink instead of overrunning the toggle */
@@ -2747,6 +2753,8 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   font-size: 10px; color: var(--text); cursor: pointer;
 }
 .vg-checkbox-row input { cursor: pointer; width: 12px; height: 12px; }
+/* Same UXP quirk as .vg-varToggle — <label> colour does not reach the child span. */
+.vg-checkbox-row span { color: var(--text); }
 .vg-folderInput {
   flex: 1 1 auto; height: 24px; min-width: 0;
   background: rgba(0,0,0,0.3);
