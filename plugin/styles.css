@@ -3625,9 +3625,11 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 /* VoiceGen SFX/Music rows: nhãn dài ("Thời lượng") — rộng hơn + không xuống dòng
    để hai hàng slider thẳng cột. Không đụng module Tạo Sub (nhãn ngắn). */
 .vg-modeContent .st-slideLbl { flex-basis: 68px; white-space: nowrap; }
-/* Tách thanh slider đầu ra khỏi ô prompt phía trên (bỏ .vg-editorFoot khiến nó
-   dí sát). Khoảng đệm trên khớp với gap 14px giữa hai hàng slider. */
-.vg-modeContent .st-slideRow:first-of-type { margin-top: 16px; }
+/* Tách ô prompt khỏi thanh slider đầu (bỏ .vg-editorFoot khiến nó dí sát).
+   Dùng margin-bottom trên editorWrap — KHÔNG dùng .st-slideRow:first-of-type vì
+   :first-of-type xét theo tag <div>, mà div đầu là .vg-editorWrap nên không khớp. */
+.vg-modeContent[data-mode="sfx"] .vg-editorWrap,
+.vg-modeContent[data-mode="music"] .vg-editorWrap { margin-bottom: 18px; }
 /* Custom slider (UXP native <input type=range> doesn't drag) */
 .st-cslider { flex: 1 1 auto; min-width: 0; position: relative; height: 22px; cursor: pointer; }
 .st-cline  { position: absolute; top: 9px; left: 0; right: 0; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.15); }
