@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.10.1';  // FIX: 'bỏ audio source' chưa từng chạy (createEmptySelection cần callback; mediaType = Constants.MediaType.AUDIO GUID) + strip track tái dùng track rỗng + chuyển setting gen-voice từ General sang tab Autocut. Bridge API 1.10.0
+var PLUGIN_VERSION = 'v4.11.0';  // VoiceGen: bin picker dạng cây + bin lồng nhau + 1 hàng theo mode; Music prompt builder (chip + preset + AI, fallback chuỗi tag). Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
