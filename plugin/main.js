@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.7';  // fix thật sự khoảng cách prompt→slider SFX/Music (rule cũ dùng :first-of-type sai, không áp). Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.8';  // ghim chiều cao ô số slider SFX/Music (26px) cho thẳng hàng với thanh + nhãn (UXP render number input dày). Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
