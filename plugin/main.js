@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.0.0';  // Release 5.0: Music prompt builder (chip + ma trận xung khắc + preset + AI), bin picker cây/lồng nhau theo mode, dọn UI VoiceGen. Bridge app 3.2 · Server 1.11.0
+var PLUGIN_VERSION = 'v5.0.1';  // fix màu chữ 2 setting Autocut (UXP không truyền color qua label → inline style) + căn giữa checkbox với text. Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 

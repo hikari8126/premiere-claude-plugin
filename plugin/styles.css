@@ -3754,6 +3754,10 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .settings-tabPanel[data-stab="unnest"] .un-check {
   align-items: center; gap: 12px; height: 24px; padding: 0; margin: 12px 0 0;
 }
+/* Autocut: checkbox thẳng hàng với text (base .un-check dùng flex-start + margin-top
+   cho label nhiều dòng; ở đây label một dòng nên căn giữa). */
+.settings-tabPanel[data-stab="autocut"] .un-check { align-items: center; }
+.settings-tabPanel[data-stab="autocut"] .un-check input { margin-top: 0; }
 /* Equal-size radio/checkbox boxes so every label starts at the same x (one column). */
 .un-modeRow .un-radio input,
 .settings-tabPanel[data-stab="unnest"] .un-check input {
