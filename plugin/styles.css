@@ -3947,3 +3947,11 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 .vgm-presetRow .sac-nsf2-select { flex: 0 0 auto; max-width: 45%; }
 .vgm-presetName { flex: 1 1 0; min-width: 0; }
+
+/* Nút bung/gập phần thể loại/cảm xúc trầm-tối trong Music builder */
+.vgm-chip.vgm-more {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-dim);
+}
+.vgm-chip.vgm-more:hover { color: var(--text); border-color: var(--accent); }
