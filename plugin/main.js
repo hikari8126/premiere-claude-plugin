@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.8';  // ghim chiều cao ô số slider SFX/Music (26px) cho thẳng hàng với thanh + nhãn (UXP render number input dày). Bridge API 1.11.0
+var PLUGIN_VERSION = 'v5.0.0';  // Release 5.0: Music prompt builder (chip + ma trận xung khắc + preset + AI), bin picker cây/lồng nhau theo mode, dọn UI VoiceGen. Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
