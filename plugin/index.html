@@ -224,6 +224,21 @@
           </div>
         </div>
 
+        <!-- ElevenLabs clone-slot count + delete manager -->
+        <div class="vg-sg elv-manageSection">
+          <div class="vg-sl">Voice clone (ElevenLabs)</div>
+          <div class="elv-slotRow">
+            <span id="elvSlotLine" class="elv-slot">—</span>
+            <div id="elvRefresh" class="vg-profileBtn" role="button"><span data-ic="rotate_right" data-ic-size="12"></span> Làm mới</div>
+          </div>
+          <input type="text" id="elvVoiceSearch" class="vg-settingInput" placeholder="Tìm voice theo tên…" autocomplete="off" />
+          <div id="elvVoiceList" class="elv-list"></div>
+          <div class="elv-delRow">
+            <div id="elvDeleteBtn" class="vg-deleteProfileBtn is-disabled" role="button">Xoá đã chọn (0)</div>
+            <span id="elvDelStatus" class="elv-delStatus"></span>
+          </div>
+        </div>
+
         <!-- Output Format — hidden; fixed default MP3 192kbps (JS reads vgOutputFormat.value) -->
         <div class="vg-sg" style="display:none">
           <div class="vg-sl">Output Format</div>
@@ -323,6 +338,20 @@
           <input type="checkbox" id="unDisableOrig" checked />
           <span>Tắt sequence gốc sau khi bung</span>
         </label>
+
+        <div class="un-excludeWrap">
+          <label class="vg-save-label" style="margin-top:2px;">Loại trừ khi bung</label>
+          <div class="un-excludeTools">
+            <div id="unExcludeAddBtn" class="vg-nameToolBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Thêm item loại trừ <span class="vg-caret">▾</span></div>
+            <div id="unExcludeListBtn" class="vg-nameToolBtn" role="button"><span data-ic="layer_group" data-ic-size="12"></span> Đã loại trừ (<span id="unExcludeCount">0</span>) <span class="vg-caret">▾</span></div>
+          </div>
+          <div id="unExcludeAddPanel" class="vg-namePanel" hidden>
+            <input id="unExcludeSearch" type="text" class="vg-dropSearchInput" placeholder="Tìm theo tên…" />
+            <div id="unExcludeSearchList"></div>
+            <div id="unExcludeRefresh" class="un-excludeRefresh" role="button"><span data-ic="rotate_right" data-ic-size="11"></span> Làm mới danh sách</div>
+          </div>
+          <div id="unExcludeListPanel" class="vg-namePanel" hidden></div>
+        </div>
 
         <div id="unRun" class="un-runBtn" role="button" aria-disabled="false" style="margin-top:10px;"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
       </div><!-- /settings-tabPanel unnest -->
@@ -467,10 +496,14 @@
               <div class="vc-step">
                 <div class="vc-stepHd"><span class="vc-stepNo">1</span> Choose audio source</div>
                 <div class="vc-segTabs">
-                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline A1</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline</span></label>
                   <label class="vc-seg"><input type="radio" name="vcSource" value="file" /><span>From File</span></label>
                 </div>
                 <div id="vcFromSequenceSection">
+                  <div class="vc-trackSel">
+                    <div id="vcTrackSelBtn" class="vg-nameToolBtn" role="button">Track: A1 <span class="vg-caret">▾</span></div>
+                    <div id="vcTrackSelPanel" class="vg-namePanel" hidden></div>
+                  </div>
                   <div id="vcGetClip" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Extract audio from Timeline A1</div>
                   <div class="vc-clipInfo" id="vcClipInfo">Grabs every clip on audio track A1 and joins them into one voice sample.</div>
                 </div>
@@ -702,11 +735,26 @@
       <div class="vg-save-title">&#128190; Lưu audio</div>
       <label class="vg-save-label">Tên file</label>
       <input id="vgSaveName" type="text" class="vg-save-input" />
+      <div class="vg-save-nameTools">
+        <div id="vgSaveRecentBtn" class="vg-nameToolBtn" role="button"><span data-ic="rotate_left" data-ic-size="12"></span> Gần đây <span class="vg-caret">▾</span></div>
+        <div id="vgSavePresetBtn" class="vg-nameToolBtn" role="button"><span data-ic="layer_group" data-ic-size="12"></span> Preset <span class="vg-caret">▾</span></div>
+        <div id="vgSavePresetAdd" class="vg-nameToolBtn vg-nameToolBtn--add" role="button"><span data-ic="floppy_disk" data-ic-size="12"></span> Lưu preset</div>
+      </div>
+      <div id="vgSaveRecentPanel" class="vg-namePanel" hidden></div>
+      <div id="vgSavePresetPanel" class="vg-namePanel" hidden></div>
       <label class="vg-save-label">Thư mục lưu</label>
       <div class="vg-save-folderRow">
-        <span id="vgSaveFolder" class="vg-save-folder">(chưa chọn)</span>
+        <div id="vgSaveFolder" class="vg-save-folder is-empty">(chưa chọn — bấm Đổi…)</div>
+        <input id="vgSaveFolderInput" type="text" class="vg-save-folder vg-save-folderInput" spellcheck="false" hidden />
+        <div id="vgSaveFolderBmToggle" class="vg-folderBtn vg-folderBtn--icon" role="button"><span data-ic="floppy_disk" data-ic-size="13"></span></div>
         <div id="vgSaveChangeFolder" class="vg-folderBtn" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Đổi…</div>
       </div>
+      <div class="vg-save-nameTools">
+        <div id="vgSaveFolderRecentBtn" class="vg-nameToolBtn" role="button"><span data-ic="rotate_left" data-ic-size="12"></span> Gần đây <span class="vg-caret">▾</span></div>
+        <div id="vgSaveFolderBmBtn" class="vg-nameToolBtn" role="button"><span data-ic="folder" data-ic-size="12"></span> Bookmark <span class="vg-caret">▾</span></div>
+      </div>
+      <div id="vgSaveFolderRecentPanel" class="vg-namePanel" hidden></div>
+      <div id="vgSaveFolderBmPanel" class="vg-namePanel" hidden></div>
       <div class="vg-save-actions">
         <button id="vgSaveCancel" class="btn-secondary">Huỷ</button>
         <button id="vgSaveConfirm" class="btn-primary">Lưu</button>
