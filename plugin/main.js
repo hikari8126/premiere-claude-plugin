@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.0';  // VoiceGen: bin picker dạng cây + bin lồng nhau + 1 hàng theo mode; Music prompt builder (chip + preset + AI, fallback chuỗi tag). Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.1';  // Music builder: ma trận xung khắc mood/genre (ẩn chip đối nghịch) + fix preset (window.prompt bị UXP chặn → input inline) + fix modal đâm xuyên. Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8704,6 +8704,51 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
                   tempo: 'vgmTempo', vibe: 'vgmVibe' };
   var vgmSel = { genres: [], moods: [], instruments: [], tempo: [], vibe: [] };
 
+  // ── Ma trận xung khắc ─────────────────────────────────────────────────────
+  // Gom tag thành "họ" (family); hai họ xung khắc thì không thể chọn cùng lúc.
+  // Khi một tag đang chọn, mọi tag thuộc họ xung khắc với nó sẽ bị ẨN khỏi danh
+  // sách (không hiện chip), tự hiện lại khi bỏ chọn. Chỉ định nghĩa cho moods &
+  // genres — instruments/tempo/vibe cộng dồn tự do nên không cần.
+  var VGM_FAMILIES = {
+    moods: {
+      bright:  ['Uplifting','Happy','Bright','Cheerful','Joyful','Optimistic','Euphoric'],
+      sad:     ['Melancholic','Sad','Somber','Heartbroken','Bittersweet'],
+      intense: ['Energetic','Hype','Aggressive','Anthemic','Powerful','Explosive'],
+      calm:    ['Chill','Relaxed','Dreamy','Atmospheric','Calm','Peaceful','Mellow'],
+      dark:    ['Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting'],
+      // Nostalgic, Epic là trung tính — không thuộc họ nào, đi cùng mọi thứ.
+    },
+    genres: {
+      soft:  ['Lo-fi','Chillhop','Jazz','Bossa Nova','Blues','Folk','Acoustic','Ambient','Neo-classical'],
+      heavy: ['Heavy Metal','Hard Rock','Punk Rock','Grunge','Dubstep'],
+    },
+  };
+  // Cặp họ loại trừ nhau (đối xứng hai chiều).
+  var VGM_CONFLICTS = {
+    moods:  [['bright','sad'], ['bright','dark'], ['calm','intense']],
+    genres: [['soft','heavy']],
+  };
+  function vgmFamily(group, tag) {
+    var fams = VGM_FAMILIES[group];
+    if (!fams) return null;
+    for (var k in fams) { if (fams[k].indexOf(tag) >= 0) return k; }
+    return null;
+  }
+  // tag có bị khoá vì xung khắc với một lựa chọn hiện tại trong cùng nhóm không?
+  function vgmConflicts(group, tag) {
+    var pairs = VGM_CONFLICTS[group];
+    if (!pairs) return false;
+    var fam = vgmFamily(group, tag);
+    if (!fam) return false;
+    var selFams = vgmSel[group].map(function (t) { return vgmFamily(group, t); });
+    return selFams.some(function (sf) {
+      if (!sf) return false;
+      return pairs.some(function (p) {
+        return (p[0] === fam && p[1] === sf) || (p[1] === fam && p[0] === sf);
+      });
+    });
+  }
+
   function vgmItemTag(group, item) {
     return (typeof item === 'string') ? item : item.tag;
   }
@@ -8728,6 +8773,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       VGM_TAX[g].items.forEach(function (item) {
         var tag = vgmItemTag(g, item);
         var on  = vgmSel[g].indexOf(tag) >= 0;
+        // Xung khắc với lựa chọn hiện tại → ẩn hẳn chip (tự hiện lại khi bỏ chọn).
+        if (!on && vgmConflicts(g, tag)) return;
         var full = (max > 0 && vgmSel[g].length >= max && !on);
         var chip = document.createElement('div');
         chip.className = 'vgm-chip' + (on ? ' is-on' : '') + (full ? ' is-blocked' : '');
@@ -8863,8 +8910,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
     var save = document.getElementById('vgmPresetSave');
     if (save) save.addEventListener('click', function () {
-      var name = String(window.prompt('Tên preset:') || '').trim();
-      if (!name) return;
+      // UXP chặn window.prompt() → tên preset đọc từ ô input inline.
+      var nameEl = document.getElementById('vgmPresetName');
+      var name = nameEl ? String(nameEl.value || '').trim() : '';
+      if (!name) { vgmStatus('Gõ tên preset vào ô bên cạnh trước khi lưu.', 'is-err'); return; }
       var presets = vgmLoadPresets();
       var f = document.getElementById('vgmFreeText');
       var v = document.getElementById('vgmVocals');
@@ -8872,17 +8921,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
                         vocals: !!(v && v.checked), freeText: f ? f.value : '' };
       localStorage.setItem(VGM_PRESET_KEY, JSON.stringify(presets));
       vgmRefreshPresetSel();
-      document.getElementById('vgmPresetSel').value = name;
+      var selEl = document.getElementById('vgmPresetSel');
+      if (selEl) selEl.value = name;
+      if (nameEl) nameEl.value = '';
+      vgmStatus('✔ Đã lưu preset "' + name + '".', '');
     });
 
     var del = document.getElementById('vgmPresetDel');
     if (del) del.addEventListener('click', function () {
       var s = document.getElementById('vgmPresetSel');
-      if (!s || !s.value) return;
+      if (!s || !s.value) { vgmStatus('Chọn preset trong dropdown để xoá.', 'is-err'); return; }
+      var gone = s.value;
       var presets = vgmLoadPresets();
-      delete presets[s.value];
+      delete presets[gone];
       localStorage.setItem(VGM_PRESET_KEY, JSON.stringify(presets));
       vgmRefreshPresetSel();
+      vgmStatus('Đã xoá preset "' + gone + '".', '');
     });
   })();
 })();
