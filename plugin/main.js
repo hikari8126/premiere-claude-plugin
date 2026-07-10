@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.5';  // fix căn nhãn slider SFX/Music ('Thời lượng' hết xuống dòng, 2 hàng thẳng cột). Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.6';  // tách thanh Thời lượng ra khỏi ô prompt (SFX/Music) cho cân khoảng cách. Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
