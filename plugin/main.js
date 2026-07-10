@@ -6728,6 +6728,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       var modal    = $('vgSaveModal');
       var nameInp  = $('vgSaveName');
       var folderEl = $('vgSaveFolder');
+      var folderInp = $('vgSaveFolderInput');
       var changeB  = $('vgSaveChangeFolder');
       var cancelB  = $('vgSaveCancel');
       var okB      = $('vgSaveConfirm');
@@ -6755,9 +6756,73 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       // sibling of .vg-app, so hiding .vg-app leaves the modal (and its own input) visible.
       var vgApp = document.querySelector('#tab-voicegen .vg-app');
 
+      // Folder path DISPLAY is a scrollable <div> (thin scrollbar, drag/wheel scroll, no
+      // focus-jump); the EDIT <input> is shown only on double-click. A native <input> in UXP
+      // shows no scrollbar and its selection jumps when it re-focuses, so it's used only
+      // while typing. Display parked at the tail; hover shows the full path.
+      function vgFolderScrollEnd() {
+        if (!folderEl) return;
+        try { folderEl.scrollLeft = folderEl.scrollWidth; } catch (e) {}
+      }
       function renderFolder() {
-        if (customOutputFolder) { folderEl.textContent = customOutputFolder; }
-        else { folderEl.innerHTML = '(chưa chọn — bấm <span class="p-ic" style="margin:0 2px;vertical-align:-2px">' + window.pluginIconSVG('folder_open', 11, '#cbd5e1') + '</span> Đổi…)'; }
+        if (!folderEl) return;
+        folderEl.textContent = customOutputFolder || '(chưa chọn — bấm Đổi…)';
+        folderEl.classList.toggle('is-empty', !customOutputFolder);
+        if (folderInp) folderInp.hidden = true;
+        folderEl.hidden = false;
+        vgFolderScrollEnd(); // park at the tail so the end of the path is visible
+      }
+      function vgFolderBeginEdit() {
+        if (!folderInp || !folderEl) return;
+        vgHideFolderTip();
+        folderInp.value = customOutputFolder || '';
+        folderEl.hidden = true; folderInp.hidden = false;
+        try { folderInp.focus(); var n = folderInp.value.length; if (folderInp.setSelectionRange) folderInp.setSelectionRange(n, n); } catch (e) {}
+        if (window.claimKeyboard) window.claimKeyboard(); // claim ONCE, not on focus → no re-select jump
+      }
+      function vgFolderEndEdit(commit) {
+        if (!folderInp) return;
+        var v = (folderInp.value || '').trim().replace(/\/+$/, ''); // drop trailing slash(es)
+        folderInp.hidden = true; if (folderEl) folderEl.hidden = false;
+        if (commit && v) setFolder(v); // persists + re-renders + bookmark toggle
+        else renderFolder();
+      }
+      if (folderEl) {
+        folderEl.ondblclick = vgFolderBeginEdit;
+        // Mouse wheel over the field scrolls the path horizontally.
+        folderEl.onwheel = function (e) {
+          var d = e.deltaY || e.deltaX; if (!d) return;
+          folderEl.scrollLeft += d; if (e.preventDefault) e.preventDefault();
+        };
+        // Hover → floating "caution" tip with the FULL path (same look as the un-nest
+        // hotkey-conflict tip in Settings). UXP has no title="".
+        folderEl.onmouseenter = vgShowFolderTip;
+        folderEl.onmouseleave = vgHideFolderTip;
+      }
+      if (folderInp) {
+        // No onfocus→claimKeyboard: UXP fires phantom focus events during selection and
+        // each setKeyboardFocus(true) re-selects the field → "bôi đen bị nhảy về". Claim
+        // once in vgFolderBeginEdit instead.
+        folderInp.onblur = function () { if (!folderInp.hidden) vgFolderEndEdit(true); };
+        folderInp.onkeydown = function (e) {
+          if (e.key === 'Enter')       { e.preventDefault(); vgFolderEndEdit(true); try { nameInp.focus(); } catch (x) {} }
+          else if (e.key === 'Escape') { e.preventDefault(); vgFolderEndEdit(false); }
+        };
+      }
+      var _folderTip = null;
+      function vgHideFolderTip() { if (_folderTip && _folderTip.parentNode) _folderTip.parentNode.removeChild(_folderTip); _folderTip = null; }
+      function vgShowFolderTip() {
+        vgHideFolderTip();
+        if (!customOutputFolder || !folderEl || (folderInp && !folderInp.hidden)) return;
+        var tip = document.createElement('div');
+        tip.className = 'un-hkTip vg-folderTip';
+        tip.innerHTML = '<b>📁 Đường dẫn</b><span class="un-tipCmd">' + escapeHtml(customOutputFolder) + '</span>';
+        document.body.appendChild(tip);
+        var r = folderEl.getBoundingClientRect();
+        var maxW = (document.body && document.body.clientWidth) || 380;
+        tip.style.left = Math.max(6, Math.min(r.left, maxW - 266)) + 'px';
+        tip.style.top = (r.bottom + 5) + 'px';
+        _folderTip = tip;
       }
       renderFolder();
 
@@ -6907,6 +6972,9 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
 
       if (vgApp) vgApp.style.display = 'none';
       modal.hidden = false;
+      renderFolder();                    // fill + park at the tail now the modal is visible
+      setTimeout(vgFolderScrollEnd, 0);  // re-scroll after the first layout pass…
+      setTimeout(vgFolderScrollEnd, 80); // …and once more after UXP settles the modal
       try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch(e) {}
       if (window.claimKeyboard) window.claimKeyboard();
 
@@ -6917,6 +6985,9 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         closePanels();
         changeB.onclick = null; cancelB.onclick = null; okB.onclick = null;
         nameInp.onkeydown = null;
+        vgHideFolderTip();
+        if (folderEl) { folderEl.ondblclick = null; folderEl.onwheel = null; folderEl.onmouseenter = null; folderEl.onmouseleave = null; folderEl.hidden = false; }
+        if (folderInp) { folderInp.onblur = null; folderInp.onkeydown = null; folderInp.hidden = true; }
         if (recentBtn) recentBtn.onclick = null;
         if (presetBtn) presetBtn.onclick = null;
         if (presetAddB) presetAddB.onclick = null;
@@ -8521,6 +8592,12 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       list.appendChild(row);
       unnestSearchRows.push({ el: row, id: String(it.id), name: String(it.name).toLowerCase() });
     });
+    // Pre-create the empty hint ONCE so the filter never mutates the DOM on a keystroke
+    // (an appendChild next to the focused input makes UXP re-select it → swallows keys).
+    var hint = document.createElement('div');
+    hint.className = 'vg-nameRow vg-nameRow--empty un-searchHint';
+    hint.style.display = 'none';
+    list.appendChild(hint);
     unnestSearchBuiltFor = items;
   }
   function unnestFilterSearchRows(projKey, query) {
@@ -8535,12 +8612,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       r.el.style.display = ok ? '' : 'none';
       if (ok) shown++;
     }
-    var hint = list.querySelector('.un-searchHint');
-    if (!shown) {
-      if (!hint) { hint = document.createElement('div'); hint.className = 'vg-nameRow vg-nameRow--empty un-searchHint'; list.appendChild(hint); }
-      hint.textContent = unnestSearchRows.length ? '(không khớp)' : '(bấm Làm mới danh sách)';
-      hint.style.display = '';
-    } else if (hint) { hint.style.display = 'none'; }
+    var hint = list.querySelector('.un-searchHint'); // pre-created in unnestBuildSearchRows
+    if (hint) {
+      if (!shown) { hint.textContent = unnestSearchRows.length ? '(không khớp)' : '(bấm Làm mới danh sách)'; hint.style.display = ''; }
+      else hint.style.display = 'none';
+    }
   }
   // Build rows once (or after the item cache changed), then filter by display toggle.
   function unnestRenderSearch(projKey, query) {
@@ -8578,10 +8654,18 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       if (show) { unnestRenderList(unnestCurProjKey); listPanel.hidden = false; }
     };
     if (search) {
+      // NOTE: do NOT claim the keyboard on the input's focus event. UXP fires phantom
+      // focus events on the input during layout reflow (which the filter's display-toggle
+      // triggers), and each claimKeyboard() → setKeyboardFocus(true) re-selects (select-all)
+      // the field, so the next keystroke overwrites what you typed → "chữ bị nuốt". The
+      // keyboard is claimed once when the Add panel opens and released when it closes
+      // (addBtn.onclick), exactly like the working voice-search dropdown. With the focus
+      // handler gone the display-toggle no longer steals focus, so we can filter
+      // synchronously in the input event — no debounce needed.
       var composing = false;
       search.addEventListener('compositionstart', function () { composing = true; });
-      search.addEventListener('compositionend', function () { composing = false; unnestRenderSearch(unnestCurProjKey, search.value); });
-      search.addEventListener('input', function () { if (!composing) unnestRenderSearch(unnestCurProjKey, search.value); });
+      search.addEventListener('compositionend', function () { composing = false; unnestFilterSearchRows(unnestCurProjKey, search.value); });
+      search.addEventListener('input', function () { if (!composing) unnestFilterSearchRows(unnestCurProjKey, search.value); });
     }
     if (refresh) refresh.onclick = async function () {
       await unnestBuildItemList(true);

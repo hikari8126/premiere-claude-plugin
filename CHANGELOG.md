@@ -3,7 +3,7 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v4.9.7 — 2026-07-09
+## v4.9.7 — 2026-07-10
 
 ### ✅ Thêm mới / Cải tiến
 - **Lưu file VO thông minh** — Dialog "Lưu audio" (Voice Gen) giờ tự gợi ý tên theo dạng `v{version} - {tên voice}` (vd `v14.3 - Rachel`): version nhớ chính xác từ lần lưu trước, tên voice tự điền từ voice đang chọn.
@@ -13,10 +13,12 @@
 - **Un-nest — loại trừ item khi bung** — Trong Settings → Un-nest có ô tìm kiếm để **chọn các item không muốn bung** (giữ lại trong nest). Danh sách lưu **theo từng project**, có popup xem/xoá riêng, search theo tên để không bị danh sách dài.
 - **Voice Clone — chọn track audio nguồn** — Khi clone giọng "From Timeline", có dropdown chọn **track audio bất kỳ** (chỉ hiện track có clip, kèm số lượng) thay vì mặc định luôn A1.
 - **Quản lý voice clone ElevenLabs** — Trong Settings → Voice Gen có mục **"Voice clone (ElevenLabs)"**: hiển thị **số slot clone đã dùng / giới hạn** của tài khoản API hiện tại (đỏ + "ĐẦY" khi hết slot), và cho phép **tìm kiếm + tick nhiều + xoá** các voice clone ngay trong plugin (xoá 2 bước arm→xác nhận). Danh sách cập nhật ngay sau khi xoá.
+- **Ô "Thư mục lưu" — xem & sửa path dễ hơn** — Đường dẫn giờ hiển thị **phần đuôi** (thư mục sâu nhất luôn thấy thay vì bị cắt đầu); **cuộn ngang** được (thanh scroll mảnh hoặc **lăn chuột**) để xem cả path; **hover** hiện tooltip **full path**; **double-click** vào ô để **gõ/dán path** trực tiếp (Enter lưu, Esc huỷ). Ô cao & rõ hơn, chữ căn giữa.
 
 ### 🐛 Bugs đã fix
 - **Un-nest không cắt bớt element quá dài** — Element bung ra giữ nguyên độ dài, tràn dài quá vùng sequence. Nguyên nhân: dùng sai API trim (`createSetInOutPointsAction`/`createMoveTrackItemAction` không tồn tại trên track item của bản Premiere này) + không định vị được clone (khớp theo thời điểm start hỏng với ảnh tĩnh, clip trùng start, offset âm) + không quét track mới tạo (V11+). Cách fix: trim bằng `createSetStartAction`/`createSetEndAction`; định vị clone bằng **snapshot-diff toàn bộ track trước/sau clone** (bắt được cả clone trên track mới tạo); truyền **offset clone âm thật** thay vì kẹp về 0 để giữ alignment khi nest sát đầu timeline.
 - **"Move to Voice Over bin" bỏ qua checkbox** — Nguyên nhân: luồng import của AutoCut (`sacFindOrImportFile`) gọi `ppMoveToVOBin` vô điều kiện, không đọc trạng thái checkbox — nên dù tick hay bỏ tick clip vẫn luôn bị chuyển vào bin "Voice Over". Cách fix: gom toàn bộ điểm gọi về 1 helper `ppMoveToVOBinIfEnabled()` (kiểm tra `ppShouldMoveToVOBin()` trước khi move), đảm bảo mọi luồng import (Import / Import to timeline / AutoCut) đều tôn trọng checkbox.
+- **Un-nest — ô tìm "item loại trừ" nuốt chữ** — Gõ vào ô search bị nuốt chữ, không gõ tiếp được (sót sau lần fix trước). Nguyên nhân: ô input nằm CHUNG hộp `overflow-y:auto` với danh sách kết quả → mỗi keystroke toggle `display` làm hộp reflow → UXP reset vùng chọn input về select-all → phím kế ghi đè. Cách fix: cho `#unExcludeAddPanel` thành **flex column**, input là header `flex:0 0 auto` **tách khỏi vùng cuộn**, chỉ danh sách cuộn riêng — đúng khuôn dropdown chọn voice (vốn chạy tốt).
 
 ### 🔧 Kỹ thuật / Approach
 - UXP flexbox **không hỗ trợ `gap`** → thay bằng `margin` tường minh; căn thẳng hàng các nút bằng `box-sizing: border-box` + `flex: 1` + `:last-child { margin-right: 0 }`.
@@ -26,6 +28,8 @@
 - **Loại trừ item**: match theo **project-item id** (`getProjectItem().getId()`), lưu `{id,name}` per-project trong `localStorage['unnest_exclude_v1']`; fail-open nếu không đọc được id. Dropdown search **pre-render một lần, lọc bằng display toggle** (không rebuild innerHTML mỗi keystroke) để không nuốt chữ tiếng Việt và không đóng modal khi click.
 - **Voice Clone track**: `vcSelectedTrackIdx` (0-based) áp cho cả 2 path `trackGroup.getTrack()` và `getAudioTrack()`; dropdown custom toggle-panel liệt kê track có clip.
 - **ElevenLabs manager**: plugin gọi thẳng `api.elevenlabs.io` (thêm domain vào `manifest.json`, **không sửa bridge → không cần re-sign app**); `GET /v1/voices` + `DELETE /v1/voices/{id}`; đọc `voice_limit` từ `/v1/user/subscription` (không bắt buộc — key thiếu quyền User thì hiện "X / ?"). Đếm slot lọc voice **của mình** (`category≠premade && !sharing`) để không tính nhầm voice thư viện. Xoá cập nhật lạc quan (ElevenLabs eventually-consistent nên không re-fetch ngay).
+- **Ô path (Lưu VO)**: phần hiển thị là `<div>` cuộn (`overflow-x:auto` + `scrollbar-width:thin` + `::-webkit-scrollbar{height:3px}`) — KHÔNG dùng `<input>` để hiển thị vì input UXP không vẽ thanh scroll và selection **nhảy** khi re-focus. Gõ/paste path qua `<input>` riêng chỉ hiện khi double-click; `claimKeyboard()` gọi **1 lần** lúc vào edit (KHÔNG gọi trên `onfocus` — phantom focus của UXP sẽ re-select → nhảy). Hiện đuôi: `scrollLeft=scrollWidth`; lăn chuột: `onwheel → scrollLeft += deltaY`; tooltip full path tái dùng `.un-hkTip` (float `position:absolute`, append `body`, định vị bằng `getBoundingClientRect`).
+- **Lưu ý build/test**: Premiere nạp bản plugin **đã cài** ở `~/Library/Application Support/Adobe/UXP/Plugins/External/com.claudeai.premiere-assistant_<ver>/`, KHÔNG phải folder source → sửa source phải **sync** vào đó (hoặc **dev-load** qua UXP Developer Tool) mới thấy thay đổi.
 
 ---
 
