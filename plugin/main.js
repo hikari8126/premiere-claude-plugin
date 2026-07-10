@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.5';  // Autocut Settings mới (vị trí clip Đầu/Cuối, bỏ audio source, nới đầu voice +0.2s) + fix bug UXP textarea "tràn lên đỉnh" (vgReflow ép relayout lúc focus/input/tab-show). Bridge/server không đổi (3.1/1.9.1). On top of v4.9.4
+var PLUGIN_VERSION = 'v4.9.6';  // SAC: diagnostic logging tới bridge (/sac/log) — dump track sau assembly. Bridge API 1.10.0. On top of v4.9.5 (Autocut Settings: vị trí clip Đầu/Cuối, bỏ audio source, nới đầu voice +0.2s; fix UXP textarea "tràn lên đỉnh")
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -4979,6 +4979,61 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   }
 
   // TickTime via ppro.TickTime.createWithSeconds (official UXP API).
+  // ── Diagnostic logging (autocut source-audio investigation) ───────────────
+  // UXP console output only reaches the UXP Developer Tool, so mirror it to the
+  // bridge, which appends to bridge/sac-debug.log.
+  function sacLog(tag, data) {
+    try { console.log('[SAC/' + tag + ']', data); } catch (e) {}
+    try {
+      fetch(BRIDGE_URL + '/sac/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: tag, data: data }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function sacLogClear() {
+    try {
+      return fetch(BRIDGE_URL + '/sac/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: '__clear__' }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  async function sacUn(v) { return (v && typeof v.then === 'function') ? await v : v; }
+
+  // Dump every clip currently sitting on every video + audio track, so we can
+  // see exactly where source audio landed and whether it was trimmed.
+  async function sacDumpTracks(seq, label) {
+    var dump = { label: label, video: {}, audio: {} };
+    async function scan(getCountFn, getTrackFn, bucket, prefix) {
+      var cnt = 0;
+      try { cnt = await sacUn(getCountFn.call(seq)); } catch (e) { return; }
+      for (var i = 0; i < cnt; i++) {
+        var rows = [];
+        try {
+          var trk = await sacUn(getTrackFn.call(seq, i));
+          var items = await getClipItems(trk);
+          for (var k = 0; k < items.length; k++) {
+            var it = items[k], row = {};
+            try { row.name  = await sacUn(it.getName()); } catch (e) {}
+            try { row.start = (await sacUn(it.getStartTime())).seconds; } catch (e) {}
+            try { row.end   = (await sacUn(it.getEndTime())).seconds; } catch (e) {}
+            try { row.inPt  = (await sacUn(it.getInPoint())).seconds; } catch (e) {}
+            try { row.outPt = (await sacUn(it.getOutPoint())).seconds; } catch (e) {}
+            rows.push(row);
+          }
+        } catch (e) { rows.push({ error: e && e.message }); }
+        bucket[prefix + (i + 1)] = rows;
+      }
+    }
+    await scan(seq.getVideoTrackCount, seq.getVideoTrack, dump.video, 'V');
+    await scan(seq.getAudioTrackCount, seq.getAudioTrack, dump.audio, 'A');
+    sacLog('tracks', dump);
+    return dump;
+  }
+
   function sacMakeTime(seconds) {
     // Guard NaN/Infinity/âm — TickTime.createWithSeconds(NaN) có thể làm Premiere crash (sync, không catch được).
     if (!isFinite(seconds) || seconds < 0) {
@@ -5191,6 +5246,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       }, 'SAC set in/out');
     }
 
+    sacLog('insert-args', {
+      atSec: atSec, inSec: inSec, outSec: outSec, vIdx: vIdx, aIdx: aIdx,
+      hasRange: hasRange, setInOut: !!(hasRange && clipItem && typeof clipItem.createSetInOutPointsAction === 'function'),
+    });
+
     // Tx 2: insert — master clip in/out is now committed, insert uses it
     await sacCommitTx(project, function(ca) {
       ca.addAction(seqEditor.createOverwriteItemAction(item, timeAt, vIdx, aIdx));
@@ -5204,6 +5264,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     status.textContent = '⏳ Đang khởi động assembly...';
 
     try {
+      await sacLogClear();
+      sacLog('run-start', { seqMode: seqMode, noVoice: sacNoVoiceMode, stripSrcAudio: sacStripSrcAudio(), plugin: PLUGIN_VERSION });
       if (!ppro) throw new Error('Premiere Pro API không khả dụng — chạy trong Premiere');
       if (!ppro.SequenceEditor) throw new Error('ppro.SequenceEditor không có — Premiere 25.x+ required');
 
@@ -5462,6 +5524,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         status.textContent = '⏳ Xoá audio của source...';
         await sacRemoveAudioTrackClips(project, seqEditor, seq, aStripIdx);
       }
+
+      try { await sacDumpTracks(seq, 'after-assembly'); } catch (eDump) { sacLog('dump-failed', String(eDump && eDump.message)); }
 
       // ── Show success panel ────────────────────────────────────────────────
       var statsEl = $('sacSuccessStats');
