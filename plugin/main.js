@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.4';  // Music builder gọn hơn: tỉa genre phổ biến ~20 (còn lại vào 'Thêm thể loại'), nhạc cụ chia nhóm con, preview đóng khung. Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.5';  // fix căn nhãn slider SFX/Music ('Thời lượng' hết xuống dòng, 2 hàng thẳng cột). Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
