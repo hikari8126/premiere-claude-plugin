@@ -436,14 +436,6 @@
               <textarea id="vgScript" class="vg-script" spellcheck="false"
                 placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
             </div>
-            <div class="vg-editorFoot">
-              <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
-              <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
-                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
-              </select>
-              <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
-            </div>
           </div>
         </div>
 
@@ -643,7 +635,17 @@
 
       </div><!-- /vg-leftScroll -->
 
-        <!-- Pinned footer — sibling of the scroll child (UXP has no position:sticky) -->
+        <!-- Pinned footer — sibling of the scroll child (UXP has no position:sticky).
+             The char-count/Organize row carries .vg-modeContent so the existing mode
+             switcher (main.js:6548) hides it outside Voice without extra logic. -->
+        <div class="vg-editorFoot vg-modeContent vg-footRow" data-mode="tts">
+          <span class="vg-charCount" id="vgCharCount">0 / 5000</span>
+          <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
+          </select>
+          <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
+        </div>
         <div class="vg-genBar">
           <label class="vg-varToggle">
             <input type="checkbox" id="vg2Variations" />
