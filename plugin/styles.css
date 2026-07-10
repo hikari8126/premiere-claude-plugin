@@ -2343,19 +2343,23 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    against the panel edge. */
 .vg-footRow {
   flex: 0 0 auto;
-  padding: 8px 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;   /* model + Organize hug the right edge */
+  padding: 9px 10px 0;
   border-top: 1px solid rgba(255,255,255,0.08);
   background: var(--bg);
 }
-/* .vg-editorFoot sets display:flex, which beats the UA [hidden]{display:none}.
-   Without this the Organize row would stay visible in SFX/Music/Create. */
+/* display:flex above beats the UA [hidden]{display:none}, so hide explicitly —
+   otherwise the Organize row stays visible in SFX/Music/Create. */
 .vg-footRow[hidden] { display: none; }
+/* First child must not carry the 6px margin-left meant to separate the controls. */
+.vg-footRow > :first-child { margin-left: 0; }
 
 .vg-genBar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 8px 10px 12px;
   background: var(--bg);
 }
@@ -2364,18 +2368,24 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border-top: 1px solid rgba(255,255,255,0.08);
   padding-top: 10px;
 }
+/* UXP: flex `gap` is a no-op → separate children with margins. */
 .vg-varToggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  flex: 0 0 auto;
   font-size: 11px;
   color: var(--text);
   white-space: nowrap;
   cursor: pointer;
 }
+.vg-varToggle input { margin-right: 5px; }
 .vg-genButton {
   flex: 1 1 auto;
+  min-width: 0;              /* let it shrink instead of overrunning the toggle */
   height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -2385,6 +2395,10 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border-radius: 7px;
   cursor: pointer;
 }
+.vg-genButton [data-ic] { margin-right: 7px; }
+/* Only the footer instance sits next to the toggle; the full-width Create Voice
+   buttons reuse .vg-genButton and must not pick up this offset. */
+.vg-genBar .vg-genButton { margin-left: 10px; }
 .vg-genButton:hover { background: var(--accent-dark); }
 .vg-genButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
