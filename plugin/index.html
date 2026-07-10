@@ -1320,10 +1320,15 @@
       <div class="vgm-preview" id="vgmPreview"></div>
       <div class="vgm-status" id="vgmStatus" hidden></div>
 
-      <div class="vgm-foot">
-        <select id="vgmPresetSel" class="sac-nsf2-select"><option value="">— Preset —</option></select>
+      <!-- Preset row. UXP chặn window.prompt() nên tên preset nhập inline ở đây. -->
+      <div class="vgm-presetRow">
+        <select id="vgmPresetSel" class="sac-nsf2-select"><option value="">— Preset đã lưu —</option></select>
+        <input id="vgmPresetName" type="text" class="sac-nsf2-input vgm-presetName" placeholder="tên preset để lưu..." />
         <div id="vgmPresetSave" class="sac-nsf2-iconBtn" role="button"><span data-ic="floppy_disk" data-ic-size="14"></span></div>
         <div id="vgmPresetDel" class="sac-nsf2-iconBtn" role="button"><span data-ic="trash" data-ic-size="14"></span></div>
+      </div>
+
+      <div class="vgm-foot">
         <div id="vgmReset" class="btn-secondary" role="button">Xoá chọn</div>
         <div id="vgmBuild" class="btn-primary" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13" data-ic-color="#ffffff"></span> Tạo prompt</div>
       </div>

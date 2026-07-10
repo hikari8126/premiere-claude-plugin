@@ -3939,3 +3939,11 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   padding-top: 10px;
 }
 .vgm-foot .btn-primary { margin-left: auto; }
+
+.vgm-presetRow {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 6px;
+  padding-top: 8px;
+}
+.vgm-presetRow .sac-nsf2-select { flex: 0 0 auto; max-width: 45%; }
+.vgm-presetName { flex: 1 1 0; min-width: 0; }
