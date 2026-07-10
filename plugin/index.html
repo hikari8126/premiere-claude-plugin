@@ -116,6 +116,7 @@
         <div class="settings-tab is-active" role="button" data-stab="general">General</div>
         <div class="settings-tab" role="button" data-stab="voicegen">Voice Gen</div>
         <div class="settings-tab" role="button" data-stab="unnest">Un-nest</div>
+        <div class="settings-tab" role="button" data-stab="autocut">Autocut</div>
       </div>
 
       <!-- ── GENERAL tab ── -->
@@ -355,6 +356,34 @@
 
         <div id="unRun" class="un-runBtn" role="button" aria-disabled="false" style="margin-top:10px;"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
       </div><!-- /settings-tabPanel unnest -->
+
+      <!-- ── AUTOCUT tab ── -->
+      <div class="settings-tabPanel" data-stab="autocut" hidden>
+        <div class="un-settingsHint">
+          Tuỳ chọn cho AutoCut khi dựng timeline. Áp dụng cho lần chạy kế tiếp.
+        </div>
+
+        <div class="setting-row">
+          <label>Vị trí clip trên sequence</label>
+          <select id="sacPlacement">
+            <option value="end" selected>Cuối timeline (nối tiếp clip có sẵn)</option>
+            <option value="start">Đầu timeline</option>
+          </select>
+          <div class="setting-hint-inline">
+            "Đầu timeline" chỉ nên dùng với sequence trống (dùng overwrite — sẽ đè nếu đã có clip ở đầu).
+          </div>
+        </div>
+
+        <label class="un-check">
+          <input type="checkbox" id="sacStripSrcAudio" />
+          <span>Bỏ audio của source khi cut vào</span>
+        </label>
+
+        <label class="un-check">
+          <input type="checkbox" id="sacVoiceHeadPad" />
+          <span>Nới đầu voice block thêm 0.2s (đuôi đã +0.2s sẵn)</span>
+        </label>
+      </div><!-- /settings-tabPanel autocut -->
 
       <div class="settings-actions">
         <button class="btn-secondary" id="close-settings">Cancel</button>

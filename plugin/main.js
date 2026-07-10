@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.4';  // VoiceGen: overhaul "Thư mục lưu" + ElevenLabs clone-slot manager (đếm/xoá clone) + un-nest exclude/overflow. Bridge/server không đổi (3.1/1.9.1). On top of v4.9.3
+var PLUGIN_VERSION = 'v4.9.5';  // Autocut Settings mới (vị trí clip Đầu/Cuối, bỏ audio source, nới đầu voice +0.2s) + fix bug UXP textarea "tràn lên đỉnh" (vgReflow ép relayout lúc focus/input/tab-show). Bridge/server không đổi (3.1/1.9.1). On top of v4.9.4
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -1463,6 +1463,22 @@ function vgAutoResize(el) {
   sizer.textContent = (el.value || '') + '\n';
 }
 
+// UXP repaint quirk: the absolute-positioned .vg-script sometimes spills its content
+// UP over the top of the panel (over the tabs) until a focus change elsewhere forces
+// a relayout — clicking another textarea is what currently "fixes" it. We reproduce
+// that relayout ourselves by toggling the grow-wrapper's display (a cheap forced
+// reflow) so the spill never appears. Deferred so it runs after UXP's own layout pass.
+function vgReflow(el) {
+  var w = el && (el.closest ? el.closest('.vg-scriptGrow') : (el.parentNode));
+  if (!w || !w.style) return;
+  var prev = w.style.display;
+  w.style.display = 'none';
+  void w.offsetHeight;            // force reflow while hidden
+  w.style.display = prev || '';
+  void w.offsetHeight;            // force reflow after restore
+}
+function vgReflowSoon(el) { setTimeout(function () { try { vgReflow(el); } catch (e) {} }, 0); }
+
 msgInput.addEventListener('input', autoResize);
 msgInput.addEventListener('focus', window.claimKeyboard);
 msgInput.addEventListener('blur',  window.releaseKeyboard);
@@ -1651,6 +1667,28 @@ var apiKeyStatus = document.getElementById('apikey-status');
   sel.addEventListener('change', function () {
     localStorage.setItem('sac_genvoice_mode', sel.value);
   });
+})();
+// Autocut assembly options (Settings → Autocut). Each persists to its own key so it
+// survives reloads/new cuts. Read live at run time in sacRunAutoCut.
+function sacPlacementMode()  { return localStorage.getItem('sac_placement') === 'start' ? 'start' : 'end'; }
+function sacStripSrcAudio()  { return localStorage.getItem('sac_strip_src_audio') === '1'; }
+function sacVoiceHeadPad()   { return localStorage.getItem('sac_voice_head_pad') === '1'; }
+(function () {
+  var placement = document.getElementById('sacPlacement');
+  if (placement) {
+    placement.value = sacPlacementMode();
+    placement.addEventListener('change', function () { localStorage.setItem('sac_placement', placement.value === 'start' ? 'start' : 'end'); });
+  }
+  var strip = document.getElementById('sacStripSrcAudio');
+  if (strip) {
+    strip.checked = sacStripSrcAudio();
+    strip.addEventListener('change', function () { localStorage.setItem('sac_strip_src_audio', strip.checked ? '1' : '0'); });
+  }
+  var pad = document.getElementById('sacVoiceHeadPad');
+  if (pad) {
+    pad.checked = sacVoiceHeadPad();
+    pad.addEventListener('change', function () { localStorage.setItem('sac_voice_head_pad', pad.checked ? '1' : '0'); });
+  }
 })();
 // ElevenLabs key is now managed in the Voice Gen tab settings panel, not here.
 var elKeyInput = null; // removed from Claude Settings panel
@@ -2319,9 +2357,9 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
       var _vgScript = document.getElementById('vgScript');
       var _vgSfx    = document.getElementById('vgSfxText');
       var _vgMusic  = document.getElementById('vgMusicPrompt');
-      if (_vgScript) vgAutoResize(_vgScript);
-      if (_vgSfx)    vgAutoResize(_vgSfx);
-      if (_vgMusic)  vgAutoResize(_vgMusic);
+      if (_vgScript) { vgAutoResize(_vgScript); vgReflowSoon(_vgScript); }
+      if (_vgSfx)    { vgAutoResize(_vgSfx);    vgReflowSoon(_vgSfx); }
+      if (_vgMusic)  { vgAutoResize(_vgMusic);  vgReflowSoon(_vgMusic); }
     }
     // Close voice dropdown (panel is portaled to body, close directly)
     var _vdp = document.getElementById('vgVoiceDropPanel');
@@ -4961,13 +4999,60 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       var items = await getClipItems(track);
       for (var i = 0; i < items.length; i++) {
         try {
-          var e = items[i].getEnd && items[i].getEnd();
+          // UXP trackitems expose getEndTime() (sequence/timeline time). getEnd() is
+          // NOT a trackitem method → returns undefined → the whole scan measured 0, so
+          // "This seq" always appended at 0 (start) instead of the real timeline end.
+          var it = items[i];
+          var e = (it.getEndTime ? it.getEndTime() : (it.getEnd ? it.getEnd() : null));
           if (e && typeof e.then === 'function') e = await e;
           var eSec = getTimeSec(e);
           if (eSec > endRef.v) endRef.v = eSec;
         } catch(er) {}
       }
     } catch(er) {}
+  }
+
+  // Lowest EMPTY track index (no clips at all). Used by "Đầu timeline" placement so
+  // clips land on the lowest free track instead of always spawning a brand-new one;
+  // returns the track count (→ a new track) only when every existing track is filled.
+  async function sacLowestEmptyTrack(seq, isVideo) {
+    var cnt = 0;
+    try {
+      var c = isVideo ? seq.getVideoTrackCount() : seq.getAudioTrackCount();
+      if (c && typeof c.then === 'function') c = await c;
+      cnt = Number(c) || 0;
+    } catch (e) {}
+    for (var i = 0; i < cnt; i++) {
+      try {
+        var tr = isVideo ? seq.getVideoTrack(i) : seq.getAudioTrack(i);
+        if (tr && typeof tr.then === 'function') tr = await tr;
+        var items = await getClipItems(tr);
+        if (!items || items.length === 0) return i; // lowest fully-empty track
+      } catch (e) {}
+    }
+    return cnt; // all tracks busy → new track above
+  }
+
+  // Remove every clip on one audio track (used to drop source audio: we place it on a
+  // dedicated empty track then delete it — the -1 "video only" overwrite arg does NOT
+  // reliably drop a linked A/V clip's audio in practice).
+  async function sacRemoveAudioTrackClips(project, seqEditor, seq, trackIdx) {
+    try {
+      var tr = seq.getAudioTrack(trackIdx);
+      if (tr && typeof tr.then === 'function') tr = await tr;
+      if (!tr) return;
+      var items = await getClipItems(tr);
+      if (!items || !items.length) return;
+      var sel = (ppro.TrackItemSelection && typeof ppro.TrackItemSelection.createEmptySelection === 'function')
+        ? ppro.TrackItemSelection.createEmptySelection() : null;
+      if (!sel) { console.warn('[SAC] TrackItemSelection.createEmptySelection không có → không xoá được audio'); return; }
+      for (var i = 0; i < items.length; i++) { try { sel.addItem(items[i], false); } catch (e) {} }
+      var mt = (ppro.Backend && ppro.Backend.MEDIATYPE_AUDIO != null) ? ppro.Backend.MEDIATYPE_AUDIO : 1;
+      await sacCommitTx(project, function (ca) {
+        ca.addAction(seqEditor.createRemoveItemsAction(sel, false, mt, false));
+      }, 'SAC remove source audio');
+      console.log('[SAC] đã xoá ' + items.length + ' clip audio source trên A' + (trackIdx + 1));
+    } catch (e) { console.warn('[SAC] xoá audio source lỗi:', e && e.message); }
   }
 
   // Return the end position (seconds) of the last clip across ALL tracks.
@@ -5129,6 +5214,9 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
 
       var project = await getActiveProject();
       var seq, cursor;
+      // Track offset for "Đầu timeline" placement onto NEW tracks above existing
+      // content (0 = normal V1/A1 behaviour for new/empty seq and end-append).
+      var vBase = 0, aBase = 0;
 
       if (seqMode === 'new') {
         status.textContent = '⏳ Tạo sequence mới...';
@@ -5199,12 +5287,35 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         console.log('[SAC] New sequence (empty):', seqName, '| ratio:', ratio);
       } else {
         seq    = await getActiveSequence();
-        status.textContent = '⏳ Tìm vị trí cuối timeline...';
-        cursor = await sacGetSequenceEnd(seq);
+        if (sacPlacementMode() === 'start') {
+          // "Đầu timeline" — đặt từ 0 lên track TRỐNG THẤP NHẤT (V1 nếu trống, không thì
+          // V2…), chỉ tạo track mới khi mọi track đã đầy → không đè clip cũ.
+          cursor = 0;
+          vBase = await sacLowestEmptyTrack(seq, true);
+          aBase = await sacLowestEmptyTrack(seq, false);
+          console.log('[SAC] Đầu timeline → track trống thấp nhất: vBase=' + vBase + ' aBase=' + aBase);
+        } else {
+          status.textContent = '⏳ Tìm vị trí cuối timeline...';
+          cursor = await sacGetSequenceEnd(seq);
+        }
       }
 
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
+
+      // Strip-source-audio: place source audio on a DEDICATED empty audio track above
+      // everything, then delete all of it after assembly (the -1 "video only" overwrite
+      // arg does not reliably drop linked-clip audio). aStripIdx = current audio count.
+      var stripAudio = sacStripSrcAudio();
+      var aStripIdx = -1;
+      if (stripAudio) {
+        try {
+          var _ac2 = seq.getAudioTrackCount && seq.getAudioTrackCount();
+          if (_ac2 && typeof _ac2.then === 'function') _ac2 = await _ac2;
+          aStripIdx = Math.max(Number(_ac2) || 0, aBase + 2); // above voice/source-audio tracks
+        } catch (e) { aStripIdx = (aBase + 2); }
+        console.log('[SAC] strip audio → dồn source audio lên A' + (aStripIdx + 1) + ' rồi xoá');
+      }
 
       console.log('[SAC] Assembly start at', cursor.toFixed(2) + 's, blocks:', blocks.length,
         sacNoVoiceMode ? '(without voice)' : '');
@@ -5305,8 +5416,11 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
           if (!isFinite(clipDur) || clipDur < 0)      clipDur = 0.5;
 
           try {
-            await sacInsertClipAt(project, seqEditor, srcItem, cursor, inSec, outSec, 0, 1);
-            console.log('[SAC] V1 "' + src.name + '" ' + label + ' @' + cursor.toFixed(2) + 's');
+            // strip → source audio to a dedicated track (deleted after assembly);
+            // else source audio → aBase+1 (A2 normal, or a new track above).
+            var srcAIdx = stripAudio ? aStripIdx : (aBase + 1);
+            await sacInsertClipAt(project, seqEditor, srcItem, cursor, inSec, outSec, vBase, srcAIdx);
+            console.log('[SAC] V' + (vBase + 1) + ' "' + src.name + '" ' + label + ' @' + cursor.toFixed(2) + 's' + (stripAudio ? ' (audio→A' + (aStripIdx + 1) + ' sẽ xoá)' : ''));
           } catch (eClip) {
             // One bad clip must not abort the whole assembly (crash-hardening, #4).
             console.error('[SAC] insert failed for "' + src.name + '":', eClip && eClip.message);
@@ -5318,14 +5432,17 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
 
         // Place voice segment on A1 (skipped in Without Voice mode)
         if (!sacNoVoiceMode && voiceItem && block.voiceStart != null && block.voiceEnd != null) {
-          var vStart = Math.max(0, Number(block.voiceStart));
+          // Head pad: nới đầu voice block sớm 0.2s (Settings → Autocut). Đuôi luôn +0.2s.
+          var headPad = sacVoiceHeadPad() ? 0.2 : 0;
+          var vStart = Math.max(0, Number(block.voiceStart) - headPad);
           var vOut   = Number(block.voiceEnd) + 0.2;
           var vDur   = block.voiceDuration || (block.voiceEnd - block.voiceStart);
           // Guard against NaN / negative / inverted times that would crash TickTime.
           if (isFinite(vStart) && isFinite(vOut) && vOut > vStart) {
             try {
-              await sacInsertClipAt(project, seqEditor, voiceItem, blockStart, vStart, vOut, 5, 0);
-              console.log('[SAC] A1 voice [' + vStart.toFixed(2) + '-' + vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
+              // vIdx=5 skips video (voice has none); voice audio → aBase (A1 normal, or new track above).
+              await sacInsertClipAt(project, seqEditor, voiceItem, blockStart, vStart, vOut, 5, aBase);
+              console.log('[SAC] A' + (aBase + 1) + ' voice [' + vStart.toFixed(2) + '-' + vOut.toFixed(2) + ']s @' + blockStart.toFixed(2) + 's');
               if (vDur > srcTotal) cursor = blockStart + vDur;
             } catch (eVoice) {
               console.error('[SAC] voice insert failed @block ' + (i + 1) + ':', eVoice && eVoice.message);
@@ -5338,6 +5455,12 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         cursor += 1.0; // 1s gap between blocks
         placed++;
         await new Promise(function(r) { setTimeout(r, 300); });
+      }
+
+      // Drop source audio: delete everything we parked on the dedicated strip track.
+      if (stripAudio && aStripIdx >= 0) {
+        status.textContent = '⏳ Xoá audio của source...';
+        await sacRemoveAudioTrackClips(project, seqEditor, seq, aStripIdx);
       }
 
       // ── Show success panel ────────────────────────────────────────────────
@@ -8108,6 +8231,14 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     el.addEventListener('focus', window.claimKeyboard);
     el.addEventListener('blur',  window.releaseKeyboard);
   });
+  // Auto-clear the "spill over the top" UXP repaint bug on the script textareas —
+  // force a relayout on focus (what clicking another textarea does today) so the
+  // spilled text corrects itself without the user having to click away.
+  [$('vgScript'), sfxText, musicPrompt].forEach(function(el) {
+    if (!el) return;
+    el.addEventListener('focus', function () { vgReflowSoon(el); });
+    el.addEventListener('input', function () { vgReflowSoon(el); });
+  });
 
   // ── Voice dropdown init ──────────────────────────────────────────────────
   // Seed VG_VOICES_DATA from the static default <option> elements
@@ -8438,11 +8569,16 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     }
   });
   var stScriptEl = $('stScript');
-  if (stScriptEl) { stScriptEl.addEventListener('input', stAutoResize); stAutoResize(); }
+  if (stScriptEl) {
+    stScriptEl.addEventListener('input', stAutoResize); stAutoResize();
+    // Same UXP spill-over-top fix as the Voice Gen textareas.
+    stScriptEl.addEventListener('focus', function () { vgReflowSoon(stScriptEl); });
+    stScriptEl.addEventListener('input', function () { vgReflowSoon(stScriptEl); });
+  }
 
   // Auto-scan when the Tạo Sub tab is opened…
   var subTabBtn = document.querySelector('.tab-btn[data-tab="subtext"]');
-  if (subTabBtn) subTabBtn.addEventListener('click', function () { stScanTracks(); });
+  if (subTabBtn) subTabBtn.addEventListener('click', function () { if (stScriptEl) { stAutoResize(); vgReflowSoon(stScriptEl); } stScanTracks(); });
   // …and whenever the active sequence changes (pollTimeline calls this), if visible.
   window.__subtextSync = function () {
     var panel = document.getElementById('tab-subtext');
