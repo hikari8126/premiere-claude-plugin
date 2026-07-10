@@ -8825,12 +8825,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgmStatus('', '');
     vgmRefreshPresetSel();
     vgmRender();
+    // UXP has no z-index and native textareas paint over overlays — hide the panel
+    // behind the modal, exactly as vgBinModal/sacBindModal do.
+    var app = document.getElementById('vgApp');
+    if (app) app.style.display = 'none';
     var m = document.getElementById('vgMusicModal');
     if (m) m.hidden = false;
   }
   function vgmClose() {
     var m = document.getElementById('vgMusicModal');
     if (m) m.hidden = true;
+    var app = document.getElementById('vgApp');
+    if (app) app.style.display = '';
   }
 
   (function vgmWire() {
