@@ -2380,10 +2380,6 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border-radius: 7px;
   cursor: pointer;
 }
-/* Only the footer instance sits next to the toggle; the full-width Create Voice
-   buttons reuse .vg-genButton and must not pick up this offset. Descendant
-   selectors are unreliable in UXP, so this is its own single class. */
-.vg-genButtonBar { margin-left: 10px; }
 .vg-genButton:hover { background: var(--accent-dark); }
 .vg-genButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -2475,7 +2471,13 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 
 /* Auto left margin pushes the model+Organize group to the right edge. */
 .vg-ftPush { margin-left: auto; flex: 0 0 auto; }
-/* Label text inside a <label> needs the colour set on the span itself. */
+/* Organize group: needs its own display, and its own [hidden] guard because the
+   display below would otherwise beat .vg-modeContent[hidden]{display:none}. */
+.vg-ftGroup { display: flex; align-items: center; }
+.vg-ftGroup[hidden] { display: none; }
+/* NOTE: colour here is inert — UXP lets a <label> force its colour onto a child
+   <span>, and only an inline style wins. The inline style lives in index.html.
+   Kept for the non-label uses of this class. */
 .vg-ftLabel { color: var(--text); }
 /* Icon inside the Generate button — pluginRenderIcons keeps existing classes. */
 .vg-ftIcon { margin-right: 7px; }

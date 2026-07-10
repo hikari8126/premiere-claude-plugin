@@ -638,19 +638,26 @@
         <!-- Pinned footer — sibling of the scroll child (UXP has no position:sticky).
              The char-count/Organize row carries .vg-modeContent so the existing mode
              switcher (main.js:6548) hides it outside Voice without extra logic. -->
-        <div class="vg-modeContent vg-footRow" data-mode="tts">
-          <select id="vgOrganizeModel" class="vg-organizeModel vg-ftPush" title="Model dùng cho Organize">
-            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
-          </select>
-          <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
-        </div>
-        <div class="vg-genBar">
-          <label class="vg-varToggle">
+        <!-- Row 1 (Voice only): variations toggle · model · Organize.
+             UXP: <label> forces its own colour onto child <span>, and only an
+             inline style overrides it — hence style="color:..." below. -->
+        <div class="vg-footRow" id="vgFootRow">
+          <label class="vg-varToggle" id="vgVarToggleWrap">
             <input type="checkbox" id="vg2Variations" class="vg-ftChk" />
-            <span class="vg-ftLabel">2 variations</span>
+            <span class="vg-ftLabel" style="color:#e8e8e8">2 variations</span>
           </label>
-          <div id="vgGenerate" class="vg-genButton vg-genButtonBar" role="button"><span class="vg-ftIcon" data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
+          <!-- Organize is Voice-only; the mode switcher hides it via .vg-modeContent -->
+          <div class="vg-modeContent vg-ftGroup vg-ftPush" data-mode="tts">
+            <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
+            </select>
+            <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
+          </div>
+        </div>
+        <!-- Row 2: Generate spans the full width. -->
+        <div class="vg-genBar">
+          <div id="vgGenerate" class="vg-genButton" role="button"><span class="vg-ftIcon" data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
         </div>
       </div><!-- /vg-left -->
 
