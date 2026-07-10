@@ -8658,6 +8658,227 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
     vgLoadBinsForProject();
   })();
+
+  // ── Music prompt builder ──────────────────────────────────────────────────
+  // Nhóm nào loại trừ nhau thì max 1; nhóm nào cộng dồn được thì không giới hạn.
+  // Tempo gom thành 4 dải: mỗi item mang sẵn khoảng BPM trong chuỗi tag.
+  var VGM_TAX = {
+    genres: { max: 2, items: [
+      'Synthpop','Electropop','K-pop','J-pop','Indie Pop','Bubblegum pop',
+      'Alternative Rock','Hard Rock','Classic Rock','Heavy Metal','Punk Rock','Grunge',
+      'House','Deep House','Future Bass','Techno','Dubstep','Trance','Slap House',
+      'Hip-hop','Boom Bap','Trap','R&B','Neo-Soul','Contemporary R&B',
+      'Cinematic','Orchestral','Neo-classical','Symphonic','Ambient',
+      'Lo-fi','Chillhop','Jazz','Bossa Nova','Blues','Folk','Acoustic',
+      'Synthwave','Cyberpunk','City Pop','80s pop','90s grunge',
+    ] },
+    moods: { max: 2, items: [
+      'Uplifting','Energetic','Happy','Bright','Cheerful','Joyful','Optimistic',
+      'Euphoric','Hype','Aggressive','Anthemic','Powerful','Explosive',
+      'Melancholic','Sad','Nostalgic','Somber','Heartbroken','Bittersweet',
+      'Chill','Relaxed','Dreamy','Atmospheric','Calm','Peaceful','Mellow',
+      'Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting','Epic',
+    ] },
+    instruments: { max: 0, items: [
+      'Acoustic guitar','Classical guitar','Ukulele','Harp',
+      'Electric guitar','Distorted guitar','Synthesizer','Keytar',
+      'Grand piano','Rhodes piano','Violin','Cello','String quartet',
+      'Saxophone','Trumpet','Flute','Brass section',
+      'Heavy drums','Acoustic drums','808 bass','Sub-bass','Slap bass','Percussion',
+    ] },
+    tempo: { max: 1, items: [
+      { label: 'Chậm',      tag: 'Slow tempo, 60-80 BPM' },
+      { label: 'Vừa',       tag: 'Mid-tempo, 90-110 BPM' },
+      { label: 'Nhanh',     tag: 'Fast tempo, 120-140 BPM' },
+      { label: 'Rất nhanh', tag: 'Very fast, 150+ BPM' },
+    ] },
+    vibe: { max: 1, items: [
+      'Heavy reverb','Echoing','Spacious','Arena sound',
+      'Studio production','Live recording','Concert vibe',
+      'Lo-fi vibe','Vinyl crackle','Cassette tape warmth',
+      'Crystal clear','High fidelity','Polished','Modern production',
+    ] },
+  };
+  var VGM_ORDER = ['genres', 'moods', 'instruments', 'tempo', 'vibe'];
+  var VGM_DOM = { genres: 'vgmGenres', moods: 'vgmMoods', instruments: 'vgmInstruments',
+                  tempo: 'vgmTempo', vibe: 'vgmVibe' };
+  var vgmSel = { genres: [], moods: [], instruments: [], tempo: [], vibe: [] };
+
+  function vgmItemTag(group, item) {
+    return (typeof item === 'string') ? item : item.tag;
+  }
+  function vgmItemLabel(group, item) {
+    return (typeof item === 'string') ? item : item.label;
+  }
+  // Chuỗi tag nối bằng dấu phẩy — vừa là đầu vào cho AI, vừa là fallback khi AI hỏng.
+  function vgmBuildTags() {
+    var parts = [];
+    VGM_ORDER.forEach(function (g) { parts = parts.concat(vgmSel[g]); });
+    var vocals = document.getElementById('vgmVocals');
+    parts.push(vocals && vocals.checked ? 'With vocals' : 'Instrumental');
+    return parts.join(', ');
+  }
+
+  function vgmRender() {
+    VGM_ORDER.forEach(function (g) {
+      var host = document.getElementById(VGM_DOM[g]);
+      if (!host) return;
+      host.textContent = '';
+      var max = VGM_TAX[g].max;
+      VGM_TAX[g].items.forEach(function (item) {
+        var tag = vgmItemTag(g, item);
+        var on  = vgmSel[g].indexOf(tag) >= 0;
+        var full = (max > 0 && vgmSel[g].length >= max && !on);
+        var chip = document.createElement('div');
+        chip.className = 'vgm-chip' + (on ? ' is-on' : '') + (full ? ' is-blocked' : '');
+        chip.setAttribute('role', 'button');
+        chip.textContent = vgmItemLabel(g, item);
+        chip.addEventListener('click', function () { vgmToggle(g, tag); });
+        host.appendChild(chip);
+      });
+    });
+    var prev = document.getElementById('vgmPreview');
+    if (prev) prev.textContent = vgmBuildTags();
+  }
+
+  function vgmToggle(group, tag) {
+    var arr = vgmSel[group];
+    var i = arr.indexOf(tag);
+    var max = VGM_TAX[group].max;
+    if (i >= 0) { arr.splice(i, 1); }
+    else if (max === 1) { vgmSel[group] = [tag]; }        // radio
+    else if (max === 0 || arr.length < max) { arr.push(tag); }
+    else { return; }                                       // đã đầy → bỏ qua
+    vgmRender();
+  }
+
+  var VGM_PRESET_KEY = 'vg_music_presets';
+  function vgmLoadPresets() {
+    try { return JSON.parse(localStorage.getItem(VGM_PRESET_KEY) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function vgmRefreshPresetSel() {
+    var sel = document.getElementById('vgmPresetSel');
+    if (!sel) return;
+    var presets = vgmLoadPresets();
+    sel.textContent = '';
+    var opt0 = document.createElement('option');
+    opt0.value = ''; opt0.textContent = '— Preset —';
+    sel.appendChild(opt0);
+    Object.keys(presets).forEach(function (name) {
+      var o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+  }
+  function vgmApplyPreset(name) {
+    var p = vgmLoadPresets()[name];
+    if (!p) return;
+    VGM_ORDER.forEach(function (g) { vgmSel[g] = (p.sel && p.sel[g]) ? p.sel[g].slice() : []; });
+    var v = document.getElementById('vgmVocals');
+    if (v) v.checked = !!p.vocals;
+    var f = document.getElementById('vgmFreeText');
+    if (f) f.value = p.freeText || '';
+    vgmRender();
+  }
+
+  function vgmStatus(msg, cls) {
+    var el = document.getElementById('vgmStatus');
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg || '';
+    el.className = 'vgm-status' + (cls ? ' ' + cls : '');
+  }
+
+  async function vgmBuildPrompt() {
+    var tags = vgmBuildTags();
+    // Chỉ có "Instrumental"/"With vocals" nghĩa là chưa chọn gì.
+    if (VGM_ORDER.every(function (g) { return vgmSel[g].length === 0; })) {
+      vgmStatus('Chọn ít nhất một mục trước khi tạo prompt.', 'is-err');
+      return;
+    }
+    var freeEl = document.getElementById('vgmFreeText');
+    var freeText = freeEl ? freeEl.value.trim() : '';
+    var target = document.getElementById('vgMusicPrompt');
+    var cfg = (window.sacOrganizeConfig ? window.sacOrganizeConfig() : {}) || {};
+
+    vgmStatus('⏳ AI đang viết prompt...', '');
+    try {
+      var r = await fetch(BRIDGE_URL + '/music/prompt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags: tags, freeText: freeText,
+          provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
+      });
+      var d = await r.json();
+      if (!d || !d.ok) throw new Error((d && d.error) || 'Bridge lỗi');
+      if (target) { target.value = d.prompt; target.dispatchEvent(new Event('input')); }
+      vgmClose();
+    } catch (e) {
+      // KHÔNG thất bại im lặng: đổ chuỗi tag vào ô prompt và nói rõ vì sao.
+      if (target) { target.value = tags; target.dispatchEvent(new Event('input')); }
+      vgmStatus('⚠ AI không phản hồi (' + e.message + ') — đã dùng prompt ghép thẳng từ lựa chọn.', 'is-warn');
+      console.warn('[vgm] AI prompt failed → fallback tags:', e.message);
+    }
+  }
+
+  function vgmOpen() {
+    vgmStatus('', '');
+    vgmRefreshPresetSel();
+    vgmRender();
+    var m = document.getElementById('vgMusicModal');
+    if (m) m.hidden = false;
+  }
+  function vgmClose() {
+    var m = document.getElementById('vgMusicModal');
+    if (m) m.hidden = true;
+  }
+
+  (function vgmWire() {
+    var btn = document.getElementById('vgMusicBuilderBtn');
+    if (btn) btn.addEventListener('click', vgmOpen);
+    var close = document.getElementById('vgMusicClose');
+    if (close) close.addEventListener('click', vgmClose);
+    var build = document.getElementById('vgmBuild');
+    if (build) build.addEventListener('click', vgmBuildPrompt);
+
+    var reset = document.getElementById('vgmReset');
+    if (reset) reset.addEventListener('click', function () {
+      VGM_ORDER.forEach(function (g) { vgmSel[g] = []; });
+      var v = document.getElementById('vgmVocals'); if (v) v.checked = false;
+      var f = document.getElementById('vgmFreeText'); if (f) f.value = '';
+      vgmStatus('', ''); vgmRender();
+    });
+
+    var vocals = document.getElementById('vgmVocals');
+    if (vocals) vocals.addEventListener('change', vgmRender);
+
+    var sel = document.getElementById('vgmPresetSel');
+    if (sel) sel.addEventListener('change', function () { if (sel.value) vgmApplyPreset(sel.value); });
+
+    var save = document.getElementById('vgmPresetSave');
+    if (save) save.addEventListener('click', function () {
+      var name = String(window.prompt('Tên preset:') || '').trim();
+      if (!name) return;
+      var presets = vgmLoadPresets();
+      var f = document.getElementById('vgmFreeText');
+      var v = document.getElementById('vgmVocals');
+      presets[name] = { sel: JSON.parse(JSON.stringify(vgmSel)),
+                        vocals: !!(v && v.checked), freeText: f ? f.value : '' };
+      localStorage.setItem(VGM_PRESET_KEY, JSON.stringify(presets));
+      vgmRefreshPresetSel();
+      document.getElementById('vgmPresetSel').value = name;
+    });
+
+    var del = document.getElementById('vgmPresetDel');
+    if (del) del.addEventListener('click', function () {
+      var s = document.getElementById('vgmPresetSel');
+      if (!s || !s.value) return;
+      var presets = vgmLoadPresets();
+      delete presets[s.value];
+      localStorage.setItem(VGM_PRESET_KEY, JSON.stringify(presets));
+      vgmRefreshPresetSel();
+    });
+  })();
 })();
 
 // ════════════════════════════════════════════════════════════════════════════
