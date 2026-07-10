@@ -840,19 +840,85 @@ body {
   font-family: inherit;
 }
 .vg-save-input:focus { outline: none; border-color: var(--accent); }
-.vg-save-folderRow { display: flex; align-items: center; gap: 6px; }
-.vg-save-folder {
+
+/* Name history & preset tools */
+/* Every save-modal element shares border-box so 100%/flex widths line up to the
+   same left & right edges across all rows (UXP defaults are inconsistent). */
+.vg-save-box, .vg-save-input, .vg-save-nameTools, .vg-nameToolBtn, .vg-namePanel,
+.vg-save-folderRow, .vg-save-folder, .vg-folderBtn { box-sizing: border-box; }
+
+/* UXP flexbox does NOT support `gap` — space with explicit margins instead. */
+.vg-save-nameTools { display: flex; align-items: center; margin-top: 10px; flex-wrap: nowrap; }
+.vg-nameToolBtn {
   flex: 1 1 0; min-width: 0;
+  display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; color: var(--text-dim);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px; cursor: pointer;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+.vg-nameToolBtn:last-child { margin-right: 0; } /* reach the right edge, any row */
+.vg-nameToolBtn > span[data-ic] { margin-right: 6px; }
+.vg-nameToolBtn:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+.vg-nameToolBtn--add { margin-right: 0; color: var(--accent); border-color: var(--accent); }
+.vg-caret { font-size: 9px; opacity: 0.7; }
+.vg-namePanel {
+  margin-top: 4px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 6px 8px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: ui-monospace, monospace;
+  max-height: 150px; overflow-y: auto;
 }
+.vg-nameRow {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text);
+  padding: 6px 8px; cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.vg-nameRow:last-child { border-bottom: none; }
+.vg-nameRow:hover { background: rgba(255,255,255,0.08); }
+.vg-nameRow--empty { color: var(--text-dim); cursor: default; font-style: italic; }
+.vg-nameRow--empty:hover { background: none; }
+.vg-nameRowLabel { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-nameRowDel { flex: 0 0 auto; opacity: 0.6; cursor: pointer; display: inline-flex; }
+.vg-nameRowDel:hover { opacity: 1; }
+
+.vg-save-folderRow { display: flex; align-items: center; }
+.vg-save-folder {
+  flex: 1 1 0; min-width: 0;
+  margin-right: 8px; /* UXP flex has no `gap` — space the Đổi button manually */
+  font-size: 12px; color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 10px; height: 36px; box-sizing: border-box;
+  /* Display is a scrollable <div> (thin horizontal scrollbar, drag/wheel scroll, no focus
+     jump); the edit <input> is shown only while typing. A native <input> shows no scrollbar
+     in UXP, so it can't be the display. Tail parked from JS; full path on hover too. */
+  white-space: nowrap; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin;
+  font-family: ui-monospace, monospace; outline: none;
+}
+.vg-save-folder::-webkit-scrollbar { height: 3px; }
+.vg-save-folder::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.32); border-radius: 2px; }
+.vg-save-folder::-webkit-scrollbar-track { background: transparent; }
+.vg-save-folder.is-empty { color: var(--text-dim); }
+#vgSaveFolder { display: flex; align-items: center; cursor: text; } /* display div — vertically centered */
+#vgSaveFolder[hidden] { display: none; }                            /* re-assert hide in edit mode */
+.vg-save-folderInput[hidden] { display: none; }
+.vg-save-folderInput { color: var(--text); border-color: var(--accent); }
 .vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 #vgSaveChangeFolder { flex: 0 0 auto; width: auto; padding: 0 8px; gap: 4px; font-size: 11px; white-space: nowrap; }
+/* Floating full-path tip shown on folder hover — reuses .un-hkTip, wider + monospace path. */
+.vg-folderTip { max-width: 320px; }
+.vg-folderTip .un-tipCmd { margin-top: 3px; word-break: break-all; overflow-wrap: anywhere; font-family: ui-monospace, monospace; opacity: 0.95; }
+/* Bookmark save/unsave toggle sitting between the path and the Đổi… button. */
+#vgSaveFolderBmToggle { flex: 0 0 28px; width: 28px; height: 28px; margin-right: 8px; }
+#vgSaveFolderBmToggle.is-on { border-color: #3b82f6; background: rgba(59,130,246,0.16); }
+#vgSaveFolderBmToggle.is-on:hover { background: rgba(59,130,246,0.24); }
 
 /* ── SAC bind-source modal (2 columns: 📁 Folder | 🎬 Source) ── */
 .sac-bind-modal {
@@ -2762,6 +2828,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vc-bigPrimary:hover { background: var(--accent-dark); }
 .vc-bigGo { background: var(--success); color: #fff; }
 .vc-bigGo:hover { filter: brightness(1.08); }
+.vc-trackSel { margin-bottom: 8px; }
+.vc-trackSel .vg-nameToolBtn { width: 100%; justify-content: center; box-sizing: border-box; }
+.vc-bigBtn.is-disabled { opacity: 0.5; pointer-events: none; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SUPER AUTO CUT (SAC) — Phase 1
@@ -3684,3 +3753,41 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 .un-hkTip b { color: #fbbf24; font-weight: 700; }
 .un-hkTip .un-tipCmd { display: block; margin-top: 3px; opacity: 0.9; }
+
+.un-excludeWrap { margin-top: 12px; }
+.un-excludeTools { display: flex; align-items: center; margin-top: 6px; }
+.un-excludeTools .vg-nameToolBtn { margin-right: 8px; }
+.un-excludeTools .vg-nameToolBtn:last-child { margin-right: 0; }
+.un-excludeRefresh {
+  display: flex; align-items: center; gap: 4px; justify-content: center;
+  font-size: 10px; color: var(--text-dim); cursor: pointer;
+  padding: 6px 8px; border-top: 1px solid rgba(255,255,255,0.06);
+}
+.un-excludeRefresh:hover { color: var(--text); }
+/* Isolate the search input from the results list — same shape as the working Voice
+   dropdown (fixed-header input + one scrolling list). Before, input + list shared
+   .vg-namePanel's overflow-y:auto box; each keystroke's display-toggle reflowed that box
+   and UXP reset the input's selection to select-all → next key overwrote it ("nuốt chữ").
+   Now the input is a flex:0 0 header OUTSIDE any scroll box; only the list scrolls. */
+#unExcludeAddPanel { display: flex; flex-direction: column; max-height: 200px; overflow: visible; }
+#unExcludeAddPanel[hidden] { display: none; } /* explicit display overrides [hidden] → re-assert */
+#unExcludeSearch { flex: 0 0 auto; width: auto; margin: 6px 6px 4px; }
+#unExcludeSearchList { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#unExcludeRefresh { flex: 0 0 auto; }
+
+.elv-manageSection { margin-top: 10px; }
+.elv-slotRow { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
+.elv-slot { font-size: 11px; color: var(--text-dim); }
+.elv-slot.is-full, .elv-slot.elv-err { color: #fca5a5; font-weight: 600; }
+.elv-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 4px; }
+.elv-row { display: flex; align-items: center; padding: 5px 8px; font-size: 11px; color: var(--text); border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; }
+.elv-row:last-child { border-bottom: none; }
+.elv-row:hover { background: rgba(255,255,255,0.06); }
+.elv-cb { width: 13px; height: 13px; margin-right: 8px; flex: 0 0 auto; }
+.elv-rowName { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+.elv-rowTag { flex: 0 0 auto; font-size: 9px; color: var(--text-dim); }
+.elv-delRow { display: flex; align-items: center; margin-top: 6px; }
+.elv-delRow #elvDeleteBtn { margin-right: 8px; }
+.elv-delStatus { font-size: 10px; color: var(--text-dim); }
+.vg-deleteProfileBtn.is-armed { background: #dc2626; color: #fff; }
+.vg-deleteProfileBtn.is-disabled { opacity: 0.5; pointer-events: none; }

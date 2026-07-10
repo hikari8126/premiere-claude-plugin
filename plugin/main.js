@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.3';  // Hotkey: bắt buộc ≥1 modifier (⌘/⌥/⌃) — bỏ AX/Accessibility; chỉ đăng ký khi Premiere frontmost + định tuyến đa phiên bản + cảnh báo trùng. On top of v4.9.2
+var PLUGIN_VERSION = 'v4.9.4';  // VoiceGen: overhaul "Thư mục lưu" + ElevenLabs clone-slot manager (đếm/xoá clone) + un-nest exclude/overflow. Bridge/server không đổi (3.1/1.9.1). On top of v4.9.3
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -2626,6 +2626,18 @@ async function ppMoveToVOBin(item, proj) {
     if (rs && typeof rs.then === 'function') await rs;
     console.log('[ppVO] Moved to voice over bin');
   } catch(e) { console.warn('[ppVO] ppMoveToVOBin failed:', e.message); }
+}
+
+// Single source of truth for the "Move to Voice Over bin" toggle. Every import
+// path must gate the VO-bin move through this so the checkbox is always honored.
+function ppShouldMoveToVOBin() {
+  var cb = document.getElementById('vgMoveToVOBin');
+  return !!(cb && cb.checked);
+}
+// Move only when the toggle is on.
+async function ppMoveToVOBinIfEnabled(item, proj) {
+  if (!ppShouldMoveToVOBin()) return;
+  await ppMoveToVOBin(item, proj);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5046,8 +5058,8 @@ async function ppMoveToVOBin(item, proj) {
     // Re-scan bin to find the newly imported item
     var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
     var found2 = binItems2.find(function(b) { return b.name === fname; });
-    // Move to "voice over" bin
-    if (found2) await ppMoveToVOBin(found2.item, proj);
+    // Move to "voice over" bin — only if the toggle is on (was unconditional).
+    if (found2) await ppMoveToVOBinIfEnabled(found2.item, proj);
     return found2 ? found2.item : null;
   }
 
@@ -6562,8 +6574,7 @@ async function ppMoveToVOBin(item, proj) {
       els.importStatus.className = 'ac-manualStatus is-ok';
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       // Move to "Voice Over" bin only if checkbox is checked
-      var moveToVO = $('vgMoveToVOBin') && $('vgMoveToVOBin').checked;
-      if (moveToVO) {
+      if (ppShouldMoveToVOBin()) {
         try {
           var rootItem = null;
           if (typeof project.getRootItem === 'function') {
@@ -6665,11 +6676,48 @@ async function ppMoveToVOBin(item, proj) {
       if (r && typeof r.then === 'function') await r;
       if (txErr) throw txErr;
 
-      if ($('vgMoveToVOBin') && $('vgMoveToVOBin').checked) { try { await ppMoveToVOBin(item, project); } catch (e) {} }
+      try { await ppMoveToVOBinIfEnabled(item, project); } catch (e) {}
       setMsg('is-ok', '✓ Đã đặt "' + fname + '" lên A' + (targetA + 1) + ' tại ' + atSec.toFixed(2) + 's');
     } catch (e) {
       setMsg('is-err', '✗ Timeline: ' + e.message);
     }
+  }
+
+  // ── Save-name history & presets ────────────────────────────────────────────
+  // localStorage helpers (tolerant of missing / malformed JSON).
+  function vgGetNameList(key) {
+    try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a : []; }
+    catch (e) { return []; }
+  }
+  function vgSetNameList(key, arr) {
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+  }
+  // Build the default suggested name: v{lastVersion} - {currentVoiceName}
+  // (no extension — okB appends the ext automatically on save).
+  function vgBuildDefaultName() {
+    var ver = '';
+    try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
+    if (!ver) ver = '1.0';
+    var voice = 'Voice';
+    try { voice = vgVoiceName() || 'Voice'; } catch (e) {}
+    return 'v' + ver + ' - ' + voice;
+  }
+  // On a successful save: remember the version and push the name into recents (cap 5).
+  function vgRememberSavedName(finalName) {
+    var m = /^v\s*([0-9]+(?:\.[0-9x]+)?)/i.exec(finalName);
+    if (m) { try { localStorage.setItem('vg_last_version', m[1]); } catch (e) {} }
+    var r = vgGetNameList('vg_recent_names').filter(function (n) { return n !== finalName; });
+    r.unshift(finalName);
+    if (r.length > 5) r = r.slice(0, 5);
+    vgSetNameList('vg_recent_names', r);
+  }
+  // On a successful save: push the folder into recent folders (cap 5, newest first).
+  function vgRememberSavedFolder(dir) {
+    if (!dir) return;
+    var r = vgGetNameList('vg_recent_folders').filter(function (d) { return d !== dir; });
+    r.unshift(dir);
+    if (r.length > 5) r = r.slice(0, 5);
+    vgSetNameList('vg_recent_folders', r);
   }
 
   // Custom save modal: lets the user type a filename while showing (and remembering)
@@ -6680,15 +6728,27 @@ async function ppMoveToVOBin(item, proj) {
       var modal    = $('vgSaveModal');
       var nameInp  = $('vgSaveName');
       var folderEl = $('vgSaveFolder');
+      var folderInp = $('vgSaveFolderInput');
       var changeB  = $('vgSaveChangeFolder');
       var cancelB  = $('vgSaveCancel');
       var okB      = $('vgSaveConfirm');
+      var recentBtn   = $('vgSaveRecentBtn');
+      var presetBtn   = $('vgSavePresetBtn');
+      var presetAddB  = $('vgSavePresetAdd');
+      var recentPanel = $('vgSaveRecentPanel');
+      var presetPanel = $('vgSavePresetPanel');
+      var fRecentBtn   = $('vgSaveFolderRecentBtn');
+      var fBmBtn       = $('vgSaveFolderBmBtn');
+      var fBmToggle    = $('vgSaveFolderBmToggle');
+      var fRecentPanel = $('vgSaveFolderRecentPanel');
+      var fBmPanel     = $('vgSaveFolderBmPanel');
       if (!modal || !nameInp || !okB) { resolve(null); return; }
 
       suggestedName = suggestedName || 'voice.mp3';
-      nameInp.value = suggestedName;
       var dot = suggestedName.lastIndexOf('.');
-      var ext = dot >= 0 ? suggestedName.substring(dot) : '';
+      var ext = dot >= 0 ? suggestedName.substring(dot) : '.mp3';
+      // Smart default: v{lastVersion} - {currentVoiceName} (ext added on save).
+      nameInp.value = vgBuildDefaultName();
 
       // Hide the rest of the VoiceGen UI while the modal is open. UXP renders native
       // <input>/<textarea> on top of everything regardless of DOM order, so the
@@ -6696,13 +6756,225 @@ async function ppMoveToVOBin(item, proj) {
       // sibling of .vg-app, so hiding .vg-app leaves the modal (and its own input) visible.
       var vgApp = document.querySelector('#tab-voicegen .vg-app');
 
+      // Folder path DISPLAY is a scrollable <div> (thin scrollbar, drag/wheel scroll, no
+      // focus-jump); the EDIT <input> is shown only on double-click. A native <input> in UXP
+      // shows no scrollbar and its selection jumps when it re-focuses, so it's used only
+      // while typing. Display parked at the tail; hover shows the full path.
+      function vgFolderScrollEnd() {
+        if (!folderEl) return;
+        try { folderEl.scrollLeft = folderEl.scrollWidth; } catch (e) {}
+      }
       function renderFolder() {
-        if (customOutputFolder) { folderEl.textContent = customOutputFolder; }
-        else { folderEl.innerHTML = '(chưa chọn — bấm <span class="p-ic" style="margin:0 2px;vertical-align:-2px">' + window.pluginIconSVG('folder_open', 11, '#cbd5e1') + '</span> Đổi…)'; }
+        if (!folderEl) return;
+        folderEl.textContent = customOutputFolder || '(chưa chọn — bấm Đổi…)';
+        folderEl.classList.toggle('is-empty', !customOutputFolder);
+        if (folderInp) folderInp.hidden = true;
+        folderEl.hidden = false;
+        vgFolderScrollEnd(); // park at the tail so the end of the path is visible
+      }
+      function vgFolderBeginEdit() {
+        if (!folderInp || !folderEl) return;
+        vgHideFolderTip();
+        folderInp.value = customOutputFolder || '';
+        folderEl.hidden = true; folderInp.hidden = false;
+        try { folderInp.focus(); var n = folderInp.value.length; if (folderInp.setSelectionRange) folderInp.setSelectionRange(n, n); } catch (e) {}
+        if (window.claimKeyboard) window.claimKeyboard(); // claim ONCE, not on focus → no re-select jump
+      }
+      function vgFolderEndEdit(commit) {
+        if (!folderInp) return;
+        var v = (folderInp.value || '').trim().replace(/\/+$/, ''); // drop trailing slash(es)
+        folderInp.hidden = true; if (folderEl) folderEl.hidden = false;
+        if (commit && v) setFolder(v); // persists + re-renders + bookmark toggle
+        else renderFolder();
+      }
+      if (folderEl) {
+        folderEl.ondblclick = vgFolderBeginEdit;
+        // Mouse wheel over the field scrolls the path horizontally.
+        folderEl.onwheel = function (e) {
+          var d = e.deltaY || e.deltaX; if (!d) return;
+          folderEl.scrollLeft += d; if (e.preventDefault) e.preventDefault();
+        };
+        // Hover → floating "caution" tip with the FULL path (same look as the un-nest
+        // hotkey-conflict tip in Settings). UXP has no title="".
+        folderEl.onmouseenter = vgShowFolderTip;
+        folderEl.onmouseleave = vgHideFolderTip;
+      }
+      if (folderInp) {
+        // No onfocus→claimKeyboard: UXP fires phantom focus events during selection and
+        // each setKeyboardFocus(true) re-selects the field → "bôi đen bị nhảy về". Claim
+        // once in vgFolderBeginEdit instead.
+        folderInp.onblur = function () { if (!folderInp.hidden) vgFolderEndEdit(true); };
+        folderInp.onkeydown = function (e) {
+          if (e.key === 'Enter')       { e.preventDefault(); vgFolderEndEdit(true); try { nameInp.focus(); } catch (x) {} }
+          else if (e.key === 'Escape') { e.preventDefault(); vgFolderEndEdit(false); }
+        };
+      }
+      var _folderTip = null;
+      function vgHideFolderTip() { if (_folderTip && _folderTip.parentNode) _folderTip.parentNode.removeChild(_folderTip); _folderTip = null; }
+      function vgShowFolderTip() {
+        vgHideFolderTip();
+        if (!customOutputFolder || !folderEl || (folderInp && !folderInp.hidden)) return;
+        var tip = document.createElement('div');
+        tip.className = 'un-hkTip vg-folderTip';
+        tip.innerHTML = '<b>📁 Đường dẫn</b><span class="un-tipCmd">' + escapeHtml(customOutputFolder) + '</span>';
+        document.body.appendChild(tip);
+        var r = folderEl.getBoundingClientRect();
+        var maxW = (document.body && document.body.clientWidth) || 380;
+        tip.style.left = Math.max(6, Math.min(r.left, maxW - 266)) + 'px';
+        tip.style.top = (r.bottom + 5) + 'px';
+        _folderTip = tip;
       }
       renderFolder();
+
+      // ── Recent / preset dropdowns (custom toggle-panels; native <select> is
+      //    unreliable in UXP and would punch through the modal). ──────────────
+      function closePanels() {
+        if (recentPanel) recentPanel.hidden = true;
+        if (presetPanel) presetPanel.hidden = true;
+        if (fRecentPanel) fRecentPanel.hidden = true;
+        if (fBmPanel) fBmPanel.hidden = true;
+      }
+      function fillName(n) {
+        nameInp.value = n;
+        closePanels();
+        try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch (e) {}
+      }
+      function renderRecent() {
+        if (!recentPanel) return;
+        recentPanel.innerHTML = '';
+        var list = vgGetNameList('vg_recent_names');
+        if (!list.length) { recentPanel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa có tên nào)</div>'; return; }
+        list.forEach(function (n) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          row.textContent = n;
+          row.onclick = function () { fillName(n); };
+          recentPanel.appendChild(row);
+        });
+      }
+      function renderPresets() {
+        if (!presetPanel) return;
+        presetPanel.innerHTML = '';
+        var list = vgGetNameList('vg_name_presets');
+        if (!list.length) { presetPanel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa có preset)</div>'; return; }
+        list.forEach(function (n) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          var label = document.createElement('span');
+          label.className = 'vg-nameRowLabel';
+          label.textContent = n;
+          label.onclick = function () { fillName(n); };
+          var del = document.createElement('span');
+          del.className = 'vg-nameRowDel';
+          del.setAttribute('role', 'button');
+          del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+          del.onclick = function (e) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            var arr = vgGetNameList('vg_name_presets').filter(function (x) { return x !== n; });
+            vgSetNameList('vg_name_presets', arr);
+            renderPresets();
+          };
+          row.appendChild(label); row.appendChild(del);
+          presetPanel.appendChild(row);
+        });
+      }
+      if (recentBtn) recentBtn.onclick = function () {
+        var show = recentPanel && recentPanel.hidden;
+        closePanels();
+        if (show) { renderRecent(); recentPanel.hidden = false; }
+      };
+      if (presetBtn) presetBtn.onclick = function () {
+        var show = presetPanel && presetPanel.hidden;
+        closePanels();
+        if (show) { renderPresets(); presetPanel.hidden = false; }
+      };
+      if (presetAddB) presetAddB.onclick = function () {
+        var name = (nameInp.value || '').trim();
+        if (!name) { try { nameInp.focus(); } catch (e) {} return; }
+        var arr = vgGetNameList('vg_name_presets');
+        if (arr.indexOf(name) === -1) { arr.push(name); vgSetNameList('vg_name_presets', arr); }
+        renderPresets();
+        closePanels();
+        if (presetPanel) presetPanel.hidden = false; // show the updated list
+      };
+
+      // ── Folder recent / bookmark dropdowns (same pattern; path strings are
+      //    reused directly via the bridge, so no UXP folder token needed). ────
+      function isFolderBookmarked() {
+        return !!customOutputFolder && vgGetNameList('vg_folder_bookmarks').indexOf(customOutputFolder) !== -1;
+      }
+      function renderBmToggle() {
+        if (!fBmToggle) return;
+        var on = isFolderBookmarked();
+        fBmToggle.classList.toggle('is-on', on);
+        fBmToggle.innerHTML = window.pluginIconSVG('floppy_disk', 13, on ? '#3b82f6' : '#94a3b8');
+      }
+      function setFolder(dir) {
+        if (!dir) return;
+        customOutputFolder = dir;
+        if (els.outputFolder) els.outputFolder.value = dir;
+        try { localStorage.setItem('vg_last_save_folder', dir); } catch (e) {}
+        renderFolder();
+        renderBmToggle();
+        closePanels();
+      }
+      function renderFolderList(panel, key, emptyMsg, withDelete) {
+        if (!panel) return;
+        panel.innerHTML = '';
+        var list = vgGetNameList(key);
+        if (!list.length) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">' + emptyMsg + '</div>'; return; }
+        list.forEach(function (d) {
+          var row = document.createElement('div');
+          row.className = 'vg-nameRow';
+          var label = document.createElement('span');
+          label.className = 'vg-nameRowLabel';
+          label.textContent = d;
+          label.onclick = function () { setFolder(d); };
+          row.appendChild(label);
+          if (withDelete) {
+            var del = document.createElement('span');
+            del.className = 'vg-nameRowDel';
+            del.setAttribute('role', 'button');
+            del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+            del.onclick = function (e) {
+              if (e && e.stopPropagation) e.stopPropagation();
+              var arr = vgGetNameList(key).filter(function (x) { return x !== d; });
+              vgSetNameList(key, arr);
+              renderFolderList(panel, key, emptyMsg, withDelete);
+              renderBmToggle(); // active folder may have just been un-bookmarked
+            };
+            row.appendChild(del);
+          }
+          panel.appendChild(row);
+        });
+      }
+      if (fRecentBtn) fRecentBtn.onclick = function () {
+        var show = fRecentPanel && fRecentPanel.hidden;
+        closePanels();
+        if (show) { renderFolderList(fRecentPanel, 'vg_recent_folders', '(chưa có thư mục nào)', false); fRecentPanel.hidden = false; }
+      };
+      if (fBmBtn) fBmBtn.onclick = function () {
+        var show = fBmPanel && fBmPanel.hidden;
+        closePanels();
+        if (show) { renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true); fBmPanel.hidden = false; }
+      };
+      if (fBmToggle) fBmToggle.onclick = function () {
+        if (!customOutputFolder) { if (changeB.onclick) changeB.onclick(); return; } // pick one first
+        var arr = vgGetNameList('vg_folder_bookmarks');
+        var i = arr.indexOf(customOutputFolder);
+        if (i === -1) arr.push(customOutputFolder); else arr.splice(i, 1); // toggle save/unsave
+        vgSetNameList('vg_folder_bookmarks', arr);
+        renderBmToggle();
+        if (fBmPanel && !fBmPanel.hidden) renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true);
+      };
+      renderBmToggle();
+      closePanels();
+
       if (vgApp) vgApp.style.display = 'none';
       modal.hidden = false;
+      renderFolder();                    // fill + park at the tail now the modal is visible
+      setTimeout(vgFolderScrollEnd, 0);  // re-scroll after the first layout pass…
+      setTimeout(vgFolderScrollEnd, 80); // …and once more after UXP settles the modal
       try { nameInp.focus(); if (nameInp.select) nameInp.select(); } catch(e) {}
       if (window.claimKeyboard) window.claimKeyboard();
 
@@ -6710,12 +6982,23 @@ async function ppMoveToVOBin(item, proj) {
         modal.hidden = true;
         if (vgApp) vgApp.style.display = '';
         if (window.releaseKeyboard) window.releaseKeyboard();
+        closePanels();
         changeB.onclick = null; cancelB.onclick = null; okB.onclick = null;
         nameInp.onkeydown = null;
+        vgHideFolderTip();
+        if (folderEl) { folderEl.ondblclick = null; folderEl.onwheel = null; folderEl.onmouseenter = null; folderEl.onmouseleave = null; folderEl.hidden = false; }
+        if (folderInp) { folderInp.onblur = null; folderInp.onkeydown = null; folderInp.hidden = true; }
+        if (recentBtn) recentBtn.onclick = null;
+        if (presetBtn) presetBtn.onclick = null;
+        if (presetAddB) presetAddB.onclick = null;
+        if (fRecentBtn) fRecentBtn.onclick = null;
+        if (fBmBtn) fBmBtn.onclick = null;
+        if (fBmToggle) fBmToggle.onclick = null;
       }
       changeB.onclick = async function() {
         await pickOutputFolder(); // updates + persists customOutputFolder
         renderFolder();
+        renderBmToggle();
         try { nameInp.focus(); } catch(e) {}
       };
       cancelB.onclick = function() { cleanup(); resolve(null); };
@@ -6725,6 +7008,8 @@ async function ppMoveToVOBin(item, proj) {
         if (!customOutputFolder) { changeB.onclick(); return; } // must pick a folder first
         if (ext && name.toLowerCase().slice(-ext.length) !== ext.toLowerCase()) name += ext;
         var dir = customOutputFolder;
+        vgRememberSavedName(name);   // persist version + push to recent names
+        vgRememberSavedFolder(dir);  // push to recent folders
         cleanup();
         resolve({ dir: dir, name: name });
       };
@@ -6935,6 +7220,8 @@ async function ppMoveToVOBin(item, proj) {
     var vcDesignStatus   = document.getElementById('vcDesignStatus');
 
     var vcSelectedFilePath = ''; // for clone: current audio file path
+    var vcSelectedTrackIdx = 0;  // 0-based source audio track for Clone Voice (first non-empty by default)
+    var vcTrackList = [];        // cached [{ index, label, count }] of non-empty audio tracks
     var vcGenerationId     = ''; // for design: generationId from preview
     var vcPreviewAudioUrl  = ''; // for design preview player
     var vcPreviewIsPlaying = false;
@@ -6948,6 +7235,7 @@ async function ppMoveToVOBin(item, proj) {
       if (vcDesignCard)   vcDesignCard.classList.toggle('is-active', m === 'design');
       if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
       if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
+      if (m === 'clone') { try { vcRefreshTrackList(); } catch (e) {} }
     }
     if (vcCloneCard)  vcCloneCard.addEventListener('click',  function() { vcSelectMethod('clone'); });
     if (vcDesignCard) vcDesignCard.addEventListener('click', function() { vcSelectMethod('design'); });
@@ -6961,6 +7249,59 @@ async function ppMoveToVOBin(item, proj) {
       if (vcCloneStep2) vcCloneStep2.hidden = !hasAudio;
       if (!hasAudio && vcCloneStep3) vcCloneStep3.hidden = true; // sample gone → re-collapse details
     }
+
+    // List non-empty audio tracks of the active sequence → [{ index, label, count }].
+    async function vcListAudioTracks() {
+      var out = [];
+      try {
+        var seq = await getActiveSequence();
+        if (!seq) return out;
+        var cnt = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
+        if (cnt && typeof cnt.then === 'function') cnt = await cnt;
+        cnt = cnt || 0;
+        for (var i = 0; i < cnt; i++) {
+          var trk = null;
+          try { trk = seq.getAudioTrack(i); if (trk && typeof trk.then === 'function') trk = await trk; } catch (e) {}
+          if (!trk) continue;
+          var items = []; try { items = await getClipItems(trk); } catch (e) {}
+          if (items && items.length) out.push({ index: i, label: 'A' + (i + 1), count: items.length });
+        }
+      } catch (e) {}
+      return out;
+    }
+    function vcRenderTrackSel() {
+      var btn = document.getElementById('vcTrackSelBtn');
+      var panel = document.getElementById('vcTrackSelPanel');
+      var sel = null;
+      for (var i = 0; i < vcTrackList.length; i++) if (vcTrackList[i].index === vcSelectedTrackIdx) sel = vcTrackList[i];
+      var hasAny = vcTrackList.length > 0;
+      if (btn) btn.innerHTML = 'Track: ' + (sel ? (sel.label + ' (' + sel.count + ' clip)') : '(không có clip audio)') + ' <span class="vg-caret">▾</span>';
+      if (vcGetClip) {
+        vcGetClip.setAttribute('aria-disabled', hasAny ? 'false' : 'true');
+        vcGetClip.classList.toggle('is-disabled', !hasAny);
+        vcGetClip.innerHTML = window.pluginIconSVG('download', 13, '#ffffff') + ' ' + (hasAny && sel ? ('Extract audio from ' + sel.label) : 'Không có clip audio');
+      }
+      if (vcClipInfo) vcClipInfo.textContent = (hasAny && sel)
+        ? ('Grabs every clip on audio track ' + sel.label + ' and joins them into one voice sample.')
+        : 'Không có clip audio nào trên timeline.';
+      if (panel) {
+        panel.innerHTML = '';
+        if (!hasAny) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có clip audio)</div>'; }
+        else vcTrackList.forEach(function (t) {
+          var row = document.createElement('div'); row.className = 'vg-nameRow';
+          row.textContent = t.label + ' (' + t.count + ' clip)';
+          row.onclick = function (e) { if (e && e.stopPropagation) e.stopPropagation(); vcSelectedTrackIdx = t.index; if (panel) panel.hidden = true; vcRenderTrackSel(); };
+          panel.appendChild(row);
+        });
+      }
+    }
+    async function vcRefreshTrackList() {
+      vcTrackList = await vcListAudioTracks();
+      var found = false;
+      for (var i = 0; i < vcTrackList.length; i++) if (vcTrackList[i].index === vcSelectedTrackIdx) found = true;
+      if (!found) vcSelectedTrackIdx = vcTrackList.length ? vcTrackList[0].index : 0;
+      vcRenderTrackSel();
+    }
     if (vcCloneBtn) vcCloneBtn.addEventListener('click', function() {
       if (vcCloneStep3) vcCloneStep3.hidden = false;
       if (vcCloneName) { try { vcCloneName.focus(); } catch(e) {} }
@@ -6973,18 +7314,26 @@ async function ppMoveToVOBin(item, proj) {
         if (vcFromSeqSection)  vcFromSeqSection.hidden  = !fromSeq;
         if (vcFromFileSection) vcFromFileSection.hidden = fromSeq;
         vcSelectedFilePath = '';
-        if (vcClipInfo) vcClipInfo.textContent = 'Grabs every clip on audio track A1 and joins them into one voice sample.';
+        if (fromSeq) { try { vcRefreshTrackList(); } catch (e) {} }
         if (vcFileInfo) vcFileInfo.textContent = 'Pick an MP3/WAV/M4A file of the voice to clone.';
         vcRefreshCloneSteps(); // switching source collapses Steps 2 & 3
       });
     });
+
+    (function () {
+      var tb = document.getElementById('vcTrackSelBtn');
+      var tp = document.getElementById('vcTrackSelPanel');
+      if (tb) tb.addEventListener('click', function () { if (tp) tp.hidden = !tp.hidden; });
+    })();
+    try { vcRefreshTrackList(); } catch (e) {}
 
     // ── Get from Sequence ──
     // Reads all clips from audio track A1, extracts each segment via ffmpeg,
     // concatenates them into a single MP3, and sets vcSelectedFilePath to result.
     if (vcGetClip) {
       vcGetClip.addEventListener('click', async function() {
-        if (vcClipInfo) vcClipInfo.textContent = 'Reading A1 clips…';
+        var vcTrkLabel = 'A' + (vcSelectedTrackIdx + 1);
+        if (vcClipInfo) vcClipInfo.textContent = 'Reading ' + vcTrkLabel + ' clips…';
         vcGetClip.disabled = true;
         vcSelectedFilePath = '';
         vcRefreshCloneSteps(); // collapse Steps 2 & 3 while re-extracting
@@ -6997,7 +7346,7 @@ async function ppMoveToVOBin(item, proj) {
           try {
             if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_AUDIO !== undefined) {
               var aGroup = seq.trackGroup(ppro.Backend.MEDIATYPE_AUDIO);
-              if (aGroup && aGroup.numTracks > 0) track = aGroup.getTrack(0);
+              if (aGroup && aGroup.numTracks > vcSelectedTrackIdx) track = aGroup.getTrack(vcSelectedTrackIdx);
             }
           } catch(eA) {}
 
@@ -7006,17 +7355,17 @@ async function ppMoveToVOBin(item, proj) {
             try {
               var cnt = seq.getAudioTrackCount && seq.getAudioTrackCount();
               if (cnt && typeof cnt.then === 'function') cnt = await cnt;
-              if (cnt > 0) {
-                track = seq.getAudioTrack && seq.getAudioTrack(0);
+              if (cnt > vcSelectedTrackIdx) {
+                track = seq.getAudioTrack && seq.getAudioTrack(vcSelectedTrackIdx);
                 if (track && typeof track.then === 'function') track = await track;
               }
             } catch(eB) {}
           }
 
-          if (!track) throw new Error('Cannot access audio track A1');
+          if (!track) throw new Error('Cannot access audio track ' + vcTrkLabel);
 
           var items = await getClipItems(track);
-          if (!items.length) throw new Error('No clips on audio track A1');
+          if (!items.length) throw new Error('No clips on audio track ' + vcTrkLabel);
 
           if (vcClipInfo) vcClipInfo.textContent = 'Found ' + items.length + ' clip(s), reading paths…';
 
@@ -7294,6 +7643,142 @@ async function ppMoveToVOBin(item, proj) {
   var vgSaveKeyBtn       = $('vgSaveKey');
   var vgAddProfileBtn    = $('vgAddProfile');
   var vgDeleteProfileBtn = $('vgDeleteProfile');
+
+  // ── ElevenLabs clone manager (direct API; current ELEVENLABS_KEY) ──────────
+  var elvVoices = [];    // [{ id, name, category }] custom (non-premade) voices
+  var elvLimit = 0;      // subscription.voice_limit
+  var elvLimitKnown = false; // whether the subscription (limit) read succeeded
+  var elvSelected = {};  // voice_id → 1
+  var elvBusy = false;
+  var elvArmed = false, elvArmTimer = null;
+
+  async function elvApi(method, path) {
+    if (!ELEVENLABS_KEY) throw new Error('no-key');
+    var res = await fetch('https://api.elevenlabs.io' + path, {
+      method: method,
+      headers: { 'xi-api-key': ELEVENLABS_KEY, 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (method === 'DELETE') return true;
+    return await res.json();
+  }
+
+  async function elvFetchState() {
+    var slot = $('elvSlotLine');
+    if (!ELEVENLABS_KEY) { if (slot) { slot.textContent = 'Chưa có API key'; slot.className = 'elv-slot'; } elvVoices = []; elvLimit = 0; elvSelected = {}; elvRenderList(); return; }
+    if (slot) { slot.textContent = 'Đang tải…'; slot.className = 'elv-slot'; }
+    // 1) Voices — required (the manager works even if the key lacks other scopes).
+    try {
+      var vd = await elvApi('GET', '/v1/voices');
+      var voices = (vd && vd.voices) || [];
+      // Own clones only: exclude premade AND library/shared voices (they carry a
+      // `sharing` object and don't occupy your clone slots).
+      elvVoices = voices.filter(function (v) { return v.category !== 'premade' && !v.sharing; })
+        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
+      elvSelected = {};
+    } catch (e) {
+      if (slot) { slot.textContent = 'Lỗi tải voices: ' + (e && e.message ? e.message : String(e)); slot.className = 'elv-slot elv-err'; }
+      elvVoices = []; elvSelected = {}; elvRenderList(); return;
+    }
+    // 2) Subscription — optional; the key may lack the "User" read scope (→ 401).
+    //    Without it we still show the count as X / ? (limit unknown).
+    elvLimit = 0; elvLimitKnown = false;
+    try { var sub = await elvApi('GET', '/v1/user/subscription'); elvLimit = (sub && sub.voice_limit) || 0; elvLimitKnown = true; }
+    catch (e) { elvLimit = 0; elvLimitKnown = false; }
+    elvRenderSlots();
+    elvRenderList();
+  }
+  function elvRenderSlots() {
+    var slot = $('elvSlotLine'); if (!slot) return;
+    var x = elvVoices.length, y = elvLimit;
+    var full = elvLimitKnown && y > 0 && x >= y;
+    if (elvLimitKnown) {
+      slot.textContent = 'Đã dùng ' + x + ' / ' + (y || '?') + ' slot clone' + (full ? ' — ĐẦY' : '');
+    } else {
+      slot.textContent = 'Có ' + x + ' voice clone (không đọc được giới hạn — key thiếu quyền User)';
+    }
+    slot.className = 'elv-slot' + (full ? ' is-full' : '');
+  }
+  function elvUpdateDeleteBtn() {
+    var btn = $('elvDeleteBtn'); if (!btn) return;
+    var n = Object.keys(elvSelected).length;
+    btn.classList.toggle('is-disabled', n === 0 || elvBusy);
+    if (elvArmed) { btn.textContent = 'Xác nhận xoá ' + n + ' voice?'; btn.classList.add('is-armed'); }
+    else { btn.textContent = 'Xoá đã chọn (' + n + ')'; btn.classList.remove('is-armed'); }
+  }
+  // Rebuilt only on fetch/delete (never on keystroke) — search uses elvFilterRows.
+  function elvRenderList() {
+    var list = $('elvVoiceList'); if (!list) return;
+    list.innerHTML = '';
+    if (!elvVoices.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có voice clone)</div>'; elvUpdateDeleteBtn(); return; }
+    elvVoices.forEach(function (v) {
+      var row = document.createElement('label'); row.className = 'elv-row';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'elv-cb'; cb.checked = !!elvSelected[v.id];
+      cb.onchange = function () { if (cb.checked) elvSelected[v.id] = 1; else delete elvSelected[v.id]; elvUpdateDeleteBtn(); };
+      var nm = document.createElement('span'); nm.className = 'elv-rowName'; nm.textContent = v.name;
+      var tag = document.createElement('span'); tag.className = 'elv-rowTag'; tag.textContent = v.category;
+      row.appendChild(cb); row.appendChild(nm); row.appendChild(tag);
+      row.setAttribute('data-name', String(v.name).toLowerCase());
+      list.appendChild(row);
+    });
+    elvUpdateDeleteBtn();
+    var s = $('elvVoiceSearch'); elvFilterRows(s ? s.value : '');
+  }
+  function elvFilterRows(query) {
+    var list = $('elvVoiceList'); if (!list) return;
+    var q = (query || '').trim().toLowerCase();
+    var rows = list.querySelectorAll('.elv-row');
+    for (var i = 0; i < rows.length; i++) {
+      var nm = rows[i].getAttribute('data-name') || '';
+      rows[i].style.display = (!q || nm.indexOf(q) !== -1) ? '' : 'none';
+    }
+  }
+  async function elvDoDelete() {
+    var ids = Object.keys(elvSelected);
+    if (!ids.length || elvBusy) return;
+    elvBusy = true; elvArmed = false; if (elvArmTimer) { clearTimeout(elvArmTimer); elvArmTimer = null; }
+    elvUpdateDeleteBtn();
+    var ok = 0, fail = 0, gone = {};
+    for (var i = 0; i < ids.length; i++) {
+      try { await elvApi('DELETE', '/v1/voices/' + ids[i]); ok++; gone[ids[i]] = 1; } catch (e) { fail++; }
+    }
+    // Optimistic update — ElevenLabs' voice list is eventually-consistent, so an
+    // immediate re-GET can still return the just-deleted voices. Drop them locally
+    // and re-render now for instant feedback (Làm mới does a full server refresh).
+    elvVoices = elvVoices.filter(function (v) { return !gone[v.id]; });
+    ids.forEach(function (id) { delete elvSelected[id]; });
+    var st = $('elvDelStatus'); if (st) st.textContent = 'Đã xoá ' + ok + (fail ? (' • Lỗi ' + fail) : '');
+    elvBusy = false;
+    elvRenderSlots(); elvRenderList();
+    try { if (typeof loadVoices === 'function') await loadVoices(); } catch (e) {} // refresh main dropdown
+  }
+  function elvOnDeleteClick() {
+    var n = Object.keys(elvSelected).length;
+    if (!n || elvBusy) return;
+    if (!elvArmed) {
+      elvArmed = true; elvUpdateDeleteBtn();
+      if (elvArmTimer) clearTimeout(elvArmTimer);
+      elvArmTimer = setTimeout(function () { elvArmed = false; elvUpdateDeleteBtn(); }, 4000);
+      return;
+    }
+    elvDoDelete();
+  }
+  (function elvWire() {
+    var rb = $('elvRefresh'); if (rb) rb.addEventListener('click', function () { elvFetchState(); });
+    var db = $('elvDeleteBtn'); if (db) db.addEventListener('click', elvOnDeleteClick);
+    var es = $('elvVoiceSearch');
+    if (es) {
+      es.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      es.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
+      var composing = false;
+      es.addEventListener('compositionstart', function () { composing = true; });
+      es.addEventListener('compositionend', function () { composing = false; elvFilterRows(es.value); });
+      es.addEventListener('input', function () { if (!composing) elvFilterRows(es.value); });
+    }
+    document.querySelectorAll('.settings-tab').forEach(function (t) {
+      if (t.getAttribute('data-stab') === 'voicegen') t.addEventListener('click', function () { elvFetchState(); });
+    });
+  })();
 
   function vgPersistProfiles() {
     var stored = {};
@@ -7990,6 +8475,7 @@ async function ppMoveToVOBin(item, proj) {
   }
 
   var EPS = 0.0006;            // seconds tolerance for overlap math
+  var UNNEST_PAD = 2.0;        // seconds: max overflow kept beyond the nested region
   var detected = [];           // unique nested clips
   var rawSelected = [];        // every selected track item (for disabling originals)
   var canRun = false;          // gates the run() handler (un-nest button is a <div>)
@@ -8010,6 +8496,188 @@ async function ppMoveToVOBin(item, proj) {
     els.log.scrollTop = els.log.scrollHeight;
   }
   function clearLog() { if (els.log) { els.log.textContent = ''; els.log.hidden = true; } }
+
+  // ── Exclude-from-un-nest list (per-project, by project-item id) ──────────────
+  var UNNEST_EXCLUDE_LS = 'unnest_exclude_v1'; // { projKey: [ {id, name}, … ] }
+  var unnestItemCache = null; // cached [{id, name}] of project media+sequences (session)
+  async function unnestProjKey() {
+    try {
+      var p = await getActiveProject(); var nm = p && p.name;
+      if (nm && typeof nm.then === 'function') nm = await nm;
+      return String(nm || (p && p.guid) || '');
+    } catch (e) { return ''; }
+  }
+  function unnestLoadStore() {
+    try { var o = JSON.parse(localStorage.getItem(UNNEST_EXCLUDE_LS) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e) { return {}; }
+  }
+  function unnestLoadExcludes(projKey) {
+    var a = unnestLoadStore()[projKey]; return Array.isArray(a) ? a : [];
+  }
+  function unnestSaveExcludes(projKey, arr) {
+    var store = unnestLoadStore(); store[projKey] = arr;
+    try { localStorage.setItem(UNNEST_EXCLUDE_LS, JSON.stringify(store)); } catch (e) {}
+  }
+  async function unnestExcludeIdSet() {
+    var key = await unnestProjKey(); var arr = unnestLoadExcludes(key); var set = {};
+    for (var i = 0; i < arr.length; i++) if (arr[i] && arr[i].id != null) set[String(arr[i].id)] = 1;
+    return set;
+  }
+  // Build (and cache) the list of project media items + sequences (id + name).
+  async function unnestBuildItemList(force) {
+    if (unnestItemCache && !force) return unnestItemCache;
+    var out = [];
+    try {
+      var proj = await getActiveProject();
+      var root = proj && (proj.getRootItem ? await un(proj.getRootItem()) : proj.rootItem);
+      if (root && typeof sacCollectBinItems === 'function') {
+        var items = await sacCollectBinItems(root);
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].isFolder) continue; // skip bins/folders
+          var id = null;
+          try { id = await un(items[i].item.getId()); } catch (e) {}
+          if (id == null) continue;
+          out.push({ id: String(id), name: items[i].name || '(không tên)' });
+        }
+      }
+    } catch (e) {}
+    out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
+    unnestItemCache = out; return out;
+  }
+  function unnestRenderCount(projKey) {
+    var el = document.getElementById('unExcludeCount');
+    if (el) el.textContent = String(unnestLoadExcludes(projKey).length);
+  }
+  function unnestRenderList(projKey) {
+    var panel = document.getElementById('unExcludeListPanel');
+    if (!panel) return;
+    panel.innerHTML = '';
+    var arr = unnestLoadExcludes(projKey);
+    if (!arr.length) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa loại trừ item nào)</div>'; return; }
+    arr.forEach(function (it) {
+      var row = document.createElement('div'); row.className = 'vg-nameRow';
+      var label = document.createElement('span'); label.className = 'vg-nameRowLabel'; label.textContent = it.name;
+      var del = document.createElement('span'); del.className = 'vg-nameRowDel'; del.setAttribute('role', 'button');
+      del.innerHTML = window.pluginIconSVG('trash', 12, '#fca5a5');
+      del.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        var cur = unnestLoadExcludes(projKey).filter(function (x) { return String(x.id) !== String(it.id); });
+        unnestSaveExcludes(projKey, cur); unnestRenderList(projKey); unnestRenderCount(projKey);
+      };
+      row.appendChild(label); row.appendChild(del); panel.appendChild(row);
+    });
+  }
+  // Search rows are pre-rendered ONCE and filtered by toggling display — never
+  // rebuilt on each keystroke/click. Rebuilding innerHTML on a keystroke resets the
+  // input focus (drops Vietnamese IME composition), and rebuilding on a click detaches
+  // the clicked row so the Settings modal's outside-click handler fires and closes it.
+  var unnestSearchRows = [];       // [{ el, id, name }]
+  var unnestSearchBuiltFor = null; // the unnestItemCache array these rows were built from
+  function unnestBuildSearchRows() {
+    var list = document.getElementById('unExcludeSearchList');
+    if (!list) return;
+    list.innerHTML = ''; unnestSearchRows = [];
+    var items = unnestItemCache || [];
+    items.forEach(function (it) {
+      var row = document.createElement('div'); row.className = 'vg-nameRow';
+      row.textContent = it.name;
+      row.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation(); // keep the Settings modal open
+        var cur = unnestLoadExcludes(unnestCurProjKey);
+        if (!cur.some(function (x) { return String(x.id) === String(it.id); })) { cur.push({ id: String(it.id), name: it.name }); unnestSaveExcludes(unnestCurProjKey, cur); }
+        unnestRenderCount(unnestCurProjKey); unnestRenderList(unnestCurProjKey);
+        var s = document.getElementById('unExcludeSearch');
+        unnestFilterSearchRows(unnestCurProjKey, s ? s.value : '');
+      };
+      list.appendChild(row);
+      unnestSearchRows.push({ el: row, id: String(it.id), name: String(it.name).toLowerCase() });
+    });
+    // Pre-create the empty hint ONCE so the filter never mutates the DOM on a keystroke
+    // (an appendChild next to the focused input makes UXP re-select it → swallows keys).
+    var hint = document.createElement('div');
+    hint.className = 'vg-nameRow vg-nameRow--empty un-searchHint';
+    hint.style.display = 'none';
+    list.appendChild(hint);
+    unnestSearchBuiltFor = items;
+  }
+  function unnestFilterSearchRows(projKey, query) {
+    var list = document.getElementById('unExcludeSearchList');
+    if (!list) return;
+    var q = (query || '').trim().toLowerCase();
+    var excluded = {}; unnestLoadExcludes(projKey).forEach(function (x) { excluded[String(x.id)] = 1; });
+    var shown = 0;
+    for (var i = 0; i < unnestSearchRows.length; i++) {
+      var r = unnestSearchRows[i];
+      var ok = !excluded[r.id] && (!q || r.name.indexOf(q) !== -1) && shown < 40; // cap rendered
+      r.el.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    }
+    var hint = list.querySelector('.un-searchHint'); // pre-created in unnestBuildSearchRows
+    if (hint) {
+      if (!shown) { hint.textContent = unnestSearchRows.length ? '(không khớp)' : '(bấm Làm mới danh sách)'; hint.style.display = ''; }
+      else hint.style.display = 'none';
+    }
+  }
+  // Build rows once (or after the item cache changed), then filter by display toggle.
+  function unnestRenderSearch(projKey, query) {
+    if (unnestSearchBuiltFor !== unnestItemCache) unnestBuildSearchRows();
+    unnestFilterSearchRows(projKey, query);
+  }
+  var unnestExcludeWired = false;
+  var unnestCurProjKey = '';
+  async function unnestInitExclude() {
+    var projKey = await unnestProjKey();
+    if (projKey !== unnestCurProjKey) unnestItemCache = null; // project changed → rebuild item list
+    unnestCurProjKey = projKey;
+    var addBtn = document.getElementById('unExcludeAddBtn');
+    var listBtn = document.getElementById('unExcludeListBtn');
+    var addPanel = document.getElementById('unExcludeAddPanel');
+    var listPanel = document.getElementById('unExcludeListPanel');
+    var search = document.getElementById('unExcludeSearch');
+    var refresh = document.getElementById('unExcludeRefresh');
+    if (!addBtn || !listBtn) return;
+    unnestRenderCount(projKey); unnestRenderList(projKey);
+    if (unnestExcludeWired) return; // wire click handlers once
+    unnestExcludeWired = true;
+    function closeP() { if (addPanel) addPanel.hidden = true; if (listPanel) listPanel.hidden = true; }
+    addBtn.onclick = async function () {
+      var show = addPanel && addPanel.hidden; closeP();
+      if (show) {
+        if (!unnestItemCache) await unnestBuildItemList(false);
+        unnestRenderSearch(unnestCurProjKey, search ? search.value : ''); addPanel.hidden = false;
+        try { search.focus(); } catch (e) {}
+        if (window.claimKeyboard) window.claimKeyboard();
+      } else if (window.releaseKeyboard) window.releaseKeyboard();
+    };
+    listBtn.onclick = function () {
+      var show = listPanel && listPanel.hidden; closeP();
+      if (show) { unnestRenderList(unnestCurProjKey); listPanel.hidden = false; }
+    };
+    if (search) {
+      // NOTE: do NOT claim the keyboard on the input's focus event. UXP fires phantom
+      // focus events on the input during layout reflow (which the filter's display-toggle
+      // triggers), and each claimKeyboard() → setKeyboardFocus(true) re-selects (select-all)
+      // the field, so the next keystroke overwrites what you typed → "chữ bị nuốt". The
+      // keyboard is claimed once when the Add panel opens and released when it closes
+      // (addBtn.onclick), exactly like the working voice-search dropdown. With the focus
+      // handler gone the display-toggle no longer steals focus, so we can filter
+      // synchronously in the input event — no debounce needed.
+      var composing = false;
+      search.addEventListener('compositionstart', function () { composing = true; });
+      search.addEventListener('compositionend', function () { composing = false; unnestFilterSearchRows(unnestCurProjKey, search.value); });
+      search.addEventListener('input', function () { if (!composing) unnestFilterSearchRows(unnestCurProjKey, search.value); });
+    }
+    if (refresh) refresh.onclick = async function () {
+      await unnestBuildItemList(true);
+      // prune saved ids no longer in the project; refresh saved names to current.
+      var live = {}; unnestItemCache.forEach(function (it) { live[String(it.id)] = it.name; });
+      var pk = await unnestProjKey();
+      var pruned = unnestLoadExcludes(pk).filter(function (x) { return live[String(x.id)]; })
+        .map(function (x) { return { id: String(x.id), name: live[String(x.id)] }; });
+      unnestSaveExcludes(pk, pruned);
+      unnestRenderCount(pk); unnestRenderList(pk); unnestRenderSearch(pk, search ? search.value : '');
+    };
+  }
 
   async function un(v) { return (v && typeof v.then === 'function') ? await v : v; }
 
@@ -8170,8 +8838,13 @@ async function ppMoveToVOBin(item, proj) {
   // which preserves effects. One transaction = one undo step. Track index is
   // absolute (auto-creates high tracks); time is an offset added to each item's
   // own start, so item at nested-time T lands at parentStart + (T - nestIn).
+  // Overflow trim: feature-detected at runtime (no console probe available).
+  //   TAIL → trackItem.createSetInOutPointsAction(inPt, outPt) when present.
+  //   HEAD → trackItem.createMoveTrackItemAction(startTT, false) when present; else tail-only + log.
   async function expandViaClone(project, parentSeq, d, mode) {
     if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
+    var excludeIds = await unnestExcludeIdSet();
+    var excludedCount = 0;
     var nested = d.nestedSeq;
     var nestIn = d.nestIn || 0, nestOut = d.nestOut || 0, parentStart = d.parentStart || 0;
     var ed = ppro.SequenceEditor.getEditor(parentSeq);
@@ -8230,6 +8903,8 @@ async function ppMoveToVOBin(item, proj) {
       for (var c = 0; c < vc.length; c++) {
         var s1 = await callSec(vc[c], 'getStartTime'), e1 = await callSec(vc[c], 'getEndTime');
         if (s1 == null || e1 == null || !inRange(s1, e1)) continue;
+        var vpi = await un(vc[c].getProjectItem ? vc[c].getProjectItem() : null);
+        if (vpi) { var vpid = null; try { vpid = await un(vpi.getId()); } catch (e) {} if (vpid != null && excludeIds[String(vpid)]) { excludedCount++; continue; } }
         if (mode === 'video' || mode === 'av') {
           var cls = await classifyVideoClip(vc[c]);
           if (!cls.keep) { vfDropped++; continue; } // pure text/title → skip
@@ -8249,6 +8924,8 @@ async function ppMoveToVOBin(item, proj) {
         for (var b = 0; b < ac.length; b++) {
           var s2 = await callSec(ac[b], 'getStartTime'), e2 = await callSec(ac[b], 'getEndTime');
           if (s2 == null || e2 == null || !inRange(s2, e2)) continue;
+          var api2 = await un(ac[b].getProjectItem ? ac[b].getProjectItem() : null);
+          if (api2) { var apid = null; try { apid = await un(api2.getId()); } catch (e) {} if (apid != null && excludeIds[String(apid)]) { excludedCount++; continue; } }
           apick.push(ac[b]);
         }
         if (!apick.length) continue;
@@ -8259,21 +8936,91 @@ async function ppMoveToVOBin(item, proj) {
 
     if (!targets.length) { logLine('· "' + d.name + '": không có clip trong đoạn cắt', 'warn'); return 0; }
 
+    // Snapshot every existing track's clips BEFORE cloning, so the new clones can be
+    // found by set-difference afterward. We scan ALL tracks (not just our requested
+    // target indices) because the clone action can place clips on tracks that don't
+    // match the requested vIdx and can create extra high tracks. This is robust vs
+    // matching by start time (which breaks on stills, duplicate starts, negative offsets).
+    async function _clipKey(c) {
+      try { if (typeof c.getGuid === 'function') { var g = await un(c.getGuid()); if (g != null) return 'g:' + (g.toString ? g.toString() : g); } } catch (e) {}
+      var s = await callSec(c, 'getStartTime'); return 's:' + (s == null ? '?' : s.toFixed(3));
+    }
+    var beforeV = {}, beforeA = {};
+    for (var bv = 0; bv < pv; bv++) {
+      var bvt = await un(parentSeq.getVideoTrack(bv)); var bvs = {};
+      var bvc = bvt ? await getClipItems(bvt) : []; for (var bx = 0; bx < bvc.length; bx++) bvs[await _clipKey(bvc[bx])] = 1;
+      beforeV[bv] = bvs;
+    }
+    for (var ba = 0; ba < pa; ba++) {
+      var bat = await un(parentSeq.getAudioTrack(ba)); var bas = {};
+      var bac = bat ? await getClipItems(bat) : []; for (var by = 0; by < bac.length; by++) bas[await _clipKey(bac[by])] = 1;
+      beforeA[ba] = bas;
+    }
+
     var done = 0;
+    // Use the real (possibly negative) clone offset. TT() clamps to ≥0, which shifted
+    // all clips right when the nested clip sits near the timeline start (parentStart <
+    // nestIn); passing the true offset keeps them aligned (Premiere clamps any clip that
+    // would land before 0). Fall back to the clamped offset if TickTime rejects negatives.
+    var offTick;
+    try { offTick = ppro.TickTime.createWithSeconds(timeOffset); } catch (e) { offTick = TT(timeOffset); }
     await project.lockedAccess(function () {
       project.executeTransaction(function (action) {
         for (var t = 0; t < targets.length; t++) {
           try {
-            action.addAction(ed.createCloneTrackItemAction(targets[t].item, TT(timeOffset), targets[t].vIdx, targets[t].aIdx, targets[t].align, false));
+            action.addAction(ed.createCloneTrackItemAction(targets[t].item, offTick, targets[t].vIdx, targets[t].aIdx, targets[t].align, false));
             done++;
           } catch (e) { logLine('  ✗ clone lỗi: ' + (e.message || e), 'err'); }
         }
       }, 'Un-nest: clone ' + targets.length + ' clip');
     });
 
+    // ── Clamp overflow: trim every NEW clone to at most UNNEST_PAD seconds beyond the
+    //    nested region [winStart, winEnd]. Head never goes before timeline 0. ──
+    var Hlo = Math.max(winStart - UNNEST_PAD, 0);
+    var Hhi = winEnd + UNNEST_PAD;
+    var trims = [];   // { item, doHead, doTail }
+    var cntV = pv, cntA = pa;
+    try { cntV = await un(parentSeq.getVideoTrackCount()); } catch (e) {}
+    try { cntA = await un(parentSeq.getAudioTrackCount()); } catch (e) {}
+    async function _collectNew(idx, isVideo) {
+      var trk = await un(isVideo ? parentSeq.getVideoTrack(idx) : parentSeq.getAudioTrack(idx));
+      if (!trk) return;
+      var before = isVideo ? beforeV[idx] : beforeA[idx];
+      var clips = await getClipItems(trk);
+      for (var i = 0; i < clips.length; i++) {
+        var key = await _clipKey(clips[i]);
+        if (before && before[key]) continue; // pre-existing clip → leave it
+        var cS = await callSec(clips[i], 'getStartTime'), cE = await callSec(clips[i], 'getEndTime');
+        if (cS == null || cE == null) continue;
+        var doHead = cS < Hlo - EPS, doTail = cE > Hhi + EPS;
+        if (doHead || doTail) trims.push({ item: clips[i], doHead: doHead, doTail: doTail });
+      }
+    }
+    for (var vv = 0; vv < cntV; vv++) await _collectNew(vv, true);
+    for (var aa = 0; aa < cntA; aa++) await _collectNew(aa, false);
+
+    if (trims.length) {
+      await project.lockedAccess(function () {
+        project.executeTransaction(function (action) {
+          for (var q = 0; q < trims.length; q++) {
+            var t = trims[q];
+            try {
+              // Trim the overflowing timeline edge(s) — createSetEndAction / createSetStartAction
+              // move the clip's end/start (and adjust its source point) without shifting the rest.
+              if (t.doTail && typeof t.item.createSetEndAction === 'function') action.addAction(t.item.createSetEndAction(TT(Hhi)));
+              if (t.doHead && typeof t.item.createSetStartAction === 'function') action.addAction(t.item.createSetStartAction(TT(Hlo)));
+            } catch (e) { logLine('  ✗ trim lỗi: ' + (e.message || e), 'err'); }
+          }
+        }, 'Un-nest: trim overflow ' + trims.length + ' clip');
+      });
+      logLine('✂ trim tràn: ' + trims.length + ' clip (±' + UNNEST_PAD + 's)', 'ok');
+    }
+
     logLine('✓ "' + d.name + '": clone ' + done + ' clip (giữ effect) · video: dùng lại ' + reusedV + ' track trống + ' + (newV - pv) + ' track mới'
       + ((mode === 'av' || mode === 'avt') ? ' · audio: ' + reusedA + ' trống + ' + (newA - pa) + ' mới' : '')
-      + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : ''), 'ok');
+      + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : '')
+      + (excludedCount ? ' · bỏ ' + excludedCount + ' item loại trừ' : ''), 'ok');
     return done;
   }
 
@@ -8619,7 +9366,8 @@ async function ppMoveToVOBin(item, proj) {
     w.addEventListener('mouseleave', hideTip);
   });
   loadHotkeys(); // populate labels + premiere-shortcut conflicts (defaults if unreachable)
+  unnestInitExclude();
   document.querySelectorAll('.settings-tab').forEach(function (t) {
-    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', loadHotkeys);
+    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
   });
 })();
