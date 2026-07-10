@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.3';  // Music builder: collapse thể loại/cảm xúc trầm-tối (mặc định ẩn, +Trầm/tối để bung, tự bung khi có chọn) + bỏ đếm ký tự ở SFX/Music. Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.4';  // Music builder gọn hơn: tỉa genre phổ biến ~20 (còn lại vào 'Thêm thể loại'), nhạc cụ chia nhóm con, preview đóng khung. Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8677,12 +8677,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       'Chill','Relaxed','Dreamy','Atmospheric','Calm','Peaceful','Mellow',
       'Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting','Epic',
     ] },
-    instruments: { max: 0, items: [
-      'Acoustic guitar','Classical guitar','Ukulele','Harp',
-      'Electric guitar','Distorted guitar','Synthesizer','Keytar',
-      'Grand piano','Rhodes piano','Violin','Cello','String quartet',
-      'Saxophone','Trumpet','Flute','Brass section',
-      'Heavy drums','Acoustic drums','808 bass','Sub-bass','Slap bass','Percussion',
+    // Nhạc cụ chia nhóm con để dễ quét mắt. `items` phẳng vẫn suy ra từ subs cho
+    // các chỗ khác dùng tới (vgmRender riêng nhánh subs; build tags đọc vgmSel).
+    instruments: { max: 0, subs: [
+      { label: 'Dây / gảy',   items: ['Acoustic guitar','Classical guitar','Ukulele','Harp','Electric guitar','Distorted guitar'] },
+      { label: 'Phím',        items: ['Synthesizer','Keytar','Grand piano','Rhodes piano'] },
+      { label: 'Dàn dây',     items: ['Violin','Cello','String quartet'] },
+      { label: 'Kèn hơi',     items: ['Saxophone','Trumpet','Flute','Brass section'] },
+      { label: 'Trống / bass', items: ['Heavy drums','Acoustic drums','808 bass','Sub-bass','Slap bass','Percussion'] },
     ] },
     tempo: { max: 1, items: [
       { label: 'Chậm',      tag: 'Slow tempo, 60-80 BPM' },
@@ -8727,13 +8729,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     genres: [['soft','heavy']],
   };
 
-  // Tag hướng deep/dark/sad/heavy — giấu trong phần collapse cho bảng gọn.
-  // Mặc định ẩn; bấm "+ Trầm / tối" mới hiện. Tự bung nếu có tag đang chọn ở đây.
+  // Tag giấu trong phần collapse cho bảng gọn. Mặc định ẩn; bấm nút mới hiện.
+  // Tự bung nếu có tag đang chọn ở đây. Genres: chừa ~20 phổ biến cho nhạc nền
+  // video, còn lại (niche + heavy/dark) cho vào "Thêm thể loại". Moods: gom trầm/tối.
   var VGM_EXT = {
-    genres: ['Heavy Metal','Hard Rock','Punk Rock','Grunge','90s grunge','Dubstep','Cyberpunk','Blues'],
+    genres: ['K-pop','J-pop','Bubblegum pop','Alternative Rock','Hard Rock','Classic Rock',
+             'Heavy Metal','Punk Rock','Grunge','Techno','Dubstep','Slap House',
+             'Neo-Soul','Contemporary R&B','Neo-classical','Symphonic','Bossa Nova',
+             'Blues','Folk','Cyberpunk','80s pop','90s grunge'],
     moods:  ['Melancholic','Sad','Somber','Heartbroken','Bittersweet',
              'Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting'],
   };
+  var VGM_MORE_LABEL = { genres: 'Thêm thể loại', moods: 'Trầm / tối' };
   var vgmExpanded = { genres: false, moods: false };
   function vgmIsExt(group, tag) {
     var e = VGM_EXT[group];
@@ -8775,41 +8782,66 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return parts.join(', ');
   }
 
-  function vgmRender() {
-    VGM_ORDER.forEach(function (g) {
-      var host = document.getElementById(VGM_DOM[g]);
-      if (!host) return;
-      host.textContent = '';
-      var max = VGM_TAX[g].max;
-      var hasExt = !!VGM_EXT[g];
-      // Tự bung nếu có lựa chọn nằm trong phần ẩn (vd load preset có tag tối/buồn).
-      var autoExp  = hasExt && vgmSel[g].some(function (t) { return vgmIsExt(g, t); });
-      var expanded = vgmExpanded[g] || autoExp;
-      var hiddenExt = 0;
-      VGM_TAX[g].items.forEach(function (item) {
-        var tag = vgmItemTag(g, item);
-        var on  = vgmSel[g].indexOf(tag) >= 0;
-        // Xung khắc với lựa chọn hiện tại → ẩn hẳn chip (tự hiện lại khi bỏ chọn).
-        if (!on && vgmConflicts(g, tag)) return;
-        // Tag tối/buồn khi chưa bung → giấu, đếm để hiện trên nút toggle.
-        if (!on && hasExt && vgmIsExt(g, tag) && !expanded) { hiddenExt++; return; }
-        var full = (max > 0 && vgmSel[g].length >= max && !on);
-        var chip = document.createElement('div');
-        chip.className = 'vgm-chip' + (on ? ' is-on' : '') + (full ? ' is-blocked' : '');
-        chip.setAttribute('role', 'button');
-        chip.textContent = vgmItemLabel(g, item);
-        chip.addEventListener('click', function () { vgmToggle(g, tag); });
-        host.appendChild(chip);
+  function vgmMakeChip(host, g, item, max) {
+    var tag = vgmItemTag(g, item);
+    var on  = vgmSel[g].indexOf(tag) >= 0;
+    var full = (max > 0 && vgmSel[g].length >= max && !on);
+    var chip = document.createElement('div');
+    chip.className = 'vgm-chip' + (on ? ' is-on' : '') + (full ? ' is-blocked' : '');
+    chip.setAttribute('role', 'button');
+    chip.textContent = vgmItemLabel(g, item);
+    chip.addEventListener('click', function () { vgmToggle(g, tag); });
+    host.appendChild(chip);
+  }
+
+  function vgmRenderGroup(g) {
+    var host = document.getElementById(VGM_DOM[g]);
+    if (!host) return;
+    host.textContent = '';
+    var max = VGM_TAX[g].max;
+
+    // Nhạc cụ: chia nhóm con, mỗi nhóm có sub-heading + một hàng chip riêng.
+    if (VGM_TAX[g].subs) {
+      VGM_TAX[g].subs.forEach(function (sub) {
+        var h = document.createElement('div');
+        h.className = 'vgm-subHead';
+        h.textContent = sub.label;
+        host.appendChild(h);
+        var wrap = document.createElement('div');
+        wrap.className = 'vgm-chips';
+        sub.items.forEach(function (it) { vgmMakeChip(wrap, g, it, max); });
+        host.appendChild(wrap);
       });
-      if (hasExt && (expanded || hiddenExt > 0)) {
-        var toggle = document.createElement('div');
-        toggle.className = 'vgm-chip vgm-more';
-        toggle.setAttribute('role', 'button');
-        toggle.textContent = expanded ? '− Thu gọn' : ('+ Trầm / tối (' + hiddenExt + ')');
-        toggle.addEventListener('click', function () { vgmExpanded[g] = !expanded; vgmRender(); });
-        host.appendChild(toggle);
-      }
+      return;
+    }
+
+    var hasExt = !!VGM_EXT[g];
+    // Tự bung nếu có lựa chọn nằm trong phần ẩn (vd load preset có tag ẩn).
+    var autoExp  = hasExt && vgmSel[g].some(function (t) { return vgmIsExt(g, t); });
+    var expanded = vgmExpanded[g] || autoExp;
+    var hiddenExt = 0;
+    VGM_TAX[g].items.forEach(function (item) {
+      var tag = vgmItemTag(g, item);
+      var on  = vgmSel[g].indexOf(tag) >= 0;
+      // Xung khắc với lựa chọn hiện tại → ẩn hẳn chip (tự hiện lại khi bỏ chọn).
+      if (!on && vgmConflicts(g, tag)) return;
+      // Tag trong phần collapse khi chưa bung → giấu, đếm để hiện trên nút toggle.
+      if (!on && hasExt && vgmIsExt(g, tag) && !expanded) { hiddenExt++; return; }
+      vgmMakeChip(host, g, item, max);
     });
+    if (hasExt && (expanded || hiddenExt > 0)) {
+      var toggle = document.createElement('div');
+      toggle.className = 'vgm-chip vgm-more';
+      toggle.setAttribute('role', 'button');
+      var lbl = VGM_MORE_LABEL[g] || 'Thêm';
+      toggle.textContent = expanded ? '− Thu gọn' : ('+ ' + lbl + ' (' + hiddenExt + ')');
+      toggle.addEventListener('click', function () { vgmExpanded[g] = !expanded; vgmRender(); });
+      host.appendChild(toggle);
+    }
+  }
+
+  function vgmRender() {
+    VGM_ORDER.forEach(vgmRenderGroup);
     var prev = document.getElementById('vgmPreview');
     if (prev) prev.textContent = vgmBuildTags();
   }

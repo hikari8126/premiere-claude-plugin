@@ -3925,14 +3925,33 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border-radius: 5px;
   color: var(--text); font-size: 11px; padding: 6px 8px;
 }
-.vgm-preview {
+.vgm-previewWrap {
   flex: 0 0 auto;
-  font-size: 10px; color: var(--text-dim);
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(255,255,255,0.08);
-  padding: 8px 2px 0;
-  margin-top: 4px;
-  word-break: break-word;
 }
+.vgm-previewLbl {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.vgm-preview {
+  font-size: 10px; color: var(--text);
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 9px;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.vgm-subHead {
+  flex: 0 0 auto;
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  margin: 2px 0 5px;
+}
+.vgm-instr .vgm-chips { margin-bottom: 9px; }
+.vgm-instr .vgm-chips:last-child { margin-bottom: 0; }
 .vgm-foot {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 6px;
