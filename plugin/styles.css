@@ -2337,16 +2337,32 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vg-organizeBtn.is-cancel:hover { background: rgba(239,68,68,0.28); color: #fff; }
 
 /* ── Generate bar ── */
-/* Pinned footer — UXP has no position:sticky, so this must be a sibling of the
-   scroll child (.vg-leftScroll) with flex:0 0 auto. Same pattern as .st-footer. */
+/* Pinned footer — UXP has no position:sticky, so these must be siblings of the
+   scroll child (.vg-leftScroll) with flex:0 0 auto. Same pattern as .st-footer.
+   Horizontal padding matches .vg-leftScroll (10px) so the button isn't flush
+   against the panel edge. */
+.vg-footRow {
+  flex: 0 0 auto;
+  padding: 8px 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg);
+}
+/* .vg-editorFoot sets display:flex, which beats the UA [hidden]{display:none}.
+   Without this the Organize row would stay visible in SFX/Music/Create. */
+.vg-footRow[hidden] { display: none; }
+
 .vg-genBar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 0 0;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 8px 10px 12px;
   background: var(--bg);
+}
+/* Border sits on whichever row is topmost in the footer. */
+.vg-footRow[hidden] + .vg-genBar {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 10px;
 }
 .vg-varToggle {
   display: flex;
