@@ -648,8 +648,9 @@
             </select>
             <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
           </div>
-          <!-- Music-only; same row as the variations toggle -->
-          <div class="vg-modeContent vg-ftGroup vg-ftPush" data-mode="music">
+          <!-- Music-only; same row as the variations toggle. hidden by default —
+               only switchMode('music') reveals it (default mode is tts). -->
+          <div class="vg-modeContent vg-ftGroup vg-ftPush" data-mode="music" hidden>
             <div id="vgMusicBuilderBtn" class="vg-organizeBtn" role="button"><span data-ic="gear" data-ic-size="13"></span> Chi tiết đoạn nhạc</div>
           </div>
         </div>

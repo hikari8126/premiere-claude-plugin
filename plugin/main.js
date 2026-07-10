@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.1';  // Music builder: ma trận xung khắc mood/genre (ẩn chip đối nghịch) + fix preset (window.prompt bị UXP chặn → input inline) + fix modal đâm xuyên. Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.2';  // fix: nút Chi tiết đoạn nhạc lòi ở mode Voice lúc load đầu (thiếu hidden mặc định trên .vg-modeContent music). Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
