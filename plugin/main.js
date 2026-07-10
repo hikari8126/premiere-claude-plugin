@@ -2606,8 +2606,9 @@ function sacCountBinMatches(items, targetName) {
 // ── Voice-over bin helpers ─────────────────────────────────────────────────
 // Find a bin whose name matches "voice over" / "voiceover" / "vo" near root.
 // Creates it at root if not found.
-async function ppGetOrCreateVOBin(proj) {
+async function ppGetOrCreateBin(proj, binName) {
   if (!proj) return null;
+  binName = binName || 'Voice Over';
   var root = null;
   try {
     root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
@@ -2615,37 +2616,45 @@ async function ppGetOrCreateVOBin(proj) {
   } catch(e) { return null; }
   if (!root) return null;
 
+  // So khớp tên bin. Bin "Voice Over" cũ có thể đang mang tên "VO" — vẫn nhận,
+  // nếu không mỗi project cũ sẽ mọc thêm một bin trùng vai.
+  function binMatches(name) {
+    var n = String(name || '').trim().toLowerCase();
+    var want = binName.trim().toLowerCase();
+    if (n === want) return true;
+    return (want === 'voice over' && /^(voice\s*over|vo)$/.test(n));
+  }
+
   // Search direct children of root (1 level)
   try {
     var children = await sacGetFolderChildren(root);
     for (var i = 0; i < children.length; i++) {
-      var n = await sacGetItemName(children[i]);
-      if (/^(voice\s*over|vo)$/i.test(n.trim())) return children[i];
+      if (binMatches(await sacGetItemName(children[i]))) return children[i];
     }
   } catch(e) {}
 
-  // Not found — create "voice over" bin at root via Action + transaction
+  // Not found — create the bin at root via Action + transaction
   try {
-    var createAction = root.createBinAction('voice over', false);
+    var createAction = root.createBinAction(binName, false);
     var r = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(createAction); }, 'Create VO bin');
+      proj.executeTransaction(function(ca) { ca.addAction(createAction); }, 'Create bin');
     });
     if (r && typeof r.then === 'function') await r;
     // Re-scan to find the newly created bin
     var children2 = await sacGetFolderChildren(root);
     for (var j = 0; j < children2.length; j++) {
-      var n2 = await sacGetItemName(children2[j]);
-      if (/^(voice\s*over|vo)$/i.test(n2.trim())) return children2[j];
+      if (binMatches(await sacGetItemName(children2[j]))) return children2[j];
     }
   } catch(e) { console.warn('[ppVO] createBin failed:', e.message); }
   return null;
 }
 
-// Move a ProjectItem to the "voice over" bin (find or create it).
-async function ppMoveToVOBin(item, proj) {
+// Move a ProjectItem into a bin by name (find or create it).
+async function ppMoveToBin(item, proj, binName) {
   if (!item || !proj) return;
+  binName = binName || (window.vgTargetBinName ? window.vgTargetBinName() : 'Voice Over');
   try {
-    var binRaw = await ppGetOrCreateVOBin(proj);
+    var binRaw = await ppGetOrCreateBin(proj, binName);
     if (!binRaw) return;
 
     // Must cast to FolderItem — createMoveItemAction only exists on FolderItem, not ProjectItem
@@ -2659,23 +2668,26 @@ async function ppMoveToVOBin(item, proj) {
 
     var action = bin.createMoveItemAction(item, bin);
     var rs = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to VO bin');
+      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to bin');
     });
     if (rs && typeof rs.then === 'function') await rs;
-    console.log('[ppVO] Moved to voice over bin');
-  } catch(e) { console.warn('[ppVO] ppMoveToVOBin failed:', e.message); }
+    console.log('[ppVO] Moved to bin "' + binName + '"');
+  } catch(e) { console.warn('[ppVO] ppMoveToBin failed:', e.message); }
 }
 
-// Single source of truth for the "Move to Voice Over bin" toggle. Every import
-// path must gate the VO-bin move through this so the checkbox is always honored.
+// Single source of truth for the "move to bin" toggle. Every import path must gate
+// the bin move through this so the checkbox is always honored.
 function ppShouldMoveToVOBin() {
   var cb = document.getElementById('vgMoveToVOBin');
   return !!(cb && cb.checked);
 }
-// Move only when the toggle is on.
-async function ppMoveToVOBinIfEnabled(item, proj) {
+// Move only when the toggle is on. Không truyền binName → lấy theo mode Voice Gen
+// đang chọn. Caller nào biết chắc loại media (vd Autocut luôn import voice) thì
+// phải truyền tên bin tường minh, nếu không voice sẽ rơi vào bin BGM khi user
+// đang mở tab Music.
+async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (!ppShouldMoveToVOBin()) return;
-  await ppMoveToVOBin(item, proj);
+  await ppMoveToBin(item, proj, binName || (window.vgTargetBinName ? window.vgTargetBinName() : 'Voice Over'));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5235,8 +5247,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     // Re-scan bin to find the newly imported item
     var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
     var found2 = binItems2.find(function(b) { return b.name === fname; });
-    // Move to "voice over" bin — only if the toggle is on (was unconditional).
-    if (found2) await ppMoveToVOBinIfEnabled(found2.item, proj);
+    // Autocut always imports a voice file → bin "Voice Over", không theo mode Voice Gen.
+    if (found2) await ppMoveToVOBinIfEnabled(found2.item, proj, 'Voice Over');
     return found2 ? found2.item : null;
   }
 
@@ -5738,6 +5750,13 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   if (customOutputFolder && els.outputFolder) els.outputFolder.value = customOutputFolder;
   var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
   var currentMode = 'tts'; // 'tts' | 'sfx' | 'music'
+
+  // Bin đích cho import, theo mode đang chọn. ppMoveToBin() là hàm global (main.js
+  // ~2645) nên không đọc được `currentMode` trong IIFE này — phải phơi ra qua window.
+  var VG_BIN_BY_MODE = { tts: 'Voice Over', sfx: 'SFX', music: 'BGM' };
+  window.vgTargetBinName = function () {
+    return VG_BIN_BY_MODE[currentMode] || 'Voice Over';
+  };
   var players = {}; // { var1: {audio, isPlaying}, var2: {...} }
 
   // ── Multi-speaker state ─────────────────────────────────────────────────
@@ -6810,7 +6829,7 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
             var fname2 = importedName || finalPath.split('/').pop();
             var binItems2 = await sacCollectBinItems(rootItem);
             var voItem2 = binItems2.find(function(b) { return b.name === fname2; });
-            if (voItem2) await ppMoveToVOBin(voItem2.item, project);
+            if (voItem2) await ppMoveToBin(voItem2.item, project, window.vgTargetBinName());
           }
         } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
       }
@@ -9608,53 +9627,4 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
   document.querySelectorAll('.settings-tab').forEach(function (t) {
     if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
   });
-})();
-
-// ── TEMP PROBE: footer layout (gỡ sau khi cân xong) ────────────────────────
-// UXP âm thầm bỏ qua nhiều thuộc tính CSS (gap, justify-content, kế thừa color).
-// Đọc giá trị THẬT mà UXP áp, thay vì đoán.
-(function vgFooterProbe() {
-  function dump() {
-    var out = {};
-    function grab(label, sel, props) {
-      var el = document.querySelector(sel);
-      if (!el) { out[label] = 'NOT FOUND'; return; }
-      var cs = getComputedStyle(el);
-      var o = {};
-      props.forEach(function (p) { o[p] = cs[p]; });
-      var r = el.getBoundingClientRect();
-      o._box = Math.round(r.left) + ',' + Math.round(r.top) + ' ' +
-               Math.round(r.width) + 'x' + Math.round(r.height);
-      out[label] = o;
-    }
-    // Chỉ selector MỘT cấp — UXP không khớp selector hai cấp (đã đo bằng probe này).
-    grab('footRow', '.vg-footRow', ['display', 'alignItems', 'padding']);
-    grab('select', '#vgOrganizeModel', ['marginLeft', 'flexGrow', 'flexBasis']);
-    grab('organizeBtn', '#vgOrganizeBtn', ['marginLeft', 'flexGrow']);
-    grab('genBar', '.vg-genBar', ['display', 'alignItems', 'padding']);
-    grab('varToggle', '.vg-varToggle', ['color', 'display', 'flexGrow']);
-    grab('varToggleSpan', '.vg-ftLabel', ['color', 'display']);
-    // Đối chứng: span khác đang hiển thị màu đúng (không nằm trong <label>).
-    grab('sfxCharCount', '#vgSfxCharCount', ['color', 'display']);
-    // Inline style có ăn không, khi CSS class không ăn?
-    (function () {
-      var el = document.querySelector('.vg-ftLabel');
-      if (!el) { out.inlineTest = 'no el'; return; }
-      el.style.color = '#ff0000';
-      out.inlineTest = { after: getComputedStyle(el).color };
-      el.style.color = '';
-    })();
-    grab('genButton', '#vgGenerate',
-      ['marginLeft', 'flexGrow', 'display', 'justifyContent']);
-
-    try {
-      fetch('http://localhost:3030/sac/log', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag: 'footer-probe', data: out }),
-      }).catch(function () {});
-    } catch (e) {}
-    console.log('[footer-probe]', out);
-  }
-  if (document.readyState === 'complete') setTimeout(dump, 800);
-  else window.addEventListener('load', function () { setTimeout(dump, 800); });
 })();

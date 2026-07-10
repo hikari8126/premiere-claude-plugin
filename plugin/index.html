@@ -627,12 +627,6 @@
           </div><!-- /vc-scroll -->
         </div><!-- /create modeContent -->
 
-        <!-- Move-to-VO toggle (Generate bar is pinned below, outside the scroll child) -->
-        <label class="vg-checkbox-row vg-moveVoRow">
-          <input type="checkbox" id="vgMoveToVOBin" checked>
-          <span class="vg-ftLabel">Move to "Voice Over" bin after import/autocut</span>
-        </label>
-
       </div><!-- /vg-leftScroll -->
 
         <!-- Pinned footer — sibling of the scroll child (UXP has no position:sticky).
@@ -759,6 +753,19 @@
             <div id="vgImportStatus" class="ac-manualStatus"></div>
           </div>
           <div id="vgMultiVars" style="display:none;"></div>
+        </div>
+
+        <!-- Global (outside every .vg-modeContent) — bin đích đổi theo mode.
+             UXP: <label> forces its colour onto the child <span>; only an inline
+             style overrides it. -->
+        <div class="vg-sg">
+          <label class="vg-checkbox-row vg-moveVoRow">
+            <input type="checkbox" id="vgMoveToVOBin" checked>
+            <span class="vg-ftLabel" style="color:#e8e8e8">Chuyển vào bin sau khi import</span>
+          </label>
+          <div class="setting-hint-inline">
+            Voice → bin "Voice Over" · SFX → bin "SFX" · Music → bin "BGM". Bin tự tạo nếu chưa có.
+          </div>
         </div>
 
         </div><!-- /vg-rightScroll -->
