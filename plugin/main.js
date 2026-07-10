@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.2';  // fix: nút Chi tiết đoạn nhạc lòi ở mode Voice lúc load đầu (thiếu hidden mặc định trên .vg-modeContent music). Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.3';  // Music builder: collapse thể loại/cảm xúc trầm-tối (mặc định ẩn, +Trầm/tối để bung, tự bung khi có chọn) + bỏ đếm ký tự ở SFX/Music. Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -8393,21 +8393,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   vgMakeCSlider('vgSfxInfluenceC', 'vgSfxInfluence');
   vgMakeCSlider('vgMusicLengthC',  'vgMusicLength');
 
-  // SFX char count + auto-resize
+  // SFX auto-resize (char count đã bỏ khỏi UI)
   var sfxText = $('vgSfxText');
   if (sfxText) {
     sfxText.addEventListener('input', function() {
-      $('vgSfxCharCount').textContent = safeLen(sfxText) + ' / 500';
       vgAutoResize(sfxText);
     });
     sfxText.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(sfxText); }, 0); });
   }
 
-  // Music char count + auto-resize
+  // Music auto-resize (char count đã bỏ khỏi UI)
   var musicPrompt = $('vgMusicPrompt');
   if (musicPrompt) {
     musicPrompt.addEventListener('input', function() {
-      $('vgMusicCharCount').textContent = safeLen(musicPrompt) + ' / 1000';
       vgAutoResize(musicPrompt);
     });
     musicPrompt.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(musicPrompt); }, 0); });
@@ -8728,6 +8726,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     moods:  [['bright','sad'], ['bright','dark'], ['calm','intense']],
     genres: [['soft','heavy']],
   };
+
+  // Tag hướng deep/dark/sad/heavy — giấu trong phần collapse cho bảng gọn.
+  // Mặc định ẩn; bấm "+ Trầm / tối" mới hiện. Tự bung nếu có tag đang chọn ở đây.
+  var VGM_EXT = {
+    genres: ['Heavy Metal','Hard Rock','Punk Rock','Grunge','90s grunge','Dubstep','Cyberpunk','Blues'],
+    moods:  ['Melancholic','Sad','Somber','Heartbroken','Bittersweet',
+             'Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting'],
+  };
+  var vgmExpanded = { genres: false, moods: false };
+  function vgmIsExt(group, tag) {
+    var e = VGM_EXT[group];
+    return !!(e && e.indexOf(tag) >= 0);
+  }
   function vgmFamily(group, tag) {
     var fams = VGM_FAMILIES[group];
     if (!fams) return null;
@@ -8770,11 +8781,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!host) return;
       host.textContent = '';
       var max = VGM_TAX[g].max;
+      var hasExt = !!VGM_EXT[g];
+      // Tự bung nếu có lựa chọn nằm trong phần ẩn (vd load preset có tag tối/buồn).
+      var autoExp  = hasExt && vgmSel[g].some(function (t) { return vgmIsExt(g, t); });
+      var expanded = vgmExpanded[g] || autoExp;
+      var hiddenExt = 0;
       VGM_TAX[g].items.forEach(function (item) {
         var tag = vgmItemTag(g, item);
         var on  = vgmSel[g].indexOf(tag) >= 0;
         // Xung khắc với lựa chọn hiện tại → ẩn hẳn chip (tự hiện lại khi bỏ chọn).
         if (!on && vgmConflicts(g, tag)) return;
+        // Tag tối/buồn khi chưa bung → giấu, đếm để hiện trên nút toggle.
+        if (!on && hasExt && vgmIsExt(g, tag) && !expanded) { hiddenExt++; return; }
         var full = (max > 0 && vgmSel[g].length >= max && !on);
         var chip = document.createElement('div');
         chip.className = 'vgm-chip' + (on ? ' is-on' : '') + (full ? ' is-blocked' : '');
@@ -8783,6 +8801,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         chip.addEventListener('click', function () { vgmToggle(g, tag); });
         host.appendChild(chip);
       });
+      if (hasExt && (expanded || hiddenExt > 0)) {
+        var toggle = document.createElement('div');
+        toggle.className = 'vgm-chip vgm-more';
+        toggle.setAttribute('role', 'button');
+        toggle.textContent = expanded ? '− Thu gọn' : ('+ Trầm / tối (' + hiddenExt + ')');
+        toggle.addEventListener('click', function () { vgmExpanded[g] = !expanded; vgmRender(); });
+        host.appendChild(toggle);
+      }
     });
     var prev = document.getElementById('vgmPreview');
     if (prev) prev.textContent = vgmBuildTags();
