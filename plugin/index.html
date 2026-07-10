@@ -398,7 +398,7 @@
 <!-- TAB: VOICE GEN (ElevenLabs)                            -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-voicegen">
-  <div class="vg-app">
+  <div class="vg-app" id="vgApp">
 
     <!-- Status bar -->
     <div class="vg-statusBar" id="vgStatusBar">
@@ -765,20 +765,11 @@
           </label>
           <div class="setting-hint-inline">Bin nhớ riêng theo từng project. Bin chưa có sẽ được tạo.</div>
 
+          <!-- Một dòng duy nhất — hiển thị bin của mode đang mở. -->
           <div class="vg-binRow">
-            <span class="vg-binMode">Voice</span>
-            <span class="vg-binName" id="vgBinNameTts">Voice Over</span>
-            <div class="vg-binPick" role="button" data-binmode="tts"><span data-ic="folder_open" data-ic-size="12"></span></div>
-          </div>
-          <div class="vg-binRow">
-            <span class="vg-binMode">SFX</span>
-            <span class="vg-binName" id="vgBinNameSfx">SFX</span>
-            <div class="vg-binPick" role="button" data-binmode="sfx"><span data-ic="folder_open" data-ic-size="12"></span></div>
-          </div>
-          <div class="vg-binRow">
-            <span class="vg-binMode">Music</span>
-            <span class="vg-binName" id="vgBinNameMusic">BGM</span>
-            <div class="vg-binPick" role="button" data-binmode="music"><span data-ic="folder_open" data-ic-size="12"></span></div>
+            <span class="vg-binMode" id="vgBinMode">Voice</span>
+            <span class="vg-binName" id="vgBinName">Voice Over</span>
+            <div class="vg-binPick" id="vgBinPick" role="button"><span data-ic="folder_open" data-ic-size="12"></span></div>
           </div>
         </div>
 
@@ -787,6 +778,26 @@
 
     </div><!-- /vg-body -->
   </div><!-- /vg-app -->
+
+  <!-- Bin picker. Sibling of .vg-app so hiding .vg-app while open keeps native
+       textareas from punching through (UXP has no z-index). Same trick as
+       sacBindModal. -->
+  <div id="vgBinModal" class="sac-bind-modal" hidden>
+    <div class="sac-bind-box">
+      <div class="sac-bind-head">
+        <span id="vgBinTitle" class="sac-bind-title">Chọn bin</span>
+        <div id="vgBinClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+      </div>
+      <input id="vgBinFilter" type="text" class="sac-bind-filter" placeholder="🔍 Lọc theo tên bin..." />
+      <div id="vgBinList" class="sac-bind-list"></div>
+      <div id="vgBinStatus" class="vgm-status" hidden></div>
+      <div class="vg-binFoot">
+        <input id="vgBinNew" type="text" class="sac-nsf2-input vg-binNewInput" placeholder="hoặc gõ tên bin mới..." />
+        <div id="vgBinRescan" class="sac-nsf2-iconBtn vg-binRescanBtn" role="button"><span data-ic="rotate_right" data-ic-size="14"></span></div>
+        <div id="vgBinSave" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn</div>
+      </div>
+    </div>
+  </div>
 
   <!-- Save-location modal: filename + remembered folder.
        UXP getFileForSaving can't open at a chosen folder, so we use this instead. -->
@@ -1256,24 +1267,6 @@
         <div id="stRevealBtn" class="st-btn st-btn-sec" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Mở trong Finder</div>
       </div>
       <div id="stMakeBtn" class="st-btn st-btn-primary" role="button"><span data-ic="closed_captioning" data-ic-size="14" data-ic-color="#ffffff"></span> Tạo SRT</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Bin picker (Voice Gen settings) ── -->
-<div id="vgBinModal" class="sac-bind-modal" hidden>
-  <div class="sac-bind-box">
-    <div class="sac-bind-head">
-      <span id="vgBinTitle" class="sac-bind-title">Chọn bin</span>
-      <div id="vgBinClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
-    </div>
-    <input id="vgBinFilter" type="text" class="sac-bind-filter" placeholder="🔍 Lọc theo tên bin..." />
-    <div id="vgBinList" class="sac-bind-list vg-binList"></div>
-    <div id="vgBinStatus" class="vgm-status" hidden></div>
-    <div class="vg-binFoot">
-      <input id="vgBinNew" type="text" class="sac-nsf2-input vg-binNewInput" placeholder="hoặc gõ tên bin mới..." />
-      <div id="vgBinRescan" class="sac-nsf2-iconBtn vg-binRescanBtn" role="button"><span data-ic="rotate_right" data-ic-size="14"></span></div>
-      <div id="vgBinSave" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn</div>
     </div>
   </div>
 </div>
