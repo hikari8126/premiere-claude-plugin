@@ -164,18 +164,6 @@
       </div>
 
       <div class="setting-row">
-        <label>Autocut — Chuẩn hoá &amp; gen voice khi Validate</label>
-        <select id="sacGenVoiceMode">
-          <option value="ask">Hỏi mỗi lần (popup)</option>
-          <option value="auto">Tự gen voice — không hỏi</option>
-          <option value="never">Chỉ validate — không gen voice</option>
-        </select>
-        <div class="setting-hint-inline">
-          Điều khiển popup "Chuẩn hoá &amp; gen voice?" khi bấm Validate ở tab Autocut. Lưu ngay khi đổi.
-        </div>
-      </div>
-
-      <div class="setting-row">
         <label>Màu giao diện (accent)</label>
         <div class="accent-row">
           <div id="accentSwatches" class="accent-swatches"></div>
@@ -361,6 +349,18 @@
       <div class="settings-tabPanel" data-stab="autocut" hidden>
         <div class="un-settingsHint">
           Tuỳ chọn cho AutoCut khi dựng timeline. Áp dụng cho lần chạy kế tiếp.
+        </div>
+
+        <div class="setting-row">
+          <label>Chuẩn hoá &amp; gen voice khi Validate</label>
+          <select id="sacGenVoiceMode">
+            <option value="ask">Hỏi mỗi lần (popup)</option>
+            <option value="auto">Tự gen voice — không hỏi</option>
+            <option value="never">Chỉ validate — không gen voice</option>
+          </select>
+          <div class="setting-hint-inline">
+            Điều khiển popup "Chuẩn hoá &amp; gen voice?" khi bấm Validate ở tab Autocut. Lưu ngay khi đổi.
+          </div>
         </div>
 
         <div class="setting-row">
