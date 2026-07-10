@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.6';  // SAC: diagnostic logging tới bridge (/sac/log) — dump track sau assembly. Bridge API 1.10.0. On top of v4.9.5 (Autocut Settings: vị trí clip Đầu/Cuối, bỏ audio source, nới đầu voice +0.2s; fix UXP textarea "tràn lên đỉnh")
+var PLUGIN_VERSION = 'v4.10.1';  // FIX: 'bỏ audio source' chưa từng chạy (createEmptySelection cần callback; mediaType = Constants.MediaType.AUDIO GUID) + strip track tái dùng track rỗng + chuyển setting gen-voice từ General sang tab Autocut. Bridge API 1.10.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -5088,9 +5088,30 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     return cnt; // all tracks busy → new track above
   }
 
-  // Remove every clip on one audio track (used to drop source audio: we place it on a
-  // dedicated empty track then delete it — the -1 "video only" overwrite arg does NOT
-  // reliably drop a linked A/V clip's audio in practice).
+  // Lowest EMPTY audio track at or above startIdx. Returns the track count (→ a brand
+  // new track) only when every track from startIdx up is occupied. Keeps the strip track
+  // from spawning a fresh track on every run.
+  async function sacLowestEmptyAudioTrackFrom(seq, startIdx) {
+    var cnt = 0;
+    try {
+      var c = seq.getAudioTrackCount();
+      if (c && typeof c.then === 'function') c = await c;
+      cnt = Number(c) || 0;
+    } catch (e) {}
+    for (var i = Math.max(0, startIdx); i < cnt; i++) {
+      try {
+        var tr = seq.getAudioTrack(i);
+        if (tr && typeof tr.then === 'function') tr = await tr;
+        var items = await getClipItems(tr);
+        if (!items || items.length === 0) return i;
+      } catch (e) {}
+    }
+    return cnt;
+  }
+
+  // Remove every clip on one audio track (used to drop source audio: we park it on an
+  // empty track then delete it). createOverwriteItemAction has no video-only mode — it
+  // places every stream the item carries, and no aIdx value drops the audio.
   async function sacRemoveAudioTrackClips(project, seqEditor, seq, trackIdx) {
     try {
       var tr = seq.getAudioTrack(trackIdx);
@@ -5098,16 +5119,32 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       if (!tr) return;
       var items = await getClipItems(tr);
       if (!items || !items.length) return;
-      var sel = (ppro.TrackItemSelection && typeof ppro.TrackItemSelection.createEmptySelection === 'function')
-        ? ppro.TrackItemSelection.createEmptySelection() : null;
-      if (!sel) { console.warn('[SAC] TrackItemSelection.createEmptySelection không có → không xoá được audio'); return; }
-      for (var i = 0; i < items.length; i++) { try { sel.addItem(items[i], false); } catch (e) {} }
-      var mt = (ppro.Backend && ppro.Backend.MEDIATYPE_AUDIO != null) ? ppro.Backend.MEDIATYPE_AUDIO : 1;
+
+      // createEmptySelection KHÔNG trả selection — nó nhận callback và trao selection
+      // vào đó (gọi 0 tham số ném "Not Enough Parameters"). Callback chạy đồng bộ.
+      var sel = null;
+      try { ppro.TrackItemSelection.createEmptySelection(function (s) { sel = s; }); } catch (e) {}
+      if (!sel || typeof sel.addItem !== 'function') {
+        console.warn('[SAC] không tạo được TrackItemSelection → bỏ qua xoá audio source');
+        return;
+      }
+
+      for (var i = 0; i < items.length; i++) {
+        try { sel.addItem(items[i], false); } catch (e) {}
+      }
+
+      // mediaType là Constants.MediaType (GUID string), KHÔNG phải số.
+      // ppro.Backend không tồn tại trong context này.
+      var mt = ppro.Constants && ppro.Constants.MediaType && ppro.Constants.MediaType.AUDIO;
+      if (!mt) { console.warn('[SAC] thiếu Constants.MediaType.AUDIO → bỏ qua xoá audio source'); return; }
+
       await sacCommitTx(project, function (ca) {
         ca.addAction(seqEditor.createRemoveItemsAction(sel, false, mt, false));
       }, 'SAC remove source audio');
       console.log('[SAC] đã xoá ' + items.length + ' clip audio source trên A' + (trackIdx + 1));
-    } catch (e) { console.warn('[SAC] xoá audio source lỗi:', e && e.message); }
+    } catch (e) {
+      console.warn('[SAC] xoá audio source lỗi:', e && e.message);
+    }
   }
 
   // Return the end position (seconds) of the last clip across ALL tracks.
@@ -5365,17 +5402,14 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
       var seqEditor = ppro.SequenceEditor.getEditor(seq); // sync, no await
       if (!seqEditor) throw new Error('Không lấy được SequenceEditor');
 
-      // Strip-source-audio: place source audio on a DEDICATED empty audio track above
-      // everything, then delete all of it after assembly (the -1 "video only" overwrite
-      // arg does not reliably drop linked-clip audio). aStripIdx = current audio count.
+      // Strip-source-audio: park source audio on an empty audio track above the voice
+      // track, then delete all of it after assembly. Reuse the lowest empty track rather
+      // than spawning a new one each run, otherwise tracks pile up run after run.
       var stripAudio = sacStripSrcAudio();
       var aStripIdx = -1;
       if (stripAudio) {
-        try {
-          var _ac2 = seq.getAudioTrackCount && seq.getAudioTrackCount();
-          if (_ac2 && typeof _ac2.then === 'function') _ac2 = await _ac2;
-          aStripIdx = Math.max(Number(_ac2) || 0, aBase + 2); // above voice/source-audio tracks
-        } catch (e) { aStripIdx = (aBase + 2); }
+        aStripIdx = await sacLowestEmptyAudioTrackFrom(seq, aBase + 1);
+        sacLog('strip-track', { aBase: aBase, aStripIdx: aStripIdx, track: 'A' + (aStripIdx + 1) });
         console.log('[SAC] strip audio → dồn source audio lên A' + (aStripIdx + 1) + ' rồi xoá');
       }
 
@@ -5434,7 +5468,8 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
         var srcTotal   = 0;
         status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
 
-        // Place each source clip on V1 (video only), source audio → A2
+        // Place each source clip on the video base track; its audio lands on the strip
+        // track (deleted after assembly) when "bỏ audio source" is on, else on aBase+1.
         for (var j = 0; j < (block.sources || []).length; j++) {
           var src = block.sources[j];
 
