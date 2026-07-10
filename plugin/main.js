@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.9.6';  // Hotkey: bắt buộc ≥1 modifier (⌘/⌥/⌃) — bỏ AX/Accessibility; chỉ đăng ký khi Premiere frontmost + định tuyến đa phiên bản + cảnh báo trùng. On top of v4.9.2
+var PLUGIN_VERSION = 'v4.9.4';  // VoiceGen: overhaul "Thư mục lưu" + ElevenLabs clone-slot manager (đếm/xoá clone) + un-nest exclude/overflow. Bridge/server không đổi (3.1/1.9.1). On top of v4.9.3
 
 // ── State ──────────────────────────────────────────────────────────────────
 
