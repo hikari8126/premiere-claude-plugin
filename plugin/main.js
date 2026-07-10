@@ -6551,7 +6551,10 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     var isCreate = (mode === 'create');
     var genBar = document.querySelector('.vg-genBar');
     var vgRight = document.querySelector('.vg-right');
+    var footRow = document.getElementById('vgFootRow');
     if (genBar)  genBar.style.display  = isCreate ? 'none' : '';
+    // Row 1 carries the variations toggle, which all three gen modes use.
+    if (footRow) footRow.style.display = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     if (els.resultSection) els.resultSection.hidden = true;
     var genLabels = {
@@ -9630,7 +9633,17 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     grab('organizeBtn', '#vgOrganizeBtn', ['marginLeft', 'flexGrow']);
     grab('genBar', '.vg-genBar', ['display', 'alignItems', 'padding']);
     grab('varToggle', '.vg-varToggle', ['color', 'display', 'flexGrow']);
-    grab('varToggleSpan', '.vg-ftLabel', ['color']);
+    grab('varToggleSpan', '.vg-ftLabel', ['color', 'display']);
+    // Đối chứng: span khác đang hiển thị màu đúng (không nằm trong <label>).
+    grab('sfxCharCount', '#vgSfxCharCount', ['color', 'display']);
+    // Inline style có ăn không, khi CSS class không ăn?
+    (function () {
+      var el = document.querySelector('.vg-ftLabel');
+      if (!el) { out.inlineTest = 'no el'; return; }
+      el.style.color = '#ff0000';
+      out.inlineTest = { after: getComputedStyle(el).color };
+      el.style.color = '';
+    })();
     grab('genButton', '#vgGenerate',
       ['marginLeft', 'flexGrow', 'display', 'justifyContent']);
 
