@@ -3622,6 +3622,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .st-slideRow { display: flex; align-items: center; margin-bottom: 14px; }
 .st-slideRow:last-child { margin-bottom: 0; }
 .st-slideLbl { flex: 0 0 44px; font-size: 11px; color: rgba(255,255,255,0.65); margin-right: 10px; }
+/* VoiceGen SFX/Music rows: nhãn dài ("Thời lượng") — rộng hơn + không xuống dòng
+   để hai hàng slider thẳng cột. Không đụng module Tạo Sub (nhãn ngắn). */
+.vg-modeContent .st-slideLbl { flex-basis: 68px; white-space: nowrap; }
 /* Custom slider (UXP native <input type=range> doesn't drag) */
 .st-cslider { flex: 1 1 auto; min-width: 0; position: relative; height: 22px; cursor: pointer; }
 .st-cline  { position: absolute; top: 9px; left: 0; right: 0; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.15); }
