@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v4.11.6';  // tách thanh Thời lượng ra khỏi ô prompt (SFX/Music) cho cân khoảng cách. Bridge API 1.11.0
+var PLUGIN_VERSION = 'v4.11.7';  // fix thật sự khoảng cách prompt→slider SFX/Music (rule cũ dùng :first-of-type sai, không áp). Bridge API 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
