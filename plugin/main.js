@@ -9606,3 +9606,42 @@ async function ppMoveToVOBinIfEnabled(item, proj) {
     if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
   });
 })();
+
+// ── TEMP PROBE: footer layout (gỡ sau khi cân xong) ────────────────────────
+// UXP âm thầm bỏ qua nhiều thuộc tính CSS (gap, justify-content, kế thừa color).
+// Đọc giá trị THẬT mà UXP áp, thay vì đoán.
+(function vgFooterProbe() {
+  function dump() {
+    var out = {};
+    function grab(label, sel, props) {
+      var el = document.querySelector(sel);
+      if (!el) { out[label] = 'NOT FOUND'; return; }
+      var cs = getComputedStyle(el);
+      var o = {};
+      props.forEach(function (p) { o[p] = cs[p]; });
+      var r = el.getBoundingClientRect();
+      o._box = Math.round(r.left) + ',' + Math.round(r.top) + ' ' +
+               Math.round(r.width) + 'x' + Math.round(r.height);
+      out[label] = o;
+    }
+    // Chỉ selector MỘT cấp — UXP không khớp selector hai cấp (đã đo bằng probe này).
+    grab('footRow', '.vg-footRow', ['display', 'alignItems', 'padding']);
+    grab('select', '#vgOrganizeModel', ['marginLeft', 'flexGrow', 'flexBasis']);
+    grab('organizeBtn', '#vgOrganizeBtn', ['marginLeft', 'flexGrow']);
+    grab('genBar', '.vg-genBar', ['display', 'alignItems', 'padding']);
+    grab('varToggle', '.vg-varToggle', ['color', 'display', 'flexGrow']);
+    grab('varToggleSpan', '.vg-ftLabel', ['color']);
+    grab('genButton', '#vgGenerate',
+      ['marginLeft', 'flexGrow', 'display', 'justifyContent']);
+
+    try {
+      fetch('http://localhost:3030/sac/log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: 'footer-probe', data: out }),
+      }).catch(function () {});
+    } catch (e) {}
+    console.log('[footer-probe]', out);
+  }
+  if (document.readyState === 'complete') setTimeout(dump, 800);
+  else window.addEventListener('load', function () { setTimeout(dump, 800); });
+})();

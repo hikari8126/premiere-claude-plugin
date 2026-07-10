@@ -630,7 +630,7 @@
         <!-- Move-to-VO toggle (Generate bar is pinned below, outside the scroll child) -->
         <label class="vg-checkbox-row vg-moveVoRow">
           <input type="checkbox" id="vgMoveToVOBin" checked>
-          <span>Move to "Voice Over" bin after import/autocut</span>
+          <span class="vg-ftLabel">Move to "Voice Over" bin after import/autocut</span>
         </label>
 
       </div><!-- /vg-leftScroll -->
@@ -639,7 +639,7 @@
              The char-count/Organize row carries .vg-modeContent so the existing mode
              switcher (main.js:6548) hides it outside Voice without extra logic. -->
         <div class="vg-modeContent vg-footRow" data-mode="tts">
-          <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
+          <select id="vgOrganizeModel" class="vg-organizeModel vg-ftPush" title="Model dùng cho Organize">
             <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
             <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
           </select>
@@ -647,10 +647,10 @@
         </div>
         <div class="vg-genBar">
           <label class="vg-varToggle">
-            <input type="checkbox" id="vg2Variations" />
-            <span>2 variations</span>
+            <input type="checkbox" id="vg2Variations" class="vg-ftChk" />
+            <span class="vg-ftLabel">2 variations</span>
           </label>
-          <div id="vgGenerate" class="vg-genButton" role="button"><span data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
+          <div id="vgGenerate" class="vg-genButton vg-genButtonBar" role="button"><span class="vg-ftIcon" data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
         </div>
       </div><!-- /vg-left -->
 

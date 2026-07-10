@@ -2341,24 +2341,6 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    scroll child (.vg-leftScroll) with flex:0 0 auto. Same pattern as .st-footer.
    Horizontal padding matches .vg-leftScroll (10px) so the button isn't flush
    against the panel edge. */
-.vg-footRow {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  padding: 9px 10px 0;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  background: var(--bg);
-}
-/* display:flex above beats the UA [hidden]{display:none}, so hide explicitly —
-   otherwise the Organize row stays visible in SFX/Music/Create. */
-.vg-footRow[hidden] { display: none; }
-/* UXP ignores justify-content:flex-end here (same class of gap/justify no-ops).
-   An auto left margin on the first child pushes the whole group right instead. */
-.vg-footRow > :first-child { margin-left: auto; }
-/* Don't let the select stretch — it must keep its natural width so the auto
-   margin above has free space to consume. */
-.vg-footRow .vg-organizeModel { flex: 0 0 auto; }
-
 .vg-genBar {
   flex: 0 0 auto;
   display: flex;
@@ -2381,10 +2363,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   white-space: nowrap;
   cursor: pointer;
 }
-.vg-varToggle input { margin-right: 5px; }
-/* UXP does not inherit `color` from a <label> down into its child <span>, so the
-   text stays dim unless the span is targeted directly. */
-.vg-varToggle span { color: var(--text); }
+.vg-ftChk { margin-right: 5px; }
 .vg-genButton {
   flex: 1 1 auto;
   min-width: 0;              /* let it shrink instead of overrunning the toggle */
@@ -2401,10 +2380,10 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   border-radius: 7px;
   cursor: pointer;
 }
-.vg-genButton [data-ic] { margin-right: 7px; }
 /* Only the footer instance sits next to the toggle; the full-width Create Voice
-   buttons reuse .vg-genButton and must not pick up this offset. */
-.vg-genBar .vg-genButton { margin-left: 10px; }
+   buttons reuse .vg-genButton and must not pick up this offset. Descendant
+   selectors are unreliable in UXP, so this is its own single class. */
+.vg-genButtonBar { margin-left: 10px; }
 .vg-genButton:hover { background: var(--accent-dark); }
 .vg-genButton:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -2475,6 +2454,31 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 /* Mode content (both left editor and right settings panels) */
 .vg-modeContent { display: block; flex-shrink: 0; }
 .vg-modeContent[hidden] { display: none; }
+
+/* ── Pinned footer rows ────────────────────────────────────────────────────
+   Hard-won UXP rules, verified with getComputedStyle:
+   1. Only SINGLE-class selectors apply. `.a .b` and `.a > :first-child` never
+      match — hence every element below owns a dedicated class.
+   2. `gap` and `justify-content` are no-ops → use margins (incl. margin:auto).
+   3. `color` does not inherit from <label> into a child <span>.
+   4. This block MUST stay after `.vg-modeContent`, which also sets `display`
+      at equal specificity and would otherwise win by source order. */
+.vg-footRow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 9px 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg);
+}
+.vg-footRow[hidden] { display: none; }
+
+/* Auto left margin pushes the model+Organize group to the right edge. */
+.vg-ftPush { margin-left: auto; flex: 0 0 auto; }
+/* Label text inside a <label> needs the colour set on the span itself. */
+.vg-ftLabel { color: var(--text); }
+/* Icon inside the Generate button — pluginRenderIcons keeps existing classes. */
+.vg-ftIcon { margin-right: 7px; }
 
 /* ── Right: settings panel ── */
 .vg-right {
@@ -2753,8 +2757,6 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   font-size: 10px; color: var(--text); cursor: pointer;
 }
 .vg-checkbox-row input { cursor: pointer; width: 12px; height: 12px; }
-/* Same UXP quirk as .vg-varToggle — <label> colour does not reach the child span. */
-.vg-checkbox-row span { color: var(--text); }
 .vg-folderInput {
   flex: 1 1 auto; height: 24px; min-width: 0;
   background: rgba(0,0,0,0.3);
