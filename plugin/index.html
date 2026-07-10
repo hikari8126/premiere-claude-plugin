@@ -477,6 +477,7 @@
             </div>
             <div class="vg-editorFoot">
               <span class="vg-charCount" id="vgMusicCharCount">0 / 1000</span>
+              <div id="vgMusicBuilderBtn" class="vg-organizeBtn" role="button"><span data-ic="gear" data-ic-size="13"></span> Chi tiết đoạn nhạc</div>
             </div>
           </div>
           <div class="st-slideRow">
@@ -1270,6 +1271,61 @@
     </div>
   </div>
 </div>
+
+  <!-- ── Music prompt builder ── -->
+  <div id="vgMusicModal" class="sac-bind-modal" hidden>
+    <div class="sac-bind-box">
+      <div class="sac-bind-head">
+        <span class="sac-bind-title">Chi tiết đoạn nhạc</span>
+        <div id="vgMusicClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+      </div>
+
+      <div class="vgm-scroll">
+        <div class="vgm-group" data-group="genres">
+          <div class="vgm-groupHead">Thể loại <span class="vgm-limit">chọn tối đa 2</span></div>
+          <div class="vgm-chips" id="vgmGenres"></div>
+        </div>
+        <div class="vgm-group" data-group="moods">
+          <div class="vgm-groupHead">Cảm xúc <span class="vgm-limit">chọn tối đa 2</span></div>
+          <div class="vgm-chips" id="vgmMoods"></div>
+        </div>
+        <div class="vgm-group" data-group="instruments">
+          <div class="vgm-groupHead">Nhạc cụ <span class="vgm-limit">chọn thoải mái</span></div>
+          <div class="vgm-chips" id="vgmInstruments"></div>
+        </div>
+        <div class="vgm-group" data-group="tempo">
+          <div class="vgm-groupHead">Nhịp độ <span class="vgm-limit">chọn 1</span></div>
+          <div class="vgm-chips" id="vgmTempo"></div>
+        </div>
+        <div class="vgm-group" data-group="vibe">
+          <div class="vgm-groupHead">Không gian âm thanh <span class="vgm-limit">chọn 1</span></div>
+          <div class="vgm-chips" id="vgmVibe"></div>
+        </div>
+        <div class="vgm-group">
+          <label class="vg-checkbox-row">
+            <input type="checkbox" id="vgmVocals">
+            <span>Có giọng hát (mặc định tắt = nhạc không lời)</span>
+          </label>
+        </div>
+        <div class="vgm-group">
+          <div class="vgm-groupHead">Mô tả thêm <span class="vgm-limit">tuỳ chọn</span></div>
+          <textarea id="vgmFreeText" class="vgm-free" spellcheck="false"
+            placeholder="vd: nhạc nền cho cảnh mở hộp sản phẩm, xây dựng cao trào ở giây thứ 8"></textarea>
+        </div>
+      </div>
+
+      <div class="vgm-preview" id="vgmPreview"></div>
+      <div class="vgm-status" id="vgmStatus" hidden></div>
+
+      <div class="vgm-foot">
+        <select id="vgmPresetSel" class="sac-nsf2-select"><option value="">— Preset —</option></select>
+        <div id="vgmPresetSave" class="sac-nsf2-iconBtn" role="button"><span data-ic="floppy_disk" data-ic-size="14"></span></div>
+        <div id="vgmPresetDel" class="sac-nsf2-iconBtn" role="button"><span data-ic="trash" data-ic-size="14"></span></div>
+        <div id="vgmReset" class="btn-secondary" role="button">Xoá chọn</div>
+        <div id="vgmBuild" class="btn-primary" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13" data-ic-color="#ffffff"></span> Tạo prompt</div>
+      </div>
+    </div>
+  </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- Single non-module script -->
