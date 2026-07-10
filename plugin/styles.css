@@ -2337,19 +2337,23 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vg-organizeBtn.is-cancel:hover { background: rgba(239,68,68,0.28); color: #fff; }
 
 /* ── Generate bar ── */
+/* Pinned footer — UXP has no position:sticky, so this must be a sibling of the
+   scroll child (.vg-leftScroll) with flex:0 0 auto. Same pattern as .st-footer. */
 .vg-genBar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
-  flex-shrink: 0;  /* never shrink — always visible above results */
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg);
 }
 .vg-varToggle {
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2710,7 +2714,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vg-folderRow { display: flex; gap: 4px; align-items: center; }
 .vg-checkbox-row {
   display: flex; align-items: center; gap: 6px;
-  font-size: 10px; color: rgba(255,255,255,0.5); cursor: pointer;
+  font-size: 10px; color: var(--text); cursor: pointer;
 }
 .vg-checkbox-row input { cursor: pointer; width: 12px; height: 12px; }
 .vg-folderInput {

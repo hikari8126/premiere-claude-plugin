@@ -635,11 +635,15 @@
           </div><!-- /vc-scroll -->
         </div><!-- /create modeContent -->
 
-        <!-- Move-to-VO toggle + Generate bar (results now live in the right column) -->
+        <!-- Move-to-VO toggle (Generate bar is pinned below, outside the scroll child) -->
         <label class="vg-checkbox-row vg-moveVoRow">
           <input type="checkbox" id="vgMoveToVOBin" checked>
           <span>Move to "Voice Over" bin after import/autocut</span>
         </label>
+
+      </div><!-- /vg-leftScroll -->
+
+        <!-- Pinned footer — sibling of the scroll child (UXP has no position:sticky) -->
         <div class="vg-genBar">
           <label class="vg-varToggle">
             <input type="checkbox" id="vg2Variations" />
@@ -647,8 +651,6 @@
           </label>
           <div id="vgGenerate" class="vg-genButton" role="button"><span data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
         </div>
-
-      </div><!-- /vg-leftScroll -->
       </div><!-- /vg-left -->
 
       <!-- ── RIGHT: Settings panel ── -->
