@@ -3,7 +3,7 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v4.9.7 — 2026-07-10
+## v4.9.4 — 2026-07-10
 
 ### ✅ Thêm mới / Cải tiến
 - **Lưu file VO thông minh** — Dialog "Lưu audio" (Voice Gen) giờ tự gợi ý tên theo dạng `v{version} - {tên voice}` (vd `v14.3 - Rachel`): version nhớ chính xác từ lần lưu trước, tên voice tự điền từ voice đang chọn.
