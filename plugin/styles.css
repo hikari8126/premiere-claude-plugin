@@ -3835,6 +3835,12 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   background: rgba(239,68,68,0.08);
 }
 .un-excludeClear:hover { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.5); }
+.un-excludeSeqInfo {
+  font-size: 10px; color: var(--text-dim);
+  padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  line-height: 1.35; word-break: break-word;
+}
+.un-excludeSeqInfo b { color: var(--text); font-weight: 600; }
 /* Isolate the search input from the results list — same shape as the working Voice
    dropdown (fixed-header input + one scrolling list). Before, input + list shared
    .vg-namePanel's overflow-y:auto box; each keystroke's display-toggle reflowed that box

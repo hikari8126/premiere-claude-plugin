@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.1.0';  // Unnest: danh sách loại trừ chỉ quét source trong SEQUENCE đang chọn (không quét cả project) + chip lọc theo loại (Tất cả/Sequence/Video/Image/Audio) như Bind + nút "Bỏ toàn bộ loại trừ". Bridge app 3.2 · Server 1.11.0
+var PLUGIN_VERSION = 'v5.1.1';  // Unnest: danh sách loại trừ quét source BÊN TRONG nested sequence đang CHỌN trên timeline (không phải sequence đang mở) → tự đổi theo clip chọn; hiện tên nested đang quét; danh sách tự cập nhật khi chọn nested clip khác (poll selection 700ms lúc mở panel, không cần bấm Làm mới); rút gọn hint. (v5.1.0: chip lọc loại như Bind + nút "Bỏ toàn bộ loại trừ".) Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -9329,7 +9329,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   // ── Exclude-from-un-nest list (per-project, by project-item id) ──────────────
   var UNNEST_EXCLUDE_LS = 'unnest_exclude_v1'; // { projKey: [ {id, name}, … ] }
-  var unnestItemCache = null; // cached [{id, name}] of project media+sequences (session)
+  var unnestItemCache = null; // cached [{id, name, mediaType}] of the ACTIVE sequence's sources
+  var unnestCurSeqName = '';  // name of the sequence the cache was built from
+  function unnestRenderSeqInfo() {
+    var el = document.getElementById('unExcludeSeqInfo'); if (!el) return;
+    el.innerHTML = '';
+    if (!unnestCurSeqName) {
+      el.appendChild(document.createTextNode('⚠ Chưa chọn nested sequence trên timeline'));
+      return;
+    }
+    el.appendChild(document.createTextNode('Nguồn trong: '));
+    var nm = document.createElement('b'); nm.textContent = unnestCurSeqName;
+    el.appendChild(nm);
+  }
   async function unnestProjKey() {
     try {
       var p = await getActiveProject(); var nm = p && p.name;
@@ -9354,31 +9366,39 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return set;
   }
   // Build (and cache) the list of project media items + sequences (id + name).
-  // Collect the DISTINCT project-item sources used by clips in the active sequence
-  // (not the whole project). Dedupe by projectItem id — one source can appear on many
-  // clips/tracks. mediaType lets the picker filter by category like the Bind panel.
+  // Collect every track of a sequence (video + audio) via trackGroup (sync) with an
+  // async getVideoTrack/getAudioTrack fallback — mirrors ppGetTimelineInfo's two paths.
+  async function unnestSeqTracks(seq) {
+    var tracks = [];
+    if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_VIDEO !== undefined) {
+      try {
+        [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO].forEach(function (mt) {
+          var g = seq.trackGroup(mt);
+          if (g && typeof g.numTracks === 'number') for (var t = 0; t < g.numTracks; t++) tracks.push(g.getTrack(t));
+        });
+      } catch (e) {}
+    }
+    if (!tracks.length) {
+      var vc = await un(seq.getVideoTrackCount()), ac = await un(seq.getAudioTrackCount());
+      for (var vi = 0; vi < vc; vi++) tracks.push(await un(seq.getVideoTrack(vi)));
+      for (var ai = 0; ai < ac; ai++) tracks.push(await un(seq.getAudioTrack(ai)));
+    }
+    return tracks;
+  }
+
+  // Collect the DISTINCT sources INSIDE the nested sequence(s) currently selected on the
+  // timeline (from detect()'s `detected` list — NOT the sequence being viewed). Dedupe by
+  // projectItem id. mediaType lets the picker filter by category like the Bind panel.
   async function unnestBuildItemList(force) {
     if (unnestItemCache && !force) return unnestItemCache;
     var out = [], seen = {};
+    var names = [];
     try {
-      var seq = await getActiveSequence();
-      if (seq) {
-        var tracks = [];
-        // Path A: trackGroup (sync) — mirrors ppGetTimelineInfo's preferred path.
-        if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_VIDEO !== undefined) {
-          try {
-            [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO].forEach(function (mt) {
-              var g = seq.trackGroup(mt);
-              if (g && typeof g.numTracks === 'number') for (var t = 0; t < g.numTracks; t++) tracks.push(g.getTrack(t));
-            });
-          } catch (e) {}
-        }
-        // Path B: async getVideoTrack/getAudioTrack fallback.
-        if (!tracks.length) {
-          var vc = await un(seq.getVideoTrackCount()), ac = await un(seq.getAudioTrackCount());
-          for (var vi = 0; vi < vc; vi++) tracks.push(await un(seq.getVideoTrack(vi)));
-          for (var ai = 0; ai < ac; ai++) tracks.push(await un(seq.getAudioTrack(ai)));
-        }
+      for (var d = 0; d < detected.length; d++) {
+        var nseq = detected[d].nestedSeq;
+        if (detected[d].name) names.push(detected[d].name);
+        if (!nseq) continue;
+        var tracks = await unnestSeqTracks(nseq);
         for (var k = 0; k < tracks.length; k++) {
           var items = await getClipItems(tracks[k]);
           for (var c = 0; c < items.length; c++) {
@@ -9398,6 +9418,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         }
       }
     } catch (e) {}
+    unnestCurSeqName = names.join(', ');
     out.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
     unnestItemCache = out; return out;
   }
@@ -9516,11 +9537,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Build rows once (or after the item cache changed), then filter by display toggle.
   function unnestRenderSearch(projKey, query) {
     if (unnestSearchBuiltFor !== unnestItemCache) unnestBuildSearchRows();
+    unnestRenderSeqInfo();
     unnestRenderTypeChips();
     unnestFilterSearchRows(projKey, query);
   }
   var unnestExcludeWired = false;
   var unnestCurProjKey = '';
+  var unnestSelPoll = null;      // interval id: selection poll while Add panel open
+  var unnestLastSelSig = '';     // last seen selected-nested signature
   async function unnestInitExclude() {
     var projKey = await unnestProjKey();
     if (projKey !== unnestCurProjKey) unnestItemCache = null; // project changed → rebuild item list
@@ -9535,14 +9559,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     unnestRenderCount(projKey); unnestRenderList(projKey);
     if (unnestExcludeWired) return; // wire click handlers once
     unnestExcludeWired = true;
-    function closeP() { if (addPanel) addPanel.hidden = true; if (listPanel) listPanel.hidden = true; }
+    // While the Add panel is open, poll the timeline selection so the item list
+    // refreshes the instant a different nested clip is selected — no Refresh needed.
+    // (pollTimeline's fingerprint only tracks the active sequence, not clip selection.)
+    function unnestSelSig() { return detected.length + '#' + detected.map(function (d) { return d.name; }).join('|'); }
+    async function unnestScanSelection() {
+      if (typeof detect === 'function') { try { await detect({ silent: true }); } catch (e) {} }
+      unnestLastSelSig = unnestSelSig();
+      await unnestBuildItemList(true);
+      unnestRenderSearch(unnestCurProjKey, search ? search.value : '');
+    }
+    async function unnestSelTick() {
+      try {
+        if (typeof detect === 'function') { try { await detect({ silent: true }); } catch (e) {} }
+        var sig = unnestSelSig();
+        if (sig !== unnestLastSelSig) {
+          unnestLastSelSig = sig;
+          await unnestBuildItemList(true);
+          unnestRenderSearch(unnestCurProjKey, search ? search.value : '');
+        }
+      } catch (e) {}
+    }
+    function stopSelPoll() { if (unnestSelPoll) { clearInterval(unnestSelPoll); unnestSelPoll = null; } }
+    function closeP() {
+      if (addPanel) addPanel.hidden = true; if (listPanel) listPanel.hidden = true;
+      stopSelPoll();
+    }
     addBtn.onclick = async function () {
       var show = addPanel && addPanel.hidden; closeP();
       if (show) {
-        // Rebuild every open: the list is scoped to the ACTIVE sequence, which may
-        // have changed since last time (cheap — one sequence's clips only).
-        await unnestBuildItemList(true);
-        unnestRenderSearch(unnestCurProjKey, search ? search.value : ''); addPanel.hidden = false;
+        await unnestScanSelection(); addPanel.hidden = false;
+        stopSelPoll(); unnestSelPoll = setInterval(unnestSelTick, 700);
         try { search.focus(); } catch (e) {}
         if (window.claimKeyboard) window.claimKeyboard();
       } else if (window.releaseKeyboard) window.releaseKeyboard();
@@ -9566,6 +9613,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       search.addEventListener('input', function () { if (!composing) unnestFilterSearchRows(unnestCurProjKey, search.value); });
     }
     if (refresh) refresh.onclick = async function () {
+      if (typeof detect === 'function') { try { await detect({ silent: true }); } catch (e) {} }
       await unnestBuildItemList(true);
       // prune saved ids no longer in the project; refresh saved names to current.
       var live = {}; unnestItemCache.forEach(function (it) { live[String(it.id)] = it.name; });
