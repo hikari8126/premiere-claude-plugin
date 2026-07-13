@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.0.1';  // fix màu chữ 2 setting Autocut (UXP không truyền color qua label → inline style) + căn giữa checkbox với text. Bridge app 3.2 · Server 1.11.0
+var PLUGIN_VERSION = 'v5.1.0';  // Unnest: danh sách loại trừ chỉ quét source trong SEQUENCE đang chọn (không quét cả project) + chip lọc theo loại (Tất cả/Sequence/Video/Image/Audio) như Bind + nút "Bỏ toàn bộ loại trừ". Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -9354,20 +9354,47 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return set;
   }
   // Build (and cache) the list of project media items + sequences (id + name).
+  // Collect the DISTINCT project-item sources used by clips in the active sequence
+  // (not the whole project). Dedupe by projectItem id — one source can appear on many
+  // clips/tracks. mediaType lets the picker filter by category like the Bind panel.
   async function unnestBuildItemList(force) {
     if (unnestItemCache && !force) return unnestItemCache;
-    var out = [];
+    var out = [], seen = {};
     try {
-      var proj = await getActiveProject();
-      var root = proj && (proj.getRootItem ? await un(proj.getRootItem()) : proj.rootItem);
-      if (root && typeof sacCollectBinItems === 'function') {
-        var items = await sacCollectBinItems(root);
-        for (var i = 0; i < items.length; i++) {
-          if (items[i].isFolder) continue; // skip bins/folders
-          var id = null;
-          try { id = await un(items[i].item.getId()); } catch (e) {}
-          if (id == null) continue;
-          out.push({ id: String(id), name: items[i].name || '(không tên)' });
+      var seq = await getActiveSequence();
+      if (seq) {
+        var tracks = [];
+        // Path A: trackGroup (sync) — mirrors ppGetTimelineInfo's preferred path.
+        if (typeof seq.trackGroup === 'function' && ppro.Backend && ppro.Backend.MEDIATYPE_VIDEO !== undefined) {
+          try {
+            [ppro.Backend.MEDIATYPE_VIDEO, ppro.Backend.MEDIATYPE_AUDIO].forEach(function (mt) {
+              var g = seq.trackGroup(mt);
+              if (g && typeof g.numTracks === 'number') for (var t = 0; t < g.numTracks; t++) tracks.push(g.getTrack(t));
+            });
+          } catch (e) {}
+        }
+        // Path B: async getVideoTrack/getAudioTrack fallback.
+        if (!tracks.length) {
+          var vc = await un(seq.getVideoTrackCount()), ac = await un(seq.getAudioTrackCount());
+          for (var vi = 0; vi < vc; vi++) tracks.push(await un(seq.getVideoTrack(vi)));
+          for (var ai = 0; ai < ac; ai++) tracks.push(await un(seq.getAudioTrack(ai)));
+        }
+        for (var k = 0; k < tracks.length; k++) {
+          var items = await getClipItems(tracks[k]);
+          for (var c = 0; c < items.length; c++) {
+            var projItem = await un(items[c].getProjectItem ? items[c].getProjectItem() : null);
+            if (!projItem) continue;
+            var id = null;
+            try { id = await un(projItem.getId()); } catch (e) {}
+            if (id == null || seen[String(id)]) continue;
+            seen[String(id)] = 1;
+            var name = '';
+            try { name = await un(projItem.name != null ? projItem.name : (projItem.getName ? projItem.getName() : '')); } catch (e) {}
+            if (!name) { try { name = await un(items[c].getName ? items[c].getName() : items[c].name); } catch (e) {} }
+            var mediaType = 'other';
+            try { mediaType = await sacItemMediaType(projItem, name); } catch (e) {}
+            out.push({ id: String(id), name: name || '(không tên)', mediaType: mediaType });
+          }
         }
       }
     } catch (e) {}
@@ -9384,6 +9411,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     panel.innerHTML = '';
     var arr = unnestLoadExcludes(projKey);
     if (!arr.length) { panel.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(chưa loại trừ item nào)</div>'; return; }
+    var clearBtn = document.createElement('div');
+    clearBtn.className = 'un-excludeClear'; clearBtn.setAttribute('role', 'button');
+    clearBtn.innerHTML = window.pluginIconSVG('trash', 11, '#fca5a5') + ' Bỏ toàn bộ loại trừ (' + arr.length + ')';
+    clearBtn.onclick = function (e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+      unnestSaveExcludes(projKey, []);
+      unnestRenderList(projKey); unnestRenderCount(projKey);
+      var s = document.getElementById('unExcludeSearch');
+      if (unnestSearchBuiltFor === unnestItemCache) unnestFilterSearchRows(projKey, s ? s.value : '');
+    };
+    panel.appendChild(clearBtn);
     arr.forEach(function (it) {
       var row = document.createElement('div'); row.className = 'vg-nameRow';
       var label = document.createElement('span'); label.className = 'vg-nameRowLabel'; label.textContent = it.name;
@@ -9401,8 +9439,30 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // rebuilt on each keystroke/click. Rebuilding innerHTML on a keystroke resets the
   // input focus (drops Vietnamese IME composition), and rebuilding on a click detaches
   // the clicked row so the Settings modal's outside-click handler fires and closes it.
-  var unnestSearchRows = [];       // [{ el, id, name }]
+  var unnestSearchRows = [];       // [{ el, id, name, mediaType }]
   var unnestSearchBuiltFor = null; // the unnestItemCache array these rows were built from
+  var unnestTypeFilter = 'all';    // 'all' | 'video' | 'audio' | 'image' | 'sequence'
+  // Category chips (only for types actually present in the sequence), Bind-style.
+  function unnestRenderTypeChips() {
+    var el = document.getElementById('unExcludeTypeChips'); if (!el) return;
+    el.innerHTML = '';
+    var present = {};
+    (unnestItemCache || []).forEach(function (it) { present[it.mediaType] = true; });
+    ['all', 'sequence', 'video', 'image', 'audio'].forEach(function (t) {
+      if (t !== 'all' && !present[t]) return;
+      var chip = document.createElement('span');
+      chip.className = 'sac-bind-chip' + (unnestTypeFilter === t ? ' is-active' : '');
+      if (t === 'all') chip.textContent = 'Tất cả';
+      else chip.innerHTML = window.pluginIconSVG(t, 12);
+      chip.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        unnestTypeFilter = t; unnestRenderTypeChips();
+        var s = document.getElementById('unExcludeSearch');
+        unnestFilterSearchRows(unnestCurProjKey, s ? s.value : '');
+      };
+      el.appendChild(chip);
+    });
+  }
   function unnestBuildSearchRows() {
     var list = document.getElementById('unExcludeSearchList');
     if (!list) return;
@@ -9410,7 +9470,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var items = unnestItemCache || [];
     items.forEach(function (it) {
       var row = document.createElement('div'); row.className = 'vg-nameRow';
-      row.textContent = it.name;
+      var ico = document.createElement('span'); ico.className = 'p-ic'; ico.style.marginRight = '6px';
+      ico.innerHTML = window.pluginIconSVG(it.mediaType, 12);
+      var lbl = document.createElement('span'); lbl.textContent = it.name;
+      row.appendChild(ico); row.appendChild(lbl);
       row.onclick = function (e) {
         if (e && e.stopPropagation) e.stopPropagation(); // keep the Settings modal open
         var cur = unnestLoadExcludes(unnestCurProjKey);
@@ -9420,7 +9483,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         unnestFilterSearchRows(unnestCurProjKey, s ? s.value : '');
       };
       list.appendChild(row);
-      unnestSearchRows.push({ el: row, id: String(it.id), name: String(it.name).toLowerCase() });
+      unnestSearchRows.push({ el: row, id: String(it.id), name: String(it.name).toLowerCase(), mediaType: it.mediaType });
     });
     // Pre-create the empty hint ONCE so the filter never mutates the DOM on a keystroke
     // (an appendChild next to the focused input makes UXP re-select it → swallows keys).
@@ -9438,7 +9501,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var shown = 0;
     for (var i = 0; i < unnestSearchRows.length; i++) {
       var r = unnestSearchRows[i];
-      var ok = !excluded[r.id] && (!q || r.name.indexOf(q) !== -1) && shown < 40; // cap rendered
+      var ok = !excluded[r.id]
+        && (unnestTypeFilter === 'all' || r.mediaType === unnestTypeFilter)
+        && (!q || r.name.indexOf(q) !== -1) && shown < 40; // cap rendered
       r.el.style.display = ok ? '' : 'none';
       if (ok) shown++;
     }
@@ -9451,6 +9516,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Build rows once (or after the item cache changed), then filter by display toggle.
   function unnestRenderSearch(projKey, query) {
     if (unnestSearchBuiltFor !== unnestItemCache) unnestBuildSearchRows();
+    unnestRenderTypeChips();
     unnestFilterSearchRows(projKey, query);
   }
   var unnestExcludeWired = false;
@@ -9473,7 +9539,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     addBtn.onclick = async function () {
       var show = addPanel && addPanel.hidden; closeP();
       if (show) {
-        if (!unnestItemCache) await unnestBuildItemList(false);
+        // Rebuild every open: the list is scoped to the ACTIVE sequence, which may
+        // have changed since last time (cheap — one sequence's clips only).
+        await unnestBuildItemList(true);
         unnestRenderSearch(unnestCurProjKey, search ? search.value : ''); addPanel.hidden = false;
         try { search.focus(); } catch (e) {}
         if (window.claimKeyboard) window.claimKeyboard();
