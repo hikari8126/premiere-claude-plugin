@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.1.2';  // Unnest: GIỮ TRANSITION video khi bung — UXP không đọc được transition (getTrackItems(2)→null), nên export nested qua ProjectConverter: FCP7 XML cho VỊ TRÍ/alignment/duration + OTIO cho MATCHNAME THẬT (XML dí mọi AE transition thành Cross Dissolve; OTIO giữ metadata.PremierePro_OTIO.MatchName như AE.AE_Impact_Pop/Pull/Wave). Zip theo track+thứ tự, khớp clip clone theo thời điểm + adjacency, dựng lại bằng TransitionFactory.createVideoTransition + createAddVideoTransitionAction (trong lockedAccess). Checkbox bật/tắt. Audio cross-fade UXP không hỗ trợ → cảnh báo. (v5.1.1: exclude quét trong nested chọn.) Bridge app 3.2 · Server 1.11.0
+var PLUGIN_VERSION = 'v5.1.3';  // Music builder: genres/moods tối đa 3 (was 2); nhãn "chọn tối đa N" bám theo VGM_TAX.max; thêm Funk/Disco/EDM/Reggaeton, bỏ thể loại niche. Model: thêm Gemini 3.5 Flash Lite (mặc định vẫn 3.1 để an toàn khi bridge cũ; 3.5 cần bridge ≥1.11.1). Fix(import): file VO import đúng bin đã chọn (snapshot trước import, lấy item count tăng — không còn bắt nhầm clip trùng tên ở bin khác), thêm Funk/Disco/EDM/Reggaeton, bỏ thể loại niche (J-pop/Bubblegum/Grunge/Trance/Slap House/Boom Bap/Neo-Soul/Contemporary R&B/Neo-classical/Symphonic/Bossa Nova/Cyberpunk/City Pop/90s grunge). Thêm model Gemini 3.5 Flash Lite (default Gemini mới, giữ 3.1) cho Organize + Parse AI. (5.1.2.1) Fix(import): file VO gen ra import vào ĐÚNG bin đã chọn. Trước đây tìm clip vừa import bằng name khớp ĐẦU TIÊN trong toàn project (sacCollectBinItems().find(name===x)) → khi tên file trùng (VO đánh version v3.0/v3.1... hoặc clip cùng tên đã nằm ở bin khác như Facebook/3x) thì bắt nhầm clip cũ ở bin khác, clip mới bị bỏ lại → "nhảy vào 1 bin khác trùng tên". Giờ chụp snapshot project TRƯỚC import (đếm theo key path::name) rồi lấy item có count TĂNG sau import = clip thật sự mới, kể cả khi trùng tên. Áp cho cả 3 đường import: importVariation (Chuyển vào bin), importToTimeline, sacFindOrImportFile (Autocut). (v5.1.2: Unnest giữ transition video khi bung.) Bridge app 3.2 · Server 1.11.0 — UXP không đọc được transition (getTrackItems(2)→null), nên export nested qua ProjectConverter: FCP7 XML cho VỊ TRÍ/alignment/duration + OTIO cho MATCHNAME THẬT (XML dí mọi AE transition thành Cross Dissolve; OTIO giữ metadata.PremierePro_OTIO.MatchName như AE.AE_Impact_Pop/Pull/Wave). Zip theo track+thứ tự, khớp clip clone theo thời điểm + adjacency, dựng lại bằng TransitionFactory.createVideoTransition + createAddVideoTransitionAction (trong lockedAccess). Checkbox bật/tắt. Audio cross-fade UXP không hỗ trợ → cảnh báo. (v5.1.1: exclude quét trong nested chọn.) Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -802,14 +802,15 @@ var GEMINI_KEY      = ''; // user-provided Gemini key for Organize (optional; br
 // Raw saved pick (rỗng nếu user chưa từng đổi dropdown). KHÔNG fallback ở đây —
 // giá trị mặc định được tính động trong sacResolveOrganizeModel() (phụ thuộc có key Gemini hay chưa).
 var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || '';
-var ORGANIZE_MODELS = ['gemini-3.1-flash-lite', 'claude-sonnet-4-6']; // chỉ 2 model: Gemini (default) + Sonnet (backup)
+var ORGANIZE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'claude-sonnet-4-6']; // Gemini 3.1 Flash Lite (default, an toàn khi bridge cũ) · Gemini 3.5 Flash Lite (cần bridge ≥1.11.1) · Sonnet (backup CLI)
 var ELEVENLABS_KEY  = ''; // no hardcoded key — user enters in Settings, or bridge .env (ELEVENLABS_API_KEY) provides the shared default
 var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
 var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
 
 // Model dùng cho Organize. Ưu tiên lựa chọn thủ công còn hợp lệ của user; nếu chưa
 // chọn (hoặc giá trị cũ đã bị bỏ) → mặc định Gemini 3.1 Flash Lite CHỈ KHI đã có key
-// Gemini, ngược lại dùng Sonnet 4.6 (chạy qua CLI, không cần key).
+// Gemini, ngược lại dùng Sonnet 4.6 (chạy qua CLI, không cần key). Giữ 3.1 làm mặc
+// định để user chưa update bridge (≥1.11.1) vẫn dùng được; 3.5 là lựa chọn tự chọn.
 function sacResolveOrganizeModel() {
   if (ORGANIZE_MODELS.indexOf(ORGANIZE_MODEL) >= 0) return ORGANIZE_MODEL;
   return GEMINI_KEY ? 'gemini-3.1-flash-lite' : 'claude-sonnet-4-6';
@@ -2455,6 +2456,47 @@ async function sacCollectBinItems(rootItem) {
     }
   }
   return out;
+}
+
+// ── Locating a just-imported ProjectItem ────────────────────────────────────
+// project.importFiles() returns NO ProjectItem, so the imported clip has to be
+// found by re-scanning the project. Finding it by name alone is unsafe: VO
+// filenames are versioned and repeat ("PleuraForm v3.0 v1 - ADV.mp3"), and a
+// same-named clip may already sit in another bin. A bare `items.find(name===x)`
+// then returns the FIRST match anywhere — a pre-existing clip in the wrong bin —
+// so the real import is left wherever Premiere dropped it and the wrong item gets
+// moved. That is the "nhảy vào 1 bin khác trùng tên" bug.
+//
+// Fix: snapshot the project BEFORE import (count per path::name key), then after
+// import take the entry whose count grew. That pins the genuinely new clip even
+// when names collide across bins.
+function ppSnapshotBinKeys(items) {
+  var m = Object.create(null);
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].isFolder) continue;
+    var k = (items[i].path || '') + ' :: ' + items[i].name;
+    m[k] = (m[k] || 0) + 1;
+  }
+  return m;
+}
+// afterItems: fresh sacCollectBinItems() taken AFTER import.
+// beforeKeys: ppSnapshotBinKeys() taken BEFORE import.
+// Returns the collected-bin entry ({name,item,path,...}) of the new clip, or null.
+function ppPickImportedItem(afterItems, beforeKeys, fname) {
+  var seen = Object.create(null);
+  var fallback = null;
+  for (var i = 0; i < afterItems.length; i++) {
+    var b = afterItems[i];
+    if (b.isFolder) continue;
+    var k = (b.path || '') + ' :: ' + b.name;
+    seen[k] = (seen[k] || 0) + 1;
+    var isNew = seen[k] > (beforeKeys[k] || 0);
+    if (b.name === fname) {
+      if (isNew) return b;          // new + right name → unambiguous
+      if (!fallback) fallback = b;  // right name but no count delta detected
+    }
+  }
+  return fallback; // no delta (e.g. imported in place) → best-effort name match
 }
 
 // Normalize for name matching: lowercase, strip a trailing file extension, then
@@ -5255,7 +5297,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return found.item;
     }
 
-    // Not found — import
+    // Not found — snapshot BEFORE import so the new item can be told apart from any
+    // same-named clip already elsewhere in the project.
+    var beforeKeys = ppSnapshotBinKeys(binItems);
     if (typeof proj.importFiles === 'function') {
       await proj.importFiles([filePath]);
     } else if (typeof proj.importFile === 'function') {
@@ -5263,9 +5307,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } else {
       throw new Error('No importFiles API on project');
     }
-    // Re-scan bin to find the newly imported item
+    // Re-scan bin, then pick the genuinely NEW item (not the first name match).
     var binItems2 = rootItem ? (await sacCollectBinItems(rootItem)) : [];
-    var found2 = binItems2.find(function(b) { return b.name === fname; });
+    var found2 = ppPickImportedItem(binItems2, beforeKeys, fname);
     // Autocut always imports a voice file → bin "Voice Over", không theo mode Voice Gen.
     if (found2) await ppMoveToVOBinIfEnabled(found2.item, proj, 'Voice Over');
     return found2 ? found2.item : null;
@@ -6875,6 +6919,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try {
       if (!ppro || !ppro.Project) throw new Error('Premiere API unavailable');
       var project = await getActiveProject();
+      // The clip is located by diffing against a pre-import snapshot, so grab the
+      // root + snapshot BEFORE importing (name-only search grabs the wrong same-named
+      // clip → moves it to the wrong bin).
+      var rootItem = null;
+      if (typeof project.getRootItem === 'function') {
+        rootItem = project.getRootItem();
+        if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
+      }
+      var beforeKeys = rootItem ? ppSnapshotBinKeys(await sacCollectBinItems(rootItem)) : Object.create(null);
       if (typeof project.importFiles === 'function') {
         await project.importFiles([finalPath]);
       } else if (typeof project.importFile === 'function') {
@@ -6885,18 +6938,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var importedName = saveName || variation.filename;
       els.importStatus.className = 'ac-manualStatus is-ok';
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
-      // Move to "Voice Over" bin only if checkbox is checked
+      // Move to target bin only if checkbox is checked
       if (ppShouldMoveToVOBin()) {
         try {
-          var rootItem = null;
-          if (typeof project.getRootItem === 'function') {
-            rootItem = project.getRootItem();
-            if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
-          }
           if (rootItem) {
             var fname2 = importedName || finalPath.split('/').pop();
             var binItems2 = await sacCollectBinItems(rootItem);
-            var voItem2 = binItems2.find(function(b) { return b.name === fname2; });
+            var voItem2 = ppPickImportedItem(binItems2, beforeKeys, fname2);
             if (voItem2) await ppMoveToBin(voItem2.item, project, window.vgTargetBinName());
           }
         } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
@@ -6938,16 +6986,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!project) throw new Error('Không có project đang mở');
       var rootItem = (typeof project.getRootItem === 'function') ? project.getRootItem() : project.rootItem;
       if (rootItem && typeof rootItem.then === 'function') rootItem = await rootItem;
-      var find = async function() {
-        var its = rootItem ? await sacCollectBinItems(rootItem) : [];
-        return its.find(function(b) { return b.name === fname; });
-      };
-      var found = await find();
+      var scan = async function() { return rootItem ? await sacCollectBinItems(rootItem) : []; };
+      var before = await scan();
+      // Already in project? (avoids duplicate import when re-run) — first name match ok here.
+      var found = before.find(function(b) { return b.name === fname && !b.isFolder; });
       if (!found) {
+        var beforeKeys = ppSnapshotBinKeys(before);
         if (typeof project.importFiles === 'function') await project.importFiles([finalPath]);
         else if (typeof project.importFile === 'function') await project.importFile(finalPath);
         else throw new Error('No importFiles API');
-        found = await find();
+        found = ppPickImportedItem(await scan(), beforeKeys, fname);
       }
       if (!found) throw new Error('Không tìm thấy clip trong bin sau khi import');
       var item = found.item;
@@ -8661,16 +8709,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Nhóm nào loại trừ nhau thì max 1; nhóm nào cộng dồn được thì không giới hạn.
   // Tempo gom thành 4 dải: mỗi item mang sẵn khoảng BPM trong chuỗi tag.
   var VGM_TAX = {
-    genres: { max: 2, items: [
-      'Synthpop','Electropop','K-pop','J-pop','Indie Pop','Bubblegum pop',
-      'Alternative Rock','Hard Rock','Classic Rock','Heavy Metal','Punk Rock','Grunge',
-      'House','Deep House','Future Bass','Techno','Dubstep','Trance','Slap House',
-      'Hip-hop','Boom Bap','Trap','R&B','Neo-Soul','Contemporary R&B',
-      'Cinematic','Orchestral','Neo-classical','Symphonic','Ambient',
-      'Lo-fi','Chillhop','Jazz','Bossa Nova','Blues','Folk','Acoustic',
-      'Synthwave','Cyberpunk','City Pop','80s pop','90s grunge',
+    genres: { max: 3, items: [
+      'Synthpop','Electropop','K-pop','Indie Pop',
+      'Alternative Rock','Hard Rock','Classic Rock','Heavy Metal','Punk Rock',
+      'House','Deep House','Future Bass','Techno','Dubstep','EDM',
+      'Hip-hop','Trap','R&B','Funk','Disco','Reggaeton',
+      'Cinematic','Orchestral','Ambient',
+      'Lo-fi','Chillhop','Jazz','Blues','Folk','Acoustic',
+      'Synthwave','80s pop',
     ] },
-    moods: { max: 2, items: [
+    moods: { max: 3, items: [
       'Uplifting','Energetic','Happy','Bright','Cheerful','Joyful','Optimistic',
       'Euphoric','Hype','Aggressive','Anthemic','Powerful','Explosive',
       'Melancholic','Sad','Nostalgic','Somber','Heartbroken','Bittersweet',
@@ -8719,8 +8767,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Nostalgic, Epic là trung tính — không thuộc họ nào, đi cùng mọi thứ.
     },
     genres: {
-      soft:  ['Lo-fi','Chillhop','Jazz','Bossa Nova','Blues','Folk','Acoustic','Ambient','Neo-classical'],
-      heavy: ['Heavy Metal','Hard Rock','Punk Rock','Grunge','Dubstep'],
+      soft:  ['Lo-fi','Chillhop','Jazz','Blues','Folk','Acoustic','Ambient'],
+      heavy: ['Heavy Metal','Hard Rock','Punk Rock','Dubstep'],
     },
   };
   // Cặp họ loại trừ nhau (đối xứng hai chiều).
@@ -8733,10 +8781,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Tự bung nếu có tag đang chọn ở đây. Genres: chừa ~20 phổ biến cho nhạc nền
   // video, còn lại (niche + heavy/dark) cho vào "Thêm thể loại". Moods: gom trầm/tối.
   var VGM_EXT = {
-    genres: ['K-pop','J-pop','Bubblegum pop','Alternative Rock','Hard Rock','Classic Rock',
-             'Heavy Metal','Punk Rock','Grunge','Techno','Dubstep','Slap House',
-             'Neo-Soul','Contemporary R&B','Neo-classical','Symphonic','Bossa Nova',
-             'Blues','Folk','Cyberpunk','80s pop','90s grunge'],
+    genres: ['Classic Rock','Heavy Metal','Punk Rock','Techno','Dubstep',
+             'Reggaeton','Disco','Blues','Folk','80s pop'],
     moods:  ['Melancholic','Sad','Somber','Heartbroken','Bittersweet',
              'Dark','Eerie','Suspenseful','Mysterious','Gothic','Haunting'],
   };
@@ -8842,6 +8888,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   function vgmRender() {
     VGM_ORDER.forEach(vgmRenderGroup);
+    // Nhãn "chọn tối đa N" bám theo VGM_TAX.max để không lệch khi đổi max.
+    var lim = { genres: 'vgmLimitGenres', moods: 'vgmLimitMoods' };
+    Object.keys(lim).forEach(function (g) {
+      var el = document.getElementById(lim[g]);
+      if (el) el.textContent = 'chọn tối đa ' + VGM_TAX[g].max;
+    });
     var prev = document.getElementById('vgmPreview');
     if (prev) prev.textContent = vgmBuildTags();
   }
