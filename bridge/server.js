@@ -2166,11 +2166,19 @@ async function callLLM(prompt, opts) {
     const gModel = model || 'gemini-3.5-flash';
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                 encodeURIComponent(gModel) + ':generateContent?key=' + encodeURIComponent(gKey);
+    // Tắt/giảm "thinking" để cả token budget dành cho text (nếu không, model thinking
+    // mặc định có thể ăn hết maxOutputTokens → trả text RỖNG → prompt "không đổi").
+    // Gemini ≤3.1 (và 2.x) dùng thinkingBudget:0 để TẮT hẳn. Gemini ≥3.5 BỎ thinkingBudget,
+    // chuyển sang thinkingLevel (minimal|low|medium|high) và không tắt hẳn được → dùng
+    // 'minimal'. Gửi nhầm khoá cho đời sai → model vẫn thinking đầy đủ → rỗng.
+    const gv = /gemini-(\d+)\.(\d+)/.exec(gModel);
+    const gMajor = gv ? parseInt(gv[1], 10) : 0;
+    const gMinor = gv ? parseInt(gv[2], 10) : 0;
+    const useThinkingLevel = gMajor > 3 || (gMajor === 3 && gMinor >= 5);
+    const thinkingConfig = useThinkingLevel ? { thinkingLevel: 'minimal' } : { thinkingBudget: 0 };
     const payload = {
       contents: [{ parts: [{ text: prompt }] }],
-      // thinkingBudget:0 → no "thinking" tokens, so the whole output budget is text
-      // (Flash 3.x have thinking on by default, which can otherwise return empty text).
-      generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, thinkingConfig: thinkingConfig },
     };
     // Gemini Flash 3.x occasionally returns 503 (high demand) — retry a few times.
     let dj, r;
@@ -2186,7 +2194,19 @@ async function callLLM(prompt, opts) {
     }
     const cand = dj && dj.candidates && dj.candidates[0];
     const parts = (cand && cand.content && cand.content.parts) || [];
-    return parts.map(function(p) { return p.text || ''; }).join('').trim();
+    // Bỏ phần "thought" (khi includeThoughts bật), chỉ lấy text trả lời thật.
+    const text = parts.filter(function(p) { return !p.thought; })
+                      .map(function(p) { return p.text || ''; }).join('').trim();
+    if (!text) {
+      // Rỗng thường do thinking ăn hết token (finishReason=MAX_TOKENS) hoặc bị chặn.
+      // Ném lỗi rõ thay vì trả '' âm thầm (khiến prompt "không đổi" mà không báo gì).
+      const fr = (cand && cand.finishReason) || 'UNKNOWN';
+      console.warn('[callLLM] Gemini rỗng — model=' + gModel + ' finishReason=' + fr +
+                   ' usage=' + JSON.stringify(dj && dj.usageMetadata || {}));
+      throw new Error('Gemini "' + gModel + '" trả về rỗng (finishReason=' + fr +
+                      '). Thử model khác hoặc tăng token.');
+    }
+    return text;
   }
   const anthKey = apiKey || API_KEY;
   if (anthKey) {
@@ -2376,7 +2396,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.11.0';  // + POST /music/prompt (AI dựng prompt nhạc từ tag). Prior 1.10.0: POST /sac/log
+const BRIDGE_VERSION = '1.11.1';  // Gemini thinking version-aware: ≥3.5 dùng thinkingLevel:minimal (bỏ thinkingBudget vốn bị 3.5 phớt lờ → thinking ăn hết token → text rỗng), ≤3.1 giữ thinkingBudget:0. Lọc phần thought khi parse + ném lỗi rõ khi rỗng thay vì trả '' âm thầm. Prior 1.11.0: + POST /music/prompt (AI dựng prompt nhạc từ tag). 1.10.0: POST /sac/log
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
