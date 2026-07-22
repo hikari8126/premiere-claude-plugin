@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.1.1';  // Unnest: danh sách loại trừ quét source BÊN TRONG nested sequence đang CHỌN trên timeline (không phải sequence đang mở) → tự đổi theo clip chọn; hiện tên nested đang quét; danh sách tự cập nhật khi chọn nested clip khác (poll selection 700ms lúc mở panel, không cần bấm Làm mới); rút gọn hint. (v5.1.0: chip lọc loại như Bind + nút "Bỏ toàn bộ loại trừ".) Bridge app 3.2 · Server 1.11.0
+var PLUGIN_VERSION = 'v5.1.2';  // Unnest: GIỮ TRANSITION video khi bung — UXP không đọc được transition (getTrackItems(2)→null), nên export nested qua ProjectConverter: FCP7 XML cho VỊ TRÍ/alignment/duration + OTIO cho MATCHNAME THẬT (XML dí mọi AE transition thành Cross Dissolve; OTIO giữ metadata.PremierePro_OTIO.MatchName như AE.AE_Impact_Pop/Pull/Wave). Zip theo track+thứ tự, khớp clip clone theo thời điểm + adjacency, dựng lại bằng TransitionFactory.createVideoTransition + createAddVideoTransitionAction (trong lockedAccess). Checkbox bật/tắt. Audio cross-fade UXP không hỗ trợ → cảnh báo. (v5.1.1: exclude quét trong nested chọn.) Bridge app 3.2 · Server 1.11.0
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -9787,6 +9787,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Overflow trim: feature-detected at runtime (no console probe available).
   //   TAIL → trackItem.createSetInOutPointsAction(inPt, outPt) when present.
   //   HEAD → trackItem.createMoveTrackItemAction(startTT, false) when present; else tail-only + log.
+  // Stable source name for a track item, read the SAME way for nested clips and their clones
+  // so they compare equal. projectItem name first, then the item's own name / matchName.
+  async function clipSourceName(it) {
+    try {
+      var pi = await un(it.getProjectItem ? it.getProjectItem() : null);
+      if (pi) { var n = await un(pi.name != null ? pi.name : (pi.getName ? pi.getName() : null)); if (n) return String(n); }
+    } catch (e) {}
+    try { var nm = await un(it.getName ? it.getName() : (it.name != null ? it.name : null)); if (nm) return String(nm); } catch (e) {}
+    try { var mm = await un(it.getMatchName ? it.getMatchName() : null); if (mm) return String(mm); } catch (e) {}
+    return null;
+  }
+
   async function expandViaClone(project, parentSeq, d, mode) {
     if (!d.ok || !d.nestedSeq) { logLine('· bỏ qua "' + d.name + '" (không đọc được nội dung)', 'warn'); return 0; }
     var excludeIds = await unnestExcludeIdSet();
@@ -9842,23 +9854,29 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var vfDropped = 0;
 
     var nv = 0; try { nv = await un(nested.getVideoTrackCount()); } catch (e) {}
+    var vtClips = {}; // nested video track index → [{s,e,name}] of cloned clips (for transition source matching)
     for (var vi = 0; vi < nv; vi++) {
       var vt = await un(nested.getVideoTrack(vi));
       var vc = await getClipItems(vt);
-      var picked = [];
+      var picked = [], pinfo = [];
       for (var c = 0; c < vc.length; c++) {
         var s1 = await callSec(vc[c], 'getStartTime'), e1 = await callSec(vc[c], 'getEndTime');
         if (s1 == null || e1 == null || !inRange(s1, e1)) continue;
         var vpi = await un(vc[c].getProjectItem ? vc[c].getProjectItem() : null);
-        if (vpi) { var vpid = null; try { vpid = await un(vpi.getId()); } catch (e) {} if (vpid != null && excludeIds[String(vpid)]) { excludedCount++; continue; } }
+        if (vpi) {
+          var vpid = null; try { vpid = await un(vpi.getId()); } catch (e) {}
+          if (vpid != null && excludeIds[String(vpid)]) { excludedCount++; continue; }
+        }
         if (mode === 'video' || mode === 'av') {
           var cls = await classifyVideoClip(vc[c]);
           if (!cls.keep) { vfDropped++; continue; } // pure text/title → skip
         }
-        picked.push(vc[c]);
+        var vname = await clipSourceName(vc[c]);
+        picked.push(vc[c]); pinfo.push({ s: s1, e: e1, name: vname });
       }
       if (!picked.length) continue;
       var vIdx = nextV();
+      vtClips[vi] = pinfo;
       for (var pk = 0; pk < picked.length; pk++) targets.push({ item: picked[pk], vIdx: vIdx, aIdx: 0, align: true });
     }
     if (mode === 'av' || mode === 'avt') {
@@ -9967,7 +9985,304 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       + ((mode === 'av' || mode === 'avt') ? ' · audio: ' + reusedA + ' trống + ' + (newA - pa) + ' mới' : '')
       + ((mode === 'video' || mode === 'av') && vfDropped ? ' · bỏ ' + vfDropped + ' text/title' : '')
       + (excludedCount ? ' · bỏ ' + excludedCount + ' item loại trừ' : ''), 'ok');
+
+    // Rebuild video transitions (dissolves etc.) that clone can't carry. Best-effort:
+    // wrapped so any failure never breaks the core un-nest. Needs beforeV to find clones.
+    if (keepTransitionsEnabled()) {
+      try {
+        await unnestRebuildTransitions(project, parentSeq, nested, {
+          nestIn: nestIn, nestOut: nestOut, timeOffset: timeOffset,
+          vtClips: vtClips, beforeV: beforeV, name: d.name,
+        });
+      } catch (e) { logLine('  ⚠ transition: ' + (e.message || e), 'warn'); }
+    }
     return done;
+  }
+
+  // Whether to attempt transition preservation (checkbox in Un-nest settings).
+  function keepTransitionsEnabled() {
+    var cb = document.getElementById('unKeepTransitions');
+    return cb ? !!cb.checked : true;
+  }
+
+  // ── Transition rebuild via FCP7-XML round-trip ──────────────────────────────
+  // UXP cannot read/enumerate existing transitions (getTrackItems(2)→null), but
+  // ProjectConverter.exportAsFinalCutProXML (26.3) serializes them in full. We export
+  // the nested sequence, parse each <transitionitem>, map it onto the freshly-cloned
+  // parent clips, and recreate it with TransitionFactory + createAddVideoTransitionAction.
+  // Video only — UXP has no audio-transition API (those are counted and reported).
+  // Tolerance for matching a clone edge to a transition cut. Only decides WHICH clip is
+  // picked — the transition still binds to that clip's real edge, so a looser value never
+  // mis-places it. Kept well under typical cut spacing (~0.5s) and backed by an adjacency
+  // check, so it won't grab a neighbouring cut.
+  var UNNEST_TRANS_TOL = 0.15;
+
+  // FCP effectid/name → UXP matchName (from getVideoTransitionMatchNames, 106 entries).
+  var UNNEST_TRANS_MAP = {
+    'cross dissolve': 'AE.ADBE Cross Dissolve New',
+    'dip to black': 'AE.ADBE Dip To Black',
+    'dip to white': 'AE.ADBE Dip To White',
+    'additive dissolve': 'ADBE Additive Dissolve',
+    'film dissolve': 'ADBE Film Dissolve',
+    'non-additive dissolve': 'AE.ADBE Non-Additive Dissolve',
+    'morph cut': 'AE.ADBE MorphCut',
+  };
+  function unnestMapMatchName(effectId, effectName, avail) {
+    var keys = [effectId, effectName];
+    // 1) exact matchName already?
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] && avail && avail.indexOf(keys[i]) !== -1) return keys[i];
+    }
+    // 2) curated FCP→UXP map (case-insensitive)
+    for (var j = 0; j < keys.length; j++) {
+      if (!keys[j]) continue;
+      var m = UNNEST_TRANS_MAP[String(keys[j]).toLowerCase().trim()];
+      if (m && (!avail || avail.indexOf(m) !== -1)) return m;
+    }
+    // 3) fuzzy: strip AE./ADBE prefixes + "New" suffix, compare lowercased
+    if (avail) {
+      var norm = function (s) { return String(s || '').toLowerCase().replace(/^ae\./, '').replace(/^adbe\s+/, '').replace(/\bnew\b/, '').replace(/[^a-z0-9]+/g, ' ').trim(); };
+      for (var k = 0; k < keys.length; k++) {
+        if (!keys[k]) continue;
+        var target = norm(keys[k]);
+        for (var a = 0; a < avail.length; a++) { if (norm(avail[a]) === target) return avail[a]; }
+      }
+    }
+    return null; // caller falls back to default + warns
+  }
+
+  // Extract a balanced <tag>…</tag> (handles same-tag nesting: a sequence <video>
+  // contains per-clip <file><media><video>). Returns inner content or ''.
+  function unnestExtractBalanced(s, tag, from) {
+    var openLen = tag.length + 1, i = from || 0, start = -1;
+    var isBoundary = function (ch) { return ch === '>' || ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r'; };
+    while (i < s.length) {
+      var lt = s.indexOf('<' + tag, i);
+      if (lt < 0) return '';
+      if (isBoundary(s.charAt(lt + openLen))) { start = lt; break; }
+      i = lt + openLen;
+    }
+    if (start < 0) return '';
+    var afterOpen = s.indexOf('>', start) + 1, depth = 1, pos = afterOpen, closeTag = '</' + tag + '>';
+    while (depth > 0) {
+      var nO = s.indexOf('<' + tag, pos), nC = s.indexOf(closeTag, pos);
+      if (nC < 0) return '';
+      var realOpen = (nO >= 0 && nO < nC && isBoundary(s.charAt(nO + openLen)));
+      if (realOpen) { depth++; pos = nO + openLen; }
+      else { depth--; if (depth === 0) return s.substring(afterOpen, nC); pos = nC + closeTag.length; }
+    }
+    return '';
+  }
+
+  // Parse an FCP7-XML string → { video:[{trackIndex,startSec,endSec,durSec,alignment,effectId,effectName}], audioCount, videoTimebase }.
+  function unnestParseTransitionsXml(xml) {
+    var out = { video: [], audioCount: 0, videoTimebase: 24, videoFps: 24, ntsc: false };
+    function tag(b, n) { var m = b.match(new RegExp('<' + n + '>([^<]*)</' + n + '>', 'i')); return m ? m[1] : null; }
+    var seqStart = xml.indexOf('<sequence'); if (seqStart < 0) seqStart = 0;
+    var videoBlock = unnestExtractBalanced(xml, 'video', seqStart);
+    // Rate = timebase + ntsc flag. getStartTime() returns REAL (wall-clock) seconds, so an
+    // NTSC sequence runs at timebase*1000/1001 (e.g. 30→29.97) — dividing frames by the raw
+    // integer timebase drifts ~0.1%/s and blows past the match tolerance late in the seq.
+    var rateBlock = (videoBlock.match(/<rate>([\s\S]*?)<\/rate>/i) || [null, ''])[1];
+    var tb = rateBlock.match(/<timebase>(\d+)<\/timebase>/i);
+    if (tb) out.videoTimebase = parseInt(tb[1], 10) || 24;
+    out.ntsc = /<ntsc>\s*true\s*<\/ntsc>/i.test(rateBlock);
+    var fps = out.ntsc ? (out.videoTimebase * 1000 / 1001) : out.videoTimebase;
+    out.videoFps = fps;
+    var trackRe = /<track\b[^>]*>([\s\S]*?)<\/track>/gi, tm, vIndex = 0;
+    while ((tm = trackRe.exec(videoBlock)) !== null) {
+      var body = tm[1], trRe = /<transitionitem>([\s\S]*?)<\/transitionitem>/gi, trm;
+      while ((trm = trRe.exec(body)) !== null) {
+        var b = trm[1];
+        var sf = parseInt(tag(b, 'start'), 10), ef = parseInt(tag(b, 'end'), 10);
+        if (isNaN(sf) || isNaN(ef)) continue;
+        var effBlock = (b.match(/<effect>([\s\S]*?)<\/effect>/i) || [null, ''])[1];
+        out.video.push({
+          trackIndex: vIndex, startSec: sf / fps, endSec: ef / fps, durSec: (ef - sf) / fps,
+          alignment: (tag(b, 'alignment') || 'center').toLowerCase(),
+          effectId: tag(effBlock, 'effectid'), effectName: tag(effBlock, 'name'),
+        });
+      }
+      vIndex++;
+    }
+    var allRe = /<transitionitem>([\s\S]*?)<\/transitionitem>/gi, am;
+    while ((am = allRe.exec(xml)) !== null) { if (/<mediatype>\s*audio\s*<\/mediatype>/i.test(am[1])) out.audioCount++; }
+    return out;
+  }
+
+  // Cut point + options for one parsed transition.
+  function unnestTransitionPlacement(t) {
+    if (t.alignment === 'start')       return { cutSec: t.startSec, applyToStart: true,  single: false, ratio: 0 };
+    if (t.alignment === 'end')         return { cutSec: t.endSec,   applyToStart: false, single: false, ratio: 1 };
+    if (t.alignment === 'start-black') return { cutSec: t.startSec, applyToStart: true,  single: true,  ratio: 0 };
+    if (t.alignment === 'end-black')   return { cutSec: t.endSec,   applyToStart: false, single: true,  ratio: 1 };
+    return { cutSec: (t.startSec + t.endSec) / 2, applyToStart: true, single: false, ratio: 0.5 }; // center
+  }
+
+  // FCP7 XML flattens custom AE transitions to "Cross Dissolve"; OTIO keeps the real UXP
+  // matchName under metadata.PremierePro_OTIO.MatchName. Parse OTIO → per-video-track list
+  // of matchNames in timeline order, to zip onto the XML transitions (counts match exactly).
+  function unnestParseOtioMatchNames(text) {
+    var out = {}; // videoTrackIndex → [matchName|null, …]
+    var d; try { d = JSON.parse(text); } catch (e) { return out; }
+    function findTracks(o) {
+      if (o && typeof o === 'object') {
+        if (typeof o.OTIO_SCHEMA === 'string' && o.OTIO_SCHEMA.indexOf('Stack') === 0 && o.children && o.children.length) return o.children;
+        for (var k in o) { if (o.hasOwnProperty(k)) { var r = findTracks(o[k]); if (r) return r; } }
+      }
+      return null;
+    }
+    var tracks = findTracks(d) || [];
+    var vIdx = -1;
+    for (var i = 0; i < tracks.length; i++) {
+      var tr = tracks[i]; if (!tr || tr.kind !== 'Video') continue;
+      vIdx++;
+      var kids = tr.children || [], list = [];
+      for (var c = 0; c < kids.length; c++) {
+        var kid = kids[c];
+        if (kid && typeof kid.OTIO_SCHEMA === 'string' && kid.OTIO_SCHEMA.indexOf('Transition') === 0) {
+          var mn = kid.metadata && kid.metadata.PremierePro_OTIO && kid.metadata.PremierePro_OTIO.MatchName;
+          list.push(mn || null);
+        }
+      }
+      out[vIdx] = list;
+    }
+    return out;
+  }
+
+  async function unnestRebuildTransitions(project, parentSeq, nested, ctx) {
+    var PC = ppro.ProjectConverter;
+    if (!PC || typeof PC.exportAsFinalCutProXML !== 'function') { logLine('  ⚠ transition: build này không có ProjectConverter (bỏ qua)', 'warn'); return; }
+    // 1) Export the nested sequence to a temp FCP XML and read it back.
+    var fs = require('uxp').storage.localFileSystem;
+    var folder = await fs.getTemporaryFolder();
+    var fname = 'unnest-trans.xml';
+    var outPath = (folder.nativePath || '').replace(/\/$/, '') + '/' + fname;
+    var okx = false;
+    try { okx = await un(PC.exportAsFinalCutProXML(nested, outPath, true)); } catch (e) { logLine('  ⚠ transition: export XML lỗi: ' + (e.message || e), 'warn'); return; }
+    if (!okx) { logLine('  ⚠ transition: export XML thất bại', 'warn'); return; }
+    var xml = '';
+    try { var entry = await folder.getEntry(fname); xml = await entry.read(); } catch (e) { logLine('  ⚠ transition: đọc XML lỗi: ' + (e.message || e), 'warn'); return; }
+    var parsed = unnestParseTransitionsXml(xml);
+
+    // 1b) Export OTIO too — it keeps the REAL matchName (XML flattens AE transitions to
+    //     Cross Dissolve). Zip by (video track, order) since counts match exactly. Position/
+    //     alignment/duration still come from XML (clips have speed changes → OTIO time math
+    //     is unreliable). Assign each XML transition its order within its track first.
+    var perTrack = {};
+    for (var pv = 0; pv < parsed.video.length; pv++) {
+      var kk = parsed.video[pv].trackIndex;
+      parsed.video[pv].orderInTrack = (perTrack[kk] = (perTrack[kk] == null ? 0 : perTrack[kk] + 1));
+    }
+    var otioBy = {};
+    if (typeof PC.exportAsOpenTimelineIO === 'function') {
+      try {
+        var opath = (folder.nativePath || '').replace(/\/$/, '') + '/unnest-trans.otio';
+        var oko = await un(PC.exportAsOpenTimelineIO(nested, opath, true));
+        if (oko) { var oe = await folder.getEntry('unnest-trans.otio'); otioBy = unnestParseOtioMatchNames(await oe.read()); }
+      } catch (e) { logLine('  · OTIO không đọc được (dùng loại từ XML): ' + (e.message || e), 'warn'); }
+    }
+
+    // 2) In-range video transitions only (within the cloned cut window).
+    var vids = parsed.video.filter(function (t) {
+      var p = unnestTransitionPlacement(t);
+      return p.cutSec > (ctx.nestIn - UNNEST_TRANS_TOL) && p.cutSec < (ctx.nestOut + UNNEST_TRANS_TOL);
+    });
+    if (!vids.length && !parsed.audioCount) return;
+
+    // 3) Available UXP matchNames for mapping.
+    var avail = [];
+    try { avail = await un(ppro.TransitionFactory.getVideoTransitionMatchNames()) || []; } catch (e) {}
+
+    // 4) Collect every freshly-cloned clip (across ALL video tracks) inside the paste window,
+    //    tagged with its SOURCE NAME. createCloneTrackItemAction packs clones from different
+    //    nested tracks onto shared parent tracks, so track index is meaningless — instead we
+    //    disambiguate a transition's clip by matching source name (7.mp4 vs Graphic vs Text).
+    var nearT = function (a, b) { return Math.abs(a - b) < UNNEST_TRANS_TOL; };
+    var winStart = ctx.nestIn + ctx.timeOffset, winEnd = ctx.nestOut + ctx.timeOffset;
+    var winLo = winStart - UNNEST_PAD - UNNEST_TRANS_TOL, winHi = winEnd + UNNEST_PAD + UNNEST_TRANS_TOL;
+    var pool = []; // flat: { s, e, item, name, trk }
+    var cntV = 0; try { cntV = await un(parentSeq.getVideoTrackCount()); } catch (e) {}
+    for (var pIdx = 0; pIdx < cntV; pIdx++) {
+      var trk = await un(parentSeq.getVideoTrack(pIdx));
+      if (!trk) continue;
+      var clips = await getClipItems(trk);
+      for (var i = 0; i < clips.length; i++) {
+        var s = await callSec(clips[i], 'getStartTime'), e = await callSec(clips[i], 'getEndTime');
+        if (s == null || e == null) continue;
+        if (e < winLo || s > winHi) continue; // outside paste window → pre-existing, ignore
+        var cname = await clipSourceName(clips[i]);
+        pool.push({ s: s, e: e, item: clips[i], name: cname });
+      }
+    }
+    // Expected source name for a transition = the nested clip on its own track whose relevant
+    // edge sits at the cut (incoming clip for applyToStart, outgoing for !applyToStart).
+    function expectedName(t, p) {
+      var arr = (ctx.vtClips || {})[t.trackIndex]; if (!arr) return null;
+      for (var i = 0; i < arr.length; i++) {
+        if (p.applyToStart && nearT(arr[i].s, p.cutSec)) return arr[i].name;
+        if (!p.applyToStart && nearT(arr[i].e, p.cutSec)) return arr[i].name;
+      }
+      return null;
+    }
+
+    // 5) For each transition, match the clone at the cut whose SOURCE NAME matches; fall back
+    //    to the nearest clone of any source if no name match.
+    var toAdd = []; // { clip, matchName, applyToStart, single, ratio, durSec }
+    var skipped = 0, matchedDefault = 0, otioMatched = 0;
+    for (var v = 0; v < vids.length; v++) {
+      var t = vids[v];
+      var p = unnestTransitionPlacement(t);
+      var parentCut = p.cutSec + ctx.timeOffset;
+      var wantName = expectedName(t, p);
+      var bestNamed = null, bestNamedD = UNNEST_TRANS_TOL;
+      var bestAny = null, bestAnyD = UNNEST_TRANS_TOL;
+      for (var c = 0; c < pool.length; c++) {
+        var edge = p.applyToStart ? pool[c].s : pool[c].e;
+        var dd = Math.abs(edge - parentCut);
+        if (dd >= UNNEST_TRANS_TOL) continue;
+        if (dd < bestAnyD) { bestAnyD = dd; bestAny = pool[c]; }
+        if (pool[c].name === wantName && dd < bestNamedD) { bestNamedD = dd; bestNamed = pool[c]; }
+      }
+      var best = bestNamed || bestAny;
+      if (!best) { skipped++; continue; }
+      // Prefer the REAL matchName from OTIO (by track+order); fall back to XML mapping.
+      var mn = null;
+      var otioList = otioBy[t.trackIndex];
+      var otioMn = (otioList && t.orderInTrack != null) ? otioList[t.orderInTrack] : null;
+      if (otioMn && (!avail.length || avail.indexOf(otioMn) !== -1)) { mn = otioMn; otioMatched++; }
+      if (!mn) mn = unnestMapMatchName(t.effectId, t.effectName, avail);
+      if (!mn) { mn = 'AE.ADBE Cross Dissolve New'; matchedDefault++; }
+      toAdd.push({ clip: best.item, matchName: mn, applyToStart: p.applyToStart, single: p.single, ratio: p.ratio, durSec: t.durSec });
+    }
+
+    // 6) Apply all add-actions in one transaction (inside lockedAccess, required in 26.3).
+    var added = 0;
+    if (toAdd.length) {
+      await project.lockedAccess(function () {
+        project.executeTransaction(function (action) {
+          for (var q = 0; q < toAdd.length; q++) {
+            var a = toAdd[q];
+            try {
+              var trans = ppro.TransitionFactory.createVideoTransition(a.matchName);
+              var opts; try { opts = new ppro.AddTransitionOptions(); } catch (e) { opts = ppro.AddTransitionOptions(); }
+              if (opts.setApplyToStart) opts.setApplyToStart(!!a.applyToStart);
+              if (opts.setForceSingleSided) opts.setForceSingleSided(!!a.single);
+              if (opts.setTransitionAlignment) opts.setTransitionAlignment(a.ratio);
+              if (opts.setDuration && a.durSec > 0) opts.setDuration(ppro.TickTime.createWithSeconds(a.durSec));
+              action.addAction(a.clip.createAddVideoTransitionAction(trans, opts));
+              added++;
+            } catch (e) { logLine('  ✗ transition add lỗi: ' + (e.message || e), 'err'); }
+          }
+        }, 'Un-nest: rebuild ' + toAdd.length + ' transition');
+      });
+    }
+    var msg = '✓ transition: dựng lại ' + added + '/' + vids.length + ' video';
+    if (otioMatched) msg += ' (' + otioMatched + ' đúng loại gốc)';
+    if (matchedDefault) msg += ' · ' + matchedDefault + ' về Cross Dissolve mặc định';
+    if (skipped) msg += ' · bỏ ' + skipped + ' (ngoài vùng bung)';
+    if (parsed.audioCount) msg += ' · ⚠ ' + parsed.audioCount + ' transition audio KHÔNG dựng lại được (UXP không hỗ trợ)';
+    logLine('  ' + msg, added ? 'ok' : 'warn');
   }
 
   // ── RUN ─────────────────────────────────────────────────────────────────────
