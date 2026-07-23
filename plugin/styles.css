@@ -820,7 +820,9 @@ body {
 .vg-save-modal[hidden] { display: none; }  /* higher specificity than .vg-save-modal */
 .vg-save-box {
   width: 100%;
-  max-width: 300px;
+  /* Rộng rãi hơn nhưng vẫn < panel tổng: modal có padding 16px + width:100% nên
+     hộp luôn co lại theo panel khi panel hẹp hơn max-width. */
+  max-width: 440px;
   background: var(--surface);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
@@ -3615,7 +3617,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .st-btn:disabled { opacity: 0.6; cursor: default; }
 .st-aiToggle { display: flex; align-items: center; font-size: 11px; color: rgba(255,255,255,0.75); margin-bottom: 10px; cursor: pointer; }
 .st-aiToggle input { margin-right: 7px; }
-.st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; padding: 0 2px; margin-top: 12px; }
+.st-status { font-size: 10px; color: rgba(255,255,255,0.7); line-height: 1.4; word-break: break-word; white-space: pre-wrap; padding: 0 2px; margin-top: 12px; }
 
 /* Tạo Sub — sequence name + slider rows */
 .st-seqName { font-weight: 400; font-size: 9.5px; color: rgba(255,255,255,0.4); margin-left: 4px; }
