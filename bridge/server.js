@@ -1251,21 +1251,49 @@ app.post('/tts/voice-preview', async (req, res) => {
 });
 
 // Move a file from temp dir to user's chosen output folder (called on Import)
+// Tìm tên chưa bị chiếm trong dir: "name.mp3" → "name (1).mp3" → "name (2).mp3"…
+// Trả về TÊN (không kèm dir) đầu tiên còn trống.
+function uniqueFilename(dir, filename) {
+  const ext  = path.extname(filename);
+  const base = path.basename(filename, ext);
+  let candidate = filename, i = 1;
+  while (fs.existsSync(path.join(dir, candidate))) {
+    candidate = base + ' (' + i + ')' + ext;
+    i++;
+  }
+  return candidate;
+}
 app.post('/tts/move', async (req, res) => {
   try {
-    const { sourcePath, targetDir, targetName } = req.body;
+    const { sourcePath, targetDir, targetName, noOverwrite } = req.body;
     if (!sourcePath) throw new Error('sourcePath required');
     if (!targetDir)  throw new Error('targetDir required');
     if (!fs.existsSync(sourcePath)) throw new Error('Source file missing: ' + sourcePath);
     ensureDir(targetDir);
-    const filename = targetName || path.basename(sourcePath); // allow custom filename
+    let filename = targetName || path.basename(sourcePath); // allow custom filename
+    // noOverwrite → không ghi đè file cũ: tự đánh số " (1)", " (2)"… cho tới khi trống.
+    if (noOverwrite) filename = uniqueFilename(targetDir, filename);
     const targetPath = path.join(targetDir, filename);
     fs.copyFileSync(sourcePath, targetPath);
     // Keep temp file for now — user might use the other variation. Cleanup later.
     console.log('[tts/move]', sourcePath, '→', targetPath);
-    res.json({ ok: true, targetPath: targetPath });
+    res.json({ ok: true, targetPath: targetPath, name: filename });
   } catch (err) {
     console.error('[tts/move]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Tạo folder (UXP không tự tạo folder được — chỉ chọn folder có sẵn). Cho phép
+// plugin tạo thư mục mới ngay để hiện lên trong ô "Thư mục lưu".
+app.post('/fs/mkdir', (req, res) => {
+  try {
+    const { dir } = req.body || {};
+    if (!dir) throw new Error('dir required');
+    ensureDir(dir);
+    res.json({ ok: true, dir: dir });
+  } catch (err) {
+    console.error('[fs/mkdir]', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -1696,7 +1724,7 @@ function subtextFlattenScript(scriptLines) {
 // then interpolating timing for any words that didn't match.
 function subtextAssignTimes(sw, whisper) {
   const wnorm = whisper.map(w => norm(w.text));
-  let wi = 0;
+  let wi = 0, matched = 0;
   const LOOK = 10;
   for (const s of sw) {
     let found = -1;
@@ -1704,9 +1732,22 @@ function subtextAssignTimes(sw, whisper) {
     for (let j = wi; j < stop; j++) {
       if (wnorm[j] && wnorm[j] === s.n) { found = j; break; }
     }
-    if (found >= 0) { s.start = whisper[found].start; s.end = whisper[found].end; wi = found + 1; }
+    if (found >= 0) { s.start = whisper[found].start; s.end = whisper[found].end; wi = found + 1; matched++; }
   }
   subtextInterpolate(sw, whisper);
+  return { matched, total: sw.length }; // chẩn đoán: khớp bao nhiêu / tổng từ script
+}
+
+// Chẩn đoán: các khoảng LẶNG dài (không có từ whisper) ≥ minGap giây — thủ phạm
+// chính khiến caption bị nội suy tràn / lệch. Trả [{after, before, len}] (giây).
+function subtextGaps(whisper, minGap) {
+  minGap = minGap || 2;
+  const gaps = [];
+  for (let k = 1; k < whisper.length; k++) {
+    const g = whisper[k].start - whisper[k - 1].end;
+    if (g >= minGap) gaps.push({ after: +whisper[k - 1].end.toFixed(2), before: +whisper[k].start.toFixed(2), len: +g.toFixed(2) });
+  }
+  return gaps.sort((a, b) => b.len - a.len);
 }
 
 // First whisper speech onset (start of a word preceded by a >0.4s silence)
@@ -1837,14 +1878,44 @@ function subtextChunk(sw, opts) {
 
 function subtextTextOf(c) { return c.words.map(w => w.raw).join(' '); }
 
-// Back-to-back timing + index + trailing-comma cleanup. Shared by the rule
-// chunker and the AI segmenter so both emit identical cue shapes.
+// Prompt ngắt câu phụ đề — dùng chung cho: (1) ngắt trên transcript đã canh giờ
+// (subtextSegmentAI, luồng no-script) và (2) ngắt sớm trên SCRIPT (subtextAILineBreak,
+// luồng có script). Kèm luật DẤU CÂU: bỏ dấu thừa cho caption, giữ dấu có nghĩa.
+function subtextBreakPrompt(text, maxChars) {
+  return [
+    'You split a voice-over transcript into SUBTITLE LINES for on-screen captions.',
+    'Return ONLY the lines, one per row — no numbering, no wrapping quotes, no commentary.',
+    'STRICT RULES:',
+    '1. Keep the EXACT same WORDS in the EXACT same order. Do NOT add, remove, reorder, reword, or fix spelling of any word. You may ONLY change where lines break and adjust punctuation per rule 7.',
+    '2. The transcript already has line breaks separating DISTINCT on-screen segments. NEVER merge across them — keep each input line separate; you may only SPLIT a line further if it is long.',
+    '3. Break at natural phrase boundaries: after commas/clauses, before conjunctions and relative pronouns.',
+    '4. NEVER end a line with a function word (a, an, the, and, or, that, which, of, to, for, at, in, on, with, by, no, both, your…) — let it lead the next line.',
+    '5. Keep phrasal verbs ("gave up") and modifier+noun ("extra pull") together on one line.',
+    `6. Aim for about ${maxChars} characters per line max, but prioritise natural phrasing over strict length.`,
+    '7. PUNCTUATION — clean up for captions:',
+    '   • Drop sentence-ending periods (.) — captions do not need a full stop.',
+    '   • Drop a comma (,) ONLY when it would fall at the END of a line; KEEP commas INSIDE a line that separate clauses/ideas.',
+    '   • Remove ALL double quotes (") entirely — no exceptions, even around spoken words.',
+    '   • Never remove apostrophes or hyphens inside words.',
+    'TRANSCRIPT:',
+    text,
+  ].join('\n');
+}
+
+// Dọn text caption: BỎ HẾT dấu nháy kép (") — không ngoại lệ — + bỏ dấu ,;:. cuối
+// dòng (caption không cần), giữ dấu giữa dòng. Dùng chung cho mọi nơi xuất cue.
+function subtextCleanText(s) {
+  return String(s || '').replace(/["“”]/g, '').replace(/\s+/g, ' ').trim().replace(/[,;:.]+$/, '');
+}
+
+// Back-to-back timing + index + text cleanup. Shared by the rule chunker and the
+// AI segmenter so both emit identical cue shapes.
 function subtextFinalize(cues) {
   for (let k = 0; k < cues.length; k++) {
     if (k + 1 < cues.length) cues[k].end = cues[k + 1].start;
     if (cues[k].end <= cues[k].start) cues[k].end = cues[k].start + 0.4;
   }
-  return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: subtextTextOf(c).replace(/[,;:]+$/, '') }));
+  return cues.map((c, i) => ({ index: i + 1, start: c.start, end: c.end, text: subtextCleanText(subtextTextOf(c)) }));
 }
 
 // AI segmentation: ask the LLM to insert line breaks into the (already-timed)
@@ -1860,19 +1931,7 @@ async function subtextSegmentAI(sw, opts, llm) {
   let ln = -1;
   for (const w of sw) { if (w.line !== ln) { srcLines.push([]); ln = w.line; } srcLines[srcLines.length - 1].push(w.raw); }
   const text = srcLines.map(a => a.join(' ')).join('\n');
-  const prompt = [
-    'You split a voice-over transcript into SUBTITLE LINES for on-screen captions.',
-    'Return ONLY the lines, one per row — no numbering, no quotes, no commentary.',
-    'STRICT RULES:',
-    '1. Output the EXACT same words in the EXACT same order. Do NOT add, remove, reorder, reword, or fix spelling/grammar. ONLY decide where each line breaks.',
-    '2. The transcript already has line breaks separating DISTINCT on-screen segments. NEVER merge across them — keep each input line separate; you may only SPLIT a line further if it is long.',
-    '3. Break at natural phrase boundaries: after commas/clauses, before conjunctions and relative pronouns.',
-    '4. NEVER end a line with a function word (a, an, the, and, or, that, which, of, to, for, at, in, on, with, by, no, both, your…) — let it lead the next line.',
-    '5. Keep phrasal verbs ("gave up") and modifier+noun ("extra pull") together on one line.',
-    `6. Aim for about ${maxChars} characters per line max, but prioritise natural phrasing over strict length.`,
-    'TRANSCRIPT:',
-    text,
-  ].join('\n');
+  const prompt = subtextBreakPrompt(text, maxChars);
 
   let out;
   try {
@@ -1920,6 +1979,58 @@ async function subtextSegmentAI(sw, opts, llm) {
     else if (fitFwd) { next.words = c.words.concat(next.words); next.start = c.start; cues.splice(k, 1); k--; }
   }
   return cues.length ? subtextFinalize(cues) : null;
+}
+
+// AI ngắt câu SỚM trên SCRIPT (không timing) — cho luồng preview có-script. Trả về
+// mảng dòng phụ đề (chuỗi), hoặc null nếu lỗi/lệch quá nhiều (caller fallback rule).
+async function subtextAILineBreak(srcLines, maxChars, llm) {
+  const src = (srcLines || []).map(s => String(s || '').trim()).filter(Boolean);
+  if (!src.length) return null;
+  let out;
+  try {
+    out = await callLLM(subtextBreakPrompt(src.join('\n'), maxChars || 42),
+      { provider: llm.provider, model: llm.model, apiKey: llm.apiKey, maxTokens: 2048 });
+  } catch (e) { console.warn('[subtext AI lines] LLM error:', e.message); return null; }
+  const lines = (out || '').split('\n')
+    .map(s => s.replace(/^\s*[-*•\d.)\]]+\s*/, '').trim()).filter(Boolean);
+  if (!lines.length) return null;
+  // Bỏ dấu " + dấu cuối dòng ngay từ output AI (khớp luật prompt, chắc chắn).
+  const clean = lines.map(subtextCleanText).filter(Boolean);
+  if (!clean.length) return null;
+  // Verbatim guard: bộ chữ (đã bỏ dấu) phải khớp — AI không được thêm/bớt CHỮ.
+  const sw = norm(src.join(' ')).split(/\s+/).filter(Boolean);
+  const ow = norm(clean.join(' ')).split(/\s+/).filter(Boolean);
+  if (Math.abs(sw.length - ow.length) > Math.max(3, sw.length * 0.12)) {
+    console.warn(`[subtext AI lines] word drift ${sw.length}→${ow.length} → fallback`);
+    return null;
+  }
+  return clean;
+}
+
+// Fallback không-AI: cắt mỗi dòng script thành khúc ≤maxWords từ / ≤maxChars ký tự.
+function subtextRuleLines(srcLines, opts) {
+  const maxWords = opts.maxWords || 6, maxChars = opts.maxChars || 42;
+  const out = [];
+  (srcLines || []).forEach(function (line) {
+    const words = String(line || '').split(/\s+/).filter(Boolean);
+    let cur = [];
+    for (const w of words) {
+      const trial = cur.concat(w).join(' ');
+      if (cur.length && (cur.length >= maxWords || trial.length > maxChars)) { out.push(cur.join(' ')); cur = [w]; }
+      else cur.push(w);
+    }
+    if (cur.length) out.push(cur.join(' '));
+  });
+  return out.map(subtextCleanText).filter(Boolean);
+}
+
+// Ghi chuỗi .srt ra file (outputPath, hoặc temp nếu trống). Trả path đã ghi.
+function subtextWriteSrt(outputPath, srt) {
+  let p = outputPath;
+  if (p) ensureDir(path.dirname(p));
+  else { p = path.join(getTempDir(), 'subtext_' + Date.now() + '.srt'); ensureDir(path.dirname(p)); }
+  fs.writeFileSync(p, srt, 'utf8');
+  return p;
 }
 
 function subtextSecToSrt(sec) {
@@ -2024,7 +2135,7 @@ function ffprobeDuration(audioPath) {
 app.post('/superautocut/subtext', async (req, res) => {
   try {
     let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur,
-          useAI, provider, model, apiKey } = req.body || {};
+          useAI, provider, model, apiKey, previewOnly } = req.body || {};
     // Source audio: a direct path OR a list of timeline clips → timeline-accurate render.
     let offset = 0;
     if (Array.isArray(clips) && clips.length) {
@@ -2039,11 +2150,11 @@ app.post('/superautocut/subtext', async (req, res) => {
     if (!words || !words.length) throw new Error('Whisper không nhận được từ nào');
 
     const cleanScript = (Array.isArray(scriptLines) ? scriptLines : []).filter(s => String(s || '').trim());
-    let sw;
+    let sw, assignStats = null;
     if (cleanScript.length) {
       // Script provided → use the user's text, borrow timing from whisper.
       sw = subtextFlattenScript(cleanScript);
-      subtextAssignTimes(sw, words);
+      assignStats = subtextAssignTimes(sw, words);
     } else {
       // No script → whisper text + segment-boundary cue breaks.
       sw = subtextWordsFromWhisper(words, segments);
@@ -2058,8 +2169,8 @@ app.post('/superautocut/subtext', async (req, res) => {
     if (!cues) cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
     // Extend the LAST cue to the true audio end — whisper's last word usually ends
     // before the audio actually does, leaving total subtitle span < voice length.
+    const audioDur = await ffprobeDuration(audioPath);
     if (cues.length) {
-      const audioDur = await ffprobeDuration(audioPath);
       const last = cues[cues.length - 1];
       if (audioDur > last.end) last.end = audioDur;
     }
@@ -2068,19 +2179,91 @@ app.post('/superautocut/subtext', async (req, res) => {
     const srt  = subtextToSrt(cues);
     console.log(`[subtext] ${words.length} words · ${cleanScript.length ? 'script' : 'whisper'} → ${cues.length} cues · offset ${offset.toFixed(2)}s`);
 
-    let savedPath;
-    if (outputPath) {
-      ensureDir(path.dirname(outputPath));
-      fs.writeFileSync(outputPath, srt, 'utf8');
-      savedPath = outputPath;
-    } else {
-      savedPath = path.join(getTempDir(), 'subtext_' + Date.now() + '.srt');
-      ensureDir(path.dirname(savedPath));
-      fs.writeFileSync(savedPath, srt, 'utf8');
-    }
-    res.json({ ok: true, path: savedPath, cues, srt });
+    // ── Chẩn đoán: giúp biết vì sao timing lệch (Whisper hụt / khoảng lặng dài). ──
+    const gaps = subtextGaps(words, 2);
+    const wordSpan = words.length ? +(words[words.length - 1].end - words[0].start).toFixed(2) : 0;
+    const diag = {
+      whisperWords: words.length,
+      audioDur: +audioDur.toFixed(2),
+      wordSpan: wordSpan,                          // khoảng có tiếng nói whisper nghe được
+      silentTail: +Math.max(0, audioDur - (words.length ? words[words.length - 1].end : 0)).toFixed(2),
+      scriptWords: assignStats ? assignStats.total : null,
+      matched: assignStats ? assignStats.matched : null,
+      matchPct: assignStats && assignStats.total ? Math.round(assignStats.matched / assignStats.total * 100) : null,
+      bigGaps: gaps.slice(0, 5),
+      cues: cues.length,
+    };
+    console.log('[subtext][diag]', JSON.stringify(diag));
+
+    // previewOnly → CHỈ trả cues (đã có timing) để xem/sửa; KHÔNG ghi file.
+    if (previewOnly) { res.json({ ok: true, cues, srt, timed: true, diag }); return; }
+    const savedPath = subtextWriteSrt(outputPath, srt);
+    res.json({ ok: true, path: savedPath, cues, srt, diag });
   } catch (e) {
     console.error('[subtext]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── PREVIEW nhanh (chỉ khi CÓ script): AI ngắt câu trên chữ script, KHÔNG Whisper.
+// Trả về { lines: [chuỗi] } để hiện/sửa. Whisper canh giờ để dành cho bước finalize.
+app.post('/superautocut/subtext-segment', async (req, res) => {
+  try {
+    const { scriptLines = [], maxWords, maxChars, useAI, provider, model, apiKey } = req.body || {};
+    const src = (Array.isArray(scriptLines) ? scriptLines : []).map(s => String(s || '').trim()).filter(Boolean);
+    if (!src.length) throw new Error('Cần script để AI ngắt câu trước');
+    let lines = null;
+    if (useAI) lines = await subtextAILineBreak(src, maxChars, { provider, model, apiKey });
+    const ai = !!lines;
+    if (!lines) lines = subtextRuleLines(src, { maxWords, maxChars });
+    console.log(`[subtext-segment] ${src.length} script lines → ${lines.length} caption lines (${ai ? 'AI' : 'rule'})`);
+    res.json({ ok: true, lines, ai });
+  } catch (e) {
+    console.error('[subtext-segment]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── FINALIZE: ghi .srt (+ import phía plugin).
+//   (a) có `cues` đã có timing (luồng no-script đã sửa) → ghi thẳng, KHÔNG Whisper.
+//   (b) có `lines` (luồng có-script đã sửa) → Whisper canh giờ cho từng dòng rồi ghi.
+app.post('/superautocut/subtext-finalize', async (req, res) => {
+  try {
+    let { clips, audioPath, cues, lines, outputPath, language } = req.body || {};
+    // (a) cues đã có timing → chỉ dựng lại .srt từ text đã sửa + timing sẵn có.
+    if (Array.isArray(cues) && cues.length && cues[0] && cues[0].start != null) {
+      const fin = cues.map((c, i) => ({ index: i + 1, start: Number(c.start) || 0, end: Number(c.end) || 0,
+        text: subtextCleanText(c.text) })).filter(c => c.text);
+      const srt = subtextToSrt(fin);
+      const savedPath = subtextWriteSrt(outputPath, srt);
+      console.log(`[subtext-finalize] rewrite ${fin.length} cues (no whisper)`);
+      res.json({ ok: true, path: savedPath, cues: fin, srt });
+      return;
+    }
+    // (b) lines cần Whisper canh giờ.
+    const edited = (Array.isArray(lines) ? lines : []).map(s => String(s || '').trim()).filter(Boolean);
+    if (!edited.length) throw new Error('Không có dòng phụ đề để tạo');
+    let offset = 0;
+    if (Array.isArray(clips) && clips.length) { const r = await subtextConcatClips(clips); audioPath = r.audioPath; offset = r.offset; }
+    if (!audioPath) throw new Error('Cần clips hoặc audioPath để canh giờ');
+    if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
+    const { words } = await transcribeWhisper(audioPath, language);
+    if (!words || !words.length) throw new Error('Whisper không nhận được từ nào');
+    // Mỗi dòng đã sửa = 1 script line → mượn timing từ whisper theo từng chữ.
+    const sw = subtextFlattenScript(edited);
+    subtextAssignTimes(sw, words);
+    const groups = []; let cur = null;
+    for (const w of sw) { if (!cur || w.line !== cur.line) { cur = { words: [], line: w.line }; groups.push(cur); } cur.words.push(w); }
+    groups.forEach(c => { c.start = c.words[0].start; c.end = c.words[c.words.length - 1].end; });
+    let fin = subtextFinalize(groups);
+    if (fin.length) { const audioDur = await ffprobeDuration(audioPath); if (audioDur > fin[fin.length - 1].end) fin[fin.length - 1].end = audioDur; }
+    if (offset) fin.forEach(c => { c.start += offset; c.end += offset; });
+    const srt = subtextToSrt(fin);
+    const savedPath = subtextWriteSrt(outputPath, srt);
+    console.log(`[subtext-finalize] ${edited.length} lines → ${fin.length} cues (whisper) · offset ${offset.toFixed(2)}s`);
+    res.json({ ok: true, path: savedPath, cues: fin, srt });
+  } catch (e) {
+    console.error('[subtext-finalize]', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
@@ -2396,7 +2579,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.11.1';  // Gemini thinking version-aware: ≥3.5 dùng thinkingLevel:minimal (bỏ thinkingBudget vốn bị 3.5 phớt lờ → thinking ăn hết token → text rỗng), ≤3.1 giữ thinkingBudget:0. Lọc phần thought khi parse + ném lỗi rõ khi rỗng thay vì trả '' âm thầm. Prior 1.11.0: + POST /music/prompt (AI dựng prompt nhạc từ tag). 1.10.0: POST /sac/log
+const BRIDGE_VERSION = '1.11.5';  // + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
