@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.1.4';  // (bridge app 3.4 · server 1.11.5) Thay đổi chính so với 5.1.3:
+var PLUGIN_VERSION = 'v5.1.5';  // (bridge app 3.4 · server 1.11.5) Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
 // • Lưu audio: import lại cùng take không hỏi lại; bridge tránh ghi đè tự đánh " (1)(2)"; bỏ Gần đây/Preset của tên; path rút gọn (bỏ cụm mount, ≤6 đoạn) + double-click sửa; nút "Thư mục mới" (gõ tên con → mkdir); modal rộng hơn (440px).
 // • Bin picker: natural sort (1x<2x<10x) + trỏ sẵn/bung tới bin đang chọn. Music: genres/moods tối đa 3, +Funk/Disco/EDM/Reggaeton, tên mặc định "AI BGM v1". Model: +Gemini 3.5 Flash Lite (mặc định vẫn 3.1).
@@ -2601,10 +2601,15 @@ function sacMatchBinItem(items, targetName) {
   // Pass 4: fuzzy typo tolerance, e.g. "K10 opt1" ↔ "K10 op1". Only over clips,
   // only the UNIQUE closest within a tight threshold, so we never silently bind
   // the wrong clip when several are equally close.
+  // Số trong tên là ĐỊNH DANH (số clip / số option), không phải typo — nên dãy chữ
+  // số phải KHỚP TUYỆT ĐỐI mới cho fuzzy. Chặn "K34 O4" ↔ "K30 O4" (34≠30) nhưng vẫn
+  // cho "K10 opt1" ↔ "K10 op1" (số "101" giống, chỉ khác chữ "t").
+  var tDigits = tNoX.replace(/\D/g, '');
   var best = null, bestD = Infinity, tie = false;
   for (var f = 0; f < items.length; f++) {
     if (items[f].isFolder) continue;
     var cand = sacNorm(items[f].name).replace(/\.[^.]+$/, '');
+    if (cand.replace(/\D/g, '') !== tDigits) continue; // số định danh khác → KHÔNG fuzzy
     var d = sacLev(tNoX, cand);
     if (d < bestD) { bestD = d; best = items[f].item; tie = false; }
     else if (d === bestD) { tie = true; }
@@ -3371,9 +3376,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     function srcEntries(name, time) {
       // Also split on the word "và"/"and" (with spaces) so one source with two
       // timestamps ("0:02-0:08 và 0:10-0:15") becomes two clip entries.
-      var segs = String(time || '').normalize('NFC')
+      // BỎ ghi chú "(...)" TRƯỚC khi tách: ghi chú thường có dấu phẩy/"và" và cả số
+      // (vd "00:01-00:04 (nhấc strap, kéo lên xuống 1 tí)") → nếu không bỏ, dấu phẩy
+      // trong ghi chú cắt ô thành 2 và số "1" trong ghi chú thành timestamp ma.
+      var clean = String(time || '').normalize('NFC').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+      var segs = clean
         .split(/\s+(?:và|and)\s+|[&+,;]/i).map(function(s) { return s.trim(); }).filter(Boolean);
-      if (segs.length <= 1) return [{ name: name, time: time }];
+      if (segs.length <= 1) return [{ name: name, time: time }]; // 1 timecode → giữ NGUYÊN time (còn ghi chú để hiển thị)
       return segs.map(function(seg) { return { name: name, time: seg }; });
     }
 
