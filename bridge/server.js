@@ -1433,7 +1433,10 @@ app.post('/plugin/check-update', async (req, res) => {
     const latestVersion  = data.pluginVersion    || '';
     const downloadUrl    = data.pluginDownloadUrl || '';
     const hasUpdate = latestVersion && downloadUrl && isNewer(latestVersion, currentVersion);
-    res.json({ ok: true, hasUpdate: !!hasUpdate, latestVersion, downloadUrl });
+    // pluginNotes = "có gì mới" của bản plugin (update-gist.sh lấy từ comment
+    // PLUGIN_VERSION). Fallback về notes chung để Gist cũ vẫn hiển thị được gì đó.
+    const notes = data.pluginNotes || data.notes || '';
+    res.json({ ok: true, hasUpdate: !!hasUpdate, latestVersion, downloadUrl, notes });
   } catch(e) {
     res.json({ ok: false, error: e.name === 'AbortError' ? 'timeout fetching manifest' : e.message });
   }
@@ -2579,7 +2582,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.11.5';  // + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
+const BRIDGE_VERSION = '1.11.6';  // /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

@@ -11,6 +11,12 @@ BRIDGE_VERSION=$(grep -A1 'CFBundleShortVersionString' bridge-app/build-app.sh \
   | grep '<string>' | head -1 | grep -o '[0-9.]*')
 PLUGIN_VERSION=$(grep '"version"' plugin/manifest.json | grep -o '[0-9.]*' | head -1)
 
+# Ghi chú "có gì mới" cho banner update trong plugin.
+#   - Ưu tiên biến môi trường: RELEASE_NOTE="..." bash update-gist.sh
+#   - Mặc định: lấy comment ngay sau `var PLUGIN_VERSION = 'vX.Y.Z';`
+PLUGIN_NOTES="${RELEASE_NOTE:-$(grep -m1 "^var PLUGIN_VERSION" plugin/main.js \
+  | sed -E "s@^[^/]*//[[:space:]]*@@")}"
+
 if [ -z "$BRIDGE_VERSION" ] || [ -z "$PLUGIN_VERSION" ]; then
   echo "❌ Không đọc được version. Kiểm tra build-app.sh và manifest.json"
   exit 1
@@ -28,6 +34,8 @@ echo ""
 
 # ── Ghi JSON ra file tạm (không dùng python encode để tránh double-encode) ─
 TMP=$(mktemp /tmp/version_XXXXX.json)
+# Ghi chú có thể chứa dấu ", \ , tiếng Việt → để python json.dumps escape đúng.
+NOTES_JSON=$(printf '%s' "$PLUGIN_NOTES" | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read().strip()))')
 cat > "$TMP" << JSON
 {
   "version": "${BRIDGE_VERSION}",
@@ -35,6 +43,7 @@ cat > "$TMP" << JSON
   "notes": "Bridge ${BRIDGE_VERSION} / Plugin ${PLUGIN_VERSION}",
   "downloadUrl": "${BASE_URL}/premiere-claude-plugin-v${PLUGIN_VERSION}.zip",
   "pluginVersion": "${PLUGIN_VERSION}",
+  "pluginNotes": ${NOTES_JSON},
   "pluginDownloadUrl": "${BASE_URL}/claude-ai-assistant-v${PLUGIN_VERSION}.ccx"
 }
 JSON
