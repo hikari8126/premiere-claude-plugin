@@ -791,7 +791,8 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.1.5';  // (bridge app 3.4 · server 1.11.5) Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
+var PLUGIN_VERSION = 'v5.2.0';  // (bridge app 3.5 · server 1.11.6) Bin picker (Voice Gen): chọn một bin → nút "+ bin con" ngay trong hàng đó, gõ tên + Enter là tạo bin thật trong project; cây bin tự refresh mỗi 4s theo Premiere. Banner update thêm dòng "có gì mới".
+// v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
 // • Lưu audio: import lại cùng take không hỏi lại; bridge tránh ghi đè tự đánh " (1)(2)"; bỏ Gần đây/Preset của tên; path rút gọn (bỏ cụm mount, ≤6 đoạn) + double-click sửa; nút "Thư mục mới" (gõ tên con → mkdir); modal rộng hơn (440px).
 // • Bin picker: natural sort (1x<2x<10x) + trỏ sẵn/bung tới bin đang chọn. Music: genres/moods tối đa 3, +Funk/Disco/EDM/Reggaeton, tên mặc định "AI BGM v1". Model: +Gemini 3.5 Flash Lite (mặc định vẫn 3.1).
@@ -967,7 +968,7 @@ function checkPluginUpdate() {
       if (data.ok && data.hasUpdate) {
         console.log('[Update] New version available:', data.latestVersion);
         // Don't re-pop the banner if the user already dismissed it this session.
-        if (!_pluginUpdateDismissed) showPluginUpdateBanner(data.latestVersion, data.downloadUrl);
+        if (!_pluginUpdateDismissed) showPluginUpdateBanner(data.latestVersion, data.downloadUrl, data.notes);
       } else {
         console.log('[Update] Up to date or check failed:', data);
       }
@@ -978,14 +979,23 @@ function checkPluginUpdate() {
   xhr.send(JSON.stringify({ currentVersion: current }));
 }
 
-function showPluginUpdateBanner(latestVersion, downloadUrl) {
+function showPluginUpdateBanner(latestVersion, downloadUrl, notes) {
   var banner  = document.getElementById('pluginUpdateBanner');
   var msg     = document.getElementById('pluginUpdateMsg');
+  var notesEl = document.getElementById('pluginUpdateNotes');
   var updateBtn = document.getElementById('pluginUpdateBtn');
   var dismissBtn = document.getElementById('pluginUpdateDismiss');
   if (!banner || !msg) return;
 
   msg.textContent = 'Plugin v' + latestVersion + ' available';
+  // "Có gì mới" — để user tự quyết định update ngay hay để sau. Cắt cho gọn banner;
+  // bản đầy đủ vẫn nằm trong GitHub release notes.
+  if (notesEl) {
+    var note = String(notes || '').trim();
+    if (note.length > 260) note = note.slice(0, 257) + '…';
+    notesEl.textContent = note ? '✦ ' + note : '';
+    notesEl.hidden = !note;
+  }
   banner.hidden = false;
 
   updateBtn.onclick = function() {
@@ -8578,6 +8588,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   var vgBinExpanded = {};   // fullPath → true
+  var vgBinNewParent = null; // fullPath của bin đang mở ô "tạo bin con" (null = không mở)
 
   // Folder list comes from sacCollectBinItems(), which already tags each node with
   // isFolder + its parent branch path. Full path uses the same ' / ' separator as
@@ -8597,6 +8608,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Sort THÔNG MINH: so từng cấp path bằng natural compare (sacNatCmp) để "1x <
     // 2x < 10x < 11x" thay vì theo chữ cái ("10x" trước "1x"). So theo segment giữ
     // đúng thứ tự cây (cha luôn trước con).
+    vgBinSortFolders();
+  }
+
+  function vgBinSortFolders() {
     vgBinFolders.sort(function (a, b) {
       var as = a.full.split(' / '), bs = b.full.split(' / ');
       var n = Math.min(as.length, bs.length);
@@ -8666,20 +8681,111 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       lbl.textContent = q ? f.full : f.name;
       row.appendChild(lbl);
 
+      // "+" chỉ hiện trên bin đang chọn — tạo bin con NGAY TRONG bin đó, khỏi phải
+      // gõ cả đường dẫn ' / ' vào ô cuối modal.
+      if (!q && f.full === vgBinChosen) {
+        var addBtn = document.createElement('div');
+        addBtn.setAttribute('role', 'button');
+        addBtn.className = 'vg-binAddChild';
+        piMakeButton(addBtn);
+        piSetBtn(addBtn, 'plus', 'bin con', null, 10);
+        addBtn.setAttribute('data-tip', 'Tạo bin mới bên trong bin này');
+        addBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          vgBinExpanded[f.full] = true;
+          vgBinNewParent = (vgBinNewParent === f.full) ? null : f.full;
+          vgBinRenderList();
+          if (vgBinNewParent) setTimeout(function () {
+            var inp = host.querySelector('.vg-binChildInput');
+            if (inp) { try { inp.focus(); } catch (er) {} }
+          }, 0);
+        });
+        row.appendChild(addBtn);
+      }
+
       row.addEventListener('click', function () {
         vgBinChosen = f.full;   // giữ full path để hiển thị; tên bin lấy leaf khi lưu
+        vgBinNewParent = null;
         var ni = document.getElementById('vgBinNew');
         if (ni) ni.value = '';
         vgBinRenderList();
       });
       host.appendChild(row);
+
+      // Ô nhập tên bin con — chèn ngay dưới bin cha, thụt vào 1 cấp.
+      if (!q && vgBinNewParent === f.full) {
+        var nrow = document.createElement('div');
+        nrow.className = 'vg-binChildRow';
+        nrow.style.paddingLeft = (8 + (depth + 1) * 16) + 'px';
+
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'sac-nsf2-input vg-binChildInput';
+        inp.placeholder = 'Tên bin con trong "' + f.name + '"...';
+        inp.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); vgBinCreateChild(f.full, inp.value); }
+          else if (e.key === 'Escape') { vgBinNewParent = null; vgBinRenderList(); }
+        });
+        nrow.appendChild(inp);
+
+        var ok = document.createElement('div');
+        ok.setAttribute('role', 'button');
+        ok.className = 'btn-primary vg-binChildOk';
+        piMakeButton(ok);
+        piSetBtn(ok, 'check', null, '#ffffff', 12);
+        ok.addEventListener('click', function () { vgBinCreateChild(f.full, inp.value); });
+        nrow.appendChild(ok);
+
+        host.appendChild(nrow);
+      }
     });
+  }
+
+  // Tạo bin con thật trong project (ppGetOrCreateBin tự tạo mọi cấp còn thiếu),
+  // rồi quét lại + chọn luôn bin mới. Nếu Premiere không tạo được thì vẫn nhận
+  // đường dẫn — bin sẽ được tạo lúc import.
+  async function vgBinCreateChild(parentFull, rawName) {
+    var name = String(rawName || '').trim();
+    if (!name) { vgBinStatus('Nhập tên bin con trước.', 'is-err'); return; }
+    if (name.indexOf('/') >= 0) { vgBinStatus('Tên bin không được chứa "/".', 'is-err'); return; }
+    var full = parentFull ? (parentFull + ' / ' + name) : name;
+
+    var exists = vgBinFolders.some(function (f) { return f.full === full; });
+    if (exists) {
+      vgBinStatus('Bin "' + name + '" đã có — đã chọn sẵn.', 'is-warn');
+    } else {
+      vgBinStatus('⏳ Đang tạo bin "' + name + '"...', '');
+      var made = null;
+      try {
+        var proj = await getActiveProject();
+        made = await ppGetOrCreateBin(proj, full);
+      } catch (e) { made = null; }
+      if (made) {
+        try { await vgBinScanFolders(); } catch (e) {}
+        vgBinStatus('✓ Đã tạo bin "' + full + '"', '');
+      } else {
+        vgBinFolders.push({ name: name, path: parentFull || '', full: full });
+        vgBinSortFolders();
+        vgBinStatus('⚠ Chưa tạo được trong project — sẽ tạo khi import.', 'is-warn');
+      }
+    }
+
+    // Bung mọi cấp cha để bin mới hiện ra ngay.
+    var segs = full.split(' / ');
+    for (var i = 1; i < segs.length; i++) vgBinExpanded[segs.slice(0, i).join(' / ')] = true;
+    vgBinChosen = full;
+    vgBinNewParent = null;
+    var ni = document.getElementById('vgBinNew');
+    if (ni) ni.value = '';
+    vgBinRenderList();
   }
 
   async function vgBinOpen(mode) {
     vgBinMode = mode;
     vgBinChosen = vgBins[mode] || VG_BIN_DEFAULTS[mode];
     vgBinExpanded = {};
+    vgBinNewParent = null;
     var modal = document.getElementById('vgBinModal');
     var title = document.getElementById('vgBinTitle');
     var filt  = document.getElementById('vgBinFilter');
@@ -8713,12 +8819,59 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var act = host && host.querySelector('.sac-bind-row.is-active');
       if (act && act.scrollIntoView) { try { act.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
     }, 0);
+    vgBinAutoStart();   // từ đây modal tự bám theo cây bin trong Premiere
   }
   function vgBinClose() {
+    vgBinAutoStop();
     var m = document.getElementById('vgBinModal');
     if (m) m.hidden = true;
     var app = document.getElementById('vgApp');
     if (app) app.style.display = '';
+  }
+
+  // ── Autorefresh cây bin ────────────────────────────────────────────────────
+  // Premiere không phát event khi user tạo/đổi tên/xoá bin, nên modal tự quét lại
+  // theo nhịp và CHỈ vẽ lại khi cây thực sự đổi (vẽ lại vô cớ sẽ nhảy scroll).
+  var VG_BIN_AUTO_MS = 4000;
+  var vgBinAutoTimer = null;
+  var vgBinAutoBusy  = false;
+
+  function vgBinSig() {
+    return vgBinFolders.map(function (f) { return f.full; }).join('');
+  }
+
+  async function vgBinAutoTick() {
+    if (vgBinAutoBusy) return;
+    var modal = document.getElementById('vgBinModal');
+    if (!modal || modal.hidden) { vgBinAutoStop(); return; }
+    // Đang gõ tên bin (con hoặc ở footer) → hoãn, nếu không re-render sẽ xoá chữ.
+    if (vgBinNewParent) return;
+    var neu = document.getElementById('vgBinNew');
+    if (neu && neu.value.trim()) return;
+
+    vgBinAutoBusy = true;
+    var before = vgBinSig();
+    var snapshot = vgBinFolders;
+    try {
+      await vgBinScanFolders();
+      if (vgBinSig() !== before) {
+        var host = document.getElementById('vgBinList');
+        var top = host ? host.scrollTop : 0;
+        vgBinRenderList();
+        if (host) { try { host.scrollTop = top; } catch (e) {} }
+        vgBinStatus('↻ Bin trong project vừa đổi — danh sách đã cập nhật.', '');
+      }
+    } catch (e) {
+      // Nhịp nền: giữ nguyên danh sách cũ, không báo lỗi ồn ào (nút ↻ vẫn báo).
+      vgBinFolders = snapshot;
+    } finally { vgBinAutoBusy = false; }
+  }
+  function vgBinAutoStart() {
+    vgBinAutoStop();
+    vgBinAutoTimer = setInterval(vgBinAutoTick, VG_BIN_AUTO_MS);
+  }
+  function vgBinAutoStop() {
+    if (vgBinAutoTimer) { clearInterval(vgBinAutoTimer); vgBinAutoTimer = null; }
   }
 
   (function vgBinWire() {

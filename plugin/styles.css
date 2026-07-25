@@ -130,9 +130,8 @@ body {
 /* ── Plugin update banner ────────────────────────────── */
 #pluginUpdateBanner {
   display: flex;
+  flex-direction: column;
   flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
   padding: 5px 10px;
   background: #1a2e1a;
   border-bottom: 1px solid #2d5a2d;
@@ -140,9 +139,21 @@ body {
   color: #86efac;
 }
 #pluginUpdateBanner[hidden] { display: none; }
+/* gap không có tác dụng trong UXP → dùng margin-left cho từng nút. */
+#pluginUpdateBanner .pu-row { display: flex; align-items: center; }
 #pluginUpdateBanner span { flex: 1; }
+#pluginUpdateBanner .pu-notes {
+  font-size: 10px;
+  line-height: 1.45;
+  color: #bbf7d0;
+  padding: 3px 1px 1px;
+  white-space: normal;
+  word-break: break-word;
+}
+#pluginUpdateBanner .pu-notes[hidden] { display: none; }
 #pluginUpdateBanner .text-btn {
   font-size: 10px;
+  margin-left: 6px;
   padding: 2px 7px;
   border: 1px solid #2d5a2d;
   border-radius: 4px;
@@ -3913,6 +3924,27 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   padding-top: 10px;
 }
 .vg-binNewInput { flex: 1 1 auto; min-width: 0; }
+/* "+ bin con" — chỉ hiện trên hàng bin đang chọn. */
+.vg-binAddChild {
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  border-radius: 4px;
+  background: var(--accent-a25);
+  border: 1px solid var(--accent-a50);
+  color: #fff;
+  vertical-align: -1px;
+}
+.vg-binAddChild:hover { background: var(--accent-a40); }
+.vg-binChildRow {
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.03);
+}
+.vg-binChildInput { flex: 1 1 auto; min-width: 0; }
+.vg-binChildOk { margin-left: 6px; padding: 3px 8px; }
 .vg-binRescanBtn { margin-left: 6px; }
 .vg-binSaveBtn { margin-left: 6px; }
 
