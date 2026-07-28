@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.0';  // (bridge app 3.5 · server 1.11.6) Bin picker (Voice Gen): chọn một bin → nút "+ bin con" ngay trong hàng đó, gõ tên + Enter là tạo bin thật trong project; cây bin tự refresh mỗi 4s theo Premiere. Banner update thêm dòng "có gì mới".
+var PLUGIN_VERSION = 'v5.2.1';  // (bridge app 3.5 · server 1.11.6) Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" giờ dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
 // • Lưu audio: import lại cùng take không hỏi lại; bridge tránh ghi đè tự đánh " (1)(2)"; bỏ Gần đây/Preset của tên; path rút gọn (bỏ cụm mount, ≤6 đoạn) + double-click sửa; nút "Thư mục mới" (gõ tên con → mkdir); modal rộng hơn (440px).
@@ -2703,7 +2703,13 @@ async function ppGetOrCreateBin(proj, binName) {
     return null;
   }
 
-  var node = root;
+  // Root cũng phải cast: getRootItem() trả ProjectItem, mà createBinAction chỉ có
+  // trên FolderItem. Thiếu cast này thì việc TẠO bin ở cấp gốc luôn ném (đọc con
+  // vẫn chạy vì sacGetFolderChildren tự cast) → máy nào project đã có bin sẵn thì
+  // ổn, máy chưa có thì move fail im lặng và clip nằm lại bin đang chọn.
+  var rootCast = null;
+  try { rootCast = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(root) : null; } catch (e) {}
+  var node = rootCast || root;
   for (var s = 0; s < segs.length; s++) {
     var want = segs[s];
     var hit = null;
@@ -5878,6 +5884,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var saved = vgLoadBinStore()[vgBinProjKey] || {};
     vgBins = Object.assign({}, VG_BIN_DEFAULTS, saved);
     vgRenderBinNames();
+    // Tên file gợi ý cũng nhớ theo project — dùng chung projKey nên nạp cùng chỗ.
+    vgNameParts = Object.assign({}, vgLoadNamePartStore()[vgBinProjKey] || {});
   }
   function vgSetBin(mode, name) {
     name = String(name || '').trim();
@@ -5890,8 +5898,33 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgRenderBinNames();
   }
   window.vgTargetBinName = function () {
-    return vgBins[currentMode] || VG_BIN_DEFAULTS[currentMode] || 'Voice Over';
+    // Mode 'create' (tạo voice) dùng chung bin với 'tts' — thiếu map này thì
+    // vgBins['create'] là undefined và bin user chọn bị bỏ qua, luôn rơi về
+    // 'Voice Over'.
+    var m = (currentMode === 'create') ? 'tts' : currentMode;
+    return vgBins[m] || VG_BIN_DEFAULTS[m] || 'Voice Over';
   };
+
+  // ── Phần tên do user đặt, nhớ theo project ────────────────────────────────
+  // Chỉ lưu PHẦN CỦA USER (không gồm tên voice): "v2.3 - Rachel" → "v2.3".
+  // Lần lưu sau gợi ý lại "{phần user} - {voice đang chọn}", nên đổi voice là tên
+  // tự cập nhật. Key theo project giống vg_bins_v1.
+  var VG_NAMEPARTS_LS = 'vg_name_parts_v1'; // { projKey: { tts, sfx, music } }
+  var vgNameParts     = {};
+
+  function vgLoadNamePartStore() {
+    try { return JSON.parse(localStorage.getItem(VG_NAMEPARTS_LS) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function vgSaveNamePart(mode, part) {
+    part = String(part || '').trim();
+    if (!part) return;
+    vgNameParts[mode] = part;
+    var store = vgLoadNamePartStore();
+    if (!store[vgBinProjKey]) store[vgBinProjKey] = {};
+    store[vgBinProjKey][mode] = part;
+    try { localStorage.setItem(VG_NAMEPARTS_LS, JSON.stringify(store)); } catch (e) {}
+  }
   var players = {}; // { var1: {audio, isPlaying}, var2: {...} }
 
   // ── Multi-speaker state ─────────────────────────────────────────────────
@@ -7091,23 +7124,53 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function vgSetNameList(key, arr) {
     try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
   }
-  // Build the default suggested name: v{lastVersion} - {currentVoiceName}
-  // (no extension — okB appends the ext automatically on save).
+  // Tên gợi ý = "{phần user lần trước} - {voice đang chọn}", phần user nhớ theo
+  // project (vgNameParts). Chưa lưu lần nào trong project này → fallback
+  // "v{vg_last_version}" (hành vi cũ, global) để không mất quán tính.
+  // Không có đuôi — okB tự thêm ext khi lưu.
   function vgBuildDefaultName() {
     var mode = (currentMode === 'create') ? 'tts' : currentMode;
-    // Music: tên mặc định riêng "AI BGM v1" (không gắn với tên voice).
-    if (mode === 'music') return 'AI BGM v1';
-    var ver = '';
-    try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
-    if (!ver) ver = '1.0';
+    var part = vgNameParts[mode] || '';
+    // Music: tên mặc định riêng (không gắn với tên voice).
+    if (mode === 'music') return part || 'AI BGM v1';
+    if (!part) {
+      var ver = '';
+      try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
+      part = 'v' + (ver || '1.0');
+    }
     var voice = 'Voice';
     try { voice = vgVoiceName() || 'Voice'; } catch (e) {}
-    return 'v' + ver + ' - ' + voice;
+    return part + ' - ' + voice;
+  }
+  // Cắt phần tên voice ở cuối để chỉ giữ lại phần user tự đặt.
+  // "v2.3 - Rachel.mp3" → "v2.3". Chỉ cắt khi đoạn cuối đúng là một voice đã
+  // biết (voice hiện tại hoặc trong VG_VOICES_DATA) — nếu user tự gõ "Bản 3 -
+  // final" thì giữ nguyên cả câu, đó là tên họ muốn.
+  function vgStripVoiceSuffix(name) {
+    var base = String(name || '').replace(/\.[^.\/]+$/, '').trim();
+    var idx  = base.lastIndexOf(' - ');
+    if (idx <= 0) return base;
+    var tail = base.slice(idx + 3).trim().toLowerCase();
+    if (!tail) return base;
+    var isVoice = false;
+    try { isVoice = (vgVoiceName() || '').trim().toLowerCase() === tail; } catch (e) {}
+    if (!isVoice) {
+      try {
+        isVoice = VG_VOICES_DATA.some(function (v) {
+          if (!v || v.isSep || !v.label) return false;
+          var n = v.label.replace(/^⭐\s*/, '').split(' · ')[0].trim().toLowerCase();
+          return n === tail;
+        });
+      } catch (e) {}
+    }
+    return isVoice ? base.slice(0, idx).trim() : base;
   }
   // On a successful save: remember the version and push the name into recents (cap 5).
   function vgRememberSavedName(finalName) {
     var m = /^v\s*([0-9]+(?:\.[0-9x]+)?)/i.exec(finalName);
     if (m) { try { localStorage.setItem('vg_last_version', m[1]); } catch (e) {} }
+    var mode = (currentMode === 'create') ? 'tts' : currentMode;
+    vgSaveNamePart(mode, vgStripVoiceSuffix(finalName));
     var r = vgGetNameList('vg_recent_names').filter(function (n) { return n !== finalName; });
     r.unshift(finalName);
     if (r.length > 5) r = r.slice(0, 5);
@@ -7145,8 +7208,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       suggestedName = suggestedName || 'voice.mp3';
       var dot = suggestedName.lastIndexOf('.');
       var ext = dot >= 0 ? suggestedName.substring(dot) : '.mp3';
-      // Smart default: v{lastVersion} - {currentVoiceName} (ext added on save).
-      nameInp.value = vgBuildDefaultName();
+      // Smart default: {phần user lần trước của project này} - {voice đang chọn}
+      // (ext added on save).
+      var autoName = vgBuildDefaultName();
+      nameInp.value = autoName;
 
       // Tên project (bỏ đuôi) để rút gọn path trong danh sách folder. Nạp async;
       // nếu chưa kịp thì vgShortPath fallback 4 đoạn cuối.
@@ -7156,6 +7221,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           var p = await getActiveProject();
           var nm = p && p.name; if (nm && nm.then) nm = await nm;
           projName = String(nm || '').replace(/\.[^.]+$/, '').trim();
+        } catch (e) {}
+        // Poll đổi-project chạy mỗi 5 s → vgNameParts có thể còn của project cũ.
+        // Nạp lại theo project thật rồi cập nhật tên gợi ý, miễn user chưa sửa ô.
+        try {
+          await vgLoadBinsForProject();
+          var fresh = vgBuildDefaultName();
+          if (modal && !modal.hidden && nameInp.value === autoName && fresh !== autoName) {
+            autoName = fresh;
+            nameInp.value = fresh;
+          }
         } catch (e) {}
         // Nạp xong tên project → vẽ lại ô path (và list nếu đang mở) để anchor đúng.
         if (modal && !modal.hidden) {
