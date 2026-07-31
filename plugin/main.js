@@ -791,7 +791,8 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.1';  // (bridge app 3.5 · server 1.11.6) Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" giờ dùng đúng bin đã chọn thay vì mặc định Voice Over.
+var PLUGIN_VERSION = 'v5.2.2';  // (bridge app 3.5 · server 1.11.6) Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
+// v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
 // • Lưu audio: import lại cùng take không hỏi lại; bridge tránh ghi đè tự đánh " (1)(2)"; bỏ Gần đây/Preset của tên; path rút gọn (bỏ cụm mount, ≤6 đoạn) + double-click sửa; nút "Thư mục mới" (gõ tên con → mkdir); modal rộng hơn (440px).
@@ -9515,8 +9516,33 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     tick();
   }
 
-  async function stResolveOutputPath() {
-    var folder = localStorage.getItem('vg_last_save_folder') || '';
+  // Lấy thư mục của file VO ĐANG dùng (dirname của media path clip đầu tiên được
+  // chọn). Nhờ vậy .srt luôn nằm cạnh VO và tự đi theo khi bạn re-link sang ổ khác.
+  async function stVoMediaFolder() {
+    try {
+      var clips = await stCollectClips();
+      for (var i = 0; i < clips.length; i++) {
+        var fp = clips[i] && clips[i].filePath;
+        if (fp) {
+          var dir = String(fp).replace(/[\/\\][^\/\\]*$/, ''); // dirname
+          if (dir && dir !== fp) return dir;
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  // Chọn thư mục lưu .srt theo thứ tự ưu tiên:
+  //   1. Thư mục của file VO hiện tại (theo re-link) — đúng kỳ vọng "srt cạnh VO".
+  //   2. Thư mục lưu gần nhất đã nhớ (dùng chung với Voice Gen) — fallback.
+  //   3. Hỏi người dùng chọn — khi chưa có gì.
+  // forcePrompt=true: bỏ qua 1 & 2, luôn hỏi (dùng khi thư mục cũ ghi hỏng).
+  async function stResolveOutputPath(forcePrompt) {
+    var folder = '';
+    if (!forcePrompt) {
+      folder = await stVoMediaFolder();
+      if (!folder) folder = localStorage.getItem('vg_last_save_folder') || '';
+    }
     if (!folder) {
       try {
         var lfs = require('uxp').storage.localFileSystem;
@@ -9619,11 +9645,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         body = { clips: clips, scriptLines: lines, outputPath: outputPath,
           maxWords: maxWords, maxChars: maxChars, maxDur: maxDur, useAI: false };
       }
-      var resp = await fetch(BRIDGE_URL + url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: stAbort ? stAbort.signal : undefined,
-      });
-      var d = await resp.json();
+      var stPostFinalize = async function () {
+        var r = await fetch(BRIDGE_URL + url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body), signal: stAbort ? stAbort.signal : undefined,
+        });
+        return r.json();
+      };
+      var d = await stPostFinalize();
+      // Thư mục đích không ghi được (VD folder VO trên NAS chỉ-đọc / đã unmount) →
+      // hỏi chọn thư mục khác rồi thử lại 1 lần, thay vì báo lỗi cụt.
+      if (d && d.ok === false && /EACCES|permission denied|Cannot create folder|ENOENT|no such file/i.test(String(d.error || ''))) {
+        stStatus('⚠ Không ghi được .srt vào thư mục của VO (chỉ-đọc hoặc ổ đã ngắt). Chọn thư mục khác để lưu...');
+        var alt = null;
+        try { alt = await stResolveOutputPath(true); } catch (e) { alt = null; }
+        if (alt) { body.outputPath = alt; d = await stPostFinalize(); }
+      }
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
       if (d.diag) { try { console.log('[Sub][diag]', JSON.stringify(d.diag)); } catch (e) {} }
       stLastPath = d.path;
