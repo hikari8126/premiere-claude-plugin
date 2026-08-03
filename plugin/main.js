@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.2';  // (bridge app 3.5 · server 1.11.6) Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
+var PLUGIN_VERSION = 'v5.2.2';  // (bridge app 3.5 · server 1.11.6) Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
@@ -9532,11 +9532,38 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return '';
   }
 
+  // Trích "version" từ tên sequence: "FB9.16 SofiLace v21.0 (O) [..]" → "v21.0".
+  // Nhận vNN, vNN.NN, vNN.NN.NN (không phân biệt hoa/thường). Không có → ''.
+  function stSeqVersionTag(name) {
+    var m = String(name || '').match(/\bv\d+(?:\.\d+)*\b/i);
+    return m ? m[0] : '';
+  }
+
+  // Tên file .srt (không đuôi) theo sequence đang mở:
+  //   1. version trong tên sequence  → "v21.0"
+  //   2. không có version            → tên sequence đã làm sạch ký tự cấm
+  //   3. không lấy được tên          → "subtitle_<timestamp>" (giữ hành vi cũ)
+  async function stOutputBasename() {
+    try {
+      var seq = await getActiveSequence();
+      var nm = seq && (seq.name != null ? seq.name : (seq.getName ? seq.getName() : ''));
+      if (nm && nm.then) nm = await nm;
+      nm = String(nm || '').trim();
+      var tag = stSeqVersionTag(nm);
+      if (tag) return tag;
+      var safe = nm.replace(/[\/\\:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim();
+      if (safe) return safe;
+    } catch (e) {}
+    return 'subtitle_' + Date.now();
+  }
+
   // Chọn thư mục lưu .srt theo thứ tự ưu tiên:
   //   1. Thư mục của file VO hiện tại (theo re-link) — đúng kỳ vọng "srt cạnh VO".
   //   2. Thư mục lưu gần nhất đã nhớ (dùng chung với Voice Gen) — fallback.
   //   3. Hỏi người dùng chọn — khi chưa có gì.
   // forcePrompt=true: bỏ qua 1 & 2, luôn hỏi (dùng khi thư mục cũ ghi hỏng).
+  // Tên file lấy theo version của sequence (vd "v21.0.srt"); trùng tên sẽ ghi đè
+  // (cùng version → thay bản mới).
   async function stResolveOutputPath(forcePrompt) {
     var folder = '';
     if (!forcePrompt) {
@@ -9552,7 +9579,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (folder) localStorage.setItem('vg_last_save_folder', folder);
       } catch (e) { throw new Error('Không chọn được thư mục: ' + e.message); }
     }
-    return folder.replace(/[\/\\]+$/, '') + '/subtitle_' + Date.now() + '.srt';
+    var base = await stOutputBasename();
+    return folder.replace(/[\/\\]+$/, '') + '/' + base + '.srt';
   }
 
   // BƯỚC 1: AI ngắt câu → ghi vào ô script → đếm ngược.
