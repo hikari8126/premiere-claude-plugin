@@ -924,7 +924,32 @@ body {
 .vg-save-folderInput[hidden] { display: none; }
 .vg-save-folderInput { color: var(--text); border-color: var(--accent); }
 .vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
-#vgSaveChangeFolder { flex: 0 0 auto; width: auto; padding: 0 8px; gap: 4px; font-size: 11px; white-space: nowrap; }
+#vgSaveChangeFolder { flex: 0 0 28px; width: 28px; height: 28px; }
+/* Dropdown chọn list Gần đây / Bookmark (nút + menu button) — 1 list dùng chung bên dưới. */
+.vg-filterBtn {
+  flex: 0 0 auto; display: inline-flex; align-items: center;
+  font-size: 11px; color: var(--text);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer;
+}
+.vg-filterBtn:hover { background: rgba(255,255,255,0.12); }
+.vg-filterBtnLabel { margin: 0 6px; }
+.vg-filterBtn .vg-caret { opacity: 0.7; font-size: 9px; }
+.vg-filterMenu { margin-left: 6px; display: inline-flex; align-items: center; }
+.vg-filterMenu[hidden] { display: none; }
+/* Mục còn lại (không phải cái đang chọn) — cùng cỡ với trigger nhưng TỐI hơn để phân biệt. */
+.vg-filterOpt {
+  display: inline-flex; align-items: center;
+  font-size: 11px; color: var(--text);
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; cursor: pointer;
+}
+.vg-filterOpt[hidden] { display: none; }
+.vg-filterOpt > span[data-ic] { margin-right: 6px; }
+.vg-filterOpt:hover { background: rgba(0,0,0,0.5); }
+.vg-folderListPanel { margin-top: 6px; }
 /* Floating full-path tip shown on folder hover — reuses .un-hkTip, wider + monospace path. */
 .vg-folderTip { max-width: 320px; }
 .vg-folderTip .un-tipCmd { margin-top: 3px; word-break: break-all; overflow-wrap: anywhere; font-family: ui-monospace, monospace; opacity: 0.95; }

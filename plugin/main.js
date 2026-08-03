@@ -791,7 +791,8 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.2';  // (bridge app 3.5 · server 1.11.6) Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
+var PLUGIN_VERSION = 'v5.2.3';  // (bridge app 3.5 · server 1.11.6) UI Lưu audio: nút chọn thư mục chỉ còn icon; bỏ nút "Thư mục mới"; gộp Gần đây/Bookmark thành 1 dropdown dạng button (chỉ hiện mục còn lại, nền tối hơn) + 1 list dùng chung bên dưới, mặc định Gần đây.
+// v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
 // • Tạo Sub: "AI ngắt câu" (Whisper canh giờ → AI ngắt) đổ dòng vào Ô SCRIPT sửa tại chỗ → đếm ngược 5s tự Tạo SRT (sửa = dừng); bỏ hết dấu " + luật dấu câu; log chẩn đoán Whisper (số từ / khớp % / khoảng lặng), cảnh báo khi timing đáng ngờ.
@@ -7198,12 +7199,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var changeB  = $('vgSaveChangeFolder');
       var cancelB  = $('vgSaveCancel');
       var okB      = $('vgSaveConfirm');
-      var fRecentBtn   = $('vgSaveFolderRecentBtn');
-      var fBmBtn       = $('vgSaveFolderBmBtn');
-      var fNewBtn      = $('vgSaveFolderNewBtn');
       var fBmToggle    = $('vgSaveFolderBmToggle');
-      var fRecentPanel = $('vgSaveFolderRecentPanel');
-      var fBmPanel     = $('vgSaveFolderBmPanel');
+      var fFilterBtn    = $('vgFolderFilterBtn');
+      var fFilterMenu   = $('vgFolderFilterMenu');
+      var fListPanel    = $('vgSaveFolderListPanel');
+      var folderFilter  = 'recent'; // 'recent' | 'bookmark' — mặc định Gần đây khi mở
       if (!modal || !nameInp || !okB) { resolve(null); return; }
 
       suggestedName = suggestedName || 'voice.mp3';
@@ -7236,8 +7236,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         // Nạp xong tên project → vẽ lại ô path (và list nếu đang mở) để anchor đúng.
         if (modal && !modal.hidden) {
           try { renderFolder(); } catch (e) {}
-          if (fRecentPanel && !fRecentPanel.hidden) renderFolderList(fRecentPanel, 'vg_recent_folders', '(chưa có thư mục nào)', false);
-          if (fBmPanel && !fBmPanel.hidden) renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true);
+          try { renderActiveFolderList(); } catch (e) {}
         }
       })();
 
@@ -7260,7 +7259,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!folderEl) return;
         // Hiện gọn (từ tên project, ≤6 đoạn). Full path vẫn xem được khi hover
         // (tooltip) và khi double-click để sửa (ô edit điền full path).
-        folderEl.textContent = customOutputFolder ? vgShortPath(customOutputFolder) : '(chưa chọn — bấm Đổi…)';
+        folderEl.textContent = customOutputFolder ? vgShortPath(customOutputFolder) : '(chưa chọn — bấm 📂)';
         folderEl.classList.toggle('is-empty', !customOutputFolder);
         if (folderInp) folderInp.hidden = true;
         folderEl.hidden = false;
@@ -7369,11 +7368,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       // ── Dropdown panels (chỉ còn folder: Gần đây / Bookmark). Tên file bỏ
       //    Gần đây/Preset theo yêu cầu — ô tên đã có default thông minh. ────────
-      function closePanels() {
-        if (fRecentPanel) fRecentPanel.hidden = true;
-        if (fBmPanel) fBmPanel.hidden = true;
-      }
-
       // ── Folder recent / bookmark dropdowns (same pattern; path strings are
       //    reused directly via the bridge, so no UXP folder token needed). ────
       function isFolderBookmarked() {
@@ -7392,7 +7386,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         try { localStorage.setItem('vg_last_save_folder', dir); } catch (e) {}
         renderFolder();
         renderBmToggle();
-        closePanels();
+        renderActiveFolderList();
+      }
+      // Nút trigger: icon + label theo filter đang chọn + caret ▾.
+      function renderFilterBtn() {
+        if (!fFilterBtn) return;
+        var isBm = folderFilter === 'bookmark';
+        fFilterBtn.innerHTML = window.pluginIconSVG(isBm ? 'folder' : 'rotate_left', 12, '#94a3b8')
+          + '<span class="vg-filterBtnLabel">' + (isBm ? 'Bookmark' : 'Gần đây') + '</span>'
+          + '<span class="vg-caret">▾</span>';
+      }
+      function closeFilterMenu() { if (fFilterMenu) fFilterMenu.hidden = true; }
+      // Vẽ list dùng chung theo filter đang chọn + đồng bộ nút trigger + đánh dấu mục active.
+      function renderActiveFolderList() {
+        renderFilterBtn();
+        if (fFilterMenu) {
+          // Menu chỉ hiện MỤC CÒN LẠI (khác cái đang chọn).
+          var opts = fFilterMenu.querySelectorAll('.vg-filterOpt');
+          for (var i = 0; i < opts.length; i++) opts[i].hidden = (opts[i].getAttribute('data-filter') === folderFilter);
+        }
+        if (!fListPanel) return;
+        if (folderFilter === 'bookmark') renderFolderList(fListPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true);
+        else renderFolderList(fListPanel, 'vg_recent_folders', '(chưa có thư mục nào)', false);
       }
       function renderFolderList(panel, key, emptyMsg, withDelete) {
         if (!panel) return;
@@ -7424,22 +7439,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           panel.appendChild(row);
         });
       }
-      if (fRecentBtn) fRecentBtn.onclick = function () {
-        var show = fRecentPanel && fRecentPanel.hidden;
-        closePanels();
-        if (show) { renderFolderList(fRecentPanel, 'vg_recent_folders', '(chưa có thư mục nào)', false); fRecentPanel.hidden = false; }
-      };
-      if (fBmBtn) fBmBtn.onclick = function () {
-        var show = fBmPanel && fBmPanel.hidden;
-        closePanels();
-        if (show) { renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true); fBmPanel.hidden = false; }
-      };
-      // "Thư mục mới": mở ô TRỐNG (newMode) để gõ thẳng TÊN thư mục con. Commit → ghép
-      // vào folder hiện tại + bridge mkdir tạo ngay. Không phải cuộn/điều hướng path dài.
-      if (fNewBtn) fNewBtn.onclick = function () {
-        closePanels();
-        vgFolderBeginEdit(true);
-      };
+      // Dropdown chọn list Gần đây / Bookmark (nút trigger + menu button).
+      if (fFilterBtn) fFilterBtn.onclick = function () { if (fFilterMenu) fFilterMenu.hidden = !fFilterMenu.hidden; };
+      if (fFilterMenu) {
+        var fOpts = fFilterMenu.querySelectorAll('.vg-filterOpt');
+        for (var oi = 0; oi < fOpts.length; oi++) {
+          fOpts[oi].onclick = function () {
+            folderFilter = (this.getAttribute('data-filter') === 'bookmark') ? 'bookmark' : 'recent';
+            closeFilterMenu();
+            renderActiveFolderList();
+          };
+        }
+      }
       if (fBmToggle) fBmToggle.onclick = function () {
         if (!customOutputFolder) { if (changeB.onclick) changeB.onclick(); return; } // pick one first
         var arr = vgGetNameList('vg_folder_bookmarks');
@@ -7447,10 +7458,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (i === -1) arr.push(customOutputFolder); else arr.splice(i, 1); // toggle save/unsave
         vgSetNameList('vg_folder_bookmarks', arr);
         renderBmToggle();
-        if (fBmPanel && !fBmPanel.hidden) renderFolderList(fBmPanel, 'vg_folder_bookmarks', '(chưa có bookmark)', true);
+        renderActiveFolderList();
       };
       renderBmToggle();
-      closePanels();
+      renderActiveFolderList();
 
       if (vgApp) vgApp.style.display = 'none';
       modal.hidden = false;
@@ -7464,15 +7475,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         modal.hidden = true;
         if (vgApp) vgApp.style.display = '';
         if (window.releaseKeyboard) window.releaseKeyboard();
-        closePanels();
         changeB.onclick = null; cancelB.onclick = null; okB.onclick = null;
         nameInp.onkeydown = null;
         vgHideFolderTip();
         if (folderEl) { folderEl.ondblclick = null; folderEl.onwheel = null; folderEl.onmouseenter = null; folderEl.onmouseleave = null; folderEl.hidden = false; }
         if (folderInp) { folderInp.onblur = null; folderInp.onkeydown = null; folderInp.hidden = true; }
-        if (fNewBtn) fNewBtn.onclick = null;
-        if (fRecentBtn) fRecentBtn.onclick = null;
-        if (fBmBtn) fBmBtn.onclick = null;
+        closeFilterMenu();
+        if (fFilterBtn) fFilterBtn.onclick = null;
+        if (fFilterMenu) { var cOpts = fFilterMenu.querySelectorAll('.vg-filterOpt'); for (var ci = 0; ci < cOpts.length; ci++) cOpts[ci].onclick = null; }
         if (fBmToggle) fBmToggle.onclick = null;
       }
       changeB.onclick = async function() {
