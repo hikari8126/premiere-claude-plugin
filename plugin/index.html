@@ -819,18 +819,19 @@
       <input id="vgSaveName" type="text" class="vg-save-input" />
       <label class="vg-save-label">Thư mục lưu</label>
       <div class="vg-save-folderRow">
-        <div id="vgSaveFolder" class="vg-save-folder is-empty">(chưa chọn — bấm Đổi…)</div>
+        <div id="vgSaveFolder" class="vg-save-folder is-empty">(chưa chọn — bấm 📂)</div>
         <input id="vgSaveFolderInput" type="text" class="vg-save-folder vg-save-folderInput" spellcheck="false" hidden />
         <div id="vgSaveFolderBmToggle" class="vg-folderBtn vg-folderBtn--icon" role="button"><span data-ic="floppy_disk" data-ic-size="13"></span></div>
-        <div id="vgSaveChangeFolder" class="vg-folderBtn" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Đổi…</div>
+        <div id="vgSaveChangeFolder" class="vg-folderBtn vg-folderBtn--icon" role="button"><span data-ic="folder_open" data-ic-size="13"></span></div>
       </div>
-      <div class="vg-save-nameTools">
-        <div id="vgSaveFolderRecentBtn" class="vg-nameToolBtn" role="button"><span data-ic="rotate_left" data-ic-size="12"></span> Gần đây <span class="vg-caret">▾</span></div>
-        <div id="vgSaveFolderBmBtn" class="vg-nameToolBtn" role="button"><span data-ic="folder" data-ic-size="12"></span> Bookmark <span class="vg-caret">▾</span></div>
-        <div id="vgSaveFolderNewBtn" class="vg-nameToolBtn vg-nameToolBtn--add" role="button"><span data-ic="folder_open" data-ic-size="12"></span> Thư mục mới</div>
+      <div class="vg-save-nameTools vg-folderFilter">
+        <div id="vgFolderFilterBtn" class="vg-filterBtn" role="button"></div>
+        <div id="vgFolderFilterMenu" class="vg-filterMenu" hidden>
+          <div class="vg-filterOpt" role="button" data-filter="recent"><span data-ic="rotate_left" data-ic-size="12"></span> Gần đây</div>
+          <div class="vg-filterOpt" role="button" data-filter="bookmark"><span data-ic="folder" data-ic-size="12"></span> Bookmark</div>
+        </div>
       </div>
-      <div id="vgSaveFolderRecentPanel" class="vg-namePanel" hidden></div>
-      <div id="vgSaveFolderBmPanel" class="vg-namePanel" hidden></div>
+      <div id="vgSaveFolderListPanel" class="vg-namePanel vg-folderListPanel"></div>
       <div class="vg-save-actions">
         <button id="vgSaveCancel" class="btn-secondary">Huỷ</button>
         <button id="vgSaveConfirm" class="btn-primary">Lưu</button>
