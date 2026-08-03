@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.3';  // (bridge app 3.5 · server 1.11.6) UI Lưu audio: nút chọn thư mục chỉ còn icon; bỏ nút "Thư mục mới"; gộp Gần đây/Bookmark thành 1 dropdown dạng button (chỉ hiện mục còn lại, nền tối hơn) + 1 list dùng chung bên dưới, mặc định Gần đây.
+var PLUGIN_VERSION = 'v5.2.4';  // (bridge app 3.5 · server 1.11.6) UI Lưu audio: các nút thư mục (💾 bookmark · ➕ thư mục mới · 📂 chọn) đều icon-only; gộp Gần đây/Bookmark thành 1 dropdown dạng button (chỉ hiện mục còn lại, nền tối hơn) + 1 list dùng chung bên dưới, mặc định Gần đây.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -7200,6 +7200,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var cancelB  = $('vgSaveCancel');
       var okB      = $('vgSaveConfirm');
       var fBmToggle    = $('vgSaveFolderBmToggle');
+      var fNewBtn      = $('vgSaveFolderNewBtn');
       var fFilterBtn    = $('vgFolderFilterBtn');
       var fFilterMenu   = $('vgFolderFilterMenu');
       var fListPanel    = $('vgSaveFolderListPanel');
@@ -7364,6 +7365,44 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         tip.style.top = (r.bottom + 5) + 'px';
         _folderTip = tip;
       }
+      // Tooltip hover >1s cho các nút icon (bookmark / thư mục mới / chọn thư mục).
+      var _btnTipTimer = null, _btnTipEl = null;
+      function vgHideBtnTip() {
+        if (_btnTipTimer) { clearTimeout(_btnTipTimer); _btnTipTimer = null; }
+        if (_btnTipEl && _btnTipEl.parentNode) _btnTipEl.parentNode.removeChild(_btnTipEl);
+        _btnTipEl = null;
+      }
+      // addEventListener('mouseenter') — kiểu gán el.onmouseenter KHÔNG kích hoạt
+      // trên div nút trong UXP; addEventListener mới chạy (giống tip cảnh báo hotkey).
+      var _btnTipHandlers = [];
+      function vgAttachBtnTip(el, label) {
+        if (!el) return;
+        var enter = function () {
+          vgHideBtnTip();
+          _btnTipTimer = setTimeout(function () {
+            _btnTipEl = document.createElement('div');
+            _btnTipEl.className = 'un-hkTip vg-btnTip';
+            _btnTipEl.textContent = label;
+            document.body.appendChild(_btnTipEl);
+            var r = el.getBoundingClientRect();
+            var maxW = (document.body && document.body.clientWidth) || 380;
+            _btnTipEl.style.left = Math.max(6, Math.min(r.left, maxW - 210)) + 'px';
+            _btnTipEl.style.top = (r.bottom + 5) + 'px';
+          }, 1000);
+        };
+        el.addEventListener('mouseenter', enter);
+        el.addEventListener('mouseleave', vgHideBtnTip);
+        _btnTipHandlers.push({ el: el, enter: enter });
+      }
+      function vgDetachBtnTips() {
+        _btnTipHandlers.forEach(function (h) {
+          try { h.el.removeEventListener('mouseenter', h.enter); h.el.removeEventListener('mouseleave', vgHideBtnTip); } catch (e) {}
+        });
+        _btnTipHandlers = [];
+      }
+      vgAttachBtnTip(fBmToggle, 'Bookmark thư mục này');
+      vgAttachBtnTip(fNewBtn, 'Tạo thư mục con mới');
+      vgAttachBtnTip(changeB, 'Chọn thư mục khác');
       renderFolder();
 
       // ── Dropdown panels (chỉ còn folder: Gần đây / Bookmark). Tên file bỏ
@@ -7439,6 +7478,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           panel.appendChild(row);
         });
       }
+      // "Thư mục mới" (icon +): gõ thẳng TÊN thư mục con → ghép vào folder hiện tại + bridge mkdir.
+      if (fNewBtn) fNewBtn.onclick = function () { closeFilterMenu(); vgFolderBeginEdit(true); };
       // Dropdown chọn list Gần đây / Bookmark (nút trigger + menu button).
       if (fFilterBtn) fFilterBtn.onclick = function () { if (fFilterMenu) fFilterMenu.hidden = !fFilterMenu.hidden; };
       if (fFilterMenu) {
@@ -7481,6 +7522,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (folderEl) { folderEl.ondblclick = null; folderEl.onwheel = null; folderEl.onmouseenter = null; folderEl.onmouseleave = null; folderEl.hidden = false; }
         if (folderInp) { folderInp.onblur = null; folderInp.onkeydown = null; folderInp.hidden = true; }
         closeFilterMenu();
+        vgHideBtnTip();
+        vgDetachBtnTips();
+        if (fNewBtn) fNewBtn.onclick = null;
         if (fFilterBtn) fFilterBtn.onclick = null;
         if (fFilterMenu) { var cOpts = fFilterMenu.querySelectorAll('.vg-filterOpt'); for (var ci = 0; ci < cOpts.length; ci++) cOpts[ci].onclick = null; }
         if (fBmToggle) fBmToggle.onclick = null;
