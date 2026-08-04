@@ -925,6 +925,9 @@ body {
 .vg-save-folderInput { color: var(--text); border-color: var(--accent); }
 .vg-save-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 #vgSaveChangeFolder { flex: 0 0 28px; width: 28px; height: 28px; }
+#vgSaveFolderNewBtn { flex: 0 0 28px; width: 28px; height: 28px; margin-right: 8px; }
+/* Tooltip hiện sau khi hover >1s trên các nút icon (dùng lại look .un-hkTip). */
+.vg-btnTip { max-width: 200px; white-space: nowrap; }
 /* Dropdown chọn list Gần đây / Bookmark (nút + menu button) — 1 list dùng chung bên dưới. */
 .vg-filterBtn {
   flex: 0 0 auto; display: inline-flex; align-items: center;
