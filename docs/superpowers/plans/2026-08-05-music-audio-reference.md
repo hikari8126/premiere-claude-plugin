@@ -500,29 +500,33 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 6: Bump version
+## Task 6: Bump version (TEST PUMP — chưa release)
+
+> Quy tắc: `a.b.c.d`. Đang test chưa approve release -> **chỉ pump segment `d`**. KHÔNG lên `5.3.0`/`1.12.0` (đó là bump release, để dành khi user duyệt release). KHÔNG tạo CCX/zip.
 
 **Files:**
 - Modify: `plugin/manifest.json:4`, `plugin/main.js:794` (PLUGIN_VERSION), `bridge/server.js:2585` (BRIDGE_VERSION)
 
-- [ ] **Step 1: Bump plugin version**
+- [ ] **Step 1: Test-pump plugin version**
 
-`plugin/manifest.json` dòng 4: `"version": "5.3.0",`
-`plugin/main.js` dòng 794: đổi `var PLUGIN_VERSION = 'v5.3.0';` và cập nhật ghi chú cuối dòng thành mô tả tính năng: `// (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn file reference, mức bám style, range 0-30s; bỏ v1.`
+`plugin/manifest.json` dòng 4: `"version": "5.2.4.1",`
+`plugin/main.js` dòng 794: đổi `var PLUGIN_VERSION = 'v5.2.4.1';` và cập nhật ghi chú cuối dòng: `// (test) Music v2 + audio reference (Style/Extend): chọn file reference, mức bám style, range 0-30s; bỏ v1.`
 
-- [ ] **Step 2: Bump bridge version**
+> Nếu qua vài vòng test cần pump tiếp: 5.2.4.2, 5.2.4.3, ... Khi user duyệt release mới lên 5.3.0.
 
-`bridge/server.js` dòng 2585: `const BRIDGE_VERSION = '1.12.0';` + cập nhật comment ngắn: `// + /music/generate: Music v2 mặc định, audio reference (upload -> composition_plan style/extend). Prior 1.11.6: ...`
+- [ ] **Step 2: Test-pump bridge version**
+
+`bridge/server.js` dòng 2585: `const BRIDGE_VERSION = '1.11.6.1';` + cập nhật comment ngắn: `// (test) /music/generate: Music v2 mặc định + audio reference (upload -> composition_plan style/extend). Prior 1.11.6: ...`
 
 - [ ] **Step 3: Verify version hiển thị**
 
-Reload plugin. Expected: footer plugin hiện `v5.3.0`. `curl -s http://localhost:3030/health` và endpoint version trả `1.12.0` (bridge phải restart để nạp version mới).
+Reload plugin. Expected: footer plugin hiện `v5.2.4.1`. Restart bridge rồi `curl -s http://localhost:3030/health` — endpoint version trả `1.11.6.1`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add plugin/manifest.json plugin/main.js bridge/server.js
-git commit -m "chore: bump plugin 5.3.0 / bridge 1.12.0 (music v2 + audio reference)
+git commit -m "chore(test): pump plugin 5.2.4.1 / bridge 1.11.6.1 (music v2 + audio reference)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
