@@ -6694,7 +6694,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       label = 'SFX';
     } else if (currentMode === 'music') {
       var prompt = safeVal($('vgMusicPrompt'));
-      if (!prompt) return setStatus('Music prompt is empty', false);
+      var _mref = window.__vgMusicRef || { path: '' };
+      if (!prompt && !_mref.path) return setStatus('Music prompt is empty', false);
       var userSuffix = safeFileStr(userFilename);
       var customName = 'music' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/music/generate';
@@ -6704,6 +6705,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         filename: customName, variations: numVar,
         outputDir: '', // temp only; move to chosen folder happens on Import
       };
+      if (_mref.path) {
+        var _s = parseInt(($('vgMusicRefStart') || {}).value || '0', 10) || 0;
+        var _e = parseInt(($('vgMusicRefEnd') || {}).value || '30', 10) || 30;
+        body.refPath = _mref.path;
+        body.refMode = _mref.mode || 'style';
+        body.conditionStrength = _mref.strength || 'medium';
+        body.refStartMs = Math.max(0, _s) * 1000;
+        body.refEndMs = Math.min(30, Math.max(_s + 1, _e)) * 1000;
+      }
       label = 'music';
     }
 
@@ -7134,7 +7144,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var mode = (currentMode === 'create') ? 'tts' : currentMode;
     var part = vgNameParts[mode] || '';
     // Music: tên mặc định riêng (không gắn với tên voice).
-    if (mode === 'music') return part || 'AI BGM v1';
+    if (mode === 'music') return part || 'AI BGM';
     if (!part) {
       var ver = '';
       try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
@@ -8619,6 +8629,76 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
     musicPrompt.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(musicPrompt); }, 0); });
   }
+
+  // ── Music audio reference state + wiring ──
+  var vgMusicRef = { path: '', name: '', mode: 'style', strength: 'medium' };
+  window.__vgMusicRef = vgMusicRef; // để nhánh gen đọc
+
+  var _mrPickBtn  = $('vgMusicRefPickBtn');
+  var _mrName     = $('vgMusicRefName');
+  var _mrClear    = $('vgMusicRefClear');
+  var _mrCfg      = $('vgMusicRefCfg');
+  var _mrStrRow   = $('vgMusicRefStrengthRow');
+  var _mrLenInput = $('vgMusicLength');
+
+  function vgMusicRefApplyClamp() {
+    if (vgMusicRef.path && _mrLenInput) {
+      _mrLenInput.max = '120';
+      if (parseFloat(_mrLenInput.value) > 120) {
+        _mrLenInput.value = '120';
+        if (_mrLenInput.dispatchEvent) _mrLenInput.dispatchEvent(new Event('input'));
+      }
+    } else if (_mrLenInput) {
+      _mrLenInput.max = '300';
+    }
+  }
+
+  function vgMusicRefRender() {
+    var has = !!vgMusicRef.path;
+    if (_mrName)  { _mrName.hidden = !has; _mrName.textContent = vgMusicRef.name || ''; }
+    if (_mrClear) _mrClear.hidden = !has;
+    if (_mrCfg)   _mrCfg.hidden = !has;
+    if (_mrStrRow) _mrStrRow.style.display = (vgMusicRef.mode === 'style') ? 'flex' : 'none';
+    vgMusicRefApplyClamp();
+  }
+
+  if (_mrPickBtn) _mrPickBtn.addEventListener('click', async function() {
+    try {
+      var lfs = require('uxp').storage.localFileSystem;
+      var file = await lfs.getFileForOpening({ types: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] });
+      if (!file) return;
+      if (!file.nativePath) { setStatus('File phải là file local (không phải cloud)', false); return; }
+      vgMusicRef.path = file.nativePath;
+      vgMusicRef.name = file.name || file.nativePath.split('/').pop();
+      vgMusicRefRender();
+    } catch (e) {
+      setStatus('Không chọn được file: ' + e.message, false);
+    }
+  });
+
+  if (_mrClear) _mrClear.addEventListener('click', function() {
+    vgMusicRef.path = ''; vgMusicRef.name = '';
+    vgMusicRefRender();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefMode'), function(el) {
+    el.addEventListener('click', function() {
+      vgMusicRef.mode = el.getAttribute('data-refmode') || 'style';
+      Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefMode'), function(x) {
+        x.classList.toggle('is-active', x === el);
+      });
+      vgMusicRefRender();
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefStr'), function(el) {
+    el.addEventListener('click', function() {
+      vgMusicRef.strength = el.getAttribute('data-str') || 'medium';
+      Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefStr'), function(x) {
+        x.classList.toggle('is-active', x === el);
+      });
+    });
+  });
 
   // Wire setKeyboardFocus for all VoiceGen text inputs (prevent Premiere shortcut conflicts)
   [$('vgScript'), sfxText, musicPrompt, $('vgProfileName'), $('vgElKeyInput'), $('vgCustomVoiceId'),
