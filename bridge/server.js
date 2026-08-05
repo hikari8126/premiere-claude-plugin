@@ -1181,17 +1181,21 @@ app.post('/music/generate', async (req, res) => {
       const rEnd = Math.min(30000, Math.max(rStart + 1000, Math.round(Number(refEndMs || 30000))));
       const range = { start_ms: rStart, end_ms: rEnd };
       const strength = ['low', 'medium', 'high'].includes(conditionStrength) ? conditionStrength : 'medium';
+      // GenerationChunk yêu cầu positive_styles (required). Dùng prompt làm style tag; rỗng -> [].
+      const posStyles = (prompt && prompt.trim()) ? [prompt.trim()] : [];
 
       let chunks;
       if (refMode === 'extend') {
         chunks = [
           { song_id: songId, range: range },
-          { text: prompt || '', duration_ms: durMs },
+          { text: prompt || '', duration_ms: durMs, positive_styles: posStyles, negative_styles: [] },
         ];
       } else {
         chunks = [{
           text: prompt || '',
           duration_ms: durMs,
+          positive_styles: posStyles,
+          negative_styles: [],
           conditioning_ref: { song_id: songId, range: range },
           condition_strength: strength,
         }];
