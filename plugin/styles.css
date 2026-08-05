@@ -4067,3 +4067,28 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   color: var(--text-dim);
 }
 .vgm-chip.vgm-more:hover { color: var(--text); border-color: var(--accent); }
+
+
+/* ── Music audio reference ── */
+.vg-musicRef { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); }
+.vg-musicRefHead { display: flex; align-items: center; margin-bottom: 6px; }
+.vg-musicRefHead > span[data-ic] { margin-right: 6px; }
+.vg-musicRefTitle { font-size: 11px; color: #cbb8e8; text-transform: uppercase; letter-spacing: 0.5px; }
+.vg-musicRefPick { display: flex; align-items: center; }
+.vg-musicRefName { margin-left: 8px; font-size: 11px; color: #b7a6d6; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-musicRefClear { margin-left: 6px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: #d08; }
+.vg-musicRefClear:hover { background: rgba(236,72,153,0.15); }
+.vg-musicRefCfg { margin-top: 8px; }
+.vg-musicRefModeRow { display: flex; margin-bottom: 8px; }
+.vg-musicRefMode { flex: 1 1 0; text-align: center; padding: 5px 0; font-size: 11px; color: #a08cc0; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+.vg-musicRefMode:first-child { border-top-left-radius: 5px; border-bottom-left-radius: 5px; }
+.vg-musicRefMode:last-child { border-top-right-radius: 5px; border-bottom-right-radius: 5px; margin-left: -1px; }
+.vg-musicRefMode.is-active { background: rgba(168,85,247,0.22); color: #e6d8ff; border-color: rgba(168,85,247,0.5); }
+.vg-musicRefStrengthRow, .vg-musicRefRangeRow { display: flex; align-items: center; margin-bottom: 8px; }
+.vg-musicRefLbl { font-size: 11px; color: #a08cc0; width: 120px; flex: 0 0 auto; }
+.vg-musicRefStrength { display: flex; flex: 1 1 0; }
+.vg-musicRefStr { flex: 1 1 0; text-align: center; padding: 4px 0; font-size: 10px; color: #a08cc0; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+.vg-musicRefStr.is-active { background: rgba(236,72,153,0.2); color: #ffd6ec; border-color: rgba(236,72,153,0.45); }
+.vg-musicRefDash { margin: 0 6px; color: #a08cc0; }
+.vg-musicRefRangeRow .st-num { width: 52px; }
+.vg-musicRefHint { font-size: 10px; color: #8878a8; font-style: italic; }
