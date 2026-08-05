@@ -963,6 +963,69 @@ function elevenLabsRequest(apiKey, method, urlPath, body, expectBinary) {
   });
 }
 
+// Upload 1 file audio (multipart/form-data) tới ElevenLabs, trả JSON (có song_id).
+function elevenLabsUpload(apiKey, filePath, extraFields) {
+  apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
+  return new Promise((resolve, reject) => {
+    let fileBuf;
+    try { fileBuf = fs.readFileSync(filePath); }
+    catch (e) { return reject(new Error('Không đọc được file reference: ' + filePath + ' — ' + e.message)); }
+
+    const https = require('https');
+    const boundary = '----ElevenBoundary' + Date.now().toString(16);
+    const CRLF = '\r\n';
+    const fileName = path.basename(filePath);
+    const parts = [];
+
+    Object.keys(extraFields || {}).forEach(k => {
+      parts.push(Buffer.from(
+        '--' + boundary + CRLF +
+        'Content-Disposition: form-data; name="' + k + '"' + CRLF + CRLF +
+        String(extraFields[k]) + CRLF, 'utf8'));
+    });
+
+    parts.push(Buffer.from(
+      '--' + boundary + CRLF +
+      'Content-Disposition: form-data; name="file"; filename="' + fileName + '"' + CRLF +
+      'Content-Type: application/octet-stream' + CRLF + CRLF, 'utf8'));
+    parts.push(fileBuf);
+    parts.push(Buffer.from(CRLF + '--' + boundary + '--' + CRLF, 'utf8'));
+
+    const payload = Buffer.concat(parts);
+    const url = new URL(ELEVENLABS_BASE + '/v1/music/upload');
+    const opts = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'multipart/form-data; boundary=' + boundary,
+        'Content-Length': payload.length,
+      },
+      rejectUnauthorized: true,
+    };
+
+    const req = https.request(opts, response => {
+      const chunks = [];
+      response.on('data', c => chunks.push(c));
+      response.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          try { resolve(JSON.parse(buf.toString('utf8'))); }
+          catch (e) { reject(new Error('Upload bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
+        } else {
+          reject(new Error('ElevenLabs upload HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+        }
+      });
+    });
+    req.on('error', err => reject(new Error('ElevenLabs upload network: ' + err.message)));
+    req.write(payload);
+    req.end();
+  });
+}
+
 app.post('/tts/voices', async (req, res) => {
   try {
     const { apiKey } = req.body;
