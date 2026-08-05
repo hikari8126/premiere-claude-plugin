@@ -477,6 +477,36 @@
 
         <!-- Music editor -->
         <div class="vg-modeContent" data-mode="music" hidden>
+          <!-- ── Nhạc reference (Music v2) — đặt trên ô prompt ── -->
+          <div class="vg-musicRef">
+            <div class="vg-musicRefHead">
+              <span data-ic="audio" data-ic-size="12" data-ic-color="#ec4899"></span>
+              <span class="vg-musicRefTitle">Nhạc reference</span>
+            </div>
+            <div id="vgMusicRefPickRow" class="vg-musicRefPick">
+              <div id="vgMusicRefPickBtn" class="vg-organizeBtn" role="button">
+                <span data-ic="folder_open" data-ic-size="13"></span> Chọn nhạc reference
+              </div>
+              <span id="vgMusicRefName" class="vg-musicRefName" hidden></span>
+              <div id="vgMusicRefClear" class="vg-musicRefClear" role="button" hidden>
+                <span data-ic="xmark" data-ic-size="12"></span>
+              </div>
+            </div>
+            <div id="vgMusicRefCfg" class="vg-musicRefCfg" hidden>
+              <div class="vg-musicRefModeRow">
+                <div class="vg-musicRefMode is-active" data-refmode="style" role="button">Style</div>
+                <div class="vg-musicRefMode" data-refmode="extend" role="button">Extend</div>
+              </div>
+              <div id="vgMusicRefStrengthRow" class="vg-musicRefStrengthRow">
+                <span class="vg-musicRefLbl">Mức bám style</span>
+                <div class="vg-musicRefStrength">
+                  <div class="vg-musicRefStr" data-str="low" role="button">Nhẹ</div>
+                  <div class="vg-musicRefStr is-active" data-str="medium" role="button">Vừa</div>
+                  <div class="vg-musicRefStr" data-str="high" role="button">Mạnh</div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
               <div class="vg-scriptSizer" aria-hidden="true"></div>
@@ -486,10 +516,10 @@
           </div>
           <div class="st-slideRow">
             <span class="st-slideLbl">Độ dài</span>
-            <div class="st-cslider" id="vgMusicLengthC" data-min="5" data-max="300" data-step="1">
+            <div class="st-cslider" id="vgMusicLengthC" data-min="5" data-max="120" data-step="1">
               <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
             </div>
-            <input type="number" id="vgMusicLength" class="st-num" min="5" max="300" step="1" value="10" />
+            <input type="number" id="vgMusicLength" class="st-num" min="5" max="120" step="1" value="10" />
           </div>
         </div>
 

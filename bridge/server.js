@@ -963,6 +963,69 @@ function elevenLabsRequest(apiKey, method, urlPath, body, expectBinary) {
   });
 }
 
+// Upload 1 file audio (multipart/form-data) tới ElevenLabs, trả JSON (có song_id).
+function elevenLabsUpload(apiKey, filePath, extraFields) {
+  apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
+  return new Promise((resolve, reject) => {
+    let fileBuf;
+    try { fileBuf = fs.readFileSync(filePath); }
+    catch (e) { return reject(new Error('Không đọc được file reference: ' + filePath + ' — ' + e.message)); }
+
+    const https = require('https');
+    const boundary = '----ElevenBoundary' + Date.now().toString(16);
+    const CRLF = '\r\n';
+    const fileName = path.basename(filePath);
+    const parts = [];
+
+    Object.keys(extraFields || {}).forEach(k => {
+      parts.push(Buffer.from(
+        '--' + boundary + CRLF +
+        'Content-Disposition: form-data; name="' + k + '"' + CRLF + CRLF +
+        String(extraFields[k]) + CRLF, 'utf8'));
+    });
+
+    parts.push(Buffer.from(
+      '--' + boundary + CRLF +
+      'Content-Disposition: form-data; name="file"; filename="' + fileName + '"' + CRLF +
+      'Content-Type: application/octet-stream' + CRLF + CRLF, 'utf8'));
+    parts.push(fileBuf);
+    parts.push(Buffer.from(CRLF + '--' + boundary + '--' + CRLF, 'utf8'));
+
+    const payload = Buffer.concat(parts);
+    const url = new URL(ELEVENLABS_BASE + '/v1/music/upload');
+    const opts = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Accept': 'application/json',
+        'Content-Type': 'multipart/form-data; boundary=' + boundary,
+        'Content-Length': payload.length,
+      },
+      rejectUnauthorized: true,
+    };
+
+    const req = https.request(opts, response => {
+      const chunks = [];
+      response.on('data', c => chunks.push(c));
+      response.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          try { resolve(JSON.parse(buf.toString('utf8'))); }
+          catch (e) { reject(new Error('Upload bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
+        } else {
+          reject(new Error('ElevenLabs upload HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+        }
+      });
+    });
+    req.on('error', err => reject(new Error('ElevenLabs upload network: ' + err.message)));
+    req.write(payload);
+    req.end();
+  });
+}
+
 app.post('/tts/voices', async (req, res) => {
   try {
     const { apiKey } = req.body;
@@ -1095,21 +1158,61 @@ app.post('/sfx/generate', async (req, res) => {
 // Music — /v1/music
 app.post('/music/generate', async (req, res) => {
   try {
-    const { apiKey, prompt, lengthSec, filename, variations, outputDir } = req.body;
+    const {
+      apiKey, prompt, lengthSec, filename, variations, outputDir,
+      refPath, refMode, conditionStrength, refStartMs, refEndMs,
+    } = req.body;
     if (!apiKey) throw new Error('apiKey required');
-    if (!prompt) throw new Error('prompt required');
 
     const baseFilename = (filename && typeof filename === 'string')
       ? filename.replace(/\.mp3$/i, '')
       : ('bgm-' + Date.now());
     const numVariations = (variations === 2 || variations === '2') ? 2 : 1;
 
-    const body = {
-      prompt: prompt,
-      music_length_ms: Math.round(Number(lengthSec || 10) * 1000),
-    };
+    let body;
+    if (refPath && typeof refPath === 'string' && refPath.trim()) {
+      // ── Reference mode (Music v2 composition plan) ──
+      const upload = await elevenLabsUpload(apiKey, refPath.trim());
+      const songId = upload && (upload.song_id || upload.songId);
+      if (!songId) throw new Error('Upload không trả song_id: ' + JSON.stringify(upload).slice(0, 200));
 
-    console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+      const durMs = Math.min(120000, Math.max(3000, Math.round(Number(lengthSec || 10) * 1000)));
+      const rStart = Math.max(0, Math.round(Number(refStartMs || 0)));
+      const rEnd = Math.min(30000, Math.max(rStart + 1000, Math.round(Number(refEndMs || 30000))));
+      const range = { start_ms: rStart, end_ms: rEnd };
+      const strength = ['low', 'medium', 'high'].includes(conditionStrength) ? conditionStrength : 'medium';
+      // GenerationChunk yêu cầu positive_styles (required). Dùng prompt làm style tag; rỗng -> [].
+      const posStyles = (prompt && prompt.trim()) ? [prompt.trim()] : [];
+
+      let chunks;
+      if (refMode === 'extend') {
+        chunks = [
+          { song_id: songId, range: range },
+          { text: prompt || '', duration_ms: durMs, positive_styles: posStyles, negative_styles: [] },
+        ];
+      } else {
+        chunks = [{
+          text: prompt || '',
+          duration_ms: durMs,
+          positive_styles: posStyles,
+          negative_styles: [],
+          conditioning_ref: { song_id: songId, range: range },
+          condition_strength: strength,
+        }];
+      }
+
+      body = { model_id: 'music_v2', composition_plan: { chunks: chunks } };
+      console.log('[music/generate] REF', refMode || 'style', '| song', songId, '| dur', durMs + 'ms', '| range', rStart + '-' + rEnd, outputDir ? '→ ' + outputDir : '→ temp');
+    } else {
+      if (!prompt) throw new Error('prompt required');
+      body = {
+        prompt: prompt,
+        music_length_ms: Math.round(Number(lengthSec || 10) * 1000),
+        model_id: 'music_v2',
+      };
+      console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+    }
+
     const out = await generateAndSave('music', apiKey, '/v1/music', body, baseFilename, numVariations, false, outputDir);
     res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
   } catch (err) {
@@ -2582,7 +2685,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.11.6';  // /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
+const BRIDGE_VERSION = '1.12.0';  // /music/generate: Music v2 mặc định + audio reference (upload → composition_plan style/extend, GenerationChunk có positive_styles/negative_styles); helper elevenLabsUpload multipart. Prior 1.11.6: /plugin/check-update trả thêm notes. Prior 1.11.6: /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

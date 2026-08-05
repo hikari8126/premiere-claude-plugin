@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.4';  // (bridge app 3.5 · server 1.11.6) UI Lưu audio: các nút thư mục (💾 bookmark · ➕ thư mục mới · 📂 chọn) đều icon-only; gộp Gần đây/Bookmark thành 1 dropdown dạng button (chỉ hiện mục còn lại, nền tối hơn) + 1 list dùng chung bên dưới, mặc định Gần đây.
+var PLUGIN_VERSION = 'v5.3.0';  // (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -893,7 +893,7 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.5.2'; // Plugin v4.2.3+ requires bridge ≥1.5.2
+var REQUIRED_BRIDGE = '1.12.0'; // Plugin v5.3.0+ cần bridge ≥1.12.0 (music v2 + audio reference)
 
 // Compare semver strings: returns -1/0/1
 function compareVersions(a, b) {
@@ -6694,7 +6694,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       label = 'SFX';
     } else if (currentMode === 'music') {
       var prompt = safeVal($('vgMusicPrompt'));
-      if (!prompt) return setStatus('Music prompt is empty', false);
+      var _mref = window.__vgMusicRef || { path: '' };
+      if (!prompt && !_mref.path) return setStatus('Music prompt is empty', false);
       var userSuffix = safeFileStr(userFilename);
       var customName = 'music' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/music/generate';
@@ -6704,6 +6705,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         filename: customName, variations: numVar,
         outputDir: '', // temp only; move to chosen folder happens on Import
       };
+      if (_mref.path) {
+        body.refPath = _mref.path;
+        body.refMode = _mref.mode || 'style';
+        body.conditionStrength = _mref.strength || 'medium';
+        body.refStartMs = 0;
+        body.refEndMs = 30000; // ref cố định 30s đầu file (giới hạn ElevenLabs)
+      }
       label = 'music';
     }
 
@@ -7134,7 +7142,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var mode = (currentMode === 'create') ? 'tts' : currentMode;
     var part = vgNameParts[mode] || '';
     // Music: tên mặc định riêng (không gắn với tên voice).
-    if (mode === 'music') return part || 'AI BGM v1';
+    if (mode === 'music') return part || 'AI BGM';
     if (!part) {
       var ver = '';
       try { ver = localStorage.getItem('vg_last_version') || ''; } catch (e) {}
@@ -8619,6 +8627,62 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
     musicPrompt.addEventListener('paste', function() { setTimeout(function() { vgAutoResize(musicPrompt); }, 0); });
   }
+
+  // ── Music audio reference state + wiring ──
+  var vgMusicRef = { path: '', name: '', mode: 'style', strength: 'medium' };
+  window.__vgMusicRef = vgMusicRef; // để nhánh gen đọc
+
+  var _mrPickBtn  = $('vgMusicRefPickBtn');
+  var _mrName     = $('vgMusicRefName');
+  var _mrClear    = $('vgMusicRefClear');
+  var _mrCfg      = $('vgMusicRefCfg');
+  var _mrStrRow   = $('vgMusicRefStrengthRow');
+
+  function vgMusicRefRender() {
+    var has = !!vgMusicRef.path;
+    if (_mrName)  { _mrName.hidden = !has; _mrName.textContent = vgMusicRef.name || ''; }
+    if (_mrClear) _mrClear.hidden = !has;
+    if (_mrCfg)   _mrCfg.hidden = !has;
+    if (_mrStrRow) _mrStrRow.style.display = (vgMusicRef.mode === 'style') ? 'flex' : 'none';
+  }
+
+  if (_mrPickBtn) _mrPickBtn.addEventListener('click', async function() {
+    try {
+      var lfs = require('uxp').storage.localFileSystem;
+      var file = await lfs.getFileForOpening({ types: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] });
+      if (!file) return;
+      if (!file.nativePath) { setStatus('File phải là file local (không phải cloud)', false); return; }
+      vgMusicRef.path = file.nativePath;
+      vgMusicRef.name = file.name || file.nativePath.split('/').pop();
+      vgMusicRefRender();
+    } catch (e) {
+      setStatus('Không chọn được file: ' + e.message, false);
+    }
+  });
+
+  if (_mrClear) _mrClear.addEventListener('click', function() {
+    vgMusicRef.path = ''; vgMusicRef.name = '';
+    vgMusicRefRender();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefMode'), function(el) {
+    el.addEventListener('click', function() {
+      vgMusicRef.mode = el.getAttribute('data-refmode') || 'style';
+      Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefMode'), function(x) {
+        x.classList.toggle('is-active', x === el);
+      });
+      vgMusicRefRender();
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefStr'), function(el) {
+    el.addEventListener('click', function() {
+      vgMusicRef.strength = el.getAttribute('data-str') || 'medium';
+      Array.prototype.forEach.call(document.querySelectorAll('.vg-musicRefStr'), function(x) {
+        x.classList.toggle('is-active', x === el);
+      });
+    });
+  });
 
   // Wire setKeyboardFocus for all VoiceGen text inputs (prevent Premiere shortcut conflicts)
   [$('vgScript'), sfxText, musicPrompt, $('vgProfileName'), $('vgElKeyInput'), $('vgCustomVoiceId'),
