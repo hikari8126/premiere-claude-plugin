@@ -2681,7 +2681,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.11.6';  // /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
+const BRIDGE_VERSION = '1.11.6.1';  // (test) /music/generate: Music v2 mặc định + audio reference (upload → composition_plan style/extend); helper elevenLabsUpload multipart. Prior 1.11.6: /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
