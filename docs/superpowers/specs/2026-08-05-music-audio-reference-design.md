@@ -8,6 +8,7 @@
 - Tab Music cho phép user chọn 1 file audio local làm reference.
 - 2 chế độ: **Style** (tạo nhạc mới cùng phong cách) và **Extend** (nối tiếp đoạn gốc).
 - Gen thường (không reference) cũng dùng Music v2 để tăng chất lượng.
+- **Bỏ hẳn v1**: mọi đường gen music luôn `model_id: 'music_v2'`, không còn fallback v1. Đổi tên mặc định "AI BGM v1" -> "AI BGM".
 
 ## Luồng dữ liệu
 
