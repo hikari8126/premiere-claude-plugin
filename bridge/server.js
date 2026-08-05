@@ -1158,21 +1158,57 @@ app.post('/sfx/generate', async (req, res) => {
 // Music — /v1/music
 app.post('/music/generate', async (req, res) => {
   try {
-    const { apiKey, prompt, lengthSec, filename, variations, outputDir } = req.body;
+    const {
+      apiKey, prompt, lengthSec, filename, variations, outputDir,
+      refPath, refMode, conditionStrength, refStartMs, refEndMs,
+    } = req.body;
     if (!apiKey) throw new Error('apiKey required');
-    if (!prompt) throw new Error('prompt required');
 
     const baseFilename = (filename && typeof filename === 'string')
       ? filename.replace(/\.mp3$/i, '')
       : ('bgm-' + Date.now());
     const numVariations = (variations === 2 || variations === '2') ? 2 : 1;
 
-    const body = {
-      prompt: prompt,
-      music_length_ms: Math.round(Number(lengthSec || 10) * 1000),
-    };
+    let body;
+    if (refPath && typeof refPath === 'string' && refPath.trim()) {
+      // ── Reference mode (Music v2 composition plan) ──
+      const upload = await elevenLabsUpload(apiKey, refPath.trim());
+      const songId = upload && (upload.song_id || upload.songId);
+      if (!songId) throw new Error('Upload không trả song_id: ' + JSON.stringify(upload).slice(0, 200));
 
-    console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+      const durMs = Math.min(120000, Math.max(3000, Math.round(Number(lengthSec || 10) * 1000)));
+      const rStart = Math.max(0, Math.round(Number(refStartMs || 0)));
+      const rEnd = Math.min(30000, Math.max(rStart + 1000, Math.round(Number(refEndMs || 30000))));
+      const range = { start_ms: rStart, end_ms: rEnd };
+      const strength = ['low', 'medium', 'high'].includes(conditionStrength) ? conditionStrength : 'medium';
+
+      let chunks;
+      if (refMode === 'extend') {
+        chunks = [
+          { song_id: songId, range: range },
+          { text: prompt || '', duration_ms: durMs },
+        ];
+      } else {
+        chunks = [{
+          text: prompt || '',
+          duration_ms: durMs,
+          conditioning_ref: { song_id: songId, range: range },
+          condition_strength: strength,
+        }];
+      }
+
+      body = { model_id: 'music_v2', composition_plan: { chunks: chunks } };
+      console.log('[music/generate] REF', refMode || 'style', '| song', songId, '| dur', durMs + 'ms', '| range', rStart + '-' + rEnd, outputDir ? '→ ' + outputDir : '→ temp');
+    } else {
+      if (!prompt) throw new Error('prompt required');
+      body = {
+        prompt: prompt,
+        music_length_ms: Math.round(Number(lengthSec || 10) * 1000),
+        model_id: 'music_v2',
+      };
+      console.log('[music/generate]', prompt, '|', lengthSec + 's', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
+    }
+
     const out = await generateAndSave('music', apiKey, '/v1/music', body, baseFilename, numVariations, false, outputDir);
     res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
   } catch (err) {
