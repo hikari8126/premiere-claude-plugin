@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.2.4.4';  // (test · bridge server 1.11.6.2) enhance UI khối Nhạc reference (card, chip tên file, segmented đẹp hơn, căn label 68px); hint rõ ref≤30s vs output≤120s. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.2.4.5';  // (test · bridge server 1.11.6.2) reorder tab Music: reference lên trên ô prompt; độ dài max 120 (bỏ clamp động); ref cố định 30s (bỏ slider Đoạn ref). Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -6706,13 +6706,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         outputDir: '', // temp only; move to chosen folder happens on Import
       };
       if (_mref.path) {
-        var _dur = parseInt(($('vgMusicRefDur') || {}).value || '30', 10) || 30;
-        _dur = Math.max(3, Math.min(30, _dur));
         body.refPath = _mref.path;
         body.refMode = _mref.mode || 'style';
         body.conditionStrength = _mref.strength || 'medium';
         body.refStartMs = 0;
-        body.refEndMs = _dur * 1000;
+        body.refEndMs = 30000; // ref cố định 30s đầu file (giới hạn ElevenLabs)
       }
       label = 'music';
     }
@@ -8611,7 +8609,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   vgMakeCSlider('vgSfxDurationC',  'vgSfxDuration');
   vgMakeCSlider('vgSfxInfluenceC', 'vgSfxInfluence');
   vgMakeCSlider('vgMusicLengthC',  'vgMusicLength');
-  vgMakeCSlider('vgMusicRefDurC',  'vgMusicRefDur');
 
   // SFX auto-resize (char count đã bỏ khỏi UI)
   var sfxText = $('vgSfxText');
@@ -8640,19 +8637,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var _mrClear    = $('vgMusicRefClear');
   var _mrCfg      = $('vgMusicRefCfg');
   var _mrStrRow   = $('vgMusicRefStrengthRow');
-  var _mrLenInput = $('vgMusicLength');
-
-  function vgMusicRefApplyClamp() {
-    if (vgMusicRef.path && _mrLenInput) {
-      _mrLenInput.max = '120';
-      if (parseFloat(_mrLenInput.value) > 120) {
-        _mrLenInput.value = '120';
-        if (_mrLenInput.dispatchEvent) _mrLenInput.dispatchEvent(new Event('input'));
-      }
-    } else if (_mrLenInput) {
-      _mrLenInput.max = '300';
-    }
-  }
 
   function vgMusicRefRender() {
     var has = !!vgMusicRef.path;
@@ -8660,7 +8644,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (_mrClear) _mrClear.hidden = !has;
     if (_mrCfg)   _mrCfg.hidden = !has;
     if (_mrStrRow) _mrStrRow.style.display = (vgMusicRef.mode === 'style') ? 'flex' : 'none';
-    vgMusicRefApplyClamp();
   }
 
   if (_mrPickBtn) _mrPickBtn.addEventListener('click', async function() {
