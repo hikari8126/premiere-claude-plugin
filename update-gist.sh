@@ -23,8 +23,12 @@ if [ -z "$BRIDGE_VERSION" ] || [ -z "$PLUGIN_VERSION" ]; then
 fi
 
 # ── Tìm release tag ────────────────────────────────────────────────────────
+# Release assets nằm ở REPO PUBLIC riêng (premiere-claude-plugin-releases) để
+# đồng nghiệp tải được mà không cần đăng nhập, trong khi source repo là private.
+# Đổi RELEASE_REPO nếu tên repo release thay đổi.
 TAG="v${PLUGIN_VERSION}-bridge${BRIDGE_VERSION}"
-BASE_URL="https://github.com/hikari8126/premiere-claude-plugin/releases/download/${TAG}"
+RELEASE_REPO="${RELEASE_REPO:-hikari8126/premiere-claude-plugin-releases}"
+BASE_URL="https://github.com/${RELEASE_REPO}/releases/download/${TAG}"
 
 echo ""
 echo "  Bridge:  ${BRIDGE_VERSION}"
@@ -39,7 +43,7 @@ NOTES_JSON=$(printf '%s' "$PLUGIN_NOTES" | python3 -c 'import sys,json;print(jso
 cat > "$TMP" << JSON
 {
   "version": "${BRIDGE_VERSION}",
-  "url": "https://github.com/hikari8126/premiere-claude-plugin/releases/latest",
+  "url": "https://github.com/${RELEASE_REPO}/releases/latest",
   "notes": "Bridge ${BRIDGE_VERSION} / Plugin ${PLUGIN_VERSION}",
   "downloadUrl": "${BASE_URL}/premiere-claude-plugin-v${PLUGIN_VERSION}.zip",
   "pluginVersion": "${PLUGIN_VERSION}",

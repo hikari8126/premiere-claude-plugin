@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.3.0';  // (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.3.1';  // import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -7082,30 +7082,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!found) throw new Error('Không tìm thấy clip trong bin sau khi import');
       var item = found.item;
 
-      // 3. Playhead time + first audio track free at that point.
+      // 3. Playhead time = vị trí đặt. Track = audio track HOÀN TOÀN TRỐNG (0 clip)
+      //    thấp nhất — không phải track chỉ trống ngay tại điểm scrub. Mọi track đều
+      //    có clip → targetA = aCount → Premiere tự tạo track mới.
+      //    (logic inline vì sacLowestEmptyTrack ở IIFE SAC, không thấy được từ đây)
       var seq = await getActiveSequence();
       if (!seq) throw new Error('Chưa mở sequence');
       var ph = seq.getPlayerPosition ? seq.getPlayerPosition() : null;
       if (ph && ph.then) ph = await ph;
       var atSec = getTimeSec(ph);
-      var dur = Number(variation.duration) || 0.05;
       var aCount = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
       if (aCount && aCount.then) aCount = await aCount;
-      aCount = aCount || 0;
-      var targetA = -1;
+      aCount = Number(aCount) || 0;
+      var targetA = aCount; // fallback: track mới nếu không có track nào trống hẳn
       for (var i = 0; i < aCount; i++) {
         var tr = seq.getAudioTrack(i); if (tr && tr.then) tr = await tr;
         var clips = []; try { clips = await getClipItems(tr); } catch (e) {}
-        var busy = false;
-        for (var k = 0; k < clips.length; k++) {
-          var cs = 0, ce = 0;
-          try { var gs = clips[k].getStartTime ? clips[k].getStartTime() : clips[k].getStart(); if (gs && gs.then) gs = await gs; cs = getTimeSec(gs); } catch (e) {}
-          try { var ge = clips[k].getEndTime ? clips[k].getEndTime() : null; if (ge && ge.then) ge = await ge; ce = getTimeSec(ge); } catch (e) {}
-          if (atSec < ce - 0.001 && (atSec + dur) > cs + 0.001) { busy = true; break; }
-        }
-        if (!busy) { targetA = i; break; }
+        if (!clips || clips.length === 0) { targetA = i; break; }
       }
-      if (targetA < 0) targetA = aCount; // all busy → ask Premiere for a new track index
 
       // 4. Place (overwrite — track is free here, so nothing is clobbered).
       var seqEditor = ppro.SequenceEditor.getEditor(seq);
