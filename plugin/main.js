@@ -5045,7 +5045,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var inSec = toSec(tokens[0]);
     if (inSec === null) return { inSec: null, outSec: null };
     var outSec = tokens.length > 1 ? toSec(tokens[1]) : null;
-    if (outSec === null) outSec = inSec + 3; // single time → default 3s window
+    if (outSec === null) outSec = inSec + 1; // single time → default 1s window
     return { inSec: inSec, outSec: Math.max(outSec, inSec + 0.1) };
   }
 
