@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.3.1';  // import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.3.2';  // Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -8291,7 +8291,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var db = $('elvDeleteBtn'); if (db) db.addEventListener('click', elvOnDeleteClick);
     var es = $('elvVoiceSearch');
     if (es) {
-      es.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      // Claim keyboard theo GESTURE thật (mousedown), KHÔNG gắn vào 'focus': mỗi lần
+      // filter làm relayout, UXP bắn phantom 'focus' → setKeyboardFocus(true) bôi đen
+      // (select-all) toàn bộ text → caret nhảy. Cùng lý do ô dropdown "Search voices…"
+      // claim 1 lần lúc mở thay vì trong focus của input.
+      es.addEventListener('mousedown', function () { if (window.claimKeyboard) window.claimKeyboard(); });
       es.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
       var composing = false;
       es.addEventListener('compositionstart', function () { composing = true; });
