@@ -7726,13 +7726,40 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       vcxInputPath = resp.audioPath;
       var nm = resp.audioPath.split('/').pop();
       if (info) info.textContent = '✓ ' + nm + ' (' + clips.length + ' clip)';
+      vcxRevealPreview();
     } catch (e) {
       vcxInputPath = '';
       if (info) info.textContent = '✗ ' + e.message;
+      vcxRevealPreview();
       console.error('[vcx] getSelection', e);
     } finally {
       if (btn) btn.disabled = false;
     }
+  }
+
+  // Nghe thử file audio nguồn (bản gộp hoặc file upload) TRƯỚC khi gửi ElevenLabs —
+  // để tách bạch lỗi do gộp hay do STS. Phát qua bridge afplay (vgPlayPath).
+  var vcxPreviewPlaying = false;
+  function vcxRevealPreview() {
+    var b = document.getElementById('vcxPreviewMerged');
+    if (b) b.hidden = !vcxInputPath;
+  }
+  function vcxSetPreviewLabel(playing) {
+    var b = document.getElementById('vcxPreviewMerged');
+    if (b) b.innerHTML = playing
+      ? '<span data-ic="stop" data-ic-size="13" data-ic-color="#f87171"></span> Dừng nghe thử'
+      : '<span data-ic="play" data-ic-size="13" data-ic-color="#22d3ee"></span> Nghe thử bản gộp (trước khi đổi giọng)';
+  }
+  function vcxTogglePreview() {
+    if (vcxPreviewPlaying) { vgStopAll(); vcxPreviewPlaying = false; vcxSetPreviewLabel(false); return; }
+    if (!vcxInputPath) return;
+    vcxPreviewPlaying = true; vcxSetPreviewLabel(true);
+    vgPlayPath(vcxInputPath, null, function () {
+      vcxPreviewPlaying = false; vcxSetPreviewLabel(false);
+    }, function (err) {
+      vcxPreviewPlaying = false; vcxSetPreviewLabel(false);
+      console.error('[vcx] preview', err);
+    });
   }
 
   // Theo mẫu vcBrowseFile hiện có (~main.js:8053): dùng getFileForOpening + file.nativePath || file.path
@@ -7749,9 +7776,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!p) throw new Error('Không đọc được đường dẫn file');
       vcxInputPath = p;
       if (info) info.textContent = '✓ ' + p.split('/').pop();
+      vcxRevealPreview();
     } catch (e) {
       vcxInputPath = '';
       if (info) info.textContent = '✗ ' + e.message;
+      vcxRevealPreview();
       console.error('[vcx] browse', e);
     }
   }
@@ -7830,6 +7859,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (vcxGetSelBtn) vcxGetSelBtn.addEventListener('click', vcxGetSelectionAudio);
   var vcxBrowseBtn = document.getElementById('vcxBrowse');
   if (vcxBrowseBtn) vcxBrowseBtn.addEventListener('click', vcxBrowseInput);
+  var vcxPreviewBtn = document.getElementById('vcxPreviewMerged');
+  if (vcxPreviewBtn) vcxPreviewBtn.addEventListener('click', vcxTogglePreview);
   var vcxConvertBtn = document.getElementById('vcxConvert');
   if (vcxConvertBtn) vcxConvertBtn.addEventListener('click', vcxConvert);
   ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function(id) {
