@@ -3,6 +3,15 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.4.0 — 2026-08-20
+
+### ✅ Thêm mới
+- **Voice Changer (Đổi giọng)** — card thứ 3 trong tab Create. Lấy audio từ clip
+  đang chọn trên timeline (gộp nhiều clip qua ffmpeg) hoặc upload file → đổi sang
+  giọng đích ElevenLabs (Speech-to-Speech). Settings: model STS, Stability/
+  Similarity/Style, khử tiếng ồn nền. Kết quả dùng chung khu Lưu/Import của tab Voice.
+- **Bridge `POST /voice/change`** — đọc file local → multipart STS → lưu output.
+
 ## bridge 3.7 — 2026-08-20
 
 ### ✅ Thêm mới / Cải tiến
