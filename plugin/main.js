@@ -7667,7 +7667,80 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
+  // ── Voice Changer: thu input (selection concat + browse file) ──
+  async function vcxGetSelectionAudio() {
+    var info = document.getElementById('vcxSelInfo');
+    var btn  = document.getElementById('vcxGetSel');
+    if (btn) btn.disabled = true;
+    try {
+      if (!ppro) throw new Error('Premiere API không khả dụng');
+      var seq = await getActiveSequence();
+      if (!seq) throw new Error('Chưa mở sequence');
+      var sel = await un(seq.getSelection());
+      if (!sel) throw new Error('Không lấy được vùng chọn');
+      var items = await awaitArray(sel.getTrackItems());
+      if (!items || !items.length) throw new Error('Hãy chọn clip audio trên timeline');
+
+      if (info) info.textContent = 'Đang đọc ' + items.length + ' clip…';
+      var clips = [];
+      for (var i = 0; i < items.length; i++) {
+        var ti = items[i];
+        var inSec = 0, outSec = 0;
+        try { var ip = ti.getInPoint && ti.getInPoint(); if (ip && ip.then) ip = await ip; if (ip) inSec = getTimeSec(ip); } catch (e) {}
+        try { var op = ti.getOutPoint && ti.getOutPoint(); if (op && op.then) op = await op; if (op) outSec = getTimeSec(op); } catch (e) {}
+        if (!outSec || outSec <= inSec) {
+          try {
+            var gs = ti.getStart && ti.getStart(); if (gs && gs.then) gs = await gs;
+            var ge = ti.getEnd && ti.getEnd();     if (ge && ge.then) ge = await ge;
+            inSec = 0; outSec = getTimeSec(ge) - getTimeSec(gs);
+          } catch (e) {}
+        }
+        var fp = await vcGetTrackItemFilePath(ti);
+        if (!fp) throw new Error('Clip ' + (i + 1) + ': không lấy được đường dẫn — dùng "From File"');
+        clips.push({ filePath: fp, inPoint: inSec, outPoint: outSec });
+      }
+
+      if (info) info.textContent = 'Đang gộp ' + clips.length + ' clip…';
+      var resp = await postJsonVG('/tts/concat-from-sequence', { clips: clips, outputDir: '' });
+      if (!resp.ok) throw new Error(resp.error || 'Gộp clip thất bại');
+      vcxInputPath = resp.audioPath;
+      var nm = resp.audioPath.split('/').pop();
+      if (info) info.textContent = '✓ ' + nm + ' (' + clips.length + ' clip)';
+    } catch (e) {
+      vcxInputPath = '';
+      if (info) info.textContent = '✗ ' + e.message;
+      console.error('[vcx] getSelection', e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Theo mẫu vcBrowseFile hiện có (~main.js:8053): dùng getFileForOpening + file.nativePath || file.path
+  async function vcxBrowseInput() {
+    var info = document.getElementById('vcxFileInfo');
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (!uxp || !uxp.storage) throw new Error('UXP storage không khả dụng');
+      var file = await uxp.storage.localFileSystem.getFileForOpening({
+        types: ['mp3','wav','m4a','aac','ogg','flac'],
+      });
+      if (!file) return; // user hủy
+      var p = file.nativePath || file.path || '';
+      if (!p) throw new Error('Không đọc được đường dẫn file');
+      vcxInputPath = p;
+      if (info) info.textContent = '✓ ' + p.split('/').pop();
+    } catch (e) {
+      vcxInputPath = '';
+      if (info) info.textContent = '✗ ' + e.message;
+      console.error('[vcx] browse', e);
+    }
+  }
+
   // ── Voice Changer wiring ──
+  var vcxGetSelBtn = document.getElementById('vcxGetSel');
+  if (vcxGetSelBtn) vcxGetSelBtn.addEventListener('click', vcxGetSelectionAudio);
+  var vcxBrowseBtn = document.getElementById('vcxBrowse');
+  if (vcxBrowseBtn) vcxBrowseBtn.addEventListener('click', vcxBrowseInput);
   ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', function() { vcxSyncSliderLabels(); vcxSaveSettings(); });
