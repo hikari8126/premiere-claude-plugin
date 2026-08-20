@@ -7766,11 +7766,46 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
+  async function vcxConvert() {
+    var status = document.getElementById('vcxStatus');
+    var setS = function(cls, txt) { if (status) { status.className = 'ac-manualStatus' + (cls ? ' ' + cls : ''); status.textContent = txt; } };
+    if (!vcxInputPath) { setS('is-err', '✗ Chưa có audio nguồn'); return; }
+    if (!vcxVoiceId)   { setS('is-err', '✗ Chưa chọn giọng đích'); return; }
+    if (!ELEVENLABS_KEY) { setS('is-err', '✗ Chưa có ElevenLabs API key (Settings)'); return; }
+
+    var num = function(id, d) { var el = document.getElementById(id); return el ? Number(el.value) : d; };
+    var dn  = document.getElementById('vcxDenoise');
+    var body = {
+      apiKey:  ELEVENLABS_KEY,
+      voiceId: vcxVoiceId,
+      inputPath: vcxInputPath,
+      modelId: (document.getElementById('vcxModel') || {}).value || 'eleven_multilingual_sts_v2',
+      settings: { stability: num('vcxStability', 0.5), similarity: num('vcxSimilarity', 0.75), style: num('vcxStyle', 0) },
+      removeBackgroundNoise: !!(dn && dn.checked),
+      filename: 'voicechange-' + (vcxVoiceLabel || 'out').replace(/[^\w.-]+/g, '_'),
+    };
+    setS('', '⏳ Đang đổi giọng…');
+    try {
+      var resp = await postJsonVG('/voice/change', body);
+      if (!resp.ok) throw new Error(resp.error || 'Đổi giọng thất bại');
+      lastVariations = resp.variations || [];
+      lastVariationsMode = 'tts'; // dùng chung bin/flow tab Voice
+      renderVariations();
+      if (els.resultSection) els.resultSection.hidden = false;
+      setS('is-ok', '✓ Xong — nghe thử & Lưu/Import ở khu kết quả bên dưới');
+    } catch (e) {
+      setS('is-err', '✗ ' + e.message);
+      console.error('[vcx] convert', e);
+    }
+  }
+
   // ── Voice Changer wiring ──
   var vcxGetSelBtn = document.getElementById('vcxGetSel');
   if (vcxGetSelBtn) vcxGetSelBtn.addEventListener('click', vcxGetSelectionAudio);
   var vcxBrowseBtn = document.getElementById('vcxBrowse');
   if (vcxBrowseBtn) vcxBrowseBtn.addEventListener('click', vcxBrowseInput);
+  var vcxConvertBtn = document.getElementById('vcxConvert');
+  if (vcxConvertBtn) vcxConvertBtn.addEventListener('click', vcxConvert);
   ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', function() { vcxSyncSliderLabels(); vcxSaveSettings(); });
