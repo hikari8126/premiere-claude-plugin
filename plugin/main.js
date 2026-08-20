@@ -7736,6 +7736,36 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
+  function vcxRenderVoiceList(filter) {
+    var list = document.getElementById('vcxVoiceList');
+    if (!list) return;
+    list.innerHTML = '';
+    var q = (filter || '').trim().toLowerCase();
+    (VG_VOICES_DATA || []).forEach(function(v) {
+      if (v.isSep || v.voice_id === '__custom__') return;
+      var label = (v.isCustom ? '⭐ ' : '') + v.label;
+      if (q && label.toLowerCase().indexOf(q) === -1) return;
+      var item = document.createElement('div');
+      item.className = 'vg-dropItem' + (v.voice_id === vcxVoiceId ? ' is-selected' : '');
+      item.textContent = label;
+      item.addEventListener('click', function() {
+        vcxVoiceId = v.voice_id; vcxVoiceLabel = v.label;
+        var lbl = document.getElementById('vcxVoiceLabel');
+        if (lbl) lbl.textContent = v.label + ' ▾';
+        var panel = document.getElementById('vcxVoicePanel');
+        if (panel) panel.hidden = true;
+        vcxSaveSettings();
+      });
+      list.appendChild(item);
+    });
+    if (!list.children.length) {
+      var empty = document.createElement('div');
+      empty.className = 'vc-clipInfo';
+      empty.textContent = (VG_VOICES_DATA && VG_VOICES_DATA.length) ? 'Không khớp voice nào.' : 'Chưa nạp voice — bấm Refresh ở tab Voice.';
+      list.appendChild(empty);
+    }
+  }
+
   // ── Voice Changer wiring ──
   var vcxGetSelBtn = document.getElementById('vcxGetSel');
   if (vcxGetSelBtn) vcxGetSelBtn.addEventListener('click', vcxGetSelectionAudio);
@@ -7757,6 +7787,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   if (vcxSeqR)  vcxSeqR.addEventListener('change', vcxSyncSource);
   if (vcxFileR) vcxFileR.addEventListener('change', vcxSyncSource);
+  var vcxVoiceLabelEl = document.getElementById('vcxVoiceLabel');
+  if (vcxVoiceLabelEl) vcxVoiceLabelEl.addEventListener('click', function() {
+    var panel = document.getElementById('vcxVoicePanel');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) vcxRenderVoiceList(document.getElementById('vcxVoiceSearch').value);
+  });
+  var vcxSearch = document.getElementById('vcxVoiceSearch');
+  if (vcxSearch) vcxSearch.addEventListener('input', function() { vcxRenderVoiceList(this.value); });
   vcxLoadSettings();
 
   // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
