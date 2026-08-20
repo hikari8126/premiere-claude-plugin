@@ -829,44 +829,45 @@ const ELEVENLABS_BASE = 'https://api.elevenlabs.io';
 // Used only when the plugin request doesn't carry a user key.
 const ELEVENLABS_DEFAULT_KEY = process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_KEY || '';
 
-// Multipart/form-data POST (for voice cloning — no extra deps needed)
-function elevenLabsMultipart(apiKey, urlPath, fields, files) {
+// Dựng body multipart/form-data (pure — test được, không mạng).
+function buildMultipartBody(boundary, fields, files) {
+  const parts = [];
+  for (const [name, value] of Object.entries(fields || {})) {
+    if (value == null) continue;
+    parts.push(Buffer.from(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
+      String(value) + '\r\n'
+    ));
+  }
+  for (const { fieldName, buffer, filename, contentType } of (files || [])) {
+    parts.push(Buffer.from(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="' + fieldName + '"; filename="' + filename + '"\r\n' +
+      'Content-Type: ' + (contentType || 'audio/mpeg') + '\r\n\r\n'
+    ));
+    parts.push(buffer);
+    parts.push(Buffer.from('\r\n'));
+  }
+  parts.push(Buffer.from('--' + boundary + '--\r\n'));
+  return Buffer.concat(parts);
+}
+
+// Multipart POST. expectBinary=true → resolve { buffer, contentType }; ngược lại parse JSON.
+function elevenLabsMultipart(apiKey, urlPath, fields, files, expectBinary) {
   apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
   return new Promise((resolve, reject) => {
     const boundary = '----ELBoundary' + Date.now().toString(16);
-    const parts    = [];
-
-    // Text fields
-    for (const [name, value] of Object.entries(fields)) {
-      if (value == null) continue;
-      parts.push(Buffer.from(
-        '--' + boundary + '\r\n' +
-        'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
-        String(value) + '\r\n'
-      ));
-    }
-    // File fields
-    for (const { fieldName, buffer, filename, contentType } of files) {
-      parts.push(Buffer.from(
-        '--' + boundary + '\r\n' +
-        'Content-Disposition: form-data; name="' + fieldName + '"; filename="' + filename + '"\r\n' +
-        'Content-Type: ' + (contentType || 'audio/mpeg') + '\r\n\r\n'
-      ));
-      parts.push(buffer);
-      parts.push(Buffer.from('\r\n'));
-    }
-    parts.push(Buffer.from('--' + boundary + '--\r\n'));
-
-    const body    = Buffer.concat(parts);
-    const url     = new URL(ELEVENLABS_BASE + urlPath);
-    const opts    = {
+    const body     = buildMultipartBody(boundary, fields, files);
+    const url      = new URL(ELEVENLABS_BASE + urlPath);
+    const opts     = {
       hostname: url.hostname, port: 443,
-      path: url.pathname, method: 'POST',
+      path: url.pathname + url.search, method: 'POST',
       headers: {
-        'xi-api-key':    apiKey,
-        'Content-Type':  'multipart/form-data; boundary=' + boundary,
+        'xi-api-key':     apiKey,
+        'Content-Type':   'multipart/form-data; boundary=' + boundary,
         'Content-Length': body.length,
-        'Accept':        'application/json',
+        'Accept':         expectBinary ? 'audio/mpeg' : 'application/json',
       },
     };
     const req = require('https').request(opts, response => {
@@ -875,6 +876,7 @@ function elevenLabsMultipart(apiKey, urlPath, fields, files) {
       response.on('end', () => {
         const buf = Buffer.concat(chunks);
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (expectBinary) return resolve({ buffer: buf, contentType: response.headers['content-type'] });
           try   { resolve(JSON.parse(buf.toString('utf8'))); }
           catch (e) { reject(new Error('Bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
         } else {
@@ -1307,6 +1309,67 @@ app.post('/voice/design/save', async (req, res) => {
     res.json({ ok: true, voice_id: data.voice_id, name: voiceName });
   } catch (err) {
     console.error('[voice/design/save]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Voice Changer — ElevenLabs Speech-to-Speech. Đọc file audio local → đổi sang voiceId.
+app.post('/voice/change', async (req, res) => {
+  try {
+    const {
+      apiKey, voiceId, inputPath, modelId, settings,
+      removeBackgroundNoise, outputFormat, filename, outputDir,
+    } = req.body;
+    if (!apiKey)    throw new Error('apiKey required');
+    if (!voiceId)   throw new Error('voiceId required');
+    if (!inputPath) throw new Error('inputPath required');
+    if (!fs.existsSync(inputPath)) throw new Error('inputPath not found: ' + inputPath);
+
+    const model = modelId || 'eleven_multilingual_sts_v2';
+    const fmt   = outputFormat || 'mp3_44100_128';
+    const vs = {
+      stability:        Number(settings && settings.stability  != null ? settings.stability  : 0.5),
+      similarity_boost: Number(settings && settings.similarity != null ? settings.similarity : 0.75),
+      style:            Number(settings && settings.style      != null ? settings.style      : 0),
+    };
+    const fields = { model_id: model, voice_settings: JSON.stringify(vs) };
+    if (removeBackgroundNoise) fields.remove_background_noise = 'true';
+
+    const inBuf = fs.readFileSync(inputPath);
+    const inName = path.basename(inputPath);
+    const inType = inName.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg';
+
+    console.log('[voice/change]', inName, inBuf.length, 'bytes → voice', voiceId, 'model', model);
+    const urlPath = '/v1/speech-to-speech/' + encodeURIComponent(voiceId) +
+                    '?output_format=' + encodeURIComponent(fmt);
+    const out = await elevenLabsMultipart(
+      apiKey, urlPath, fields,
+      [{ fieldName: 'audio', buffer: inBuf, filename: inName, contentType: inType }],
+      true
+    );
+
+    const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim())
+      ? outputDir.trim() : getTempDir();
+    ensureDir(saveDir);
+    const base  = (filename && typeof filename === 'string')
+      ? filename.replace(/\.mp3$/i, '') : ('voicechange-' + Date.now());
+    const fname = base + '.mp3';
+    const fpath = path.join(saveDir, fname);
+    fs.writeFileSync(fpath, out.buffer);
+    console.log('[voice/change] saved', out.buffer.length, 'bytes →', fpath);
+
+    res.json({
+      ok: true,
+      variations: [{
+        audioPath:  fpath,
+        previewUrl: '/tts/audio/' + encodeURIComponent(fname),
+        sizeBytes:  out.buffer.length,
+        filename:   fname,
+      }],
+      saveDir,
+    });
+  } catch (err) {
+    console.error('[voice/change]', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -3009,6 +3072,10 @@ app.get('/unnest/premiere-shortcuts', (_req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n🎬  Premiere Claude Bridge  →  http://localhost:${PORT}\n`);
-});
+if (require.main === module) {
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`\n🎬  Premiere Claude Bridge  →  http://localhost:${PORT}\n`);
+  });
+}
+
+module.exports = Object.assign(module.exports || {}, { buildMultipartBody });
