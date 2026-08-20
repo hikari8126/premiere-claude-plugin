@@ -7695,12 +7695,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         try { var op = ti.getOutPoint && ti.getOutPoint(); if (op && op.then) op = await op; if (op) outSec = getTimeSec(op); } catch (e) {}
         // Thời điểm bắt đầu trên timeline — dùng để SẮP XẾP thứ tự nối (getTrackItems
         // trả về không theo thứ tự thời gian, và có thể lẫn nhiều track A1/A2/A3).
+        // QUAN TRỌNG: dùng getStartTime() (sequence time). getStart() trả 0 → sort hỏng.
         var startSec = 0;
-        try { var gs0 = ti.getStart && ti.getStart(); if (gs0 && gs0.then) gs0 = await gs0; startSec = getTimeSec(gs0); } catch (e) {}
+        try {
+          var sf = ti.getStartTime || ti.getStart;
+          var gs0 = sf ? sf.call(ti) : null; if (gs0 && gs0.then) gs0 = await gs0;
+          startSec = getTimeSec(gs0);
+        } catch (e) {}
         if (!outSec || outSec <= inSec) {
           try {
-            var gs = ti.getStart && ti.getStart(); if (gs && gs.then) gs = await gs;
-            var ge = ti.getEnd && ti.getEnd();     if (ge && ge.then) ge = await ge;
+            var sfn = ti.getStartTime || ti.getStart;
+            var efn = ti.getEndTime   || ti.getEnd;
+            var gs = sfn ? sfn.call(ti) : null; if (gs && gs.then) gs = await gs;
+            var ge = efn ? efn.call(ti) : null; if (ge && ge.then) ge = await ge;
             inSec = 0; outSec = getTimeSec(ge) - getTimeSec(gs);
           } catch (e) {}
         }
