@@ -1722,11 +1722,20 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
       if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: file not found: ${filePath}`);
 
       const segPath = path.join(tmpDir, `concat_seg_${ts}_${i}.wav`);
+      // Trích [inPoint, outPoint) của SOURCE. Dùng -ss TRƯỚC -i (input seeking) +
+      // -t DURATION — dạng duy nhất không mơ hồ. Đặt -ss/-to SAU -i khiến -to bị
+      // tính tương đối với điểm seek ở nhiều bản ffmpeg → đoạn dài quá/đè lên nhau
+      // (bug gộp voice-changer: clip 1s hoá 20s, lặp/thiếu/đảo).
+      const _in  = Math.max(0, Number(inPoint) || 0);
+      const _out = Number(outPoint) || 0;
+      const _dur = _out - _in;
+      if (!(_dur > 0)) throw new Error(`Clip ${i + 1}: khoảng thời gian không hợp lệ (in=${_in}, out=${_out})`);
       await new Promise((resolve, reject) => {
         const args = [
-          '-y', '-i', filePath,
-          '-ss', String(inPoint || 0),
-          '-to', String(outPoint || 0),
+          '-y',
+          '-ss', String(_in),
+          '-i', filePath,
+          '-t', String(_dur),
           '-vn', '-acodec', 'pcm_s16le',
           segPath,
         ];
