@@ -7676,9 +7676,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!ppro) throw new Error('Premiere API không khả dụng');
       var seq = await getActiveSequence();
       if (!seq) throw new Error('Chưa mở sequence');
-      var sel = await un(seq.getSelection());
+      // un()/awaitArray() sống trong IIFE khác (Unnest) — không thấy được ở đây.
+      // Tự unwrap Promise + dùng collectionToArray (global, dòng ~294).
+      var sel = seq.getSelection();
+      if (sel && sel.then) sel = await sel;
       if (!sel) throw new Error('Không lấy được vùng chọn');
-      var items = await awaitArray(sel.getTrackItems());
+      var itemsRaw = sel.getTrackItems();
+      if (itemsRaw && itemsRaw.then) itemsRaw = await itemsRaw;
+      var items = collectionToArray(itemsRaw);
       if (!items || !items.length) throw new Error('Hãy chọn clip audio trên timeline');
 
       if (info) info.textContent = 'Đang đọc ' + items.length + ' clip…';
