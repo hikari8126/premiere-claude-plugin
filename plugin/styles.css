@@ -1875,8 +1875,9 @@ div[role="button"] > .p-ic:only-child { margin-right: 0; }
   font-family: ui-monospace, monospace;
   min-height: 16px;
 }
-.ac-manualStatus.is-err { color: var(--ac-error); }
-.ac-manualStatus.is-ok  { color: var(--ac-success); }
+.ac-manualStatus.is-err  { color: var(--ac-error); }
+.ac-manualStatus.is-ok   { color: var(--ac-success); }
+.ac-manualStatus.is-warn { color: #fbbf24; }
 
 /* Setting pill (mode indicator next to label) */
 .setting-pill {

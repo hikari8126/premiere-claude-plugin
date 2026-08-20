@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.3.2';  // Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.3.3';  // Fix import VO "Chuyển vào bin sau khi import": move-to-bin thất bại nay hiện cảnh báo (⚠) thay vì âm thầm để clip nằm lại bin đang active; executeTransaction move bọc try/catch trong lockedAccess (như sacCommitTx) → bắt được lỗi thật; ppMoveToBin trả {ok,error}. v5.3.2: Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -2738,29 +2738,47 @@ async function ppGetOrCreateBin(proj, binName) {
 }
 
 // Move a ProjectItem into a bin by name (find or create it).
+// Returns { ok:true } on success, or { ok:false, error:'...' } so callers can
+// surface WHY the move failed instead of silently leaving the clip in the active
+// bin (the "import không vào bin đã chọn" bug — every failure used to be swallowed
+// into a console.warn while the UI still showed "✓ Imported").
 async function ppMoveToBin(item, proj, binName) {
-  if (!item || !proj) return;
+  if (!item || !proj) return { ok: false, error: 'thiếu item/project' };
   binName = binName || (window.vgTargetBinName ? window.vgTargetBinName() : 'Voice Over');
   try {
     var binRaw = await ppGetOrCreateBin(proj, binName);
-    if (!binRaw) return;
+    if (!binRaw) return { ok: false, error: 'không tạo/tìm được bin "' + binName + '"' };
 
     // Must cast to FolderItem — createMoveItemAction only exists on FolderItem, not ProjectItem
     var bin = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(binRaw) : binRaw;
-    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return; }
+    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return { ok: false, error: 'cast bin thất bại' }; }
 
     if (typeof bin.createMoveItemAction !== 'function') {
       console.warn('[ppVO] createMoveItemAction still not found after cast');
-      return;
+      return { ok: false, error: 'API createMoveItemAction không có' };
     }
 
-    var action = bin.createMoveItemAction(item, bin);
+    // Wrap executeTransaction in a try/catch INSIDE lockedAccess (same as
+    // sacCommitTx) — an uncaught throw inside the lock can wedge Premiere, and it
+    // also means we never saw the real error. Capture it and report it.
+    var txErr = null;
     var rs = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to bin');
+      try {
+        var action = bin.createMoveItemAction(item, bin);
+        proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to bin');
+      } catch (e) { txErr = e; }
     });
     if (rs && typeof rs.then === 'function') await rs;
+    if (txErr) {
+      console.warn('[ppVO] move transaction failed:', txErr.message);
+      return { ok: false, error: txErr.message };
+    }
     console.log('[ppVO] Moved to bin "' + binName + '"');
-  } catch(e) { console.warn('[ppVO] ppMoveToBin failed:', e.message); }
+    return { ok: true };
+  } catch(e) {
+    console.warn('[ppVO] ppMoveToBin failed:', e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // Single source of truth for the "move to bin" toggle. Every import path must gate
@@ -7032,14 +7050,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       // Move to target bin only if checkbox is checked
       if (ppShouldMoveToVOBin()) {
+        var targetBin = window.vgTargetBinName();
         try {
-          if (rootItem) {
-            var fname2 = importedName || finalPath.split('/').pop();
-            var binItems2 = await sacCollectBinItems(rootItem);
-            var voItem2 = ppPickImportedItem(binItems2, beforeKeys, fname2);
-            if (voItem2) await ppMoveToBin(voItem2.item, project, window.vgTargetBinName());
+          if (!rootItem) throw new Error('không lấy được root project');
+          var fname2 = importedName || finalPath.split('/').pop();
+          var binItems2 = await sacCollectBinItems(rootItem);
+          var voItem2 = ppPickImportedItem(binItems2, beforeKeys, fname2);
+          if (!voItem2) throw new Error('không tìm thấy clip vừa import trong project');
+          var mv = await ppMoveToBin(voItem2.item, project, targetBin);
+          if (mv && mv.ok) {
+            els.importStatus.textContent = '✓ Imported "' + importedName + '" → bin "' + targetBin + '"';
+          } else {
+            els.importStatus.className = 'ac-manualStatus is-warn';
+            els.importStatus.textContent = '⚠ Đã import "' + importedName +
+              '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' +
+              ((mv && mv.error) || 'lỗi không rõ');
           }
-        } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
+        } catch(evb) {
+          console.warn('[ppVO] importVariation moveBin:', evb.message);
+          els.importStatus.className = 'ac-manualStatus is-warn';
+          els.importStatus.textContent = '⚠ Đã import "' + importedName +
+            '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' + evb.message;
+        }
       }
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
