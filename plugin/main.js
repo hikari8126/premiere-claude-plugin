@@ -7693,6 +7693,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var inSec = 0, outSec = 0;
         try { var ip = ti.getInPoint && ti.getInPoint(); if (ip && ip.then) ip = await ip; if (ip) inSec = getTimeSec(ip); } catch (e) {}
         try { var op = ti.getOutPoint && ti.getOutPoint(); if (op && op.then) op = await op; if (op) outSec = getTimeSec(op); } catch (e) {}
+        // Thời điểm bắt đầu trên timeline — dùng để SẮP XẾP thứ tự nối (getTrackItems
+        // trả về không theo thứ tự thời gian, và có thể lẫn nhiều track A1/A2/A3).
+        var startSec = 0;
+        try { var gs0 = ti.getStart && ti.getStart(); if (gs0 && gs0.then) gs0 = await gs0; startSec = getTimeSec(gs0); } catch (e) {}
         if (!outSec || outSec <= inSec) {
           try {
             var gs = ti.getStart && ti.getStart(); if (gs && gs.then) gs = await gs;
@@ -7702,8 +7706,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         }
         var fp = await vcGetTrackItemFilePath(ti);
         if (!fp) throw new Error('Clip ' + (i + 1) + ': không lấy được đường dẫn — dùng "From File"');
-        clips.push({ filePath: fp, inPoint: inSec, outPoint: outSec });
+        clips.push({ filePath: fp, inPoint: inSec, outPoint: outSec, _startSec: startSec });
       }
+
+      // Nối theo trình tự phát trên timeline (trái→phải), không theo thứ tự chọn.
+      clips.sort(function (a, b) { return a._startSec - b._startSec; });
+      clips.forEach(function (c) { delete c._startSec; });
 
       if (info) info.textContent = 'Đang gộp ' + clips.length + ' clip…';
       var resp = await postJsonVG('/tts/concat-from-sequence', { clips: clips, outputDir: '' });
