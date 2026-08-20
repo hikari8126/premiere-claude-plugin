@@ -7785,6 +7785,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       filename: 'voicechange-' + (vcxVoiceLabel || 'out').replace(/[^\w.-]+/g, '_'),
     };
     setS('', '⏳ Đang đổi giọng…');
+    var vcxConvertBtnEl = document.getElementById('vcxConvert');
+    if (vcxConvertBtnEl) vcxConvertBtnEl.disabled = true;
     try {
       var resp = await postJsonVG('/voice/change', body);
       if (!resp.ok) throw new Error(resp.error || 'Đổi giọng thất bại');
@@ -7792,10 +7794,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       lastVariationsMode = 'tts'; // dùng chung bin/flow tab Voice
       renderVariations();
       if (els.resultSection) els.resultSection.hidden = false;
+      var vgRight = document.querySelector('.vg-right');
+      if (vgRight) vgRight.style.display = ''; // re-show right column (bị ẩn ở tab Create)
       setS('is-ok', '✓ Xong — nghe thử & Lưu/Import ở khu kết quả bên dưới');
     } catch (e) {
       setS('is-err', '✗ ' + e.message);
       console.error('[vcx] convert', e);
+    } finally {
+      if (vcxConvertBtnEl) vcxConvertBtnEl.disabled = false;
     }
   }
 
