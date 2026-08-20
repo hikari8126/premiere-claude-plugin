@@ -5862,6 +5862,44 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (customOutputFolder && els.outputFolder) els.outputFolder.value = customOutputFolder;
   var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
   var lastVariationsMode = ''; // mode đã sinh ra lastVariations → đổi mode không mất audio
+
+  // ── Voice Changer (STS) state ──
+  var vcxInputPath  = '';
+  var vcxVoiceId    = '';
+  var vcxVoiceLabel = '';
+  var VG_VCX_LS     = 'vg_vcx_v1';
+  function vcxLoadSettings() {
+    var s = {};
+    try { s = JSON.parse(localStorage.getItem(VG_VCX_LS) || '{}') || {}; } catch (e) {}
+    var byId = function(id, v) { var el = document.getElementById(id); if (el != null && v != null) el.value = v; };
+    if (s.voiceId)  { vcxVoiceId = s.voiceId; vcxVoiceLabel = s.voiceLabel || ''; }
+    byId('vcxModel',      s.modelId    || 'eleven_multilingual_sts_v2');
+    byId('vcxStability',  s.stability  != null ? s.stability  : 0.5);
+    byId('vcxSimilarity', s.similarity != null ? s.similarity : 0.75);
+    byId('vcxStyle',      s.style      != null ? s.style      : 0);
+    var dn = document.getElementById('vcxDenoise'); if (dn) dn.checked = !!s.removeNoise;
+    var lbl = document.getElementById('vcxVoiceLabel');
+    if (lbl && vcxVoiceLabel) lbl.textContent = vcxVoiceLabel + ' ▾';
+    vcxSyncSliderLabels();
+  }
+  function vcxSaveSettings() {
+    var num = function(id, d) { var el = document.getElementById(id); return el ? Number(el.value) : d; };
+    var dn = document.getElementById('vcxDenoise');
+    var s = {
+      voiceId: vcxVoiceId, voiceLabel: vcxVoiceLabel,
+      modelId: (document.getElementById('vcxModel') || {}).value || 'eleven_multilingual_sts_v2',
+      stability: num('vcxStability', 0.5), similarity: num('vcxSimilarity', 0.75),
+      style: num('vcxStyle', 0), removeNoise: !!(dn && dn.checked),
+    };
+    try { localStorage.setItem(VG_VCX_LS, JSON.stringify(s)); } catch (e) {}
+  }
+  function vcxSyncSliderLabels() {
+    [['vcxStability','vcxStabilityVal'],['vcxSimilarity','vcxSimilarityVal'],['vcxStyle','vcxStyleVal']]
+      .forEach(function(p) {
+        var el = document.getElementById(p[0]), out = document.getElementById(p[1]);
+        if (el && out) out.textContent = Number(el.value).toFixed(2);
+      });
+  }
   var currentMode = 'tts'; // 'tts' | 'sfx' | 'music'
 
   // ── Bin đích cho import ───────────────────────────────────────────────────
@@ -7629,6 +7667,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
+  // ── Voice Changer wiring ──
+  ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() { vcxSyncSliderLabels(); vcxSaveSettings(); });
+  });
+  ['vcxModel','vcxDenoise'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', vcxSaveSettings);
+  });
+  var vcxSeqR = document.getElementById('vcxSrcSeq'), vcxFileR = document.getElementById('vcxSrcFile');
+  function vcxSyncSource() {
+    var isFile = !!(vcxFileR && vcxFileR.checked);
+    var fs = document.getElementById('vcxFromFile'), sq = document.getElementById('vcxFromSeq');
+    if (fs) fs.hidden = !isFile; if (sq) sq.hidden = isFile;
+  }
+  if (vcxSeqR)  vcxSeqR.addEventListener('change', vcxSyncSource);
+  if (vcxFileR) vcxFileR.addEventListener('change', vcxSyncSource);
+  vcxLoadSettings();
+
   // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
   var vgOrgModel = $('vgOrganizeModel');
   if (vgOrgModel) {
@@ -7790,10 +7847,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (vcDesignCard)   vcDesignCard.classList.toggle('is-active', m === 'design');
       if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
       if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
+      var vcChangeCard    = document.getElementById('vcChangeCard');
+      var vcChangeSection = document.getElementById('vcChangeSection');
+      if (vcChangeCard)    vcChangeCard.classList.toggle('is-active', m === 'change');
+      if (vcChangeSection) vcChangeSection.hidden = (m !== 'change');
       if (m === 'clone') { try { vcRefreshTrackList(); } catch (e) {} }
     }
     if (vcCloneCard)  vcCloneCard.addEventListener('click',  function() { vcSelectMethod('clone'); });
     if (vcDesignCard) vcDesignCard.addEventListener('click', function() { vcSelectMethod('design'); });
+    var vcChangeCard = document.getElementById('vcChangeCard');
+    if (vcChangeCard) vcChangeCard.addEventListener('click', function() { vcSelectMethod('change'); });
 
     // ── Clone step machine ──────────────────────────────────────────────────
     // Step 2 (Clone button) appears once an audio sample exists; Step 3 (name +
