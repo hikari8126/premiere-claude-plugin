@@ -27,6 +27,7 @@ zip -r "$OUT" \
   plugin/main.js \
   plugin/styles.css \
   bridge/server.js \
+  bridge/autosub-log.js \
   bridge/package.json \
   bridge/start.command \
   bridge/.env.example \
