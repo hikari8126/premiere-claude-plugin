@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
+const autosubLog = require('./autosub-log');   // ghi report mỗi lần auto sub
 
 const app  = express();
 const PORT = 3030;
@@ -1838,7 +1839,7 @@ function subtextAssignTimes(sw, whisper) {
     for (let j = wi; j < stop; j++) {
       if (wnorm[j] && wnorm[j] === s.n) { found = j; break; }
     }
-    if (found >= 0) { s.start = whisper[found].start; s.end = whisper[found].end; wi = found + 1; matched++; }
+    if (found >= 0) { s.start = whisper[found].start; s.end = whisper[found].end; s.hit = true; wi = found + 1; matched++; }
   }
   subtextInterpolate(sw, whisper);
   return { matched, total: sw.length }; // chẩn đoán: khớp bao nhiêu / tổng từ script
@@ -2301,6 +2302,15 @@ app.post('/superautocut/subtext', async (req, res) => {
     };
     console.log('[subtext][diag]', JSON.stringify(diag));
 
+    // Ghi report chi tiết (Whisper nghe gì / lệch script chỗ nào) để soi lại sau.
+    const report = autosubLog.writeReport({
+      kind: previewOnly ? 'subtext (preview)' : 'subtext',
+      audioPath, language: language || WHISPER_LANG, whisperModel: WHISPER_MODEL,
+      clipCount: Array.isArray(clips) ? clips.length : 0, offset, audioDur,
+      words, script: cleanScript.length ? sw : null, scriptLines: cleanScript, cues, diag,
+    });
+    if (report) { diag.reportPath = report.path; diag.mismatches = report.mismatches; console.log('[subtext][log]', report.path); }
+
     // previewOnly → CHỈ trả cues (đã có timing) để xem/sửa; KHÔNG ghi file.
     if (previewOnly) { res.json({ ok: true, cues, srt, timed: true, diag }); return; }
     const savedPath = subtextWriteSrt(outputPath, srt);
@@ -2367,7 +2377,26 @@ app.post('/superautocut/subtext-finalize', async (req, res) => {
     const srt = subtextToSrt(fin);
     const savedPath = subtextWriteSrt(outputPath, srt);
     console.log(`[subtext-finalize] ${edited.length} lines → ${fin.length} cues (whisper) · offset ${offset.toFixed(2)}s`);
-    res.json({ ok: true, path: savedPath, cues: fin, srt });
+    // Log giống /subtext: bước này cũng chạy Whisper nên cũng đáng ghi lại độ lệch.
+    const fAudioDur = await ffprobeDuration(audioPath);
+    const fGaps = subtextGaps(words, 2);
+    const fMatched = sw.filter(w => w.hit).length;
+    const fDiag = {
+      whisperWords: words.length,
+      audioDur: +fAudioDur.toFixed(2),
+      wordSpan: words.length ? +(words[words.length - 1].end - words[0].start).toFixed(2) : 0,
+      silentTail: +Math.max(0, fAudioDur - (words.length ? words[words.length - 1].end : 0)).toFixed(2),
+      scriptWords: sw.length, matched: fMatched,
+      matchPct: sw.length ? Math.round(fMatched / sw.length * 100) : null,
+      bigGaps: fGaps.slice(0, 5), cues: fin.length,
+    };
+    const fReport = autosubLog.writeReport({
+      kind: 'subtext-finalize', audioPath, language: language || WHISPER_LANG, whisperModel: WHISPER_MODEL,
+      clipCount: Array.isArray(clips) ? clips.length : 0, offset, audioDur: fAudioDur,
+      words, script: sw, scriptLines: edited, cues: fin, diag: fDiag,
+    });
+    if (fReport) { fDiag.reportPath = fReport.path; fDiag.mismatches = fReport.mismatches; console.log('[subtext-finalize][log]', fReport.path); }
+    res.json({ ok: true, path: savedPath, cues: fin, srt, diag: fDiag });
   } catch (e) {
     console.error('[subtext-finalize]', e.message);
     res.status(500).json({ ok: false, error: e.message });
@@ -2650,6 +2679,22 @@ app.post('/sac/log', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.json({ ok: false, error: e.message });
+  }
+});
+
+// ── GET /autosub/logs ─────────────────────────────────────────
+// Danh sách report auto sub gần nhất + thư mục chứa. `reveal=1` → mở Finder.
+app.get('/autosub/logs', (req, res) => {
+  try {
+    const dir = autosubLog.LOG_DIR;
+    let files = [];
+    try {
+      files = fs.readdirSync(dir).filter(f => /^autosub-.*\.md$/.test(f)).sort().reverse().slice(0, 20);
+    } catch (e) {}
+    if (req.query.reveal) spawn('open', [dir]);
+    res.json({ ok: true, dir, files, history: autosubLog.HISTORY_PATH });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

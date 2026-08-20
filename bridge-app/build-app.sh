@@ -51,6 +51,7 @@ echo ""
 echo "  📦 Bundling bridge server + node_modules..."
 
 cp    bridge/server.js          "${APP_DIR}/Contents/Resources/server/"
+cp    bridge/autosub-log.js     "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/package.json       "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/.env.example       "${APP_DIR}/Contents/Resources/server/.env.example"
 cp -r bridge/node_modules       "${APP_DIR}/Contents/Resources/server/"
@@ -75,7 +76,7 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
   <key>CFBundleVersion</key>
     <string>3.5</string>
   <key>CFBundleShortVersionString</key>
-    <string>3.6</string>
+    <string>3.7</string>
   <key>PluginVersion</key>
     <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>

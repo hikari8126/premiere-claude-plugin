@@ -55,9 +55,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: ─── Menu Bar ────────────────────────────────────────────────────
     func setupMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "🔴"
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        applyTrayIcon(active: false)
         rebuildMenu()
+    }
+
+    // MARK: ─── Tray icon ────────────────────────────────────────────────
+    // Emoji ở menu bar luôn hiện MÀU → lạc quẻ giữa các icon đơn sắc của macOS.
+    // Thay bằng template image tự vẽ (đơn sắc, tự đảo màu theo light/dark và khi
+    // menu đang mở): tia sáng 8 cánh — chạy = đậm, dừng = mờ.
+    func trayIcon(active: Bool) -> NSImage {
+        let box: CGFloat = 18, c = box / 2
+        let img = NSImage(size: NSSize(width: box, height: box), flipped: false) { _ in
+            NSColor.black.withAlphaComponent(active ? 1.0 : 0.35).setStroke()
+            for i in 0..<8 {
+                let a = Double(i) * Double.pi / 4
+                let outer: Double = (i % 2 == 0) ? 7.2 : 4.6
+                let p = NSBezierPath()
+                p.lineWidth = 1.5
+                p.lineCapStyle = .round
+                p.move(to: NSPoint(x: c, y: c))
+                p.line(to: NSPoint(x: c + CGFloat(cos(a) * outer), y: c + CGFloat(sin(a) * outer)))
+                p.stroke()
+            }
+            return true
+        }
+        img.isTemplate = true   // để macOS tự tô theo màu menu bar
+        return img
+    }
+
+    func applyTrayIcon(active: Bool) {
+        guard let b = statusItem?.button else { return }
+        b.image = trayIcon(active: active)
+        b.imagePosition = .imageOnly
+        b.title = ""
+        b.toolTip = active ? "Claude Bridge — đang chạy" : "Claude Bridge — đã dừng"
     }
 
     func rebuildMenu() {
@@ -82,6 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(item("↺  Khởi động lại Bridge",     #selector(restartBridge), key: "r"))
         menu.addItem(item("📋  Xem Log",                  #selector(showLog),       key: "l"))
+        menu.addItem(item("📄  Log Auto Sub (Whisper vs script)", #selector(openAutosubLogs), key: ""))
         menu.addItem(.separator())
 
         autoStartItem = item("🔄  Tự khởi động cùng máy", #selector(toggleAutoStart), key: "")
@@ -97,6 +130,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    // Mở thư mục report auto sub (bridge ghi mỗi lần tạo phụ đề).
+    @objc func openAutosubLogs() {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/Claude Bridge Logs/autosub")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
+    }
+
     func item(_ title: String, _ sel: Selector, key: String) -> NSMenuItem {
         let m = NSMenuItem(title: title, action: sel, keyEquivalent: key)
         m.target = self
@@ -105,7 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func setStatus(_ msg: String, running: Bool) {
         DispatchQueue.main.async {
-            self.statusItem.button?.title = running ? "⚡" : "🔴"
+            self.applyTrayIcon(active: running)
             self.statusMenuItem?.title    = msg
         }
     }

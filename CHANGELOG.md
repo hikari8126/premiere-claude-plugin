@@ -3,6 +3,20 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## bridge 3.7 — 2026-08-20
+
+### ✅ Thêm mới / Cải tiến
+- **Log auto sub (Whisper vs script)** — Mỗi lần tạo phụ đề, bridge ghi 1 report `.md` vào `~/Documents/Claude Bridge Logs/autosub/` (giữ 60 lần gần nhất) + 1 dòng tóm tắt trong `autosub-history.log`. Report gồm: transcript Whisper nghe được; **diff theo từ (LCS)** giữa script và Whisper kèm mốc thời gian (nhãn *hụt* / *thêm chữ*); các đoạn script **bị nội suy timing** (nguyên nhân chính khiến caption trôi); khoảng lặng ≥2s; danh sách cue cuối cùng. Mục đích: có dữ liệu thật để tìm hướng cải thiện độ chính xác.
+- **`/superautocut/subtext-finalize` giờ trả `diag`** — Trước đây bước finalize (cũng chạy Whisper) không trả chẩn đoán nào; nay tính đủ matchPct / gaps / silentTail như `/subtext`.
+- **`GET /autosub/logs`** — Liệt kê 20 report gần nhất; `?reveal=1` mở thư mục trong Finder. Tray app có menu **📄 Log Auto Sub**.
+- **Icon menu bar mới** — Emoji `⚡`/`🔴` render màu nên lạc giữa các icon đơn sắc của macOS. Thay bằng **template `NSImage` tự vẽ** (tia sáng 8 cánh): tự đảo màu theo light/dark và khi menu mở; đang chạy = đậm, đã dừng = mờ 35%; thêm tooltip trạng thái.
+
+### 🔧 Kỹ thuật / Approach
+- `subtextAssignTimes` set thêm `s.hit` cho mỗi từ script khớp thật với 1 từ Whisper → phân biệt được timing **thật** vs **nội suy** khi ghi report.
+- Diff dùng LCS DP `Uint32Array` (chặn ở 6M cặp, quá ngưỡng thì bỏ diff chi tiết) — script/whisper cỡ vài nghìn từ vẫn nhanh.
+- Report tách sang `bridge/autosub-log.js`, `writeReport()` **không bao giờ throw** ra endpoint (log lỗi rồi trả `null`) để không làm hỏng luồng tạo SRT.
+- `bridge-app/build-app.sh` + `pack.sh` copy thêm `bridge/autosub-log.js` vào bundle/zip.
+
 ## v4.9.4 — 2026-07-10
 
 ### ✅ Thêm mới / Cải tiến
