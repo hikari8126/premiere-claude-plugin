@@ -3,6 +3,17 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.4.2 — 2026-08-20  (bridge app 3.8 / bridge server 1.13.0)
+
+### ✅ Fix (Voice Changer — render vùng chọn)
+- **Chỉ render track chứa clip đã chọn.** `exportSequence` render toàn bộ mix nên
+  bản gộp lẫn cả BGM/SFX. Nay trước khi export, plugin map clip đã chọn → track
+  (khoá start(2 chữ số)|tên file), **mute mọi audio track không có clip chọn**,
+  export xong **khôi phục** trạng thái mute. Loại BGM/SFX khỏi bản gộp.
+- Giới hạn: mute theo track — nếu track VO còn clip KHÔNG chọn trong vùng in/out
+  thì clip đó vẫn lọt (hiếm với VO). Khi cần chính xác tuyệt đối phải tạo
+  sub-sequence tạm chỉ chứa clip chọn.
+
 ## v5.4.1 — 2026-08-20
 
 ### ✅ Cải tiến / Fix (Voice Changer — "Lấy clip đang chọn")

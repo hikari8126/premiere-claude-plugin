@@ -2870,7 +2870,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.12.0';  // /music/generate: Music v2 mặc định + audio reference (upload → composition_plan style/extend, GenerationChunk có positive_styles/negative_styles); helper elevenLabsUpload multipart. Prior 1.11.6: /plugin/check-update trả thêm notes. Prior 1.11.6: /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
+const BRIDGE_VERSION = '1.13.0';  // Voice Changer: + POST /voice/change (ElevenLabs speech-to-speech), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (tìm .epr audio); concat-from-sequence trích đoạn -ss trước -i + -t. Prior 1.12.0: /music/generate: Music v2 mặc định + audio reference (upload → composition_plan style/extend, GenerationChunk có positive_styles/negative_styles); helper elevenLabsUpload multipart. Prior 1.11.6: /plugin/check-update trả thêm notes. Prior 1.11.6: /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

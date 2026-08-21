@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.4.1';  // Voice Changer: "Lấy clip đang chọn" nay RENDER đúng audio timeline của vùng chọn qua EncoderManager.exportSequence (đặt in/out = span, preset WAV mono 48k do bridge tìm, exportFull=false) rồi trích audio — tái tạo chính xác những gì timeline phát (mix/gap/trim take thô); nối in/out nguồn chỉ còn là dự phòng (cảnh báo ⚠ vì có thể sai với VO nhiều take). Thêm nút "Nghe thử bản gộp". Bridge: POST /media/extract-audio, GET /media/audio-preset; concat trích đoạn bằng -ss trước -i + -t. v5.4.0: Voice Changer (ElevenLabs Speech-to-Speech): card thứ 3 tab Create — đổi giọng từ clip timeline (gộp qua ffmpeg) hoặc file upload sang giọng đích, có settings Stability/Similarity/Style + khử ồn; bridge POST /voice/change. v5.3.3: Fix import VO "Chuyển vào bin sau khi import": move-to-bin thất bại nay hiện cảnh báo (⚠) thay vì âm thầm để clip nằm lại bin đang active; executeTransaction move bọc try/catch trong lockedAccess (như sacCommitTx) → bắt được lỗi thật; ppMoveToBin trả {ok,error}. v5.3.2: Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.4.2';  // Voice Changer render vùng chọn: CHỈ render track chứa clip đã chọn — mute mọi audio track khác (BGM/SFX) khi export rồi khôi phục (loại BGM/SFX khỏi bản gộp). v5.4.1: "Lấy clip đang chọn" nay RENDER đúng audio timeline của vùng chọn qua EncoderManager.exportSequence (đặt in/out = span, preset WAV mono 48k do bridge tìm, exportFull=false) rồi trích audio — tái tạo chính xác những gì timeline phát (mix/gap/trim take thô); nối in/out nguồn chỉ còn là dự phòng (cảnh báo ⚠ vì có thể sai với VO nhiều take). Thêm nút "Nghe thử bản gộp". Bridge: POST /media/extract-audio, GET /media/audio-preset; concat trích đoạn bằng -ss trước -i + -t. v5.4.0: Voice Changer (ElevenLabs Speech-to-Speech): card thứ 3 tab Create — đổi giọng từ clip timeline (gộp qua ffmpeg) hoặc file upload sang giọng đích, có settings Stability/Similarity/Style + khử ồn; bridge POST /voice/change. v5.3.3: Fix import VO "Chuyển vào bin sau khi import": move-to-bin thất bại nay hiện cảnh báo (⚠) thay vì âm thầm để clip nằm lại bin đang active; executeTransaction move bọc try/catch trong lockedAccess (như sacCommitTx) → bắt được lỗi thật; ppMoveToBin trả {ok,error}. v5.3.2: Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -7677,14 +7677,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var ET = ppro.Constants && ppro.Constants.ExportType;
     if (!ET || !ET.IMMEDIATELY) throw new Error('Constants.ExportType không có');
 
-    // Span vùng chọn theo sequence-time.
+    // Span vùng chọn theo sequence-time + khoá nhận diện clip đã chọn (để chỉ
+    // render đúng track chứa clip chọn, loại BGM/SFX). Khoá = start(2 chữ số)|tên file.
     var minStart = Infinity, maxEnd = -Infinity;
+    var selKeys = Object.create(null);
     for (var i = 0; i < items.length; i++) {
       var ti = items[i], s = 0, e = 0;
       try { var sf = ti.getStartTime || ti.getStart; var gs = sf ? sf.call(ti) : null; if (gs && gs.then) gs = await gs; s = getTimeSec(gs); } catch (x) {}
       try { var ef = ti.getEndTime || ti.getEnd; var ge = ef ? ef.call(ti) : null; if (ge && ge.then) ge = await ge; e = getTimeSec(ge); } catch (x) {}
       if (s < minStart) minStart = s;
       if (e > maxEnd)   maxEnd = e;
+      try { var kfp = await vcGetTrackItemFilePath(ti); selKeys[s.toFixed(2) + '|' + (kfp ? kfp.split('/').pop() : '')] = true; } catch (x) {}
     }
     if (!(maxEnd > minStart)) throw new Error('Không tính được vùng chọn (start/end)');
     console.log('[vcx] render span ' + minStart.toFixed(3) + 's → ' + maxEnd.toFixed(3) + 's (' + (maxEnd - minStart).toFixed(3) + 's)');
@@ -7693,6 +7696,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var origIn = null, origOut = null;
     try { origIn = await seq.getInPoint(); } catch (x) {}
     try { origOut = await seq.getOutPoint(); } catch (x) {}
+    var savedMute = []; // [{tr, was}] để khôi phục trạng thái mute sau export
 
     var proj = await getActiveProject();
     var inTT = ppro.TickTime.createWithSeconds(minStart);
@@ -7735,6 +7739,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try { var e2 = await em.getExportFileExtension(seq, presetPath); if (e2) ext = String(e2).replace(/^\./, ''); } catch (x) {}
     var outFile = tmpDir + '/vcx_render_' + Date.now() + '.' + ext;
 
+    // ── Chỉ render track chứa clip đã chọn: mute mọi audio track khác (BGM/SFX) ──
+    var aCount = 0;
+    try { aCount = await seq.getAudioTrackCount(); if (aCount && aCount.then) aCount = await aCount; } catch (x) {}
+    aCount = Number(aCount) || 0;
+    var selTracks = Object.create(null);
+    for (var t = 0; t < aCount; t++) {
+      var tr = null; try { tr = await seq.getAudioTrack(t); } catch (x) {}
+      if (!tr) continue;
+      var clips = []; try { clips = await getClipItems(tr); } catch (x) {}
+      for (var c = 0; c < clips.length; c++) {
+        var cs = 0;
+        try { var cf = clips[c].getStartTime || clips[c].getStart; var g = cf ? cf.call(clips[c]) : null; if (g && g.then) g = await g; cs = getTimeSec(g); } catch (x) {}
+        var cfp = null; try { cfp = await vcGetTrackItemFilePath(clips[c]); } catch (x) {}
+        if (selKeys[cs.toFixed(2) + '|' + (cfp ? cfp.split('/').pop() : '')]) { selTracks[t] = true; break; }
+      }
+    }
+    var selCount = Object.keys(selTracks).length;
+    console.log('[vcx] audio tracks=' + aCount + ', track chứa clip chọn: ' + (Object.keys(selTracks).join(',') || '(none)'));
+    if (selCount > 0) {
+      for (var t2 = 0; t2 < aCount; t2++) {
+        var tr2 = null; try { tr2 = await seq.getAudioTrack(t2); } catch (x) {}
+        if (!tr2) continue;
+        var was = false; try { was = await tr2.isMuted(); if (was && was.then) was = await was; } catch (x) {}
+        savedMute.push({ tr: tr2, was: !!was });
+        var want = !selTracks[t2]; // mute track KHÔNG có clip chọn
+        if (want !== !!was) { try { var rm = tr2.setMute(want); if (rm && rm.then) await rm; } catch (x) { console.warn('[vcx] setMute ' + t2 + ':', x && (x.message || String(x))); } }
+      }
+    } else {
+      console.warn('[vcx] không map được track nào theo clip chọn → render toàn bộ (không isolate)');
+    }
+
     if (info) info.textContent = 'Đang render vùng chọn (Premiere export)…';
     // Premiere 26.3+: đảm bảo AME chạy trước khi export (một số bản export cần AME).
     try { if (typeof em.launchEncoder === 'function') { console.log('[vcx] launchEncoder()…'); await em.launchEncoder(); } } catch (x) { console.warn('[vcx] launchEncoder:', x && (x.message || String(x))); }
@@ -7750,7 +7785,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       console.error('[vcx] exportSequence THREW:', ee, '| detail=', detail, '| keys=', (function(){ try { return Object.keys(ee||{}).join(','); } catch(x){ return '?'; } })());
       throw new Error('exportSequence lỗi: ' + (detail || 'không rõ'));
     } finally {
-      // Khôi phục in/out cũ dù export thành công hay không.
+      // Khôi phục mute + in/out cũ dù export thành công hay không.
+      for (var m = 0; m < savedMute.length; m++) {
+        try { var rr = savedMute[m].tr.setMute(savedMute[m].was); if (rr && rr.then) await rr; } catch (x) { console.warn('[vcx] restore mute:', x && (x.message || String(x))); }
+      }
       try { if (origIn && origOut) await setInOut(origIn, origOut); } catch (x) { console.warn('[vcx] restore in/out:', x.message); }
     }
     console.log('[vcx] exportSequence returned:', ok);
