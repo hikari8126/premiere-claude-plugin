@@ -3,6 +3,25 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.4.1 — 2026-08-20
+
+### ✅ Cải tiến / Fix (Voice Changer — "Lấy clip đang chọn")
+- **Render đúng audio timeline thay vì nối in/out nguồn.** Cách cũ (nối khoảng
+  in/out từng clip từ file gốc) tái tạo SAI với VO dựng từ nhiều take: lặp đoạn,
+  thiếu đoạn, sai thứ tự — vì không phản ánh những gì timeline thực sự PHÁT (mix
+  nhiều track, khoảng trống, đúng trim của editor; take thô còn chứa câu nói vấp).
+- **Cách mới:** span vùng chọn (min getStartTime → max getEndTime) → đặt in/out
+  sequence → `EncoderManager.exportSequence(seq, ExportType.IMMEDIATELY, outFile,
+  presetWAV, exportFull=false)` (preset WAV mono 48k của Premiere; bridge tìm giúp
+  qua `GET /media/audio-preset`) → khôi phục in/out cũ → bridge trích audio
+  (`POST /media/extract-audio`). Verified khớp bản export chuẩn (transcript + thời
+  lượng trùng).
+- **Nút "Nghe thử bản gộp"** — phát thử audio nguồn trước khi đổi giọng (afplay).
+- Nối in/out nguồn giữ lại làm **dự phòng** (khi export lỗi) kèm cảnh báo ⚠.
+- API note: `exportSequence` cần `presetFile` là string hợp lệ (`undefined` →
+  "Illegal Parameter type"; `''` → "Invalid parameter"). `concat-from-sequence`
+  đổi trích đoạn sang `-ss` trước `-i` + `-t` (không mơ hồ).
+
 ## v5.4.0 — 2026-08-20
 
 ### ✅ Thêm mới

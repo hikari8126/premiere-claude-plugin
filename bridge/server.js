@@ -1791,6 +1791,74 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
   }
 });
 
+// ── POST /media/extract-audio ──────────────────────────────────────────────
+// Trích audio từ 1 file bất kỳ (mp4/mov/wav/…) → mp3 mono giữ nguyên nội dung.
+// Dùng cho Voice Changer khi render vùng chọn timeline ra media rồi cần audio.
+app.post('/media/extract-audio', async (req, res) => {
+  const { inputPath, outputDir } = req.body;
+  if (!inputPath) return res.status(400).json({ ok: false, error: 'inputPath required' });
+  if (!fs.existsSync(inputPath)) return res.status(400).json({ ok: false, error: 'inputPath not found: ' + inputPath });
+  const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim()) ? outputDir.trim() : getTempDir();
+  ensureDir(saveDir);
+  const outPath = path.join(saveDir, 'vcx_extract_' + Date.now() + '.mp3');
+  try {
+    await new Promise((resolve, reject) => {
+      const args = ['-y', '-i', inputPath, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outPath];
+      const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+      let stderr = '';
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error('ffmpeg extract failed: ' + stderr.slice(-300))));
+      proc.on('error', e => reject(new Error('ffmpeg error: ' + e.message)));
+    });
+    const dur = await new Promise((resolve) => {
+      const pr = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', outPath], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let o = ''; pr.stdout.on('data', d => { o += d.toString(); });
+      pr.on('close', () => resolve(parseFloat(o.trim()) || 0)); pr.on('error', () => resolve(0));
+    });
+    console.log('[media/extract-audio]', inputPath, '→', outPath, '(' + dur.toFixed(2) + 's)');
+    res.json({ ok: true, audioPath: outPath, durationSec: +dur.toFixed(3) });
+  } catch (e) {
+    console.error('[media/extract-audio]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── GET /media/audio-preset ────────────────────────────────────────────────
+// Tìm 1 preset audio (.epr) của Premiere để exportSequence dùng (UXP không đọc
+// được /Applications). Ưu tiên WAV mono 48k → AudioOnly → MP3 mono.
+app.get('/media/audio-preset', (req, res) => {
+  try {
+    const glob = require('fs');
+    const appsDir = '/Applications';
+    let presetDirs = [];
+    try {
+      glob.readdirSync(appsDir).forEach(name => {
+        if (/^Adobe Premiere Pro/i.test(name)) {
+          const d = path.join(appsDir, name, name + '.app', 'Contents', 'Settings', 'EncoderPresets');
+          if (glob.existsSync(d)) presetDirs.push(d);
+        }
+      });
+    } catch (e) {}
+    // Bản mới hơn đứng trước (sort giảm dần theo tên → "2026" trước "2025").
+    presetDirs.sort().reverse();
+    const prefer = ['Wave48mono16.epr', 'Wave48mono24.epr', 'AudioOnly.epr', 'Wave96mono16.epr', 'MP3_mono_96kbps_nometadata.epr'];
+    for (const dir of presetDirs) {
+      for (const name of prefer) {
+        const p = path.join(dir, name);
+        if (glob.existsSync(p)) return res.json({ ok: true, presetPath: p });
+      }
+      // fallback: bất kỳ preset audio mono nào
+      try {
+        const hit = glob.readdirSync(dir).find(f => /\.epr$/i.test(f) && /(wave|aiff|mp3|audio).*mono|audioonly/i.test(f));
+        if (hit) return res.json({ ok: true, presetPath: path.join(dir, hit) });
+      } catch (e) {}
+    }
+    res.status(404).json({ ok: false, error: 'Không tìm thấy preset audio .epr trong /Applications/Adobe Premiere Pro*' });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /api/read-image — bridge reads a local file and returns base64 ───
 // Used as a fallback when UXP storage API can't read Finder drag-dropped files
 app.post('/api/read-image', async (req, res) => {

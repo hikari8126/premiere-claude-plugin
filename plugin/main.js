@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.4.0';  // Voice Changer (ElevenLabs Speech-to-Speech): card thứ 3 tab Create — đổi giọng từ clip timeline (gộp qua ffmpeg) hoặc file upload sang giọng đích, có settings Stability/Similarity/Style + khử ồn; bridge POST /voice/change. v5.3.3: Fix import VO "Chuyển vào bin sau khi import": move-to-bin thất bại nay hiện cảnh báo (⚠) thay vì âm thầm để clip nằm lại bin đang active; executeTransaction move bọc try/catch trong lockedAccess (như sacCommitTx) → bắt được lỗi thật; ppMoveToBin trả {ok,error}. v5.3.2: Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.4.1';  // Voice Changer: "Lấy clip đang chọn" nay RENDER đúng audio timeline của vùng chọn qua EncoderManager.exportSequence (đặt in/out = span, preset WAV mono 48k do bridge tìm, exportFull=false) rồi trích audio — tái tạo chính xác những gì timeline phát (mix/gap/trim take thô); nối in/out nguồn chỉ còn là dự phòng (cảnh báo ⚠ vì có thể sai với VO nhiều take). Thêm nút "Nghe thử bản gộp". Bridge: POST /media/extract-audio, GET /media/audio-preset; concat trích đoạn bằng -ss trước -i + -t. v5.4.0: Voice Changer (ElevenLabs Speech-to-Speech): card thứ 3 tab Create — đổi giọng từ clip timeline (gộp qua ffmpeg) hoặc file upload sang giọng đích, có settings Stability/Similarity/Style + khử ồn; bridge POST /voice/change. v5.3.3: Fix import VO "Chuyển vào bin sau khi import": move-to-bin thất bại nay hiện cảnh báo (⚠) thay vì âm thầm để clip nằm lại bin đang active; executeTransaction move bọc try/catch trong lockedAccess (như sacCommitTx) → bắt được lỗi thật; ppMoveToBin trả {ok,error}. v5.3.2: Fix ô tìm voice clone (ElevenLabs): hết bôi đen/nhảy caret khi gõ — claim keyboard theo mousedown thay vì focus (phantom focus lúc filter relayout gây select-all). v5.3.1: import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -7667,7 +7667,98 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
-  // ── Voice Changer: thu input (selection concat + browse file) ──
+  // Render CHÍNH XÁC audio timeline của vùng chọn qua EncoderManager.exportSequence
+  // (đặt in/out = span vùng chọn → export vùng in/out → trích audio). Cách này tái
+  // tạo đúng những gì timeline PHÁT (mix nhiều track, gap, trim take thô), khác hẳn
+  // nối in/out nguồn (gây lặp/thiếu với VO dựng từ nhiều take). Trả về path media.
+  async function vcxRenderSelection(seq, items, info) {
+    if (!ppro.EncoderManager || !ppro.EncoderManager.getManager) throw new Error('EncoderManager không có (cần Premiere ≥ 25.6)');
+    if (!ppro.TickTime || !ppro.TickTime.createWithSeconds) throw new Error('TickTime API không có');
+    var ET = ppro.Constants && ppro.Constants.ExportType;
+    if (!ET || !ET.IMMEDIATELY) throw new Error('Constants.ExportType không có');
+
+    // Span vùng chọn theo sequence-time.
+    var minStart = Infinity, maxEnd = -Infinity;
+    for (var i = 0; i < items.length; i++) {
+      var ti = items[i], s = 0, e = 0;
+      try { var sf = ti.getStartTime || ti.getStart; var gs = sf ? sf.call(ti) : null; if (gs && gs.then) gs = await gs; s = getTimeSec(gs); } catch (x) {}
+      try { var ef = ti.getEndTime || ti.getEnd; var ge = ef ? ef.call(ti) : null; if (ge && ge.then) ge = await ge; e = getTimeSec(ge); } catch (x) {}
+      if (s < minStart) minStart = s;
+      if (e > maxEnd)   maxEnd = e;
+    }
+    if (!(maxEnd > minStart)) throw new Error('Không tính được vùng chọn (start/end)');
+    console.log('[vcx] render span ' + minStart.toFixed(3) + 's → ' + maxEnd.toFixed(3) + 's (' + (maxEnd - minStart).toFixed(3) + 's)');
+
+    // Lưu in/out hiện tại để khôi phục.
+    var origIn = null, origOut = null;
+    try { origIn = await seq.getInPoint(); } catch (x) {}
+    try { origOut = await seq.getOutPoint(); } catch (x) {}
+
+    var proj = await getActiveProject();
+    var inTT = ppro.TickTime.createWithSeconds(minStart);
+    var outTT = ppro.TickTime.createWithSeconds(maxEnd);
+    async function setInOut(a, b) {
+      var err = null;
+      var r = proj.lockedAccess(function () {
+        try {
+          proj.executeTransaction(function (ca) {
+            ca.addAction(seq.createSetInPointAction(a));
+            ca.addAction(seq.createSetOutPointAction(b));
+          }, 'VCX set in/out');
+        } catch (ex) { err = ex; }
+      });
+      if (r && r.then) await r;
+      if (err) throw err;
+    }
+    await setInOut(inTT, outTT);
+
+    // Preset audio (.epr) bắt buộc — exportSequence với preset '' → "Invalid parameter".
+    // Bridge tìm preset trong /Applications (UXP không đọc được đường dẫn đó).
+    var presetPath = '';
+    try {
+      var pr = await fetch(BRIDGE_URL + '/media/audio-preset');
+      var pj = await pr.json();
+      if (pj && pj.ok) presetPath = pj.presetPath;
+    } catch (x) {}
+    if (!presetPath) throw new Error('Không tìm được preset audio (.epr) trong Premiere');
+    console.log('[vcx] audio preset:', presetPath);
+
+    // Thư mục ghi tạm (bridge đọc được path tuyệt đối).
+    var uxp = window.require && window.require('uxp');
+    var tmpFolder = await uxp.storage.localFileSystem.getTemporaryFolder();
+    var tmpDir = tmpFolder.nativePath;
+
+    var em = ppro.EncoderManager.getManager();
+    try { console.log('[vcx] isAMEInstalled =', em.isAMEInstalled); } catch (x) {}
+    // Đuôi file phải khớp preset (WAV preset → .wav).
+    var ext = 'wav';
+    try { var e2 = await em.getExportFileExtension(seq, presetPath); if (e2) ext = String(e2).replace(/^\./, ''); } catch (x) {}
+    var outFile = tmpDir + '/vcx_render_' + Date.now() + '.' + ext;
+
+    if (info) info.textContent = 'Đang render vùng chọn (Premiere export)…';
+    // Premiere 26.3+: đảm bảo AME chạy trước khi export (một số bản export cần AME).
+    try { if (typeof em.launchEncoder === 'function') { console.log('[vcx] launchEncoder()…'); await em.launchEncoder(); } } catch (x) { console.warn('[vcx] launchEncoder:', x && (x.message || String(x))); }
+    console.log('[vcx] exportSequence → ' + outFile + ' (IMMEDIATELY, exportFull=false, preset=' + presetPath.split('/').pop() + ')');
+    var ok;
+    try {
+      ok = await em.exportSequence(seq, ET.IMMEDIATELY, outFile, presetPath, false);
+    } catch (ee) {
+      // Lỗi API thường thiếu .message → moi mọi field để biết nguyên nhân thật.
+      var detail = '';
+      try { detail = ee && (ee.message || ee.code || ee.name) ? (ee.message || ('code=' + ee.code) || ee.name) : ''; } catch (x) {}
+      if (!detail) { try { detail = JSON.stringify(ee); } catch (x) { detail = String(ee); } }
+      console.error('[vcx] exportSequence THREW:', ee, '| detail=', detail, '| keys=', (function(){ try { return Object.keys(ee||{}).join(','); } catch(x){ return '?'; } })());
+      throw new Error('exportSequence lỗi: ' + (detail || 'không rõ'));
+    } finally {
+      // Khôi phục in/out cũ dù export thành công hay không.
+      try { if (origIn && origOut) await setInOut(origIn, origOut); } catch (x) { console.warn('[vcx] restore in/out:', x.message); }
+    }
+    console.log('[vcx] exportSequence returned:', ok);
+    if (!ok) throw new Error('exportSequence trả false (có thể thiếu preset audio hoặc AME)');
+    return outFile;
+  }
+
+  // ── Voice Changer: thu input (render vùng chọn → fallback concat) ──
   async function vcxGetSelectionAudio() {
     var info = document.getElementById('vcxSelInfo');
     var btn  = document.getElementById('vcxGetSel');
@@ -7685,6 +7776,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (itemsRaw && itemsRaw.then) itemsRaw = await itemsRaw;
       var items = collectionToArray(itemsRaw);
       if (!items || !items.length) throw new Error('Hãy chọn clip audio trên timeline');
+
+      // ƯU TIÊN: render đúng audio timeline (mix/gap/trim) rồi trích audio.
+      try {
+        var rendered = await vcxRenderSelection(seq, items, info);
+        if (info) info.textContent = 'Đang trích audio…';
+        var ex = await postJsonVG('/media/extract-audio', { inputPath: rendered, outputDir: '' });
+        if (!ex.ok) throw new Error(ex.error || 'Trích audio thất bại');
+        vcxInputPath = ex.audioPath;
+        if (info) info.textContent = '✓ Render vùng chọn: ' + ex.audioPath.split('/').pop() + ' (' + (ex.durationSec || '?') + 's)';
+        vcxRevealPreview();
+        return;
+      } catch (rerr) {
+        console.warn('[vcx] render thất bại, fallback sang nối in/out nguồn:', rerr.message);
+        if (info) info.textContent = '⚠ Render lỗi (' + rerr.message + ') — thử nối clip…';
+      }
 
       if (info) info.textContent = 'Đang đọc ' + items.length + ' clip…';
       var clips = [];
@@ -7725,7 +7831,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!resp.ok) throw new Error(resp.error || 'Gộp clip thất bại');
       vcxInputPath = resp.audioPath;
       var nm = resp.audioPath.split('/').pop();
-      if (info) info.textContent = '✓ ' + nm + ' (' + clips.length + ' clip)';
+      if (info) info.textContent = '⚠ Nối clip (dự phòng): ' + nm + ' (' + clips.length + ' clip) — có thể sai với VO nhiều take';
       vcxRevealPreview();
     } catch (e) {
       vcxInputPath = '';
