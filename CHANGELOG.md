@@ -3,9 +3,15 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.3.2 / bridge 3.8 — 2026-08-24
+## v5.5.0 / bridge 3.9 (server 1.14.0) — 2026-08-24
 
-> ⚠ **Bắt buộc bridge ≥ 1.13.0** (Bridge app 3.8). Plugin hiện cảnh báo đỏ + chặn chạy nếu bridge cũ.
+> ⚠ **Bắt buộc bridge ≥ 1.14.0** (Bridge app 3.9). Plugin cảnh báo đỏ + chặn Tạo SRT nếu bridge cũ.
+
+Gộp nhánh **Voice Changer** vào main cùng đợt **sub-fix**. Cấp version đè cả hai (trước đó hai nhánh vô tình cùng đánh bridge 1.13.0 / app 3.8). Chi tiết từng phần ở các entry bên dưới:
+- **Voice Changer (ElevenLabs STS)** + render đúng vùng chọn — xem v5.4.0 → v5.4.2.
+- **Tạo Sub** — fix ghép audio (clip đổi tốc độ, trộn đúng lớp track), Clear session, chống nhầm script cũ, menu bar app đơn sắc + "Kiểm tra thành phần" — xem "Tạo Sub" ngay dưới.
+
+## Tạo Sub — fix ghép audio + menu bar (phần của v5.5.0)
 
 ### 🐛 Bugs đã fix
 - **Tạo Sub — clip bị đổi tốc độ (speed) ghép sai audio** — Phụ đề mất đầu câu và dính cả câu đã trim bỏ. Nguyên nhân: `trackItem.getInPoint()/getOutPoint()` của Premiere trả về theo **đơn vị timeline** (= giây trên nguồn ÷ speed), không phải giây nguồn; bridge đưa thẳng cho `ffmpeg -ss` nên cửa sổ cắt vừa **trễ** vừa **dài quá**. Ca thật đo được: clip speed 85.3%, Premiere hiện in 7:20 / out 10:05 (=7.667→10.167s nguồn) nhưng API trả 8.99→11.92 → cắt trễ 1.32s (mất "You can actually pick exactly") và thừa 1.75s (lấy sang "I'm obsessed!" đã trim). Cách fix: `resolveClipWindow()` xác định speed (API `getSpeed` → `getDuration/tlDur` → `(out−in)/tlDur`), nhận diện in/out đang theo đơn vị timeline hay nguồn, **nhân lại in-point + span với speed**, rồi `atempo` (chain nhiều tầng cho speed ngoài 0.5–2×) đưa đoạn về đúng độ dài trên timeline. `cursor` chạy theo độ dài timeline thay vì `(out−in)`.
@@ -23,6 +29,46 @@
 - `amix` phải dùng `normalize=0`, mặc định chia cho số input làm voice nhỏ đi khi có nhạc chồng lên.
 - `atempo` chỉ nhận 0.5–100 → `atempoChain()` tách thành nhiều tầng nhân với nhau.
 - Plugin gửi kèm `endTime`, `speed`, `srcDuration`, `track`, `name` + `probe` (dump các API thời gian của track item / project item) để chẩn đoán được từ report mà không cần mở Premiere.
+
+## v5.4.2 — 2026-08-20  (bridge app 3.8 / bridge server 1.13.0)
+
+### ✅ Fix (Voice Changer — render vùng chọn)
+- **Chỉ render track chứa clip đã chọn.** `exportSequence` render toàn bộ mix nên
+  bản gộp lẫn cả BGM/SFX. Nay trước khi export, plugin map clip đã chọn → track
+  (khoá start(2 chữ số)|tên file), **mute mọi audio track không có clip chọn**,
+  export xong **khôi phục** trạng thái mute. Loại BGM/SFX khỏi bản gộp.
+- Giới hạn: mute theo track — nếu track VO còn clip KHÔNG chọn trong vùng in/out
+  thì clip đó vẫn lọt (hiếm với VO). Khi cần chính xác tuyệt đối phải tạo
+  sub-sequence tạm chỉ chứa clip chọn.
+
+## v5.4.1 — 2026-08-20
+
+### ✅ Cải tiến / Fix (Voice Changer — "Lấy clip đang chọn")
+- **Render đúng audio timeline thay vì nối in/out nguồn.** Cách cũ (nối khoảng
+  in/out từng clip từ file gốc) tái tạo SAI với VO dựng từ nhiều take: lặp đoạn,
+  thiếu đoạn, sai thứ tự — vì không phản ánh những gì timeline thực sự PHÁT (mix
+  nhiều track, khoảng trống, đúng trim của editor; take thô còn chứa câu nói vấp).
+- **Cách mới:** span vùng chọn (min getStartTime → max getEndTime) → đặt in/out
+  sequence → `EncoderManager.exportSequence(seq, ExportType.IMMEDIATELY, outFile,
+  presetWAV, exportFull=false)` (preset WAV mono 48k của Premiere; bridge tìm giúp
+  qua `GET /media/audio-preset`) → khôi phục in/out cũ → bridge trích audio
+  (`POST /media/extract-audio`). Verified khớp bản export chuẩn (transcript + thời
+  lượng trùng).
+- **Nút "Nghe thử bản gộp"** — phát thử audio nguồn trước khi đổi giọng (afplay).
+- Nối in/out nguồn giữ lại làm **dự phòng** (khi export lỗi) kèm cảnh báo ⚠.
+- API note: `exportSequence` cần `presetFile` là string hợp lệ (`undefined` →
+  "Illegal Parameter type"; `''` → "Invalid parameter"). `concat-from-sequence`
+  đổi trích đoạn sang `-ss` trước `-i` + `-t` (không mơ hồ).
+
+## v5.4.0 — 2026-08-20
+
+### ✅ Thêm mới
+- **Voice Changer (Đổi giọng)** — card thứ 3 trong tab Create. Lấy audio từ clip
+  đang chọn trên timeline (gộp nhiều clip qua ffmpeg) hoặc upload file → đổi sang
+  giọng đích ElevenLabs (Speech-to-Speech). Settings: model STS, Stability/
+  Similarity/Style, khử tiếng ồn nền. Kết quả dùng chung khu Lưu/Import của tab Voice.
+- **Bridge `POST /voice/change`** — đọc file local → multipart STS → lưu output.
+
 
 ## bridge 3.7 — 2026-08-20
 

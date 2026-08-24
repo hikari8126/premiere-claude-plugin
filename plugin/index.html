@@ -543,6 +543,13 @@
                   <div class="vc-ccSub">Generate a new voice from a description</div>
                 </div>
               </div>
+              <div id="vcChangeCard" class="vc-choiceCard" role="button">
+                <span class="vc-ccIcon" data-ic="shuffle" data-ic-size="18" data-ic-color="#22d3ee"></span>
+                <div class="vc-ccText">
+                  <div class="vc-ccTitle">Voice Changer</div>
+                  <div class="vc-ccSub">Đổi giọng đoạn audio sang giọng khác</div>
+                </div>
+              </div>
             </div>
 
             <!-- ── CLONE SECTION — 3-step guided flow ── -->
@@ -657,6 +664,67 @@
                 <div id="vcDesignSave" class="ac-primaryButton" role="button" style="width:100%;"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> SAVE VOICE</div>
               </div>
               <div id="vcDesignStatus" class="vc-status" hidden></div>
+            </div>
+
+            <!-- ── VOICE CHANGER SECTION ── -->
+            <div id="vcChangeSection" hidden>
+              <div class="vc-step">
+                <div class="vc-stepHd"><span class="vc-stepNo">1</span> Nguồn audio</div>
+                <div class="vc-segTabs">
+                  <label class="vc-seg"><input type="radio" name="vcxSource" id="vcxSrcSeq" value="sequence" checked /><span>Clip đang chọn</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcxSource" id="vcxSrcFile" value="file" /><span>From File</span></label>
+                </div>
+                <div id="vcxFromSeq">
+                  <div id="vcxGetSel" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Lấy clip đang chọn</div>
+                  <div class="vc-clipInfo" id="vcxSelInfo">Chọn 1 hay nhiều clip audio trên timeline — plugin gộp lại thành 1 file.</div>
+                </div>
+                <div id="vcxFromFile" hidden>
+                  <div id="vcxBrowse" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn file audio</div>
+                  <div class="vc-clipInfo" id="vcxFileInfo">Chọn file MP3/WAV/M4A cần đổi giọng.</div>
+                </div>
+                <div id="vcxPreviewMerged" class="vc-bigBtn" role="button" hidden style="margin-top:8px;"><span data-ic="play" data-ic-size="13" data-ic-color="#22d3ee"></span> Nghe thử bản gộp (trước khi đổi giọng)</div>
+              </div>
+
+              <div class="vc-step">
+                <div class="vc-stepHd"><span class="vc-stepNo">2</span> Giọng đích</div>
+                <div id="vcxVoiceHost" class="vcx-voiceHost">
+                  <div id="vcxVoiceLabel" class="vcx-voiceLabel" role="button">Chọn giọng… <span class="vg-caret">▾</span></div>
+                  <div id="vcxVoicePanel" class="vcx-voicePanel" hidden>
+                    <input type="text" id="vcxVoiceSearch" class="vg-dropSearchInput" placeholder="Search voices…" />
+                    <div id="vcxVoiceList" class="vg-dropList"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="vc-step">
+                <div class="vc-stepHd"><span class="vc-stepNo">3</span> Thiết lập</div>
+                <div class="vc-field">
+                  <label class="vc-label">Model</label>
+                  <select id="vcxModel" class="vg-settingInput">
+                    <option value="eleven_multilingual_sts_v2">Multilingual STS v2</option>
+                    <option value="eleven_english_sts_v2">English STS v2</option>
+                  </select>
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Stability <span class="vg-sm" id="vcxStabilityVal">0.50</span></label>
+                  <input type="range" id="vcxStability" min="0" max="1" step="0.05" value="0.5" class="vcx-range" />
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Similarity <span class="vg-sm" id="vcxSimilarityVal">0.75</span></label>
+                  <input type="range" id="vcxSimilarity" min="0" max="1" step="0.05" value="0.75" class="vcx-range" />
+                </div>
+                <div class="vc-field">
+                  <label class="vc-label">Style <span class="vg-sm" id="vcxStyleVal">0.00</span></label>
+                  <input type="range" id="vcxStyle" min="0" max="1" step="0.05" value="0" class="vcx-range" />
+                </div>
+                <label class="vg-checkRow">
+                  <input type="checkbox" id="vcxDenoise" />
+                  <span>Khử tiếng ồn nền</span>
+                </label>
+              </div>
+
+              <div id="vcxConvert" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="shuffle" data-ic-size="14" data-ic-color="#ffffff"></span> ĐỔI GIỌNG</div>
+              <div class="ac-manualStatus" id="vcxStatus" style="margin-top:6px;"></div>
             </div>
 
           </div><!-- /vc-scroll -->

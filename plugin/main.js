@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.3.2';  // CẦN BRIDGE ≥1.13.0. Tạo Sub: fix ghép audio — clip bị đổi tốc độ (speed) nay cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (trước đây lệch sang phần đã trim, mất đầu câu); clip chồng nhau ở nhiều track nay TRỘN đúng lớp thay vì nối đuôi (nhạc nền/SFX không còn bị chèn vào giữa lời). Thêm nút Clear session ở tab Tạo Sub; chống dùng nhầm script cũ (không ghi đè ô script khi bạn sửa lúc đang chạy + cảnh báo đỏ khi script khớp <40%); cảnh báo đỏ khi bridge cũ.
+var PLUGIN_VERSION = 'v5.5.0';  // CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -893,7 +893,7 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.13.0'; // Plugin v5.3.2+ cần bridge ≥1.13.0 (Tạo Sub: fix speed clip + trộn đúng lớp track)
+var REQUIRED_BRIDGE = '1.14.0'; // Plugin v5.5.0+ cần bridge ≥1.14.0 (Voice Changer + Tạo Sub: fix speed clip + trộn đúng lớp track)
 
 // Compare semver strings: returns -1/0/1
 function compareVersions(a, b) {
@@ -2739,29 +2739,47 @@ async function ppGetOrCreateBin(proj, binName) {
 }
 
 // Move a ProjectItem into a bin by name (find or create it).
+// Returns { ok:true } on success, or { ok:false, error:'...' } so callers can
+// surface WHY the move failed instead of silently leaving the clip in the active
+// bin (the "import không vào bin đã chọn" bug — every failure used to be swallowed
+// into a console.warn while the UI still showed "✓ Imported").
 async function ppMoveToBin(item, proj, binName) {
-  if (!item || !proj) return;
+  if (!item || !proj) return { ok: false, error: 'thiếu item/project' };
   binName = binName || (window.vgTargetBinName ? window.vgTargetBinName() : 'Voice Over');
   try {
     var binRaw = await ppGetOrCreateBin(proj, binName);
-    if (!binRaw) return;
+    if (!binRaw) return { ok: false, error: 'không tạo/tìm được bin "' + binName + '"' };
 
     // Must cast to FolderItem — createMoveItemAction only exists on FolderItem, not ProjectItem
     var bin = (ppro && ppro.FolderItem) ? ppro.FolderItem.cast(binRaw) : binRaw;
-    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return; }
+    if (!bin) { console.warn('[ppVO] FolderItem.cast returned null'); return { ok: false, error: 'cast bin thất bại' }; }
 
     if (typeof bin.createMoveItemAction !== 'function') {
       console.warn('[ppVO] createMoveItemAction still not found after cast');
-      return;
+      return { ok: false, error: 'API createMoveItemAction không có' };
     }
 
-    var action = bin.createMoveItemAction(item, bin);
+    // Wrap executeTransaction in a try/catch INSIDE lockedAccess (same as
+    // sacCommitTx) — an uncaught throw inside the lock can wedge Premiere, and it
+    // also means we never saw the real error. Capture it and report it.
+    var txErr = null;
     var rs = proj.lockedAccess(function() {
-      proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to bin');
+      try {
+        var action = bin.createMoveItemAction(item, bin);
+        proj.executeTransaction(function(ca) { ca.addAction(action); }, 'Move to bin');
+      } catch (e) { txErr = e; }
     });
     if (rs && typeof rs.then === 'function') await rs;
+    if (txErr) {
+      console.warn('[ppVO] move transaction failed:', txErr.message);
+      return { ok: false, error: txErr.message };
+    }
     console.log('[ppVO] Moved to bin "' + binName + '"');
-  } catch(e) { console.warn('[ppVO] ppMoveToBin failed:', e.message); }
+    return { ok: true };
+  } catch(e) {
+    console.warn('[ppVO] ppMoveToBin failed:', e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // Single source of truth for the "move to bin" toggle. Every import path must gate
@@ -5845,6 +5863,44 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (customOutputFolder && els.outputFolder) els.outputFolder.value = customOutputFolder;
   var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
   var lastVariationsMode = ''; // mode đã sinh ra lastVariations → đổi mode không mất audio
+
+  // ── Voice Changer (STS) state ──
+  var vcxInputPath  = '';
+  var vcxVoiceId    = '';
+  var vcxVoiceLabel = '';
+  var VG_VCX_LS     = 'vg_vcx_v1';
+  function vcxLoadSettings() {
+    var s = {};
+    try { s = JSON.parse(localStorage.getItem(VG_VCX_LS) || '{}') || {}; } catch (e) {}
+    var byId = function(id, v) { var el = document.getElementById(id); if (el != null && v != null) el.value = v; };
+    if (s.voiceId)  { vcxVoiceId = s.voiceId; vcxVoiceLabel = s.voiceLabel || ''; }
+    byId('vcxModel',      s.modelId    || 'eleven_multilingual_sts_v2');
+    byId('vcxStability',  s.stability  != null ? s.stability  : 0.5);
+    byId('vcxSimilarity', s.similarity != null ? s.similarity : 0.75);
+    byId('vcxStyle',      s.style      != null ? s.style      : 0);
+    var dn = document.getElementById('vcxDenoise'); if (dn) dn.checked = !!s.removeNoise;
+    var lbl = document.getElementById('vcxVoiceLabel');
+    if (lbl && vcxVoiceLabel) lbl.textContent = vcxVoiceLabel + ' ▾';
+    vcxSyncSliderLabels();
+  }
+  function vcxSaveSettings() {
+    var num = function(id, d) { var el = document.getElementById(id); return el ? Number(el.value) : d; };
+    var dn = document.getElementById('vcxDenoise');
+    var s = {
+      voiceId: vcxVoiceId, voiceLabel: vcxVoiceLabel,
+      modelId: (document.getElementById('vcxModel') || {}).value || 'eleven_multilingual_sts_v2',
+      stability: num('vcxStability', 0.5), similarity: num('vcxSimilarity', 0.75),
+      style: num('vcxStyle', 0), removeNoise: !!(dn && dn.checked),
+    };
+    try { localStorage.setItem(VG_VCX_LS, JSON.stringify(s)); } catch (e) {}
+  }
+  function vcxSyncSliderLabels() {
+    [['vcxStability','vcxStabilityVal'],['vcxSimilarity','vcxSimilarityVal'],['vcxStyle','vcxStyleVal']]
+      .forEach(function(p) {
+        var el = document.getElementById(p[0]), out = document.getElementById(p[1]);
+        if (el && out) out.textContent = Number(el.value).toFixed(2);
+      });
+  }
   var currentMode = 'tts'; // 'tts' | 'sfx' | 'music'
 
   // ── Bin đích cho import ───────────────────────────────────────────────────
@@ -7033,14 +7089,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       // Move to target bin only if checkbox is checked
       if (ppShouldMoveToVOBin()) {
+        var targetBin = window.vgTargetBinName();
         try {
-          if (rootItem) {
-            var fname2 = importedName || finalPath.split('/').pop();
-            var binItems2 = await sacCollectBinItems(rootItem);
-            var voItem2 = ppPickImportedItem(binItems2, beforeKeys, fname2);
-            if (voItem2) await ppMoveToBin(voItem2.item, project, window.vgTargetBinName());
+          if (!rootItem) throw new Error('không lấy được root project');
+          var fname2 = importedName || finalPath.split('/').pop();
+          var binItems2 = await sacCollectBinItems(rootItem);
+          var voItem2 = ppPickImportedItem(binItems2, beforeKeys, fname2);
+          if (!voItem2) throw new Error('không tìm thấy clip vừa import trong project');
+          var mv = await ppMoveToBin(voItem2.item, project, targetBin);
+          if (mv && mv.ok) {
+            els.importStatus.textContent = '✓ Imported "' + importedName + '" → bin "' + targetBin + '"';
+          } else {
+            els.importStatus.className = 'ac-manualStatus is-warn';
+            els.importStatus.textContent = '⚠ Đã import "' + importedName +
+              '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' +
+              ((mv && mv.error) || 'lỗi không rõ');
           }
-        } catch(evb) { console.warn('[ppVO] importVariation moveBin:', evb.message); }
+        } catch(evb) {
+          console.warn('[ppVO] importVariation moveBin:', evb.message);
+          els.importStatus.className = 'ac-manualStatus is-warn';
+          els.importStatus.textContent = '⚠ Đã import "' + importedName +
+            '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' + evb.message;
+        }
       }
     } catch(e) {
       els.importStatus.className = 'ac-manualStatus is-err';
@@ -7598,6 +7668,373 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
+  // Render CHÍNH XÁC audio timeline của vùng chọn qua EncoderManager.exportSequence
+  // (đặt in/out = span vùng chọn → export vùng in/out → trích audio). Cách này tái
+  // tạo đúng những gì timeline PHÁT (mix nhiều track, gap, trim take thô), khác hẳn
+  // nối in/out nguồn (gây lặp/thiếu với VO dựng từ nhiều take). Trả về path media.
+  async function vcxRenderSelection(seq, items, info) {
+    if (!ppro.EncoderManager || !ppro.EncoderManager.getManager) throw new Error('EncoderManager không có (cần Premiere ≥ 25.6)');
+    if (!ppro.TickTime || !ppro.TickTime.createWithSeconds) throw new Error('TickTime API không có');
+    var ET = ppro.Constants && ppro.Constants.ExportType;
+    if (!ET || !ET.IMMEDIATELY) throw new Error('Constants.ExportType không có');
+
+    // Span vùng chọn theo sequence-time + khoá nhận diện clip đã chọn (để chỉ
+    // render đúng track chứa clip chọn, loại BGM/SFX). Khoá = start(2 chữ số)|tên file.
+    var minStart = Infinity, maxEnd = -Infinity;
+    var selKeys = Object.create(null);
+    for (var i = 0; i < items.length; i++) {
+      var ti = items[i], s = 0, e = 0;
+      try { var sf = ti.getStartTime || ti.getStart; var gs = sf ? sf.call(ti) : null; if (gs && gs.then) gs = await gs; s = getTimeSec(gs); } catch (x) {}
+      try { var ef = ti.getEndTime || ti.getEnd; var ge = ef ? ef.call(ti) : null; if (ge && ge.then) ge = await ge; e = getTimeSec(ge); } catch (x) {}
+      if (s < minStart) minStart = s;
+      if (e > maxEnd)   maxEnd = e;
+      try { var kfp = await vcGetTrackItemFilePath(ti); selKeys[s.toFixed(2) + '|' + (kfp ? kfp.split('/').pop() : '')] = true; } catch (x) {}
+    }
+    if (!(maxEnd > minStart)) throw new Error('Không tính được vùng chọn (start/end)');
+    console.log('[vcx] render span ' + minStart.toFixed(3) + 's → ' + maxEnd.toFixed(3) + 's (' + (maxEnd - minStart).toFixed(3) + 's)');
+
+    // Lưu in/out hiện tại để khôi phục.
+    var origIn = null, origOut = null;
+    try { origIn = await seq.getInPoint(); } catch (x) {}
+    try { origOut = await seq.getOutPoint(); } catch (x) {}
+    var savedMute = []; // [{tr, was}] để khôi phục trạng thái mute sau export
+
+    var proj = await getActiveProject();
+    var inTT = ppro.TickTime.createWithSeconds(minStart);
+    var outTT = ppro.TickTime.createWithSeconds(maxEnd);
+    async function setInOut(a, b) {
+      var err = null;
+      var r = proj.lockedAccess(function () {
+        try {
+          proj.executeTransaction(function (ca) {
+            ca.addAction(seq.createSetInPointAction(a));
+            ca.addAction(seq.createSetOutPointAction(b));
+          }, 'VCX set in/out');
+        } catch (ex) { err = ex; }
+      });
+      if (r && r.then) await r;
+      if (err) throw err;
+    }
+    await setInOut(inTT, outTT);
+
+    // Preset audio (.epr) bắt buộc — exportSequence với preset '' → "Invalid parameter".
+    // Bridge tìm preset trong /Applications (UXP không đọc được đường dẫn đó).
+    var presetPath = '';
+    try {
+      var pr = await fetch(BRIDGE_URL + '/media/audio-preset');
+      var pj = await pr.json();
+      if (pj && pj.ok) presetPath = pj.presetPath;
+    } catch (x) {}
+    if (!presetPath) throw new Error('Không tìm được preset audio (.epr) trong Premiere');
+    console.log('[vcx] audio preset:', presetPath);
+
+    // Thư mục ghi tạm (bridge đọc được path tuyệt đối).
+    var uxp = window.require && window.require('uxp');
+    var tmpFolder = await uxp.storage.localFileSystem.getTemporaryFolder();
+    var tmpDir = tmpFolder.nativePath;
+
+    var em = ppro.EncoderManager.getManager();
+    try { console.log('[vcx] isAMEInstalled =', em.isAMEInstalled); } catch (x) {}
+    // Đuôi file phải khớp preset (WAV preset → .wav).
+    var ext = 'wav';
+    try { var e2 = await em.getExportFileExtension(seq, presetPath); if (e2) ext = String(e2).replace(/^\./, ''); } catch (x) {}
+    var outFile = tmpDir + '/vcx_render_' + Date.now() + '.' + ext;
+
+    // ── Chỉ render track chứa clip đã chọn: mute mọi audio track khác (BGM/SFX) ──
+    var aCount = 0;
+    try { aCount = await seq.getAudioTrackCount(); if (aCount && aCount.then) aCount = await aCount; } catch (x) {}
+    aCount = Number(aCount) || 0;
+    var selTracks = Object.create(null);
+    for (var t = 0; t < aCount; t++) {
+      var tr = null; try { tr = await seq.getAudioTrack(t); } catch (x) {}
+      if (!tr) continue;
+      var clips = []; try { clips = await getClipItems(tr); } catch (x) {}
+      for (var c = 0; c < clips.length; c++) {
+        var cs = 0;
+        try { var cf = clips[c].getStartTime || clips[c].getStart; var g = cf ? cf.call(clips[c]) : null; if (g && g.then) g = await g; cs = getTimeSec(g); } catch (x) {}
+        var cfp = null; try { cfp = await vcGetTrackItemFilePath(clips[c]); } catch (x) {}
+        if (selKeys[cs.toFixed(2) + '|' + (cfp ? cfp.split('/').pop() : '')]) { selTracks[t] = true; break; }
+      }
+    }
+    var selCount = Object.keys(selTracks).length;
+    console.log('[vcx] audio tracks=' + aCount + ', track chứa clip chọn: ' + (Object.keys(selTracks).join(',') || '(none)'));
+    if (selCount > 0) {
+      for (var t2 = 0; t2 < aCount; t2++) {
+        var tr2 = null; try { tr2 = await seq.getAudioTrack(t2); } catch (x) {}
+        if (!tr2) continue;
+        var was = false; try { was = await tr2.isMuted(); if (was && was.then) was = await was; } catch (x) {}
+        savedMute.push({ tr: tr2, was: !!was });
+        var want = !selTracks[t2]; // mute track KHÔNG có clip chọn
+        if (want !== !!was) { try { var rm = tr2.setMute(want); if (rm && rm.then) await rm; } catch (x) { console.warn('[vcx] setMute ' + t2 + ':', x && (x.message || String(x))); } }
+      }
+    } else {
+      console.warn('[vcx] không map được track nào theo clip chọn → render toàn bộ (không isolate)');
+    }
+
+    if (info) info.textContent = 'Đang render vùng chọn (Premiere export)…';
+    // Premiere 26.3+: đảm bảo AME chạy trước khi export (một số bản export cần AME).
+    try { if (typeof em.launchEncoder === 'function') { console.log('[vcx] launchEncoder()…'); await em.launchEncoder(); } } catch (x) { console.warn('[vcx] launchEncoder:', x && (x.message || String(x))); }
+    console.log('[vcx] exportSequence → ' + outFile + ' (IMMEDIATELY, exportFull=false, preset=' + presetPath.split('/').pop() + ')');
+    var ok;
+    try {
+      ok = await em.exportSequence(seq, ET.IMMEDIATELY, outFile, presetPath, false);
+    } catch (ee) {
+      // Lỗi API thường thiếu .message → moi mọi field để biết nguyên nhân thật.
+      var detail = '';
+      try { detail = ee && (ee.message || ee.code || ee.name) ? (ee.message || ('code=' + ee.code) || ee.name) : ''; } catch (x) {}
+      if (!detail) { try { detail = JSON.stringify(ee); } catch (x) { detail = String(ee); } }
+      console.error('[vcx] exportSequence THREW:', ee, '| detail=', detail, '| keys=', (function(){ try { return Object.keys(ee||{}).join(','); } catch(x){ return '?'; } })());
+      throw new Error('exportSequence lỗi: ' + (detail || 'không rõ'));
+    } finally {
+      // Khôi phục mute + in/out cũ dù export thành công hay không.
+      for (var m = 0; m < savedMute.length; m++) {
+        try { var rr = savedMute[m].tr.setMute(savedMute[m].was); if (rr && rr.then) await rr; } catch (x) { console.warn('[vcx] restore mute:', x && (x.message || String(x))); }
+      }
+      try { if (origIn && origOut) await setInOut(origIn, origOut); } catch (x) { console.warn('[vcx] restore in/out:', x.message); }
+    }
+    console.log('[vcx] exportSequence returned:', ok);
+    if (!ok) throw new Error('exportSequence trả false (có thể thiếu preset audio hoặc AME)');
+    return outFile;
+  }
+
+  // ── Voice Changer: thu input (render vùng chọn → fallback concat) ──
+  async function vcxGetSelectionAudio() {
+    var info = document.getElementById('vcxSelInfo');
+    var btn  = document.getElementById('vcxGetSel');
+    if (btn) btn.disabled = true;
+    try {
+      if (!ppro) throw new Error('Premiere API không khả dụng');
+      var seq = await getActiveSequence();
+      if (!seq) throw new Error('Chưa mở sequence');
+      // un()/awaitArray() sống trong IIFE khác (Unnest) — không thấy được ở đây.
+      // Tự unwrap Promise + dùng collectionToArray (global, dòng ~294).
+      var sel = seq.getSelection();
+      if (sel && sel.then) sel = await sel;
+      if (!sel) throw new Error('Không lấy được vùng chọn');
+      var itemsRaw = sel.getTrackItems();
+      if (itemsRaw && itemsRaw.then) itemsRaw = await itemsRaw;
+      var items = collectionToArray(itemsRaw);
+      if (!items || !items.length) throw new Error('Hãy chọn clip audio trên timeline');
+
+      // ƯU TIÊN: render đúng audio timeline (mix/gap/trim) rồi trích audio.
+      try {
+        var rendered = await vcxRenderSelection(seq, items, info);
+        if (info) info.textContent = 'Đang trích audio…';
+        var ex = await postJsonVG('/media/extract-audio', { inputPath: rendered, outputDir: '' });
+        if (!ex.ok) throw new Error(ex.error || 'Trích audio thất bại');
+        vcxInputPath = ex.audioPath;
+        if (info) info.textContent = '✓ Render vùng chọn: ' + ex.audioPath.split('/').pop() + ' (' + (ex.durationSec || '?') + 's)';
+        vcxRevealPreview();
+        return;
+      } catch (rerr) {
+        console.warn('[vcx] render thất bại, fallback sang nối in/out nguồn:', rerr.message);
+        if (info) info.textContent = '⚠ Render lỗi (' + rerr.message + ') — thử nối clip…';
+      }
+
+      if (info) info.textContent = 'Đang đọc ' + items.length + ' clip…';
+      var clips = [];
+      for (var i = 0; i < items.length; i++) {
+        var ti = items[i];
+        var inSec = 0, outSec = 0;
+        try { var ip = ti.getInPoint && ti.getInPoint(); if (ip && ip.then) ip = await ip; if (ip) inSec = getTimeSec(ip); } catch (e) {}
+        try { var op = ti.getOutPoint && ti.getOutPoint(); if (op && op.then) op = await op; if (op) outSec = getTimeSec(op); } catch (e) {}
+        // Thời điểm bắt đầu trên timeline — dùng để SẮP XẾP thứ tự nối (getTrackItems
+        // trả về không theo thứ tự thời gian, và có thể lẫn nhiều track A1/A2/A3).
+        // QUAN TRỌNG: dùng getStartTime() (sequence time). getStart() trả 0 → sort hỏng.
+        var startSec = 0;
+        try {
+          var sf = ti.getStartTime || ti.getStart;
+          var gs0 = sf ? sf.call(ti) : null; if (gs0 && gs0.then) gs0 = await gs0;
+          startSec = getTimeSec(gs0);
+        } catch (e) {}
+        if (!outSec || outSec <= inSec) {
+          try {
+            var sfn = ti.getStartTime || ti.getStart;
+            var efn = ti.getEndTime   || ti.getEnd;
+            var gs = sfn ? sfn.call(ti) : null; if (gs && gs.then) gs = await gs;
+            var ge = efn ? efn.call(ti) : null; if (ge && ge.then) ge = await ge;
+            inSec = 0; outSec = getTimeSec(ge) - getTimeSec(gs);
+          } catch (e) {}
+        }
+        var fp = await vcGetTrackItemFilePath(ti);
+        if (!fp) throw new Error('Clip ' + (i + 1) + ': không lấy được đường dẫn — dùng "From File"');
+        clips.push({ filePath: fp, inPoint: inSec, outPoint: outSec, _startSec: startSec });
+      }
+
+      // Nối theo trình tự phát trên timeline (trái→phải), không theo thứ tự chọn.
+      clips.sort(function (a, b) { return a._startSec - b._startSec; });
+      clips.forEach(function (c) { delete c._startSec; });
+
+      if (info) info.textContent = 'Đang gộp ' + clips.length + ' clip…';
+      var resp = await postJsonVG('/tts/concat-from-sequence', { clips: clips, outputDir: '' });
+      if (!resp.ok) throw new Error(resp.error || 'Gộp clip thất bại');
+      vcxInputPath = resp.audioPath;
+      var nm = resp.audioPath.split('/').pop();
+      if (info) info.textContent = '⚠ Nối clip (dự phòng): ' + nm + ' (' + clips.length + ' clip) — có thể sai với VO nhiều take';
+      vcxRevealPreview();
+    } catch (e) {
+      vcxInputPath = '';
+      if (info) info.textContent = '✗ ' + e.message;
+      vcxRevealPreview();
+      console.error('[vcx] getSelection', e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Nghe thử file audio nguồn (bản gộp hoặc file upload) TRƯỚC khi gửi ElevenLabs —
+  // để tách bạch lỗi do gộp hay do STS. Phát qua bridge afplay (vgPlayPath).
+  var vcxPreviewPlaying = false;
+  function vcxRevealPreview() {
+    var b = document.getElementById('vcxPreviewMerged');
+    if (b) b.hidden = !vcxInputPath;
+  }
+  function vcxSetPreviewLabel(playing) {
+    var b = document.getElementById('vcxPreviewMerged');
+    if (b) b.innerHTML = playing
+      ? '<span data-ic="stop" data-ic-size="13" data-ic-color="#f87171"></span> Dừng nghe thử'
+      : '<span data-ic="play" data-ic-size="13" data-ic-color="#22d3ee"></span> Nghe thử bản gộp (trước khi đổi giọng)';
+  }
+  function vcxTogglePreview() {
+    if (vcxPreviewPlaying) { vgStopAll(); vcxPreviewPlaying = false; vcxSetPreviewLabel(false); return; }
+    if (!vcxInputPath) return;
+    vcxPreviewPlaying = true; vcxSetPreviewLabel(true);
+    vgPlayPath(vcxInputPath, null, function () {
+      vcxPreviewPlaying = false; vcxSetPreviewLabel(false);
+    }, function (err) {
+      vcxPreviewPlaying = false; vcxSetPreviewLabel(false);
+      console.error('[vcx] preview', err);
+    });
+  }
+
+  // Theo mẫu vcBrowseFile hiện có (~main.js:8053): dùng getFileForOpening + file.nativePath || file.path
+  async function vcxBrowseInput() {
+    var info = document.getElementById('vcxFileInfo');
+    try {
+      var uxp = window.require && window.require('uxp');
+      if (!uxp || !uxp.storage) throw new Error('UXP storage không khả dụng');
+      var file = await uxp.storage.localFileSystem.getFileForOpening({
+        types: ['mp3','wav','m4a','aac','ogg','flac'],
+      });
+      if (!file) return; // user hủy
+      var p = file.nativePath || file.path || '';
+      if (!p) throw new Error('Không đọc được đường dẫn file');
+      vcxInputPath = p;
+      if (info) info.textContent = '✓ ' + p.split('/').pop();
+      vcxRevealPreview();
+    } catch (e) {
+      vcxInputPath = '';
+      if (info) info.textContent = '✗ ' + e.message;
+      vcxRevealPreview();
+      console.error('[vcx] browse', e);
+    }
+  }
+
+  function vcxRenderVoiceList(filter) {
+    var list = document.getElementById('vcxVoiceList');
+    if (!list) return;
+    list.innerHTML = '';
+    var q = (filter || '').trim().toLowerCase();
+    (VG_VOICES_DATA || []).forEach(function(v) {
+      if (v.isSep || v.voice_id === '__custom__') return;
+      var label = (v.isCustom ? '⭐ ' : '') + v.label;
+      if (q && label.toLowerCase().indexOf(q) === -1) return;
+      var item = document.createElement('div');
+      item.className = 'vg-dropItem' + (v.voice_id === vcxVoiceId ? ' is-selected' : '');
+      item.textContent = label;
+      item.addEventListener('click', function() {
+        vcxVoiceId = v.voice_id; vcxVoiceLabel = v.label;
+        var lbl = document.getElementById('vcxVoiceLabel');
+        if (lbl) lbl.textContent = v.label + ' ▾';
+        var panel = document.getElementById('vcxVoicePanel');
+        if (panel) panel.hidden = true;
+        vcxSaveSettings();
+      });
+      list.appendChild(item);
+    });
+    if (!list.children.length) {
+      var empty = document.createElement('div');
+      empty.className = 'vc-clipInfo';
+      empty.textContent = (VG_VOICES_DATA && VG_VOICES_DATA.length) ? 'Không khớp voice nào.' : 'Chưa nạp voice — bấm Refresh ở tab Voice.';
+      list.appendChild(empty);
+    }
+  }
+
+  async function vcxConvert() {
+    var status = document.getElementById('vcxStatus');
+    var setS = function(cls, txt) { if (status) { status.className = 'ac-manualStatus' + (cls ? ' ' + cls : ''); status.textContent = txt; } };
+    if (!vcxInputPath) { setS('is-err', '✗ Chưa có audio nguồn'); return; }
+    if (!vcxVoiceId)   { setS('is-err', '✗ Chưa chọn giọng đích'); return; }
+    if (!ELEVENLABS_KEY) { setS('is-err', '✗ Chưa có ElevenLabs API key (Settings)'); return; }
+
+    var num = function(id, d) { var el = document.getElementById(id); return el ? Number(el.value) : d; };
+    var dn  = document.getElementById('vcxDenoise');
+    var body = {
+      apiKey:  ELEVENLABS_KEY,
+      voiceId: vcxVoiceId,
+      inputPath: vcxInputPath,
+      modelId: (document.getElementById('vcxModel') || {}).value || 'eleven_multilingual_sts_v2',
+      settings: { stability: num('vcxStability', 0.5), similarity: num('vcxSimilarity', 0.75), style: num('vcxStyle', 0) },
+      removeBackgroundNoise: !!(dn && dn.checked),
+      filename: 'voicechange-' + (vcxVoiceLabel || 'out').replace(/[^\w.-]+/g, '_'),
+    };
+    setS('', '⏳ Đang đổi giọng…');
+    var vcxConvertBtnEl = document.getElementById('vcxConvert');
+    if (vcxConvertBtnEl) vcxConvertBtnEl.disabled = true;
+    try {
+      var resp = await postJsonVG('/voice/change', body);
+      if (!resp.ok) throw new Error(resp.error || 'Đổi giọng thất bại');
+      lastVariations = resp.variations || [];
+      lastVariationsMode = 'tts'; // dùng chung bin/flow tab Voice
+      renderVariations();
+      if (els.resultSection) els.resultSection.hidden = false;
+      var vgRight = document.querySelector('.vg-right');
+      if (vgRight) vgRight.style.display = ''; // re-show right column (bị ẩn ở tab Create)
+      setS('is-ok', '✓ Xong — nghe thử & Lưu/Import ở khu kết quả bên dưới');
+    } catch (e) {
+      setS('is-err', '✗ ' + e.message);
+      console.error('[vcx] convert', e);
+    } finally {
+      if (vcxConvertBtnEl) vcxConvertBtnEl.disabled = false;
+    }
+  }
+
+  // ── Voice Changer wiring ──
+  var vcxGetSelBtn = document.getElementById('vcxGetSel');
+  if (vcxGetSelBtn) vcxGetSelBtn.addEventListener('click', vcxGetSelectionAudio);
+  var vcxBrowseBtn = document.getElementById('vcxBrowse');
+  if (vcxBrowseBtn) vcxBrowseBtn.addEventListener('click', vcxBrowseInput);
+  var vcxPreviewBtn = document.getElementById('vcxPreviewMerged');
+  if (vcxPreviewBtn) vcxPreviewBtn.addEventListener('click', vcxTogglePreview);
+  var vcxConvertBtn = document.getElementById('vcxConvert');
+  if (vcxConvertBtn) vcxConvertBtn.addEventListener('click', vcxConvert);
+  ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() { vcxSyncSliderLabels(); vcxSaveSettings(); });
+  });
+  ['vcxModel','vcxDenoise'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', vcxSaveSettings);
+  });
+  var vcxSeqR = document.getElementById('vcxSrcSeq'), vcxFileR = document.getElementById('vcxSrcFile');
+  function vcxSyncSource() {
+    var isFile = !!(vcxFileR && vcxFileR.checked);
+    var fs = document.getElementById('vcxFromFile'), sq = document.getElementById('vcxFromSeq');
+    if (fs) fs.hidden = !isFile; if (sq) sq.hidden = isFile;
+  }
+  if (vcxSeqR)  vcxSeqR.addEventListener('change', vcxSyncSource);
+  if (vcxFileR) vcxFileR.addEventListener('change', vcxSyncSource);
+  var vcxVoiceLabelEl = document.getElementById('vcxVoiceLabel');
+  if (vcxVoiceLabelEl) vcxVoiceLabelEl.addEventListener('click', function() {
+    var panel = document.getElementById('vcxVoicePanel');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) vcxRenderVoiceList(document.getElementById('vcxVoiceSearch').value);
+  });
+  var vcxSearch = document.getElementById('vcxVoiceSearch');
+  if (vcxSearch) vcxSearch.addEventListener('input', function() { vcxRenderVoiceList(this.value); });
+  vcxLoadSettings();
+
   // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
   var vgOrgModel = $('vgOrganizeModel');
   if (vgOrgModel) {
@@ -7759,10 +8196,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (vcDesignCard)   vcDesignCard.classList.toggle('is-active', m === 'design');
       if (vcCloneSection)  vcCloneSection.hidden  = (m !== 'clone');
       if (vcDesignSection) vcDesignSection.hidden = (m !== 'design');
+      var vcChangeCard    = document.getElementById('vcChangeCard');
+      var vcChangeSection = document.getElementById('vcChangeSection');
+      if (vcChangeCard)    vcChangeCard.classList.toggle('is-active', m === 'change');
+      if (vcChangeSection) vcChangeSection.hidden = (m !== 'change');
       if (m === 'clone') { try { vcRefreshTrackList(); } catch (e) {} }
     }
     if (vcCloneCard)  vcCloneCard.addEventListener('click',  function() { vcSelectMethod('clone'); });
     if (vcDesignCard) vcDesignCard.addEventListener('click', function() { vcSelectMethod('design'); });
+    var vcChangeCard = document.getElementById('vcChangeCard');
+    if (vcChangeCard) vcChangeCard.addEventListener('click', function() { vcSelectMethod('change'); });
 
     // ── Clone step machine ──────────────────────────────────────────────────
     // Step 2 (Clone button) appears once an audio sample exists; Step 3 (name +
@@ -8292,7 +8735,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var db = $('elvDeleteBtn'); if (db) db.addEventListener('click', elvOnDeleteClick);
     var es = $('elvVoiceSearch');
     if (es) {
-      es.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      // Claim keyboard theo GESTURE thật (mousedown), KHÔNG gắn vào 'focus': mỗi lần
+      // filter làm relayout, UXP bắn phantom 'focus' → setKeyboardFocus(true) bôi đen
+      // (select-all) toàn bộ text → caret nhảy. Cùng lý do ô dropdown "Search voices…"
+      // claim 1 lần lúc mở thay vì trong focus của input.
+      es.addEventListener('mousedown', function () { if (window.claimKeyboard) window.claimKeyboard(); });
       es.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
       var composing = false;
       es.addEventListener('compositionstart', function () { composing = true; });

@@ -829,44 +829,45 @@ const ELEVENLABS_BASE = 'https://api.elevenlabs.io';
 // Used only when the plugin request doesn't carry a user key.
 const ELEVENLABS_DEFAULT_KEY = process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_KEY || '';
 
-// Multipart/form-data POST (for voice cloning — no extra deps needed)
-function elevenLabsMultipart(apiKey, urlPath, fields, files) {
+// Dựng body multipart/form-data (pure — test được, không mạng).
+function buildMultipartBody(boundary, fields, files) {
+  const parts = [];
+  for (const [name, value] of Object.entries(fields || {})) {
+    if (value == null) continue;
+    parts.push(Buffer.from(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
+      String(value) + '\r\n'
+    ));
+  }
+  for (const { fieldName, buffer, filename, contentType } of (files || [])) {
+    parts.push(Buffer.from(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="' + fieldName + '"; filename="' + filename + '"\r\n' +
+      'Content-Type: ' + (contentType || 'audio/mpeg') + '\r\n\r\n'
+    ));
+    parts.push(buffer);
+    parts.push(Buffer.from('\r\n'));
+  }
+  parts.push(Buffer.from('--' + boundary + '--\r\n'));
+  return Buffer.concat(parts);
+}
+
+// Multipart POST. expectBinary=true → resolve { buffer, contentType }; ngược lại parse JSON.
+function elevenLabsMultipart(apiKey, urlPath, fields, files, expectBinary) {
   apiKey = apiKey || ELEVENLABS_DEFAULT_KEY;
   return new Promise((resolve, reject) => {
     const boundary = '----ELBoundary' + Date.now().toString(16);
-    const parts    = [];
-
-    // Text fields
-    for (const [name, value] of Object.entries(fields)) {
-      if (value == null) continue;
-      parts.push(Buffer.from(
-        '--' + boundary + '\r\n' +
-        'Content-Disposition: form-data; name="' + name + '"\r\n\r\n' +
-        String(value) + '\r\n'
-      ));
-    }
-    // File fields
-    for (const { fieldName, buffer, filename, contentType } of files) {
-      parts.push(Buffer.from(
-        '--' + boundary + '\r\n' +
-        'Content-Disposition: form-data; name="' + fieldName + '"; filename="' + filename + '"\r\n' +
-        'Content-Type: ' + (contentType || 'audio/mpeg') + '\r\n\r\n'
-      ));
-      parts.push(buffer);
-      parts.push(Buffer.from('\r\n'));
-    }
-    parts.push(Buffer.from('--' + boundary + '--\r\n'));
-
-    const body    = Buffer.concat(parts);
-    const url     = new URL(ELEVENLABS_BASE + urlPath);
-    const opts    = {
+    const body     = buildMultipartBody(boundary, fields, files);
+    const url      = new URL(ELEVENLABS_BASE + urlPath);
+    const opts     = {
       hostname: url.hostname, port: 443,
-      path: url.pathname, method: 'POST',
+      path: url.pathname + url.search, method: 'POST',
       headers: {
-        'xi-api-key':    apiKey,
-        'Content-Type':  'multipart/form-data; boundary=' + boundary,
+        'xi-api-key':     apiKey,
+        'Content-Type':   'multipart/form-data; boundary=' + boundary,
         'Content-Length': body.length,
-        'Accept':        'application/json',
+        'Accept':         expectBinary ? 'audio/mpeg' : 'application/json',
       },
     };
     const req = require('https').request(opts, response => {
@@ -875,6 +876,7 @@ function elevenLabsMultipart(apiKey, urlPath, fields, files) {
       response.on('end', () => {
         const buf = Buffer.concat(chunks);
         if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (expectBinary) return resolve({ buffer: buf, contentType: response.headers['content-type'] });
           try   { resolve(JSON.parse(buf.toString('utf8'))); }
           catch (e) { reject(new Error('Bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
         } else {
@@ -1311,6 +1313,67 @@ app.post('/voice/design/save', async (req, res) => {
   }
 });
 
+// Voice Changer — ElevenLabs Speech-to-Speech. Đọc file audio local → đổi sang voiceId.
+app.post('/voice/change', async (req, res) => {
+  try {
+    const {
+      apiKey, voiceId, inputPath, modelId, settings,
+      removeBackgroundNoise, outputFormat, filename, outputDir,
+    } = req.body;
+    if (!apiKey)    throw new Error('apiKey required');
+    if (!voiceId)   throw new Error('voiceId required');
+    if (!inputPath) throw new Error('inputPath required');
+    if (!fs.existsSync(inputPath)) throw new Error('inputPath not found: ' + inputPath);
+
+    const model = modelId || 'eleven_multilingual_sts_v2';
+    const fmt   = outputFormat || 'mp3_44100_128';
+    const vs = {
+      stability:        Number(settings && settings.stability  != null ? settings.stability  : 0.5),
+      similarity_boost: Number(settings && settings.similarity != null ? settings.similarity : 0.75),
+      style:            Number(settings && settings.style      != null ? settings.style      : 0),
+    };
+    const fields = { model_id: model, voice_settings: JSON.stringify(vs) };
+    if (removeBackgroundNoise) fields.remove_background_noise = 'true';
+
+    const inBuf = fs.readFileSync(inputPath);
+    const inName = path.basename(inputPath);
+    const inType = inName.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg';
+
+    console.log('[voice/change]', inName, inBuf.length, 'bytes → voice', voiceId, 'model', model);
+    const urlPath = '/v1/speech-to-speech/' + encodeURIComponent(voiceId) +
+                    '?output_format=' + encodeURIComponent(fmt);
+    const out = await elevenLabsMultipart(
+      apiKey, urlPath, fields,
+      [{ fieldName: 'audio', buffer: inBuf, filename: inName, contentType: inType }],
+      true
+    );
+
+    const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim())
+      ? outputDir.trim() : getTempDir();
+    ensureDir(saveDir);
+    const base  = (filename && typeof filename === 'string')
+      ? filename.replace(/\.mp3$/i, '') : ('voicechange-' + Date.now());
+    const fname = base + '.mp3';
+    const fpath = path.join(saveDir, fname);
+    fs.writeFileSync(fpath, out.buffer);
+    console.log('[voice/change] saved', out.buffer.length, 'bytes →', fpath);
+
+    res.json({
+      ok: true,
+      variations: [{
+        audioPath:  fpath,
+        previewUrl: '/tts/audio/' + encodeURIComponent(fname),
+        sizeBytes:  out.buffer.length,
+        filename:   fname,
+      }],
+      saveDir,
+    });
+  } catch (err) {
+    console.error('[voice/change]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Proxy ElevenLabs CDN preview_url — fetches once, caches in temp dir, returns local /tts/audio URL
 app.post('/tts/voice-preview', async (req, res) => {
   try {
@@ -1659,11 +1722,20 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
       if (!fs.existsSync(filePath)) throw new Error(`Clip ${i + 1}: file not found: ${filePath}`);
 
       const segPath = path.join(tmpDir, `concat_seg_${ts}_${i}.wav`);
+      // Trích [inPoint, outPoint) của SOURCE. Dùng -ss TRƯỚC -i (input seeking) +
+      // -t DURATION — dạng duy nhất không mơ hồ. Đặt -ss/-to SAU -i khiến -to bị
+      // tính tương đối với điểm seek ở nhiều bản ffmpeg → đoạn dài quá/đè lên nhau
+      // (bug gộp voice-changer: clip 1s hoá 20s, lặp/thiếu/đảo).
+      const _in  = Math.max(0, Number(inPoint) || 0);
+      const _out = Number(outPoint) || 0;
+      const _dur = _out - _in;
+      if (!(_dur > 0)) throw new Error(`Clip ${i + 1}: khoảng thời gian không hợp lệ (in=${_in}, out=${_out})`);
       await new Promise((resolve, reject) => {
         const args = [
-          '-y', '-i', filePath,
-          '-ss', String(inPoint || 0),
-          '-to', String(outPoint || 0),
+          '-y',
+          '-ss', String(_in),
+          '-i', filePath,
+          '-t', String(_dur),
           '-vn', '-acodec', 'pcm_s16le',
           segPath,
         ];
@@ -1715,6 +1787,74 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
   } catch(e) {
     for (const seg of segPaths) { try { fs.unlinkSync(seg); } catch(err) {} }
     console.error('[concat-from-sequence]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /media/extract-audio ──────────────────────────────────────────────
+// Trích audio từ 1 file bất kỳ (mp4/mov/wav/…) → mp3 mono giữ nguyên nội dung.
+// Dùng cho Voice Changer khi render vùng chọn timeline ra media rồi cần audio.
+app.post('/media/extract-audio', async (req, res) => {
+  const { inputPath, outputDir } = req.body;
+  if (!inputPath) return res.status(400).json({ ok: false, error: 'inputPath required' });
+  if (!fs.existsSync(inputPath)) return res.status(400).json({ ok: false, error: 'inputPath not found: ' + inputPath });
+  const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim()) ? outputDir.trim() : getTempDir();
+  ensureDir(saveDir);
+  const outPath = path.join(saveDir, 'vcx_extract_' + Date.now() + '.mp3');
+  try {
+    await new Promise((resolve, reject) => {
+      const args = ['-y', '-i', inputPath, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', outPath];
+      const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+      let stderr = '';
+      proc.stderr.on('data', d => { stderr += d.toString(); });
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error('ffmpeg extract failed: ' + stderr.slice(-300))));
+      proc.on('error', e => reject(new Error('ffmpeg error: ' + e.message)));
+    });
+    const dur = await new Promise((resolve) => {
+      const pr = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', outPath], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let o = ''; pr.stdout.on('data', d => { o += d.toString(); });
+      pr.on('close', () => resolve(parseFloat(o.trim()) || 0)); pr.on('error', () => resolve(0));
+    });
+    console.log('[media/extract-audio]', inputPath, '→', outPath, '(' + dur.toFixed(2) + 's)');
+    res.json({ ok: true, audioPath: outPath, durationSec: +dur.toFixed(3) });
+  } catch (e) {
+    console.error('[media/extract-audio]', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── GET /media/audio-preset ────────────────────────────────────────────────
+// Tìm 1 preset audio (.epr) của Premiere để exportSequence dùng (UXP không đọc
+// được /Applications). Ưu tiên WAV mono 48k → AudioOnly → MP3 mono.
+app.get('/media/audio-preset', (req, res) => {
+  try {
+    const glob = require('fs');
+    const appsDir = '/Applications';
+    let presetDirs = [];
+    try {
+      glob.readdirSync(appsDir).forEach(name => {
+        if (/^Adobe Premiere Pro/i.test(name)) {
+          const d = path.join(appsDir, name, name + '.app', 'Contents', 'Settings', 'EncoderPresets');
+          if (glob.existsSync(d)) presetDirs.push(d);
+        }
+      });
+    } catch (e) {}
+    // Bản mới hơn đứng trước (sort giảm dần theo tên → "2026" trước "2025").
+    presetDirs.sort().reverse();
+    const prefer = ['Wave48mono16.epr', 'Wave48mono24.epr', 'AudioOnly.epr', 'Wave96mono16.epr', 'MP3_mono_96kbps_nometadata.epr'];
+    for (const dir of presetDirs) {
+      for (const name of prefer) {
+        const p = path.join(dir, name);
+        if (glob.existsSync(p)) return res.json({ ok: true, presetPath: p });
+      }
+      // fallback: bất kỳ preset audio mono nào
+      try {
+        const hit = glob.readdirSync(dir).find(f => /\.epr$/i.test(f) && /(wave|aiff|mp3|audio).*mono|audioonly/i.test(f));
+        if (hit) return res.json({ ok: true, presetPath: path.join(dir, hit) });
+      } catch (e) {}
+    }
+    res.status(404).json({ ok: false, error: 'Không tìm thấy preset audio .epr trong /Applications/Adobe Premiere Pro*' });
+  } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
@@ -2855,7 +2995,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.13.0';  // /superautocut/subtext: ghép audio theo TIMELINE THẬT — (a) clip đổi tốc độ: resolveClipWindow() nhân in-point/span với speed (Premiere trả in/out theo đơn vị timeline = giây nguồn ÷ speed) rồi atempo về đúng độ dài timeline; input-seek -ss/-t trước -i vì -to sau -i cắt cụt sau filter. (b) clip chồng nhau ở nhiều track: adelay + amix normalize=0 đặt đúng vị trí thay vì concat nối đuôi (nhạc nền dài bị chèn vào giữa lời, đẩy lệch toàn bộ). + report autosub-log (bản đồ clip, speed, track, diff script) và GET /autosub/logs.
+const BRIDGE_VERSION = '1.14.0';  // Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -3134,6 +3274,10 @@ app.get('/unnest/premiere-shortcuts', (_req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n🎬  Premiere Claude Bridge  →  http://localhost:${PORT}\n`);
-});
+if (require.main === module) {
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`\n🎬  Premiere Claude Bridge  →  http://localhost:${PORT}\n`);
+  });
+}
+
+module.exports = Object.assign(module.exports || {}, { buildMultipartBody });
