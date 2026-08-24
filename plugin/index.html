@@ -1251,8 +1251,12 @@
   <div class="st-app">
     <!-- Scrollable content: shrinks to a scrollbar instead of cramming/overlapping -->
     <div class="st-scroll">
+      <div id="stBridgeWarn" class="st-bridgeWarn" style="display:none"></div>
       <div class="st-head">
-        <span class="st-title"><span data-ic="closed_captioning" data-ic-size="14" style="margin-right:7px"></span>Tạo phụ đề (.srt)</span>
+        <div class="st-headRow">
+          <span class="st-title"><span data-ic="closed_captioning" data-ic-size="14" style="margin-right:7px"></span>Tạo phụ đề (.srt)</span>
+          <div id="stClearBtn" class="st-headBtn" role="button"><span data-ic="trash" data-ic-size="12" data-ic-color="rgba(255,255,255,0.5)" style="margin-right:5px"></span>Clear session</div>
+        </div>
       </div>
 
       <div class="st-section">

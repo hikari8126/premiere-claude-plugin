@@ -3,6 +3,27 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.3.2 / bridge 3.8 — 2026-08-24
+
+> ⚠ **Bắt buộc bridge ≥ 1.13.0** (Bridge app 3.8). Plugin hiện cảnh báo đỏ + chặn chạy nếu bridge cũ.
+
+### 🐛 Bugs đã fix
+- **Tạo Sub — clip bị đổi tốc độ (speed) ghép sai audio** — Phụ đề mất đầu câu và dính cả câu đã trim bỏ. Nguyên nhân: `trackItem.getInPoint()/getOutPoint()` của Premiere trả về theo **đơn vị timeline** (= giây trên nguồn ÷ speed), không phải giây nguồn; bridge đưa thẳng cho `ffmpeg -ss` nên cửa sổ cắt vừa **trễ** vừa **dài quá**. Ca thật đo được: clip speed 85.3%, Premiere hiện in 7:20 / out 10:05 (=7.667→10.167s nguồn) nhưng API trả 8.99→11.92 → cắt trễ 1.32s (mất "You can actually pick exactly") và thừa 1.75s (lấy sang "I'm obsessed!" đã trim). Cách fix: `resolveClipWindow()` xác định speed (API `getSpeed` → `getDuration/tlDur` → `(out−in)/tlDur`), nhận diện in/out đang theo đơn vị timeline hay nguồn, **nhân lại in-point + span với speed**, rồi `atempo` (chain nhiều tầng cho speed ngoài 0.5–2×) đưa đoạn về đúng độ dài trên timeline. `cursor` chạy theo độ dài timeline thay vì `(out−in)`.
+- **Tạo Sub — clip ở nhiều track bị NỐI ĐUÔI thay vì trộn theo lớp** — Quên bỏ tick track nhạc thì nhạc nền dài 52s bị chèn vào **giữa** lời và đẩy toàn bộ phần sau lệch 52 giây (audio 51.6s → 107.6s). Nguyên nhân: `subtextConcatClips` sắp theo `start` rồi nối đuôi + chèn im lặng cho khoảng hở — model chỉ đúng khi clip không bao giờ chồng nhau. Cách fix: bỏ concat demuxer, mỗi đoạn `adelay` về đúng giây trên timeline rồi `amix=normalize=0` cộng lại (voice không bị nhỏ đi khi có nhạc chồng lên). Báo rõ số clip chồng nhau + gợi ý bỏ tick track nhạc/SFX.
+- **Tạo Sub — vẫn dùng script cũ dù đã dán script mới** — Sau khi canh giờ, plugin **ghi đè ô script** bằng các cue vừa ngắt; script sai vì thế dính lại làm nội dung của ô cho mọi lần chạy sau, và nếu dán script mới trong lúc Whisper chạy (10s–2 phút) thì bản dán bị nuốt im lặng. Cách fix: chụp snapshot ô script lúc bắt đầu, nội dung đổi trong lúc chạy thì **không ghi đè** mà báo để chạy lại; dòng chẩn đoán ghim luôn script đang dùng; khớp <40% thì cảnh báo đỏ "script của video khác".
+- **`-to` sau `-i` cắt cụt khi có filter** — `-to` là output option nên áp SAU `atempo`: đoạn 12.5s bị cắt còn 10.0s. Chuyển sang input-seek `-ss/-t` đặt trước `-i` (đo lại: chính xác trên wav/mp3/m4a/mp4 có start_time lệch).
+
+### ✅ Thêm mới / Cải tiến
+- **Nút Clear session** (tab Tạo Sub) — xoá script, timing đã canh, kết quả lần trước, huỷ việc đang chạy và quét lại track. Bấm 2 lần để xác nhận (4s tự huỷ).
+- **Cảnh báo đỏ bridge cũ** — banner đỏ trong tab Tạo Sub + chặn bấm Tạo SRT khi bridge < 1.13.0, kèm hướng dẫn cập nhật.
+- **Report auto sub đầy đủ hơn** — bảng bản đồ clip có thêm cột **track**, **NGUỒN cắt thật**, **speed %**, cờ `chồng Xs với #n`, và mục "Whisper nghe được TỪNG clip" (gán từ về clip ngắn nhất chứa nó nên nhạc nền không nuốt hết chữ).
+
+### 🔧 Kỹ thuật / Approach
+- Suy ra speed 3 đường độc lập (in-point, out-point, span) khớp đến 4 chữ số → đủ chắc để sửa mà không cần API speed; vẫn ưu tiên `getSpeed` khi Premiere có.
+- `amix` phải dùng `normalize=0`, mặc định chia cho số input làm voice nhỏ đi khi có nhạc chồng lên.
+- `atempo` chỉ nhận 0.5–100 → `atempoChain()` tách thành nhiều tầng nhân với nhau.
+- Plugin gửi kèm `endTime`, `speed`, `srcDuration`, `track`, `name` + `probe` (dump các API thời gian của track item / project item) để chẩn đoán được từ report mà không cần mở Premiere.
+
 ## bridge 3.7 — 2026-08-20
 
 ### ✅ Thêm mới / Cải tiến

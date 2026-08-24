@@ -133,6 +133,79 @@ function writeReport(info) {
     L.push('| Cue tạo ra | ' + cues.length + ' |');
     L.push('');
 
+    // ── 0. Bản đồ clip: mỗi clip nằm ở đâu trên audio đã ghép + nghe ra gì ──
+    // Đây là chỗ soi "ffmpeg ghép sai hay không": so nội dung nghe được của TỪNG
+    // clip với nội dung thật của nó trên timeline. Cột ⚠ báo các bất biến bị vỡ.
+    const map = info.clipMap || null;
+    if (map && map.length) {
+      L.push('## 0. Bản đồ clip trên audio đã ghép');
+      L.push('');
+      L.push('Audio đã ghép: `' + (info.audioPath || '?') + '` — mở file này nghe thử.');
+      L.push('Thời điểm dưới đây tính theo AUDIO (0 = ' + (info.offset || 0).toFixed(2) + 's trên timeline).');
+      L.push('');
+      L.push('| # | track | audio | timeline | API in→out | NGUỒN cắt thật | speed | dài kỳ vọng / thực | file | ⚠ |');
+      L.push('|---|---|---|---|---|---|---|---|---|---|');
+      map.forEach(m => {
+        const aEnd = m.audioStart + (m.actual || m.expected || 0);
+        L.push('| ' + m.i +
+          ' | ' + (m.track || '?') +
+          ' | ' + ts(m.audioStart) + ' → ' + ts(aEnd) +
+          ' | ' + ts(m.tlStart) + (m.tlEnd != null ? ' → ' + ts(m.tlEnd) : ' → ?') +
+          ' | ' + ts(m.inS) + ' → ' + ts(m.outS) +
+          ' | ' + (m.srcIn != null ? ts(m.srcIn) + ' → ' + ts(m.srcIn + m.srcSpan) : '?') +
+          ' | ' + (m.speed != null ? (m.speed * 100).toFixed(1) + '%' : '?') +
+          ' | ' + (m.expected != null ? m.expected.toFixed(2) : '?') + 's / ' +
+                  (m.actual != null ? m.actual.toFixed(2) : '?') + 's' +
+          ' | ' + String(m.name || '').slice(0, 40) +
+          ' | ' + (m.flags && m.flags.length ? m.flags.join('; ') : '') + ' |');
+      });
+      L.push('');
+      L.push('### Whisper nghe được TỪNG clip');
+      L.push('');
+      L.push('So từng dòng với nội dung thật của clip đó trên timeline: thiếu chữ ở ĐẦU/CUỐI');
+      L.push('hoặc có chữ thuộc phần đã trim bỏ ⇒ in/out của clip đó lấy sai.');
+      L.push('');
+      // Mỗi từ gán về clip CHỒNG NHIỀU NHẤT (từ nằm trong khoảng lặng chèn giữa
+      // 2 clip thì về clip gần nhất) — tránh mất từ ngay ranh giới do sai số.
+      const ranges = map.map(m => ({ m, a: m.audioStart, b: m.audioStart + (m.actual || m.expected || 0), said: [] }));
+      // Clip chồng nhau (nhạc nền phủ cả bài) → chọn clip NGẮN NHẤT có chứa từ đó,
+      // vì nó cụ thể hơn; nếu không clip nào chứa thì lấy clip gần nhất.
+      words.forEach(w => {
+        let best = null, bestLen = Infinity, near = null, nearDist = Infinity;
+        for (const r of ranges) {
+          const ov = Math.min(w.end, r.b) - Math.max(w.start, r.a);
+          const len = r.b - r.a;
+          if (ov > 0) { if (len < bestLen) { bestLen = len; best = r; } }
+          else {
+            const d = Math.min(Math.abs(w.start - r.b), Math.abs(r.a - w.end));
+            if (d < nearDist) { nearDist = d; near = r; }
+          }
+        }
+        const pick = best || near;
+        if (pick) pick.said.push(w.text);
+      });
+      ranges.forEach(r => {
+        L.push('- **#' + r.m.i + '** ' + ts(r.a) + '→' + ts(r.b) + ' `' +
+               String(r.m.name || '').slice(0, 40) + '` — ' +
+               (r.said.length ? r.said.join(' ') : '_(không nghe ra chữ nào)_'));
+      });
+      L.push('');
+      // Probe API thời gian (nếu plugin gửi kèm) — để soi offset subclip / media start.
+      if (map.some(m => m.probe)) {
+        L.push('### Probe API thời gian của từng clip');
+        L.push('');
+        L.push('Nếu `projectItem.getInPoint` (hoặc getMediaStart) khác 0 mà `item.getInPoint`');
+        L.push('lại tính theo subclip ⇒ ffmpeg cần cộng thêm offset đó, nếu không sẽ cắt lệch.');
+        L.push('');
+        map.forEach(m => {
+          if (!m.probe) return;
+          L.push('- **#' + m.i + '** `' + String(m.name || '').slice(0, 40) + '` — `' +
+                 JSON.stringify(m.probe) + '`');
+        });
+        L.push('');
+      }
+    }
+
     // ── 1. Whisper nghe được gì ──
     L.push('## 1. Whisper nghe được');
     L.push('');
@@ -224,6 +297,7 @@ function writeReport(info) {
       ' | lệch ' + (runs ? runs.length : '-') + ' đoạn' +
       ' | lặng>2s ' + gaps.length +
       ' | cues ' + cues.length +
+      ' | clip cảnh báo ' + (map ? map.filter(m => m.flags && m.flags.length).length : '-') +
       ' | ' + path.basename(file);
     fs.appendFileSync(HISTORY_PATH, summary + '\n');
     pruneOldRuns();

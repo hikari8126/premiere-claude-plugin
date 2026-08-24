@@ -3605,7 +3605,24 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .st-footer .st-status   { margin: 0 0 8px; }
 .st-footer .st-afterRow { margin: 0 0 8px; }
 .st-head { display: flex; flex-direction: column; margin-bottom: 24px; }
+/* Cảnh báo đỏ: bridge cũ thì Tạo Sub ghép audio SAI (speed / chồng lớp) */
+.st-bridgeWarn {
+  display: block; margin-bottom: 16px; padding: 10px 12px;
+  background: rgba(239,68,68,0.16); border: 1px solid rgba(239,68,68,0.55);
+  border-radius: 8px; font-size: 11.5px; line-height: 1.5; color: #fca5a5; font-weight: 600;
+}
+.st-headRow { display: flex; align-items: center; justify-content: space-between; }
 .st-title { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+/* Nút phụ ở header: nhạt, không tranh chú ý với nút Tạo SRT */
+.st-headBtn {
+  display: flex; align-items: center; flex: 0 0 auto;
+  height: 24px; padding: 0 10px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+}
+.st-headBtn:hover { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+.st-headBtn.is-armed { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.55); color: #fca5a5; }
 .st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
 .st-section { display: flex; flex-direction: column; margin-bottom: 24px; }
 .st-section:last-child { margin-bottom: 0; }

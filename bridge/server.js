@@ -2156,10 +2156,61 @@ function subtextToSrt(cues) {
 // silence filling the gaps, so Whisper timestamps map straight onto the timeline.
 // Audio t=0 ↔ timeline `offset` (= first clip's start); caller adds `offset` to cues.
 // Returns { audioPath, offset }. Uniform 16kHz mono so the concat demuxer accepts all parts.
+// Chuỗi filter atempo cho tốc độ `s` (s<1 = clip bị speed down trên timeline).
+// atempo chỉ nhận 0.5–100 → tách thành nhiều tầng nhân với nhau cho tốc độ cực trị.
+function atempoChain(s) {
+  const stages = [];
+  let r = s;
+  while (r < 0.5) { stages.push(0.5); r /= 0.5; }      // mỗi tầng 0.5 → cần bù lại
+  while (r > 2)   { stages.push(2);   r /= 2;   }
+  stages.push(r);
+  return stages.map(v => 'atempo=' + v.toFixed(6)).join(',');
+}
+
+// ── Giải nghĩa in/out của một clip bị ĐỔI TỐC ĐỘ ──────────────────────────
+// Premiere (UXP) trả `getInPoint()/getOutPoint()` của track item theo ĐƠN VỊ
+// TIMELINE, tức đã chia cho speed — KHÔNG phải giây trên file nguồn. Ví dụ thật:
+// clip speed 85.3%, Premiere hiện in 7:20 / out 10:05 (=7.667→10.167s nguồn) thì
+// API trả 8.99→11.92. Đưa thẳng số đó cho ffmpeg -ss thì cửa sổ vừa TRỄ 1.32s
+// (mất đầu câu) vừa DÀI thêm 17% (lấy sang phần editor đã trim bỏ).
+//   → phải nhân lại với speed: nguồn = số API × speed.
+// Trả { speed, srcIn, srcSpan, unit } — unit = in/out đang tính theo đơn vị nào.
+function resolveClipWindow(c, inS, outS, tlDur) {
+  const span = outS - inS;
+  let speed = null, from = '';
+
+  // 1) speed từ API Premiere (plugin gửi kèm). Có thể là % (85) hoặc hệ số (0.85).
+  let s = Number(c.speed);
+  if (isFinite(s) && s !== 0) {
+    s = Math.abs(s); if (s >= 10) s /= 100;
+    if (s > 0.02 && s < 50) { speed = s; from = 'API getSpeed'; }
+  }
+  // 2) item.getDuration() thường là độ dài NGUỒN → speed = srcDur / tlDur.
+  if (speed == null && tlDur > 0) {
+    const sd = Number(c.srcDuration);
+    if (isFinite(sd) && sd > 0 && Math.abs(sd - tlDur) > 0.03) { speed = sd / tlDur; from = 'getDuration/tlDur'; }
+  }
+  // 3) Nếu (out−in) khác độ dài trên timeline thì chính tỉ số đó là speed
+  //    (trường hợp in/out được trả theo giây NGUỒN).
+  if (speed == null && tlDur > 0 && span > 0 && Math.abs(span - tlDur) > 0.03) {
+    speed = span / tlDur; from = '(out−in)/tlDur';
+  }
+  if (speed == null || !isFinite(speed) || Math.abs(speed - 1) <= 0.02) {
+    return { speed: 1, srcIn: inS, srcSpan: span, unit: 'nguồn', from: from || 'không đổi tốc' };
+  }
+
+  // in/out theo đơn vị TIMELINE khi (out−in) == độ dài clip trên timeline.
+  if (tlDur > 0 && Math.abs(span - tlDur) <= Math.max(0.05, tlDur * 0.02)) {
+    return { speed, srcIn: inS * speed, srcSpan: tlDur * speed, unit: 'timeline (đã ×speed)', from };
+  }
+  // ngược lại: in/out đã là giây nguồn.
+  return { speed, srcIn: inS, srcSpan: (tlDur > 0 ? tlDur * speed : span), unit: 'nguồn', from };
+}
+
 async function subtextConcatClips(clips) {
   const tmpDir = getTempDir(); ensureDir(tmpDir);
   const ts = Date.now();
-  const parts = [];     // ordered segment paths (clips + silence)
+  const parts = [];     // [{path, delay, dur}] — đoạn đã cắt + vị trí trộn trên audio
   const tmpFiles = [];
   const AR = '16000';
   const order = clips.slice().sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0));
@@ -2174,9 +2225,9 @@ async function subtextConcatClips(clips) {
     });
   }
 
+  const map = [];        // bản đồ clip → vị trí trên audio đã ghép (để chẩn đoán)
+  const mediaDurCache = {};
   try {
-    let cursor = offset; // timeline time covered so far (audio begins at the first clip)
-    let totalGap = 0;
     for (let i = 0; i < order.length; i++) {
       const c = order[i];
       if (!c.filePath) throw new Error(`Clip ${i + 1}: thiếu filePath`);
@@ -2185,31 +2236,103 @@ async function subtextConcatClips(clips) {
       const inS   = Math.max(0, Number(c.inPoint) || 0);
       let   outS  = Math.max(0, Number(c.outPoint) || 0);
       if (outS <= inS) outS = inS + 0.05;
+      const tlEnd0 = (c.endTime != null && Number(c.endTime) > start) ? Number(c.endTime) : null;
 
-      // Gap before this clip (timeline) → insert exact silence so timing stays aligned.
-      const gap = start - cursor;
-      if (gap > 0.02) {
-        totalGap += gap;
-        const silPath = path.join(tmpDir, `sub_sil_${ts}_${i}.wav`);
-        await run(['-y', '-f', 'lavfi', '-i', `anullsrc=r=${AR}:cl=mono`,
-          '-t', gap.toFixed(3), '-acodec', 'pcm_s16le', silPath]);
-        parts.push(silPath); tmpFiles.push(silPath);
-      }
-      // Clip segment, forced to uniform format.
+      // ── Clip segment ────────────────────────────────────────────────────
+      // Clip bị ĐỔI TỐC ĐỘ trên timeline (speed up/down) thì đoạn nguồn và đoạn
+      // trên timeline dài KHÁC nhau: tlDur = srcSpan / speed. Nếu cắt nguyên
+      // tốc độ gốc thì (a) Whisper nghe bản nhanh/chậm khác timeline nên mọi mốc
+      // trong clip lệch, (b) cursor chạy sai → toàn bộ clip sau bị drift, và (c)
+      // nếu outPoint được tính theo độ dài TIMELINE thì cắt lấn sang cả phần
+      // editor đã trim bỏ (nghe ra câu không có trên timeline).
+      // → cắt đúng srcSpan thật rồi atempo về đúng độ dài timeline.
+      // Lưu ý: phải dùng input-seek (-ss/-t TRƯỚC -i); `-to` sau -i là output
+      // option nên sẽ cắt cụt SAU filter atempo.
+      const tlDur0  = (tlEnd0 != null && tlEnd0 > start) ? (tlEnd0 - start) : 0;
+      const win     = resolveClipWindow(c, inS, outS, tlDur0);
+      const speed   = win.speed;
+      const stretch = Math.abs(speed - 1) > 0.02;
+      const srcIn   = win.srcIn, srcSpan = win.srcSpan;
       const segPath = path.join(tmpDir, `sub_seg_${ts}_${i}.wav`);
-      await run(['-y', '-i', c.filePath, '-ss', inS.toFixed(3), '-to', outS.toFixed(3),
-        '-vn', '-ar', AR, '-ac', '1', '-acodec', 'pcm_s16le', segPath]);
-      parts.push(segPath); tmpFiles.push(segPath);
-      cursor = start + (outS - inS);
+      const segArgs = ['-y', '-accurate_seek', '-ss', srcIn.toFixed(3), '-t', srcSpan.toFixed(3),
+        '-i', c.filePath, '-vn'];
+      if (stretch) segArgs.push('-af', atempoChain(speed));
+      segArgs.push('-ar', AR, '-ac', '1', '-acodec', 'pcm_s16le', segPath);
+      await run(segArgs);
+      tmpFiles.push(segPath);   // `parts` được push bên dưới (kèm vị trí trộn)
+
+      // ── Chẩn đoán: đo lại chính xác đoạn vừa cắt + kiểm tra bất biến ──────
+      // Bất biến quan trọng: (outPoint - inPoint) PHẢI bằng độ dài clip trên
+      // timeline (endTime - start). Lệch = in/out lấy sai → cắt thừa/thiếu audio
+      // (nghe ra cả phần editor đã trim bỏ), và cursor chạy sai → drift timing.
+      if (mediaDurCache[c.filePath] == null) mediaDurCache[c.filePath] = await ffprobeDuration(c.filePath);
+      const mediaDur = mediaDurCache[c.filePath];
+      const actual   = await ffprobeDuration(segPath);
+      const tlEnd    = tlEnd0;
+      const tlDur    = tlDur0 || null;
+      // Kỳ vọng = độ dài clip CHIẾM TRÊN TIMELINE (sau khi đã atempo).
+      const expected = (stretch && tlDur != null) ? tlDur : (outS - inS);
+      const flags = [];
+      if (stretch) flags.push('speed ' + (speed * 100).toFixed(1) + '% (' + win.from + ') → nguồn ' +
+        srcIn.toFixed(2) + '→' + (srcIn + srcSpan).toFixed(2) + 's [in/out API tính theo ' + win.unit + '], atempo về ' +
+        (tlDur != null ? tlDur.toFixed(2) : '?') + 's');
+      if (mediaDur && srcIn + srcSpan > mediaDur + 0.02)   flags.push('đoạn nguồn VƯỢT độ dài media (' + mediaDur.toFixed(2) + 's)');
+      if (Math.abs(actual - expected) > 0.05)              flags.push('đoạn cắt ra ' + actual.toFixed(2) + 's ≠ kỳ vọng ' + expected.toFixed(2) + 's');
+      if (!stretch && tlDur != null && Math.abs((outS - inS) - tlDur) > 0.05)
+        flags.push('(out−in)=' + (outS - inS).toFixed(2) + 's ≠ độ dài trên timeline ' + tlDur.toFixed(2) + 's → NGHI in/out sai');
+      if (c.speed != null && tlDur != null && Math.abs((outS - inS) / tlDur - 1) < 0.02 && Math.abs(Number(c.speed) - 1) > 0.02)
+        flags.push('outPoint tính theo độ dài TIMELINE (không phải nguồn) — đã dùng speed từ API');
+
+      map.push({
+        i: i + 1, name: c.name || path.basename(c.filePath), filePath: c.filePath,
+        tlStart: start, tlEnd: tlEnd, inS, outS, expected, actual, mediaDur, speed,
+        srcIn, srcSpan, unit: win.unit, audioStart: start - offset,
+        track: c.track || null, flags, probe: c.probe || null,
+      });
+      parts.push({ path: segPath, delay: Math.max(0, (start - offset)) , dur: actual || expected });
     }
-    const listPath = path.join(tmpDir, `sub_list_${ts}.txt`); tmpFiles.push(listPath);
-    fs.writeFileSync(listPath, parts.map(p => `file '${p}'`).join('\n'));
+
+    // ── Clip CHỒNG NHAU (nhạc nền A4 phủ lên voice A1, SFX đè lên voice…) ──
+    // Trước đây các clip bị NỐI ĐUÔI nhau nên nhạc nền dài 52s bị chèn vào giữa,
+    // đẩy toàn bộ phần sau lệch. Giờ trộn theo đúng vị trí timeline, nhưng vẫn
+    // báo để bạn biết mà bỏ tick track nhạc/SFX cho Whisper nghe rõ lời.
+    for (let i = 0; i < map.length; i++) {
+      for (let j = i + 1; j < map.length; j++) {
+        const a = map[i], b = map[j];
+        const aEnd = a.audioStart + (a.actual || a.expected || 0);
+        const bEnd = b.audioStart + (b.actual || b.expected || 0);
+        const ov = Math.min(aEnd, bEnd) - Math.max(a.audioStart, b.audioStart);
+        if (ov > 0.05) {
+          a.flags.push('chồng ' + ov.toFixed(1) + 's với #' + b.i + ' (' + String(b.name || '').slice(0, 24) + ')');
+          b.flags.push('chồng ' + ov.toFixed(1) + 's với #' + a.i + ' (' + String(a.name || '').slice(0, 24) + ')');
+        }
+      }
+    }
+    // TRỘN từng đoạn vào đúng giây của nó trên timeline (adelay) rồi cộng lại
+    // (amix normalize=0 để voice không bị nhỏ đi khi có nhạc nền chồng lên).
+    // KHÔNG nối đuôi nhau nữa: nối đuôi thì clip ở track khác (nhạc nền, SFX)
+    // bị chèn vào giữa và đẩy lệch toàn bộ phần sau.
     const outPath = path.join(tmpDir, `sub_audio_${ts}.mp3`);
-    await run(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-acodec', 'libmp3lame', '-q:a', '2', outPath]);
+    const inArgs = [], fParts = [], labels = [];
+    parts.forEach((p, k) => {
+      inArgs.push('-i', p.path);
+      const d = Math.round(p.delay * 1000);
+      fParts.push(`[${k}:a]aformat=sample_fmts=s16:sample_rates=${AR}:channel_layouts=mono` +
+                  (d > 0 ? `,adelay=${d}:all=1` : '') + `[a${k}]`);
+      labels.push(`[a${k}]`);
+    });
+    const graph = fParts.join(';') + ';' + labels.join('') +
+      (parts.length > 1 ? `amix=inputs=${parts.length}:normalize=0:duration=longest[out]`
+                        : 'anull[out]');
+    await run(['-y', ...inArgs, '-filter_complex', graph, '-map', '[out]',
+      '-ar', AR, '-ac', '1', '-acodec', 'libmp3lame', '-q:a', '2', outPath]);
     const realDur = await ffprobeDuration(outPath);
+    const tlSpan = parts.reduce((m, p) => Math.max(m, p.delay + p.dur), 0);
     for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (e) {} }
-    console.log(`[subtext] timeline-accurate audio: ${order.length} clips, offset ${offset.toFixed(2)}s, total gap-silence ${totalGap.toFixed(2)}s, audio dur ${realDur.toFixed(2)}s (timeline span ${(cursor - offset).toFixed(2)}s)`);
-    return { audioPath: outPath, offset: offset };
+    const nOverlap = map.filter(m => m.flags.some(f => f.startsWith('chồng'))).length;
+    console.log(`[subtext] timeline-accurate MIX: ${order.length} clips, offset ${offset.toFixed(2)}s, audio dur ${realDur.toFixed(2)}s (timeline span ${tlSpan.toFixed(2)}s), ${nOverlap} clip chồng nhau`);
+    map.forEach(m => { if (m.flags.length) console.warn(`[subtext][clip ${m.i}] ${m.name}: ${m.flags.join(' · ')}`); });
+    return { audioPath: outPath, offset: offset, map: map, overlaps: nOverlap };
   } catch (e) {
     for (const f of tmpFiles) { try { fs.unlinkSync(f); } catch (er) {} }
     throw e;
@@ -2244,11 +2367,11 @@ app.post('/superautocut/subtext', async (req, res) => {
     let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur,
           useAI, provider, model, apiKey, previewOnly } = req.body || {};
     // Source audio: a direct path OR a list of timeline clips → timeline-accurate render.
-    let offset = 0;
+    let offset = 0, clipMap = null, overlaps = 0;
     if (Array.isArray(clips) && clips.length) {
       console.log(`[subtext] timeline-accurate concat of ${clips.length} clips...`);
       const r = await subtextConcatClips(clips);
-      audioPath = r.audioPath; offset = r.offset;
+      audioPath = r.audioPath; offset = r.offset; clipMap = r.map; overlaps = r.overlaps;
     }
     if (!audioPath) throw new Error('Cần audioPath hoặc clips');
     if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
@@ -2299,6 +2422,7 @@ app.post('/superautocut/subtext', async (req, res) => {
       matchPct: assignStats && assignStats.total ? Math.round(assignStats.matched / assignStats.total * 100) : null,
       bigGaps: gaps.slice(0, 5),
       cues: cues.length,
+      overlaps,                                    // số clip chồng nhau (nhạc nền/SFX lẫn vào)
     };
     console.log('[subtext][diag]', JSON.stringify(diag));
 
@@ -2307,7 +2431,7 @@ app.post('/superautocut/subtext', async (req, res) => {
       kind: previewOnly ? 'subtext (preview)' : 'subtext',
       audioPath, language: language || WHISPER_LANG, whisperModel: WHISPER_MODEL,
       clipCount: Array.isArray(clips) ? clips.length : 0, offset, audioDur,
-      words, script: cleanScript.length ? sw : null, scriptLines: cleanScript, cues, diag,
+      words, script: cleanScript.length ? sw : null, scriptLines: cleanScript, cues, diag, clipMap,
     });
     if (report) { diag.reportPath = report.path; diag.mismatches = report.mismatches; console.log('[subtext][log]', report.path); }
 
@@ -2360,7 +2484,8 @@ app.post('/superautocut/subtext-finalize', async (req, res) => {
     const edited = (Array.isArray(lines) ? lines : []).map(s => String(s || '').trim()).filter(Boolean);
     if (!edited.length) throw new Error('Không có dòng phụ đề để tạo');
     let offset = 0;
-    if (Array.isArray(clips) && clips.length) { const r = await subtextConcatClips(clips); audioPath = r.audioPath; offset = r.offset; }
+    let clipMap = null;
+    if (Array.isArray(clips) && clips.length) { const r = await subtextConcatClips(clips); audioPath = r.audioPath; offset = r.offset; clipMap = r.map; }
     if (!audioPath) throw new Error('Cần clips hoặc audioPath để canh giờ');
     if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
     const { words } = await transcribeWhisper(audioPath, language);
@@ -2393,7 +2518,7 @@ app.post('/superautocut/subtext-finalize', async (req, res) => {
     const fReport = autosubLog.writeReport({
       kind: 'subtext-finalize', audioPath, language: language || WHISPER_LANG, whisperModel: WHISPER_MODEL,
       clipCount: Array.isArray(clips) ? clips.length : 0, offset, audioDur: fAudioDur,
-      words, script: sw, scriptLines: edited, cues: fin, diag: fDiag,
+      words, script: sw, scriptLines: edited, cues: fin, diag: fDiag, clipMap,
     });
     if (fReport) { fDiag.reportPath = fReport.path; fDiag.mismatches = fReport.mismatches; console.log('[subtext-finalize][log]', fReport.path); }
     res.json({ ok: true, path: savedPath, cues: fin, srt, diag: fDiag });
@@ -2730,7 +2855,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.12.0';  // /music/generate: Music v2 mặc định + audio reference (upload → composition_plan style/extend, GenerationChunk có positive_styles/negative_styles); helper elevenLabsUpload multipart. Prior 1.11.6: /plugin/check-update trả thêm notes. Prior 1.11.6: /plugin/check-update trả thêm `notes` (Gist pluginNotes) cho banner update. Prior 1.11.5: + chẩn đoán /subtext: trả diag { whisperWords, audioDur, wordSpan, silentTail, scriptWords, matched, matchPct, bigGaps } + log [subtext][diag]. subtextAssignTimes trả {matched,total}; subtextGaps liệt kê khoảng lặng ≥2s. Prior 1.11.4: bỏ hết dấu " trong caption.
+const BRIDGE_VERSION = '1.13.0';  // /superautocut/subtext: ghép audio theo TIMELINE THẬT — (a) clip đổi tốc độ: resolveClipWindow() nhân in-point/span với speed (Premiere trả in/out theo đơn vị timeline = giây nguồn ÷ speed) rồi atempo về đúng độ dài timeline; input-seek -ss/-t trước -i vì -to sau -i cắt cụt sau filter. (b) clip chồng nhau ở nhiều track: adelay + amix normalize=0 đặt đúng vị trí thay vì concat nối đuôi (nhạc nền dài bị chèn vào giữa lời, đẩy lệch toàn bộ). + report autosub-log (bản đồ clip, speed, track, diff script) và GET /autosub/logs.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',

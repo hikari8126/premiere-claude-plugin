@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.3.1';  // import voice → timeline: đặt vào audio track HOÀN TOÀN TRỐNG (0 clip) thay vì track chỉ trống tại điểm scrub (logic inline vì sacLowestEmptyTrack ở IIFE SAC khác scope). (bridge server 1.12.0) Music v2 + audio reference (Style/Extend): chọn nhạc reference (30s đầu), mức bám style, bỏ v1; reorder tab Music (ref trên prompt); độ dài max 120s; cảnh báo đỏ khi bridge < 1.12.0. Music v2 mặc định + audio reference (Style/Extend): chọn file reference, mức bám style low/med/high, range 0–30s; bỏ v1; tên mặc định "AI BGM".
+var PLUGIN_VERSION = 'v5.3.2';  // CẦN BRIDGE ≥1.13.0. Tạo Sub: fix ghép audio — clip bị đổi tốc độ (speed) nay cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (trước đây lệch sang phần đã trim, mất đầu câu); clip chồng nhau ở nhiều track nay TRỘN đúng lớp thay vì nối đuôi (nhạc nền/SFX không còn bị chèn vào giữa lời). Thêm nút Clear session ở tab Tạo Sub; chống dùng nhầm script cũ (không ghi đè ô script khi bạn sửa lúc đang chạy + cảnh báo đỏ khi script khớp <40%); cảnh báo đỏ khi bridge cũ.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -893,7 +893,7 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.12.0'; // Plugin v5.3.0+ cần bridge ≥1.12.0 (music v2 + audio reference)
+var REQUIRED_BRIDGE = '1.13.0'; // Plugin v5.3.2+ cần bridge ≥1.13.0 (Tạo Sub: fix speed clip + trộn đúng lớp track)
 
 // Compare semver strings: returns -1/0/1
 function compareVersions(a, b) {
@@ -916,6 +916,7 @@ function checkBridge() {
     if (xhr.status === 200) {
       try {
         bridgeHealth = JSON.parse(xhr.responseText);
+        window.bridgeHealth = bridgeHealth;   // tab Tạo Sub đọc để cảnh báo bridge cũ
         var bVer = bridgeHealth.version || '?';
 
         // Update version bar
@@ -9521,6 +9522,44 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // Collect clips from checked tracks → [{filePath,inPoint,outPoint,start}] sorted by timeline start.
+  // Đọc thử một loạt API thời gian của track item / project item và trả về giây.
+  // Mục đích chẩn đoán: nếu clip là SUBCLIP (hoặc media có start offset) thì
+  // getInPoint() của track item tính theo subclip, còn getMediaFilePath() trả về
+  // file MASTER → ffmpeg cắt lệch đúng bằng offset đó (mất đầu câu, lẫn phần đã
+  // trim bỏ ở cuối). Probe này để nhìn thấy con số offset thật.
+  async function stProbeTimes(it) {
+    var probe = {};
+    async function rd(label, obj, fn) {
+      if (!obj || typeof obj[fn] !== 'function') return;
+      try {
+        var v = obj[fn](); if (v && v.then) v = await v;
+        if (v == null) return;
+        var sec = getTimeSec(v);
+        probe[label] = (typeof sec === 'number' && isFinite(sec)) ? +sec.toFixed(4) : String(v);
+      } catch (e) {}
+    }
+    var names = ['getInPoint', 'getOutPoint', 'getStartTime', 'getEndTime', 'getStart', 'getEnd', 'getDuration'];
+    for (var i = 0; i < names.length; i++) await rd('item.' + names[i], it, names[i]);
+    // Số thuần (không phải TickTime): tốc độ phát, cờ đảo chiều.
+    var snames = ['getSpeed', 'getPlaybackSpeed', 'getTimeStretch', 'isSpeedReversed', 'isAdjustmentLayer'];
+    for (var k = 0; k < snames.length; k++) {
+      var fn = snames[k];
+      if (typeof it[fn] !== 'function') continue;
+      try { var v = it[fn](); if (v && v.then) v = await v; if (v != null) probe['item.' + fn] = (typeof v === 'object') ? String(v) : v; } catch (e) {}
+    }
+    try {
+      var pi = it.getProjectItem && it.getProjectItem(); if (pi && pi.then) pi = await pi;
+      if (pi) {
+        var cast = (ppro && ppro.ClipProjectItem && ppro.ClipProjectItem.cast) ? ppro.ClipProjectItem.cast(pi) : pi;
+        var pnames = ['getInPoint', 'getOutPoint', 'getStartTime', 'getEndTime', 'getDuration', 'getMediaStart', 'getMediaEnd'];
+        for (var j = 0; j < pnames.length; j++) await rd('projectItem.' + pnames[j], cast || pi, pnames[j]);
+        try { probe['projectItem.name'] = String((cast || pi).name || ''); } catch (e) {}
+        try { var sub = (cast || pi).isSubclip; probe['projectItem.isSubclip'] = (typeof sub === 'function') ? !!(await sub.call(cast || pi)) : !!sub; } catch (e) {}
+      }
+    } catch (e) {}
+    return probe;
+  }
+
   async function stCollectClips() {
     var checked = Array.prototype.slice.call(document.querySelectorAll('#stTrackList input[type=checkbox]'))
       .filter(function (cb) { return cb.checked; })
@@ -9537,7 +9576,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var fp = null;
         try { fp = await vcGetTrackItemFilePath(it); } catch (e) {}
         if (!fp) continue;
-        var inSec = 0, outSec = 0, startSec = 0;
+        var inSec = 0, outSec = 0, startSec = 0, endSec = 0, clipName = '';
         try {
           var ip = it.getInPoint && it.getInPoint(); if (ip && ip.then) ip = await ip; inSec = getTimeSec(ip);
           var op = it.getOutPoint && it.getOutPoint(); if (op && op.then) op = await op; outSec = getTimeSec(op);
@@ -9546,10 +9585,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           // timeline gaps (silence never inserted). Prefer getStartTime, fall back.
           var startFn = it.getStartTime || it.getStart;
           var sps = startFn ? startFn.call(it) : null; if (sps && sps.then) sps = await sps; startSec = getTimeSec(sps);
+          // Gửi kèm endTime để bridge kiểm tra bất biến (out−in) == (end−start):
+          // lệch = in/out lấy sai → cắt lẫn cả phần đã trim bỏ + drift timing.
+          var endFn = it.getEndTime || it.getEnd;
+          var eps = endFn ? endFn.call(it) : null; if (eps && eps.then) eps = await eps; endSec = getTimeSec(eps);
         } catch (e) {}
         inSec = Math.max(0, inSec); outSec = Math.max(0, outSec); // guard tiny negative FP (ffmpeg -ss)
         if (outSec <= inSec) continue;
-        out.push({ filePath: fp, inPoint: inSec, outPoint: outSec, start: Math.max(0, startSec) });
+        try { clipName = (it.name && (typeof it.name === 'string' ? it.name : '')) || ''; } catch (e) {}
+        var probe = null;
+        try { probe = await stProbeTimes(it); } catch (e) {}
+        // Tốc độ phát: clip bị speed up/down thì đoạn nguồn và đoạn trên timeline
+        // dài khác nhau — bridge cần số này để cắt đúng rồi atempo về đúng độ dài.
+        var spd = null;
+        ['item.getSpeed', 'item.getPlaybackSpeed', 'item.getTimeStretch'].forEach(function (k) {
+          if (spd == null && probe && typeof probe[k] === 'number' && probe[k] > 0) spd = probe[k];
+        });
+        // getDuration() thường là độ dài NGUỒN của clip → bridge suy ra speed
+        // bằng srcDuration / (end−start) khi không có API speed.
+        var srcDur = (probe && typeof probe['item.getDuration'] === 'number') ? probe['item.getDuration'] : null;
+        out.push({ filePath: fp, inPoint: inSec, outPoint: outSec, start: Math.max(0, startSec),
+                   endTime: endSec > startSec ? endSec : null, name: clipName || null,
+                   track: t.name, speed: spd, srcDuration: srcDur, probe: probe });
       }
     }
     out.sort(function (a, b) { return a.start - b.start; });
@@ -9584,17 +9641,66 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var parts = ['Whisper ' + diag.whisperWords + ' từ / audio ' + diag.audioDur + 's'];
     if (diag.silentTail > 3) parts.push('lặng cuối ' + diag.silentTail + 's');
     var warn = false;
+    var wrongScript = false;
     if (diag.matchPct != null) {
       parts.push('khớp script ' + diag.matched + '/' + diag.scriptWords + ' (' + diag.matchPct + '%)');
       if (diag.matchPct < 80) warn = true;
+      // Dưới 40% thì gần như chắc chắn không phải sai chính tả mà là NHẦM SCRIPT
+      // (script của video khác, hoặc script cũ còn sót trong ô).
+      if (diag.matchPct < 40) { warn = true; wrongScript = true; }
     }
     if (diag.bigGaps && diag.bigGaps.length) {
       var g = diag.bigGaps[0];
       parts.push(diag.bigGaps.length + ' khoảng lặng >2s (lớn nhất ' + g.after + '→' + g.before + '=' + g.len + 's)');
       if (g.len >= 3) warn = true;
     }
-    return { text: '🩺 ' + parts.join(' · '), warn: warn };
+    if (diag.mismatches != null) parts.push('lệch ' + diag.mismatches + ' đoạn từ');
+    // Clip ở nhiều track chồng lên nhau (nhạc nền / SFX) → đã trộn đúng lớp,
+    // nhưng nhạc đè lên lời làm Whisper nghe kém → nhắc bỏ tick track đó.
+    var overlapNote = '';
+    if (diag.overlaps) {
+      overlapNote = '\n🎚 ' + diag.overlaps + ' clip nằm chồng lên nhau (nhạc nền / SFX ở track khác) — đã trộn đúng lớp, ' +
+                    'nhưng bỏ tick track nhạc/SFX sẽ giúp Whisper nghe lời rõ hơn.';
+      warn = true;
+    }
+    var text = (wrongScript ? '⛔ SCRIPT KHÔNG KHỚP AUDIO — gần như chắc chắn đang dùng script của video khác\n🩺 ' : '🩺 ') +
+               parts.join(' · ') + overlapNote;
+    // Bridge ghi report chi tiết mỗi lần chạy (Whisper nghe gì / lệch chỗ nào)
+    // → chỉ ra tên file để mở xem, tìm hướng cải thiện.
+    if (diag.reportPath) text += '\n📄 Log: ' + String(diag.reportPath).split('/').pop() +
+      ' (Documents ▸ Claude Bridge Logs ▸ autosub)';
+    return { text: text, warn: warn, report: diag.reportPath || '' };
   }
+
+  // ── Cảnh báo bridge cũ ────────────────────────────────────────────────────
+  // Tạo Sub phụ thuộc TRỰC TIẾP vào bridge: bridge <1.13.0 cắt sai clip bị đổi
+  // tốc độ và nối đuôi các track chồng nhau (nhạc nền bị chèn vào giữa lời) →
+  // phụ đề lệch hẳn. Cảnh báo đỏ + chặn chạy thay vì để ra kết quả sai.
+  var ST_MIN_BRIDGE = '1.13.0';
+  function stBridgeOld() {
+    var h = window.bridgeHealth;
+    if (!h || !h.version) return false;              // chưa biết → không chặn
+    try { return window.compareVersions(h.version, ST_MIN_BRIDGE) < 0; } catch (e) { return false; }
+  }
+  function stSyncBridgeWarn() {
+    var el = $('stBridgeWarn'); if (!el) return;
+    if (!stBridgeOld()) { el.style.display = 'none'; return; }
+    var v = (window.bridgeHealth && window.bridgeHealth.version) || '?';
+    el.textContent = '⛔ BRIDGE CŨ (v' + v + ') — Tạo Sub cần bridge ≥ ' + ST_MIN_BRIDGE + '.\n' +
+      'Bản cũ ghép audio SAI: clip bị đổi tốc độ (speed) cắt lệch sang phần đã trim, và ' +
+      'nhạc nền / SFX ở track khác bị nối vào giữa lời thay vì nằm dưới → phụ đề lệch hẳn.\n' +
+      'Cập nhật: mở Claude Bridge trên menu bar → "⬆️ Có bản cập nhật", rồi khởi động lại Bridge.';
+    el.style.display = 'block';
+  }
+  function stBlockIfOldBridge() {
+    if (!stBridgeOld()) return false;
+    stSyncBridgeWarn();
+    var v = (window.bridgeHealth && window.bridgeHealth.version) || '?';
+    stStatus('⛔ Bridge v' + v + ' quá cũ (cần ≥ ' + ST_MIN_BRIDGE + ') — audio sẽ bị ghép sai. ' +
+             'Cập nhật Bridge rồi thử lại.');
+    return true;
+  }
+  setInterval(stSyncBridgeWarn, 5000);
 
   function stMainBtn() { return $('stMakeBtn'); }
   function stSetBtn(icon, label) { var b = stMainBtn(); if (b) piSetBtn(b, icon, label, '#ffffff', 14); }
@@ -9710,6 +9816,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var clips = await stCollectClips();
       if (!clips.length) { stStatus('⚠ Chưa chọn track có clip audio (bấm 🔄 Quét track rồi tick).'); stBusy = false; stAbort = null; stResetOrganize(); return; }
       var scriptLines = stScriptLines();
+      // Chụp lại nội dung ô script LÚC BẮT ĐẦU. Whisper chạy 10s–2 phút, thừa thời
+      // gian để bạn dán script khác vào; nếu cứ ghi đè kết quả cũ lên thì bản dán
+      // mới bị nuốt im lặng và những lần chạy sau vẫn xài script cũ.
+      var stScriptAtStart = ($('stScript') || {}).value || '';
       var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 5;
       var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 30;
       var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 3;
@@ -9724,6 +9834,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       });
       var d = await resp.json();
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Ngắt câu lỗi')); stBusy = false; stAbort = null; stResetOrganize(); return; }
+      // Ô script đã đổi trong lúc chạy → kết quả này là của script CŨ, bỏ đi.
+      if ((($('stScript') || {}).value || '') !== stScriptAtStart) {
+        stBusy = false; stAbort = null;
+        if (b) b.classList.remove('is-cancel');
+        stResetOrganize();
+        stStatus('⚠ Bạn đã sửa script trong lúc đang canh giờ — kết quả vừa xong là của script CŨ nên đã bỏ.\nBấm lại để chạy với script mới trong ô.');
+        return;
+      }
       stTimedCues = (d.cues || []).map(function (c) { return { text: c.text, start: c.start, end: c.end }; });
       stSetScript(stTimedCues.map(function (c) { return c.text; }));
       try { console.log('[Sub][diag]', JSON.stringify(d.diag || {})); } catch (e) {}
@@ -9733,12 +9851,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (b) b.classList.remove('is-cancel');
       stOrganized = true;
       var dg = stDiagText(d.diag);
-      stDiag = dg.text;
+      // Ghim dòng script ĐẦU TIÊN đang dùng vào chẩn đoán → nhìn là biết ngay có
+      // đang xài nhầm script của video khác không.
+      if (scriptLines.length) {
+        var head = scriptLines[0];
+        stDiag = '📝 Script đang dùng: "' + (head.length > 46 ? head.slice(0, 46) + '…' : head) +
+                 '" (' + scriptLines.length + ' dòng)\n' + dg.text;
+      } else {
+        stDiag = dg.text;
+      }
       if (dg.warn) {
         // Timing đáng ngờ (Whisper hụt / khoảng lặng dài) → KHÔNG tự tạo, để user soi.
         stStopCountdown();
         stSetBtn('closed_captioning', 'Tạo SRT');
-        stStatus('⚠ Timing có thể LỆCH — ' + dg.text + '.\nThường do clip audio bị hở/không khớp script. Kiểm tra track đã tick, sửa trong ô nếu cần, rồi bấm Tạo SRT.');
+        stStatus('⚠ Timing có thể LỆCH — ' + stDiag + '\nKiểm tra script trong ô có đúng của video này không (Clear session để xoá sạch), track đã tick đúng chưa, rồi bấm Tạo SRT.');
       } else {
         stStartCountdown();
       }
@@ -9808,9 +9934,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stStatus('⏳ Import .srt vào project...');
       var imported = true;
       try { await stImportFile(d.path); } catch (e) { imported = false; }
+      var logHint = (d.diag && d.diag.reportPath)
+        ? '\n📄 Log: ' + String(d.diag.reportPath).split('/').pop() + ' (Documents ▸ Claude Bridge Logs ▸ autosub)'
+        : '';
       stStatus('✅ ' + d.cues.length + ' dòng phụ đề → "' + d.path.split('/').pop() + '"' +
         (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
-                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).'));
+                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + logHint);
       stResetOrganize(); // xong → về trạng thái đầu cho lần sau
     } catch (e) {
       if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ tạo phụ đề.');
@@ -9826,6 +9955,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var makeBtn = $('stMakeBtn');
   if (makeBtn) makeBtn.addEventListener('click', function () {
     if (stBusy) { if (stAbort) stAbort.abort(); return; }
+    if (stBlockIfOldBridge()) return;
     if (stOrganized) stFinalize();
     else stOrganize();
   });
@@ -9853,6 +9983,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       await stImportFile(stLastPath);
       stStatus('✅ Đã import "' + stLastPath.split('/').pop() + '" vào project — tìm trong bin gốc.');
     } catch (e) { stStatus('❌ Import lỗi: ' + e.message + ' — dùng 📂 Mở Finder rồi kéo vào.'); }
+  });
+
+  // ── Clear session ─────────────────────────────────────────────────────────
+  // Về đúng trạng thái vừa mở tab: huỷ việc đang chạy, xoá script + timing đã
+  // canh + kết quả lần trước, quét lại track (tick mặc định). Bấm 2 lần để xác
+  // nhận vì thao tác này xoá script đang gõ dở.
+  var stClearArm = null;
+  function stDisarmClear() {
+    var b = $('stClearBtn'); if (!b) return;
+    b.classList.remove('is-armed');
+    piSetBtn(b, 'trash', 'Clear session', 'rgba(255,255,255,0.5)', 12);
+    if (stClearArm) { clearTimeout(stClearArm); stClearArm = null; }
+  }
+  async function stClearSession() {
+    if (stAbort) { try { stAbort.abort(); } catch (e) {} stAbort = null; }
+    stStopCountdown();
+    stBusy = false; stOrganized = false; stTimedCues = null; stDiag = ''; stLastPath = null;
+    var b = stMainBtn(); if (b) b.classList.remove('is-cancel');
+    stSetBtn('closed_captioning', 'AI ngắt câu → Tạo SRT');
+    stSetScript([]);
+    var ar = $('stAfterRow'); if (ar) ar.style.display = 'none';
+    stStatus('');
+    try { await stScanTracks(); } catch (e) {}
+    stStatus('🧹 Đã xoá phiên — script trống, track quét lại. Bắt đầu video mới.');
+  }
+  var clearBtn = $('stClearBtn');
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    if (clearBtn.classList.contains('is-armed')) { stDisarmClear(); stClearSession(); return; }
+    clearBtn.classList.add('is-armed');
+    piSetBtn(clearBtn, 'trash', 'Bấm lại để xoá', '#fca5a5', 12);
+    stClearArm = setTimeout(stDisarmClear, 4000);   // không bấm tiếp → tự huỷ
   });
 
   // Custom slider: UXP native <input type=range> won't drag, so drive a div+thumb
@@ -9921,7 +10082,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   // Auto-scan when the Tạo Sub tab is opened…
   var subTabBtn = document.querySelector('.tab-btn[data-tab="subtext"]');
-  if (subTabBtn) subTabBtn.addEventListener('click', function () { if (stScriptEl) { stAutoResize(); vgReflowSoon(stScriptEl); } stScanTracks(); });
+  if (subTabBtn) subTabBtn.addEventListener('click', function () { if (stScriptEl) { stAutoResize(); vgReflowSoon(stScriptEl); } stSyncBridgeWarn(); stScanTracks(); });
   // …and whenever the active sequence changes (pollTimeline calls this), if visible.
   window.__subtextSync = function () {
     var panel = document.getElementById('tab-subtext');
