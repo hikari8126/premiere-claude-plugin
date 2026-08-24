@@ -36,7 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         UnnestHotkeys.shared.start()   // register global un-nest hotkeys + watch config
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.firstRunSetup() }
-        // Auto-check for updates so the "⬆️ Có bản cập nhật" item appears on its own.
+        // Auto-check for updates so the "Có bản cập nhật" item appears on its own.
         // Runs independently of whether the bundled bridge process managed to start.
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.checkForUpdates() }
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
@@ -96,8 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         // ── Update notification (hidden until update found) ───────────────
-        let updItem = NSMenuItem(title: "⬆️  Có bản cập nhật", action: #selector(installAvailableUpdate), keyEquivalent: "")
+        let updItem = NSMenuItem(title: "Có bản cập nhật", action: #selector(installAvailableUpdate), keyEquivalent: "")
         updItem.target = self
+        updItem.image = symbolImage("arrow.down.circle.fill")
         updItem.isHidden = true
         menu.addItem(updItem)
         updateMenuItem = updItem
@@ -107,25 +108,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(titleItem)
         menu.addItem(.separator())
 
-        statusMenuItem = NSMenuItem(title: "⏳ Đang khởi động...", action: nil, keyEquivalent: "")
+        statusMenuItem = NSMenuItem(title: "Đang khởi động...", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
+        statusMenuItem.image = symbolImage("clock")
         menu.addItem(statusMenuItem)
         menu.addItem(.separator())
 
-        menu.addItem(item("↺  Khởi động lại Bridge",     #selector(restartBridge), key: "r"))
-        menu.addItem(item("📋  Xem Log",                  #selector(showLog),       key: "l"))
-        menu.addItem(item("📄  Log Auto Sub (Whisper vs script)", #selector(openAutosubLogs), key: ""))
+        menu.addItem(item("Khởi động lại Bridge", #selector(restartBridge), key: "r", symbol: "arrow.clockwise"))
+        menu.addItem(item("Xem Log",              #selector(showLog),      key: "l", symbol: "list.bullet.rectangle"))
+        menu.addItem(item("Log Auto Sub (Whisper vs script)", #selector(openAutosubLogs), key: "",
+                          symbol: "doc.text.magnifyingglass"))
         menu.addItem(.separator())
 
-        autoStartItem = item("🔄  Tự khởi động cùng máy", #selector(toggleAutoStart), key: "")
+        autoStartItem = item("Tự khởi động cùng máy", #selector(toggleAutoStart), key: "", symbol: "power")
         autoStartItem.state = launchAgentExists() ? .on : .off
         menu.addItem(autoStartItem)
 
         menu.addItem(.separator())
-        menu.addItem(item("🐍  Cài Whisper (Autocut STT)",  #selector(installWhisper),     key: ""))
-        menu.addItem(item("🎬  Cài ffmpeg (Voice & Audio)",  #selector(installFfmpeg),      key: ""))
+        // Một mục thay cho "Cài Whisper" + "Cài ffmpeg": tự dò thiếu gì rồi cài
+        // đúng phần thiếu — không phải tự đoán cần bấm cái nào.
+        menu.addItem(item("Kiểm tra thành phần cần thiết", #selector(checkComponents), key: "k",
+                          symbol: "wrench.and.screwdriver"))
         menu.addItem(.separator())
-        menu.addItem(item("Thoát",                            #selector(quit),               key: "q"))
+        menu.addItem(item("Thoát", #selector(quit), key: "q", symbol: "xmark.circle"))
 
         statusItem.menu = menu
     }
@@ -138,18 +143,161 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(dir)
     }
 
-    func item(_ title: String, _ sel: Selector, key: String) -> NSMenuItem {
+    // SF Symbol làm icon menu: đơn sắc, tự đổi màu theo theme + khi highlight —
+    // khác emoji (luôn có màu, lệch baseline, mỗi cái một style).
+    func symbolImage(_ name: String, size: CGFloat = 13) -> NSImage? {
+        guard let img = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
+        let out = img.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: size, weight: .regular)) ?? img
+        out.isTemplate = true
+        return out
+    }
+
+    func item(_ title: String, _ sel: Selector, key: String, symbol: String? = nil) -> NSMenuItem {
         let m = NSMenuItem(title: title, action: sel, keyEquivalent: key)
         m.target = self
+        if let sym = symbol { m.image = symbolImage(sym) }
         return m
     }
+
+    // Các chỗ gọi setStatus vẫn truyền emoji ở đầu chuỗi cho dễ đọc trong code;
+    // ra menu thì tách emoji thành icon SF Symbol đơn sắc cho đồng bộ.
+    static let statusSymbols: [(String, String)] = [
+        ("⏳", "clock"), ("✅", "checkmark.circle"), ("❌", "xmark.octagon"),
+        ("⚠️", "exclamationmark.triangle"), ("⚠", "exclamationmark.triangle"),
+        ("⬇️", "arrow.down.circle"), ("📦", "shippingbox"), ("🔄", "arrow.clockwise"),
+    ]
 
     func setStatus(_ msg: String, running: Bool) {
         DispatchQueue.main.async {
             self.applyTrayIcon(active: running)
-            self.statusMenuItem?.title    = msg
+            var text = msg
+            var sym  = running ? "checkmark.circle" : "circle"
+            for (emoji, name) in AppDelegate.statusSymbols where text.hasPrefix(emoji) {
+                sym  = name
+                text = String(text.dropFirst(emoji.count)).trimmingCharacters(in: .whitespaces)
+                break
+            }
+            self.statusMenuItem?.image = self.symbolImage(sym)
+            self.statusMenuItem?.title = text
         }
     }
+
+    // MARK: ─── Kiểm tra thành phần ────────────────────────────────────────
+    // Dò tất cả thành phần bridge cần, báo cái nào thiếu, rồi cài đúng cái thiếu
+    // trong MỘT lần mở Terminal (thay cho 2 mục "Cài Whisper" / "Cài ffmpeg" cũ).
+    struct Component {
+        let name: String        // tên hiển thị
+        let need: String        // dùng cho việc gì
+        let path: String        // "" nếu chưa có
+        let optional: Bool      // thiếu vẫn chạy được
+        let installKey: String  // brew / node / ffmpeg / python-whisper / claude
+    }
+
+    func scanComponents() -> [Component] {
+        func which(_ bin: String) -> String {
+            let p = sh("command -v \(bin) 2>/dev/null").out.trimmingCharacters(in: .whitespacesAndNewlines)
+            return FileManager.default.fileExists(atPath: p) ? p : ""
+        }
+        let node = findNodeAndServer()?.nodePath ?? which("node")
+        let envKey = (try? String(contentsOfFile: bridgeEnvPath(), encoding: .utf8))?
+            .contains("ANTHROPIC_API_KEY=sk-") ?? false
+        return [
+            Component(name: "Node.js",    need: "chạy bridge server",             path: node,            optional: false, installKey: "node"),
+            Component(name: "Claude CLI", need: "chat AI (hoặc dùng API key)",    path: envKey ? "(dùng ANTHROPIC_API_KEY trong .env)" : findClaude(), optional: false, installKey: "claude"),
+            Component(name: "ffmpeg",     need: "Voice Gen + ghép audio Tạo Sub", path: which("ffmpeg"),  optional: false, installKey: "ffmpeg"),
+            Component(name: "ffprobe",    need: "đo độ dài audio",                path: which("ffprobe"), optional: false, installKey: "ffmpeg"),
+            Component(name: "Whisper",    need: "Autocut + Tạo Sub (nghe lời)",   path: findWhisper(),    optional: false, installKey: "python-whisper"),
+            Component(name: "Homebrew",   need: "chỉ cần khi phải cài phần trên", path: which("brew"),    optional: true,  installKey: "brew"),
+        ]
+    }
+
+    func bridgeEnvPath() -> String {
+        if let dir = findNodeAndServer()?.serverDir { return dir + "/.env" }
+        return Bundle.main.bundlePath + "/Contents/Resources/server/.env"
+    }
+
+    @objc func checkComponents() {
+        let comps   = scanComponents()
+        let missing = comps.filter { $0.path.isEmpty && !$0.optional }
+        let needBrew = !missing.isEmpty && (comps.first(where: { $0.installKey == "brew" })?.path.isEmpty ?? true)
+
+        var lines = comps.map { c -> String in
+            let mark = c.path.isEmpty ? (c.optional ? "○" : "✕") : "✓"
+            return "\(mark)  \(c.name)  —  \(c.path.isEmpty ? "CHƯA CÓ · \(c.need)" : c.path)"
+        }
+        if needBrew { lines.append("\nHomebrew sẽ được cài trước để cài các phần còn thiếu.") }
+
+        let a = NSAlert()
+        a.messageText = missing.isEmpty ? "Đầy đủ — không thiếu thành phần nào"
+                                        : "Thiếu \(missing.count) thành phần"
+        a.informativeText = lines.joined(separator: "\n")
+        if missing.isEmpty {
+            a.addButton(withTitle: "Đóng")
+            a.runModal()
+            return
+        }
+        a.addButton(withTitle: "Cài \(missing.map { $0.name }.joined(separator: ", "))")
+        a.addButton(withTitle: "Đóng")
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        openTerminal(installScript(for: missing, needBrew: needBrew))
+    }
+
+    // Script chỉ cài đúng phần đang thiếu, chạy một lượt trong Terminal.
+    func installScript(for missing: [Component], needBrew: Bool) -> String {
+        let names = missing.map { $0.name }.joined(separator: ", ")
+        var out = """
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
+        eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"    || true
+        echo "Sẽ cài: \(names)"
+        echo ""
+
+        """
+        if needBrew {
+            out += """
+            if ! command -v brew &>/dev/null; then
+              echo "==> Cài Homebrew..."
+              /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+              eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || eval "$(/usr/local/bin/brew shellenv 2>/dev/null)"
+            fi
+            if ! command -v brew &>/dev/null; then
+              echo "Cài Homebrew thất bại — cài thủ công tại https://brew.sh rồi chạy lại."
+              exit 1
+            fi
+
+            """
+        }
+        let keys = Set(missing.map { $0.installKey })
+        if keys.contains("node") {
+            out += "echo \"==> Cài Node.js...\"\nbrew install node 2>&1\n\n"
+        }
+        if keys.contains("ffmpeg") {
+            out += "echo \"==> Cài ffmpeg...\"\nbrew install ffmpeg 2>&1\n\n"
+        }
+        if keys.contains("python-whisper") {
+            out += """
+            echo "==> Cài Whisper (~500MB, vài phút)..."
+            command -v pip3 &>/dev/null || brew install python3 2>&1
+            pip3 install -U openai-whisper 2>&1 || pip3 install -U openai-whisper --break-system-packages 2>&1
+
+            """
+        }
+        if keys.contains("claude") {
+            out += """
+            echo "==> Cài Claude CLI..."
+            npm install -g @anthropic-ai/claude-code 2>&1
+            echo "Cài xong nhớ chạy: claude login"
+
+            """
+        }
+        out += """
+        echo ""
+        echo "Xong. Quay lại Claude Bridge > Kiểm tra thành phần cần thiết để xác nhận,"
+        echo "rồi bấm Khởi động lại Bridge."
+        """
+        return out
+    }
+
 
     // MARK: ─── First-run Setup ─────────────────────────────────────────────
     func firstRunSetup() {
@@ -349,7 +497,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.restartCount = 0
                 self.updateStatusWithBridgeVersion()
                 self.log("Bridge started (PID \(task.processIdentifier), mode: \(self.detectMode()))")
-                // Check for a newer Bridge app — surfaces the "⬆️ Có bản cập nhật" item if found
+                // Check for a newer Bridge app — surfaces the "Có bản cập nhật" item if found
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3) { self.checkForUpdates() }
                 // Prompt Whisper install if not found (non-blocking, after bridge is stable)
                 DispatchQueue.global().asyncAfter(deadline: .now() + 5) { self.checkWhisperOnce() }
