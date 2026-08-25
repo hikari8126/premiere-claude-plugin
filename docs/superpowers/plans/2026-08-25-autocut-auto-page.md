@@ -816,13 +816,18 @@ git commit -m "feat(auto): sacJobContext + chuyển TSV sang rows dùng expandRo
 **Files:**
 - Modify: `plugin/main.js`
 
-- [ ] **Step 1: Xác nhận cách gọi validate hiện tại**
+- [ ] **Step 1: Xác nhận hợp đồng validate (đã điều tra 2026-08-25)**
 
 ```bash
-sed -n '4700,4760p' plugin/main.js
+grep -n "async function sacValidateAll\|var sacValidatePassed\|skipVoiceAsk" plugin/main.js
 ```
 
-Ghi lại: tên hàm bọc validate, payload gửi lên `/superautocut/validate`, và biến nhận kết quả blocks. Dùng đúng những tên đó ở Step 2.
+Đã xác minh:
+- Hàm là `sacValidateAll(opts)` (dòng 4679), **async**, **không trả về giá trị nào**.
+- Kết quả nằm ở cờ module `sacValidatePassed` (khai 2917; `true` ở 4752, `false` ở 4740/4744/4749/4770).
+- **`opts.skipVoiceAsk = true` là bắt buộc** — nếu thiếu, `sacAskGenVoice()` mở hộp thoại
+  hỏi người dùng và chặn pipeline ở mỗi job. Tiền lệ: dòng 4836.
+- Thông báo lỗi cho người dùng nằm trong `$('sacStatus').textContent`.
 
 - [ ] **Step 2: Viết vòng validate + thông báo**
 
@@ -849,7 +854,14 @@ async function autoStage1(jobs) {
       job.rows = autoTsvToRows(autoSet.jobs[job.idx].tsv || '');
       if (!job.rows.length) throw new Error('chưa dán TSV');
       sacJobContext.load(job);
-      await sacAutoValidate();          // ← tên hàm validate thật, xác nhận ở Step 1
+      // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
+      // skipVoiceAsk BẮT BUỘC: nếu không, sacAskGenVoice() sẽ chặn pipeline 3 lần.
+      sacValidatePassed = false;
+      await sacValidateAll({ skipVoiceAsk: true });
+      if (!sacValidatePassed) {
+        var st = ($('sacStatus').textContent || '').replace(/^[❌⚠✅⏳]\s*/, '');
+        throw new Error(st || 'validate thất bại');
+      }
       sacJobContext.save(job);
       job.state = 'validated';
     } catch (e) {
