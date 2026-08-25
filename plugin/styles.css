@@ -4213,6 +4213,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoPage { gap: 8px; }
 .sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; flex: 1 1 0; min-width: 0; }
+.sac-autoHeaderBtns { flex: 0 0 auto; display: flex; gap: 2px; align-items: center; }
 .sac-autoClose { padding: 2px 6px; cursor: pointer; flex: 0 0 auto; }
 /* Plain block container — mirrors .sac-newseq-box. NO flex-column wrapper
    around label/field pairs: that pattern overlaps labels and fields in UXP

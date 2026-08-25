@@ -1088,8 +1088,12 @@
     <div class="sac-panel sac-autoPage" id="sacPanelAuto" style="display:none">
       <div class="sac-autoHeader">
         <span class="sac-autoTitle">Auto — bộ 3 video</span>
-        <div id="sacAutoSettingsBtn" class="sac-autoClose" role="button"><span data-ic="gear" data-ic-size="13"></span></div>
-        <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
+        <!-- Gộp 2 nút vào 1 nhóm: header 3 con + space-between làm UXP đẩy nút
+             ⚙ ra giữa (browser thì không, vì title giãn được). 2 con thì chắc ăn. -->
+        <div class="sac-autoHeaderBtns">
+          <div id="sacAutoSettingsBtn" class="sac-autoClose" role="button"><span data-ic="gear" data-ic-size="13"></span></div>
+          <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
+        </div>
       </div>
 
       <div class="sac-autoScroll">
