@@ -4967,15 +4967,27 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // BÊ NGUYÊN panel Manual sang trang Auto. Mượn từng mảnh là sai hướng: lần nào
   // cũng thiếu một thứ. Mượn cả panel thì bảng, Parse AI, Validate, Blocks, voice
   // panel, cut panel chạy y như ở tab Manual — không có bản sao nào để lệch.
+  var autoHiddenBtns = null;     // display gốc của các nút Manual bị ẩn trong Auto
+
   function autoBorrowManual() {
     var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
     if (!pm || !slot || autoManualHome) return;
     autoManualHome = { parent: pm.parentNode, next: pm.nextSibling, display: pm.style.display };
     slot.appendChild(pm);
     pm.style.display = 'flex';   // switcher vừa set 'none' vì method !== 'manual'
+    // Ẩn nút Validate: ở trang Auto thì "Chạy cả bộ" đã validate cả 3 video, để
+    // lại chỉ gây nhầm (validate 1 video rồi tưởng đã xong cả bộ).
+    var vb = $('sacPreviewBtn');
+    autoHiddenBtns = { validate: vb ? vb.style.display : null };
+    if (vb) vb.style.display = 'none';
   }
   function autoReturnManual() {
     if (!autoManualHome) return;
+    if (autoHiddenBtns) {
+      var vb = $('sacPreviewBtn');
+      if (vb) vb.style.display = autoHiddenBtns.validate || '';
+      autoHiddenBtns = null;
+    }
     var pm = $('sacPanelManual');
     autoManualHome.parent.insertBefore(pm, autoManualHome.next);
     pm.style.display = autoManualHome.display || '';
@@ -4995,21 +5007,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoVoiceDropHome = null;
   }
 
-  // Dựng lại danh sách block theo job đang chọn — blocks lưu trong job._blocks
-  // sau khi validate. Không làm vậy thì bảng block hiện kết quả của video khác.
-  function autoSyncBlocks(job) {
-    var sec = $('sacBlockSection');
-    if (!sec) return;
-    var blocks = (job && job._blocks) || [];
-    if (blocks.length) {
-      renderBlocks(blocks);
-      sec.style.display = 'flex';
-    } else {
-      var l = $('sacBlockList'); if (l) l.innerHTML = '';
-      var c = $('sacBlockCount'); if (c) c.textContent = '';
-      sec.style.display = 'none';
-    }
-  }
+
 
   var autoVoiceDropHome = null;
   function autoBorrowVoiceDrop() {
@@ -5092,7 +5090,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
     autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
     autoLoadJobVoiceRatio(autoSet.jobs[autoActiveJob]);
-    autoSyncBlocks(autoSet.jobs[autoActiveJob]);
   }
 
   // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
