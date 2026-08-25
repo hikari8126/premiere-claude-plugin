@@ -4961,71 +4961,38 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
   var autoRunning = false;       // đang chạy pipeline (stage 1/2 hoặc stage 3) — chặn bấm lại
   var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
-  var autoTableHome = null;      // {parent, next} — vị trí gốc của #sacTableWrap trong panel Manual
+  var autoManualHome = null;     // vị trí gốc của #sacPanelManual
+  var autoVoiceDropHome = null;  // vị trí gốc của #vgVoiceDrop (ở tab Voice Gen)
 
-  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
-  // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
-  // legacyVoiceId/legacyRatio: giá trị top-level từ blob cũ (trước khi voice/ratio
-  // chuyển xuống theo job) — dùng làm fallback cho job chưa có giá trị riêng, để
-  // không lộ ra "undefined" khi migrate từ localStorage cũ.
-  function autoNormalizeJobs(jobs, legacyVoiceId, legacyRatio) {
-    var out = [];
-    for (var i = 0; i < 3; i++) {
-      var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
-      out.push({
-        rows:    Array.isArray(j.rows) ? j.rows : [],
-        voiceId: (j.voiceId !== undefined && j.voiceId !== null) ? j.voiceId : (legacyVoiceId || ''),
-        ratio:   j.ratio || legacyRatio || '1080x1920',
-      });
-    }
-    return out;
+  // BÊ NGUYÊN panel Manual sang trang Auto. Mượn từng mảnh là sai hướng: lần nào
+  // cũng thiếu một thứ. Mượn cả panel thì bảng, Parse AI, Validate, Blocks, voice
+  // panel, cut panel chạy y như ở tab Manual — không có bản sao nào để lệch.
+  function autoBorrowManual() {
+    var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
+    if (!pm || !slot || autoManualHome) return;
+    autoManualHome = { parent: pm.parentNode, next: pm.nextSibling, display: pm.style.display };
+    slot.appendChild(pm);
+    pm.style.display = 'flex';   // switcher vừa set 'none' vì method !== 'manual'
+  }
+  function autoReturnManual() {
+    if (!autoManualHome) return;
+    var pm = $('sacPanelManual');
+    autoManualHome.parent.insertBefore(pm, autoManualHome.next);
+    pm.style.display = autoManualHome.display || '';
+    autoManualHome = null;
   }
 
-  // Mượn bảng thật của Manual vào slot của Auto — nhớ đúng vị trí gốc để trả
-  // lại byte-for-byte khi đóng trang.
-  function autoBorrowTable() {
-    var w = $('sacTableWrap');
-    if (!w || autoTableHome) return;
-    autoTableHome = { parent: w.parentNode, next: w.nextSibling };
-    $('sacAutoTableSlot').appendChild(w);
+  function autoBorrowVoiceDrop() {
+    var vd = $('vgVoiceDrop'), slot = $('sacAutoVoiceSlot');
+    if (!vd || !slot || autoVoiceDropHome) return;
+    autoVoiceDropHome = { parent: vd.parentNode, next: vd.nextSibling };
+    slot.appendChild(vd);
   }
-  function autoReturnTable() {
-    if (!autoTableHome) return;
-    var w = $('sacTableWrap');
-    autoTableHome.parent.insertBefore(w, autoTableHome.next);
-    autoTableHome = null;
-  }
-
-  // Mượn dropdown voice có tìm kiếm của tab Voice Gen (#vgVoiceDrop) vào slot
-  // của Auto — cùng pattern với autoBorrowTable/autoReturnTable, để không bao
-  // giờ fork lại UI/logic của nó (fix bug ở đó tự động áp dụng ở đây).
-  var autoBlockHome = null;      // vị trí gốc của #sacBlockSection trong panel Manual
-  var autoPanelDisp = null;      // display gốc của voice/cut panel để trả lại
-
-  // Mượn khối Blocks của Manual sang trang Auto để thấy kết quả khớp source.
-  // ẨN voice panel + cut panel: đó là điều khiển của luồng Manual, pipeline Auto
-  // tự lo phần voice/dựng, để lộ ra sẽ cho bấm những thứ xung đột nhau.
-  function autoBorrowBlocks() {
-    var sec = $('sacBlockSection'), slot = $('sacAutoBlockSlot');
-    if (!sec || !slot || autoBlockHome) return;
-    autoBlockHome = { parent: sec.parentNode, next: sec.nextSibling };
-    var vp = $('sacVoicePanel'), cp = $('sacCutPanel');
-    autoPanelDisp = { voice: vp ? vp.style.display : null, cut: cp ? cp.style.display : null };
-    if (vp) vp.style.display = 'none';
-    if (cp) cp.style.display = 'none';
-    slot.appendChild(sec);
-  }
-  function autoReturnBlocks() {
-    if (!autoBlockHome) return;
-    var sec = $('sacBlockSection');
-    autoBlockHome.parent.insertBefore(sec, autoBlockHome.next);
-    autoBlockHome = null;
-    if (autoPanelDisp) {
-      var vp = $('sacVoicePanel'), cp = $('sacCutPanel');
-      if (vp) vp.style.display = autoPanelDisp.voice || '';
-      if (cp) cp.style.display = autoPanelDisp.cut || '';
-      autoPanelDisp = null;
-    }
+  function autoReturnVoiceDrop() {
+    if (!autoVoiceDropHome) return;
+    var vd = $('vgVoiceDrop');
+    autoVoiceDropHome.parent.insertBefore(vd, autoVoiceDropHome.next);
+    autoVoiceDropHome = null;
   }
 
   // Dựng lại danh sách block theo job đang chọn — blocks lưu trong job._blocks
@@ -5205,11 +5172,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     };
     // Mượn bảng thật của Manual TRƯỚC khi nạp state — autoLoadState() gọi
     // autoRenderTab() sẽ nạp rows của job đang active vào #sacBody ngay.
-    autoBorrowTable();
+    autoBorrowManual();
     // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
     // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
     autoBorrowVoiceDrop();
-    autoBorrowBlocks();
     autoLogRows('open:afterBorrow');
     autoLoadState();
     autoLogRows('open:afterLoadState');
@@ -5239,8 +5205,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // công vào nó — nếu đảo thứ tự, rows thủ công sẽ được ghi vào bảng trong
     // khi nó còn nằm ở slot Auto rồi mới bị di chuyển, vẫn đúng DOM nhưng sai
     // ý nghĩa ngữ nghĩa (bảng "thuộc" Auto lúc ghi). Trả về trước cho rõ ràng.
-    autoReturnBlocks();
-    autoReturnTable();
+    autoReturnManual();
     // Trả dropdown voice về đúng vị trí gốc trong tab Voice Gen — autoSaveState()
     // ở trên đã đọc xong voiceId nên trả về sau không mất dữ liệu gì.
     autoReturnVoiceDrop();
@@ -5394,19 +5359,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   // + Row / Xoá bảng — thao tác trực tiếp trên #sacBody đã mượn, dùng lại
   // đúng createRow() của Manual, không fork logic tạo dòng.
-  var sacAutoAddRowBtn = $('sacAutoAddRow');
-  if (sacAutoAddRowBtn) sacAutoAddRowBtn.addEventListener('click', function () { createRow(); });
-
-  var sacAutoClearRowsBtn = $('sacAutoClearRows');
-  if (sacAutoClearRowsBtn) sacAutoClearRowsBtn.addEventListener('click', function () {
-    $('sacBody').innerHTML = '';
-    rowSeq = 0;
-    createRow(); createRow(); createRow();
-    // Xoá tường minh trong job — autoCaptureRows() cố ý không ghi rỗng đè lên
-    // script đang có, nên phải nói rõ "lần này là người dùng muốn xoá".
-    autoSet.jobs[autoActiveJob].rows = [];
-    autoSaveState();
-  });
   // Gear button — mở/đóng overlay cấu hình theo project (Sản phẩm/CO/Editor/Bin).
   // UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể z-index/thứ tự DOM — một
   // backdrop mờ không che được chữ trong bảng script phía sau. Cách duy nhất là
@@ -8955,7 +8907,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (voiceId) vgSetVoice(voiceId);
   };
   window.VoiceGenGetVoiceId = function() {
-    return vgCurrentVoiceId || '';
+    // Nhãn #vgVoiceDropLabel có chữ SẴN trong HTML ("Rachel · female · narrator"),
+    // nên trang Auto thấy như đã chọn giọng trong khi vgCurrentVoiceId vẫn rỗng
+    // (người dùng chưa bấm chọn lần nào) → báo "chưa chọn voice". Lùi về
+    // select.value, rồi về option đang selected của select.
+    if (vgCurrentVoiceId) return vgCurrentVoiceId;
+    var sel = els.voiceSelect;
+    if (sel && sel.value) return sel.value;
+    if (sel && sel.options && sel.options.length) {
+      var o = sel.options[sel.selectedIndex >= 0 ? sel.selectedIndex : 0];
+      if (o && o.value) return o.value;
+    }
+    return '';
   };
 
   // ── Voice Create (Clone + Design) ────────────────────────────────────────

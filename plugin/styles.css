@@ -4264,7 +4264,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoTab.is-active { background: #7c3aed; color: #fff; border-color: #a78bfa; }
 /* Slot the real Manual table is borrowed into — must grow to fill the
    remaining vertical space or the table collapses to zero height. */
-.sac-autoTableSlot { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; }
+.sac-autoManualSlot { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }
+/* Panel Manual được mượn vào slot: bỏ padding riêng của nó để không thụt hai lần. */
+.sac-autoManualSlot .sac-panel { padding: 0; }
 .sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
 .sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
 .sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: #94a3b8; min-height: 16px; }

@@ -1135,15 +1135,11 @@
 
         <div id="sacAutoPreview" class="sac-autoPreview"></div>
 
-        <div id="sacAutoTableSlot" class="sac-autoTableSlot"></div>
-
-        <div class="sac-autoTableFooter">
-          <div id="sacAutoAddRow" class="sac-nsf2-iconBtn" role="button">+ Row</div>
-          <div id="sacAutoClearRows" class="sac-nsf2-iconBtn" role="button">Xoá bảng</div>
-        </div>
-
-        <!-- Khối Blocks của Manual được MƯỢN vào đây lúc chạy (autoBorrowBlocks) -->
-        <div id="sacAutoBlockSlot" class="sac-autoBlockSlot"></div>
+        <!-- BÊ NGUYÊN panel Manual vào đây lúc chạy (autoBorrowManual).
+             Trước đây mượn từng mảnh (bảng / blocks / voice panel) — lần nào cũng
+             thiếu một thứ và sinh lỗi mới. Mượn cả panel thì Parse AI, bảng,
+             Validate, Blocks, voice panel, cut panel chạy y như ở tab Manual. -->
+        <div id="sacAutoManualSlot" class="sac-autoManualSlot"></div>
       </div>
 
       <div id="sacAutoStatus" class="sac-autoStatus"></div>
