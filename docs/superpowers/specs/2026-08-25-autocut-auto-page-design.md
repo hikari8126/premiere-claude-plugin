@@ -25,6 +25,8 @@ Người dùng chỉ cần có mặt ở hai điểm: khi validate lỗi, và kh
 - Không sửa workflow Autocut hiện tại — trang mới là overlay tách biệt.
 - Không tự dò số bộ (đã loại: rủi ro ghi đè / nhảy số). Người dùng nhập số bộ.
 - Không hỗ trợ số lượng video khác 3 trong bản này.
+- Không dùng AI để suy mẫu tên sequence (đã loại: tên deliverable cần chính xác
+  tuyệt đối, mà thành phần lại cố định theo project → điền một lần là đủ).
 - Không chạy song song các job (tránh rate limit ElevenLabs).
 - Không điều khiển từ Claude CLI / terminal (đã loại ở bước brainstorm).
 
@@ -64,22 +66,57 @@ nếu không sẽ mất tính năng tách timestamp.
 Lợi ích của TSV: xác định, không tốn token, không cần bước preview để soát AI →
 pipeline chạy liền mạch hơn.
 
+## Cấu hình theo project (điền một lần)
+
+Tên sequence là **tên deliverable giao cho CO**, nên phải chính xác tuyệt đối. Các
+thành phần của nó cố định theo project — chỉ `{bộ}.{idx}` đổi mỗi lần chạy, mà số đó
+đã nhập ở header. Vì vậy **không dùng AI** để đặt tên: điền một lần rồi nhớ theo
+project (localStorage khoá theo tên/GUID project).
+
+Ví dụ tên thật: `SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]`
+
+```
+SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]
+└ sản phẩm ┘ └vid{bộ}.{idx}┘ └c.{CO}─┘ └─{Editor}─┘
+```
+
+Ngoặc vuông là ký tự thật; có dấu cách giữa các nhóm; `c.` là tiền tố cố định trước
+tên CO.
+
+| Trường cấu hình | Ví dụ |
+|---|---|
+| Sản phẩm | `SonaShape` |
+| CO | `ha.ttdo` |
+| Editor | `hoang.vietnguyen` |
+| Mẫu tên sequence | `{sp} vid{bộ}.{idx} [c.{CO}] [{Editor}]` |
+| Bin sequence | `Sequence / FB / {bộ}x` |
+| Bin voice | `voice over / {bộ}x` |
+
+`FB` nằm trong mẫu sửa được, **không hard-code** — chạy nền tảng khác chỉ cần sửa
+cấu hình, không sửa code.
+
 ## Suy ra tên và đường dẫn
 
-Từ số bộ `30`:
+Từ số bộ `31` với cấu hình ví dụ trên:
 
 | Thứ | Giá trị |
 |---|---|
-| Sequence | `30.0`, `30.1`, `30.2` |
-| File voice | `<gốc sản phẩm>/…/voice over/30x/30.0.mp3` |
-| Bin project | `voice over` → `30x` |
+| Sequence | `SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]` (và `.1`, `.2`) |
+| Bin sequence | `Sequence / FB / 31x` |
+| File voice | `<gốc sản phẩm>/…/voice over/31x/31.0.mp3` |
+| Bin voice | `voice over / 31x` |
 
-**Gốc sản phẩm:** suy ra từ vị trí file `.prproj` của project đang mở.
+**Đặt sequence vào bin:** dùng `ppGetOrCreateBin` (`plugin/main.js:2673`) — hàm này
+**đã** hỗ trợ đường dẫn lồng nhiều cấp với dấu phân cách `' / '` và tự tạo cấp thiếu.
+Luồng: tạo sequence → lấy `projectItem` → `ppMoveToBin` vào `Sequence / FB / 31x`.
+Không cần code mới cho phần lồng bin.
+
+**Gốc sản phẩm (trên đĩa):** suy ra từ vị trí file `.prproj` của project đang mở.
 Xem phần Rủi ro — cần dự phòng.
 
 **Thư mục "voice over":** dò theo biến thể `voice over` / `voiceover` / `vo`
 (cùng quy tắc với logic bin sẵn có ở `plugin/main.js:2671`); không thấy thì tạo mới.
-Thư mục `30x` không có thì tạo.
+Thư mục `31x` không có thì tạo.
 
 ## Thực thi: ba chặng, gom điểm dừng
 
@@ -100,7 +137,8 @@ Với từng job: `normalize-script` (`plugin/main.js:4401`) → gen voice Eleve
 Nếu không tick bỏ qua: hiện player ngay trên trang Auto — mỗi tab một player cho
 voice của job đó — duyệt từng cái, gen lại cái nào chưa vừa ý. Không chuyển sang tab
 Voice Gen (giữ người dùng ở một chỗ). Sau khi duyệt (hoặc bỏ qua): với từng job → align voice (`sacAlignVoice`) →
-`sacRunAutoCut('new')` với tên + ratio đã suy ra (`plugin/main.js:5445`).
+`sacRunAutoCut('new')` với tên + ratio đã suy ra (`plugin/main.js:5445`) → chuyển
+sequence vừa tạo vào bin `Sequence / FB / {bộ}x`.
 Cuối chặng: thông báo "Bộ 30 xong".
 
 ## Thông báo
@@ -114,6 +152,15 @@ Bắn thông báo tại: validate có lỗi · voice xong chờ duyệt · cả 
 ## Mô hình dữ liệu
 
 ```
+projectConfig = {        // lưu theo project, điền một lần
+  product,               // 'SonaShape'
+  co,                    // 'ha.ttdo'
+  editor,                // 'hoang.vietnguyen'
+  seqNameTpl,            // '{sp} vid{bộ}.{idx} [c.{CO}] [{Editor}]'
+  seqBinTpl,             // 'Sequence / FB / {bộ}x'
+  voiceBinTpl,           // 'voice over / {bộ}x'
+}
+
 autoSet = {
   setNumber,            // 30
   defaultVoiceId,
@@ -127,7 +174,7 @@ autoSet = {
     state,              // idle | validated | voiced | built | error
     error,
     voicePath,
-    seqName,            // '30.0'
+    seqName,            // 'SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]'
   } × 3 ]
 }
 ```
@@ -168,7 +215,10 @@ phải chuyển ngữ cảnh.
 - TSV có dòng nhiều timestamp → `expandRows` tách đúng, khớp kết quả của manual paste.
 - TSV có ô source merge → kế thừa source đúng.
 - Một job thiếu media → 2 job kia vẫn chạy hết, báo cáo đúng job lỗi.
-- Số bộ `30` → sinh đúng `30.0/30.1/30.2` cho cả sequence, file voice, bin.
+- Số bộ `31` + cấu hình project → sinh đúng `SonaShape vid31.0 [c.ha.ttdo]
+  [hoang.vietnguyen]` (giữ nguyên ngoặc vuông, dấu cách, tiền tố `c.`).
+- Sequence mới nằm đúng trong bin `Sequence / FB / 31x`; bin thiếu cấp → tự tạo.
+- File voice vào đúng `voice over/31x/31.0.mp3`.
 - Thư mục "voice over" viết hoa/biến thể → dò được; không có → tạo.
 - Tick bỏ qua nghe thử → chạy một mạch, không chờ.
 - Mở/đóng trang Auto → workflow Autocut cũ vẫn nguyên vẹn.
