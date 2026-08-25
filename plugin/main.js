@@ -5260,6 +5260,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoManualSnapshot.rows.forEach(function (c) {
         createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
       });
+      // autoReadTableRows() bỏ dòng trống hoàn toàn, nên bảng Manual chưa nhập gì
+      // sẽ chụp ra mảng rỗng → dựng lại 0 dòng, bảng không còn cell nào để paste.
+      // Dựng lại 3 dòng rỗng đúng như trạng thái ban đầu.
+      if (!autoManualSnapshot.rows.length) { createRow(); createRow(); createRow(); }
       parsedBlocks = autoManualSnapshot.parsedBlocks;
       sacValidatePassed = autoManualSnapshot.sacValidatePassed;
       autoManualSnapshot = null;
