@@ -4207,12 +4207,10 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .vcx-range { width: 100%; }
 
 /* ── AUTO PAGE ── */
-.sac-autoPage {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--surface);
-  display: flex; flex-direction: column; gap: 8px; padding: 10px;
-}
-.sac-autoPage[hidden] { display: none; }
+/* .sac-autoPage is applied together with .sac-panel, which already provides
+   the flex/min-height/overflow shape shared by all method panels — this
+   class only adds the gap between the header/scroll/run rows. */
+.sac-autoPage { gap: 8px; }
 .sac-autoScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; }
 .sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; }

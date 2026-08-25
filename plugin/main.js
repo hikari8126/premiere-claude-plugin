@@ -2972,6 +2972,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // ── Method switching ────────────────────────────────────────────────────
+  var sacActiveMethod = 'manual';
   document.querySelectorAll('.sac-methodBtn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
@@ -2979,8 +2980,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       });
       btn.classList.add('is-active');
       var method = btn.dataset.method;
+      var prevMethod = sacActiveMethod;
       $('sacPanelManual').style.display     = (method === 'manual')     ? 'flex' : 'none';
       $('sacPanelScreenshot').style.display = (method === 'screenshot') ? 'flex' : 'none';
+      $('sacPanelAuto').style.display       = (method === 'auto')       ? 'flex' : 'none';
+      if (method === 'auto' && prevMethod !== 'auto') {
+        autoOpen();
+      } else if (method !== 'auto' && prevMethod === 'auto') {
+        autoClose();
+      }
+      sacActiveMethod = method;
     });
   });
 
@@ -5048,9 +5057,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       parsedBlocks: parsedBlocks,
       sacValidatePassed: sacValidatePassed,
     };
-    var app = document.querySelector('#tab-autocut .sac-app');
-    if (app) app.style.display = 'none';
-    $('sacAutoPage').hidden = false;
     // Nạp state (gồm voiceId đã lưu) TRƯỚC khi build danh sách voice — nếu đảo
     // ngược thứ tự, autoFillVoices() sẽ set sel.value theo autoSet mặc định
     // (voiceId rỗng) vì autoLoadState() chưa kịp chạy để khôi phục từ localStorage.
@@ -5062,9 +5068,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   function autoClose() {
     autoSaveState();
-    $('sacAutoPage').hidden = true;
-    var app = document.querySelector('#tab-autocut .sac-app');
-    if (app) app.style.display = '';
     if (window.releaseKeyboard) window.releaseKeyboard();
     // Trả lại bảng thủ công đúng như lúc mở trang Auto — nếu không, bảng/
     // parsedBlocks/sacValidatePassed sẽ còn giữ dữ liệu của job cuối cùng đã
@@ -5169,10 +5172,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return expandRows(parsed);
   }
 
-  var sacAutoBtn = $('sacAutoBtn');
-  if (sacAutoBtn) sacAutoBtn.addEventListener('click', autoOpen);
   var sacAutoCloseBtn = $('sacAutoClose');
-  if (sacAutoCloseBtn) sacAutoCloseBtn.addEventListener('click', autoClose);
+  if (sacAutoCloseBtn) sacAutoCloseBtn.addEventListener('click', function () {
+    var manualBtn = document.querySelector('.sac-methodBtn[data-method="manual"]');
+    if (manualBtn) manualBtn.click();
+  });
 
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
