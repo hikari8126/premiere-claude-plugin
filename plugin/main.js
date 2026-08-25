@@ -5215,6 +5215,100 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return jobs.filter(function (j) { return j.state === 'validated'; });
   }
 
+  // project.path là STRING đồng bộ (đã xác minh trên Premiere 25.6.5).
+  async function autoProjectPath() {
+    var proj = await getActiveProject();
+    var p = String(proj.path || '');
+    if (!p) throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
+    return p;
+  }
+
+  // Nhờ bridge tạo/giải quyết thư mục lưu voice (UXP bị sandbox nên không tự làm).
+  async function autoVoiceDir(subdir) {
+    var r = await fetch(BRIDGE_URL + '/autoset/voicedir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath: await autoProjectPath(), subdir: subdir }),
+    }).then(function (x) { return x.json(); });
+    if (!r || !r.ok) throw new Error((r && r.error) || 'không tạo được thư mục voice');
+    return r.dir;
+  }
+
+  // lastVariations thuộc IIFE VoiceGen → đọc qua accessor.
+  function autoLastVariation() {
+    if (typeof window.VoiceGenGetLastVariations !== 'function') return null;
+    var v = window.VoiceGenGetLastVariations();
+    return (v && v[0]) || null;
+  }
+
+  // Chờ Voice Gen đẩy ra bản mới. Không có callback nên phải poll.
+  function autoWaitVariation() {
+    var b0 = autoLastVariation();
+    var before = (b0 && b0.audioPath) || '';
+    return new Promise(function (resolve, reject) {
+      var waited = 0;
+      var t = setInterval(function () {
+        waited += 500;
+        var v = autoLastVariation();
+        if (v && v.audioPath && v.audioPath !== before) { clearInterval(t); resolve(v); return; }
+        if (waited > 180000) { clearInterval(t); reject(new Error('gen voice quá 3 phút')); }
+      }, 500);
+    });
+  }
+
+  // Import file voice vào bin của bộ. importFiles KHÔNG trả về ProjectItem nên phải
+  // tìm lại clip theo tên rồi mới chuyển bin.
+  async function autoImportVoice(filePath, fileName, binPath) {
+    var proj = await getActiveProject();
+    if (typeof proj.importFiles !== 'function') throw new Error('không có API importFiles');
+    await proj.importFiles([filePath]);
+    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+    var all = await sacCollectBinItems(root);
+    var hit = all.filter(function (it) { return it.name === fileName; })[0];
+    if (!hit) throw new Error('import xong nhưng không thấy "' + fileName + '" trong project');
+    // Thứ tự tham số: (item, proj, binName) — sai thứ tự fail ÂM THẦM.
+    var mv = await ppMoveToBin(hit.item, proj, binPath);
+    if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển voice vào bin thất bại');
+  }
+
+  // Chặng 2: gen voice → lưu đúng path → import vào bin. Tuần tự để không chạm
+  // rate limit ElevenLabs.
+  async function autoStage2(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i];
+      autoStatus('⏳ Gen voice .' + job.idx + '…');
+      try {
+        // HOÃN normalize-script: endpoint đó cần {provider, model, apiKey} (cấu hình
+        // AI mà trang Auto không thu thập) và gắn với cancel-token của luồng tương
+        // tác. Gen voice không cần nó. Gửi thẳng lời đọc như khi người dùng tự gõ.
+        var scriptText = (job.rows || []).map(function (r) { return r[0]; }).filter(Boolean).join('\n');
+        if (!scriptText) throw new Error('không có lời đọc');
+
+        window.VoiceGenPushScript(scriptText, autoSet.voiceId, true, false);
+        var got = await autoWaitVariation();
+
+        var dir = await autoVoiceDir(job.voiceSubdir);
+        var mv = await fetch(BRIDGE_URL + '/tts/move', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath: got.audioPath, targetDir: dir,
+                                 targetName: job.voiceFile, noOverwrite: true }),
+        }).then(function (r) { return r.json(); });
+        if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'move file thất bại');
+
+        job.voicePath = mv.targetPath;
+        await autoImportVoice(job.voicePath, mv.name || job.voiceFile, job.voiceBin);
+        job.state = 'voiced';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+    }
+    var ok = jobs.filter(function (j) { return j.state === 'voiced'; });
+    autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong');
+    autoNotify('Voice xong', ok.length + '/' + jobs.length + ' bản — chờ duyệt');
+    return ok;
+  }
+
   var sacAutoRunBtn = $('sacAutoRun');
   if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
     autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;
@@ -5222,7 +5316,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try {
       var jobs = await autoFetchNames();
       var ok = await autoStage1(jobs);
-      autoStatus('✓ ' + ok.length + '/3 job sẵn sàng gen voice');
+      if (!ok.length) return;
+      var voiced = await autoStage2(ok);
+      if (!voiced.length) return;
     } catch (e) {
       autoStatus('✗ ' + e.message);
       autoNotify('Autocut — lỗi', e.message);
@@ -8438,6 +8534,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Expose voice list so Claude chat can inject it into prompts
   window.VoiceGenGetVoices = function() {
     return VG_VOICES_DATA.slice(); // return a copy
+  };
+
+  window.VoiceGenGetLastVariations = function() {
+    return (lastVariations || []).slice(); // trả bản copy
   };
 
   // ── Voice Create (Clone + Design) ────────────────────────────────────────
