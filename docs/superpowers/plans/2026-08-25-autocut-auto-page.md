@@ -733,10 +733,13 @@ Bảng script, `parsedBlocks` và state voice là biến toàn cục dùng chung
 - [ ] **Step 1: Xác nhận tên biến toàn cục thật trước khi viết**
 
 ```bash
-grep -n "var parsedBlocks\|var sacVP\b\|rowSeq = 0" plugin/main.js | head
+grep -n "var rowSeq\|var parsedBlocks\|var sacVP" plugin/main.js
+grep -n "row.className = " plugin/main.js | head -3
 ```
 
-Ghi lại tên chính xác. Nếu khác `parsedBlocks` / `sacVP` / `rowSeq`, dùng tên thật ở Step 2 — **không đoán**.
+Đã xác minh (2026-08-25): `rowSeq` (2870), `parsedBlocks` (2871), `sacVP` (4311),
+class row là `sac-row`, class ô là `sac-col-text` / `sac-col-time` / `sac-col-src`.
+Nếu khác thì sửa Step 2 cho khớp — **không đoán**.
 
 - [ ] **Step 2: Viết lớp đổi ngữ cảnh**
 
@@ -747,16 +750,20 @@ Thêm vào khối `// ── AUTO PAGE ──`:
 // Lớp này là chỗ DUY NHẤT được nạp/lưu state đó cho từng job.
 var sacJobContext = {
   // Lưu state hiện tại của bảng vào job.
+  // Đọc theo CLASS ngữ nghĩa, không theo chỉ số: sacApplyColOrder xáo thứ tự DOM
+  // của các ô theo cột đang hiển thị, nên đọc theo index sẽ lệch cột.
   save: function (job) {
-    job._rowsSnapshot = [];
+    var rows = [];
     document.querySelectorAll('#sacBody .sac-row').forEach(function (row) {
-      var inps = row.querySelectorAll('input');
-      var cells = ['', '', ''];
-      for (var d = 0; d < 3 && d < inps.length; d++) {
-        cells[SAC_SEM[SAC_COL_ORDER[d]]] = inps[d].value || '';
-      }
-      job._rowsSnapshot.push(cells);
+      var g = function (cls) {
+        var el = row.querySelector('.' + cls + ' input');
+        return el ? (el.value || '') : '';
+      };
+      rows.push([g('sac-col-text'), g('sac-col-time'), g('sac-col-src')]);
     });
+    // Ghi lại vào job.rows (không phải biến riêng) — validate có thể đã chuẩn hoá
+    // nội dung ô, và load() đọc chính job.rows.
+    if (rows.length) job.rows = rows;
     job._blocks = parsedBlocks;
   },
   // Nạp rows của job vào bảng, dọn state của job trước.
