@@ -5107,7 +5107,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var el = row.querySelector('.' + cls + ' input');
         return el ? (el.value || '') : '';
       };
-      rows.push([g('sac-col-text'), g('sac-col-time'), g('sac-col-src')]);
+      var cells = [g('sac-col-text'), g('sac-col-time'), g('sac-col-src')];
+      // BỎ dòng trống hoàn toàn: createRow() luôn dựng sẵn 3 dòng rỗng, nếu giữ
+      // thì job.rows.length = 3 dù không có chữ nào → phép kiểm "chưa có script"
+      // sai, và validate sau đó báo lỗi khó hiểu.
+      if ((cells[0] + cells[1] + cells[2]).trim()) rows.push(cells);
     });
     return rows;
   }
@@ -5128,6 +5132,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
     autoBorrowVoiceDrop();
     autoLoadState();
+    // Nếu người dùng vừa nhập script ở bảng Manual rồi bấm sang Auto, video đang
+    // chọn còn rỗng → MANG script đó sang. Không làm vậy thì bảng bị xoá trắng để
+    // nạp rows rỗng của job, trông như plugin ăn mất việc đang làm (script vẫn nằm
+    // trong autoManualSnapshot nhưng người dùng không thể biết điều đó).
+    var snapRows = (autoManualSnapshot && autoManualSnapshot.rows) || [];
+    if (snapRows.length && !(autoSet.jobs[autoActiveJob].rows || []).length) {
+      autoSet.jobs[autoActiveJob].rows = snapRows;
+      autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
+      autoStatus('↪ Đã mang script từ bảng Manual sang video .' + autoActiveJob
+               + ' — bảng Manual vẫn được giữ, trả lại khi bạn thoát trang Auto.');
+    }
     if (window.claimKeyboard) window.claimKeyboard();
     autoRenderPreview();
   }
@@ -5360,7 +5375,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         job.rows    = autoSet.jobs[job.idx].rows || [];
         job.voiceId = autoSet.jobs[job.idx].voiceId || '';
         job.ratio   = autoSet.jobs[job.idx].ratio || '1080x1920';
-        if (!job.rows.length) throw new Error('chưa có script');
+        if (!job.rows.length) throw new Error('chưa có script — bấm tab .' + job.idx + ' rồi dán script vào bảng');
         sacJobContext.load(job);
         // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
         // skipVoiceAsk BẮT BUỘC: nếu không, sacAskGenVoice() sẽ chặn pipeline 3 lần.
@@ -5582,6 +5597,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
     autoSet.jobs[autoActiveJob].rows = autoReadTableRows();
     autoSaveState();
+    // Chặn sớm: không chạy pipeline (và không chạm vào bảng) khi chưa có gì.
+    var filled = autoSet.jobs.filter(function (j) { return (j.rows || []).length; });
+    if (!filled.length) {
+      autoStatus('✗ Cả 3 video chưa có script — dán script vào bảng ở từng tab .0 / .1 / .2.');
+      return;
+    }
     autoRunning = true;
     sacAutoRunBtn.style.opacity = '0.5';
     try {
