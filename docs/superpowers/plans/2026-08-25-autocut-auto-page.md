@@ -1135,8 +1135,8 @@ async function autoStage3(jobs) {
       sacJobContext.load(job);
       // Gọi sacAlignVoice TRỰC TIẾP (cùng IIFE) thay vì window.AutocutPushVoice —
       // hàm kia còn click sang tab/panel, gây nhiễu overlay trang Auto.
-      sacAlignVoice(job.voicePath);
-      await autoWaitAlign();
+      sacAlignVoice(job.voicePath);        // không await: hàm này báo xong qua cờ
+      await autoWaitAlign(job.voicePath);
 
       $('sacNewSeqName').value  = job.seqName;
       $('sacNewSeqRatio').value = autoSet.ratio;
@@ -1155,16 +1155,28 @@ async function autoStage3(jobs) {
   autoNotify('Autocut xong', msg);
 }
 
-// Chờ sacAlignVoice xong. Dò qua badge thời lượng voice mà align điền vào.
-function autoWaitAlign() {
+// Chờ sacAlignVoice xong. Dùng CỜ THẬT (sacVoiceBusy/sacVoicePath), không đọc
+// chữ trong #sacVoiceInfo — text của job trước còn nằm đó nên job thứ 2 sẽ
+// tưởng xong ngay.
+// Bẫy: nhánh "chưa có script" (main.js:4493) cũng tắt busy + gán sacVoicePath,
+// tức GIẢ DẠNG thành công → sau khi chờ phải kiểm tra align có sinh mốc voice.
+function autoWaitAlign(audioPath) {
   return new Promise(function (resolve, reject) {
     var waited = 0;
     var t = setInterval(function () {
-      waited += 500;
-      var info = $('sacVoiceInfo');
-      if (info && !/Chưa có voice/.test(info.textContent || '')) { clearInterval(t); resolve(); return; }
+      waited += 300;
+      if (!sacVoiceBusy && sacVoicePath === audioPath) {
+        clearInterval(t);
+        var hasVoice = (parsedBlocks || []).some(function (b) { return b.voiceStart != null; });
+        if (!hasVoice) {
+          var info = $('sacVoiceInfo');
+          return reject(new Error('align không khớp voice: ' +
+            ((info && info.textContent) || 'không rõ')));
+        }
+        return resolve();
+      }
       if (waited > 120000) { clearInterval(t); reject(new Error('align voice quá 2 phút')); }
-    }, 500);
+    }, 300);
   });
 }
 
