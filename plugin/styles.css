@@ -4266,6 +4266,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    remaining vertical space or the table collapses to zero height. */
 .sac-autoTableSlot { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; }
 .sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
+.sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
 .sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: #94a3b8; min-height: 16px; }
 .sac-autoRun { flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px; background: #7c3aed; color: #fff; font-size: 12px; cursor: pointer; }
 /* ── /AUTO PAGE ── */

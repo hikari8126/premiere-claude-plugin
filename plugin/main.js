@@ -4999,6 +4999,51 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Mượn dropdown voice có tìm kiếm của tab Voice Gen (#vgVoiceDrop) vào slot
   // của Auto — cùng pattern với autoBorrowTable/autoReturnTable, để không bao
   // giờ fork lại UI/logic của nó (fix bug ở đó tự động áp dụng ở đây).
+  var autoBlockHome = null;      // vị trí gốc của #sacBlockSection trong panel Manual
+  var autoPanelDisp = null;      // display gốc của voice/cut panel để trả lại
+
+  // Mượn khối Blocks của Manual sang trang Auto để thấy kết quả khớp source.
+  // ẨN voice panel + cut panel: đó là điều khiển của luồng Manual, pipeline Auto
+  // tự lo phần voice/dựng, để lộ ra sẽ cho bấm những thứ xung đột nhau.
+  function autoBorrowBlocks() {
+    var sec = $('sacBlockSection'), slot = $('sacAutoBlockSlot');
+    if (!sec || !slot || autoBlockHome) return;
+    autoBlockHome = { parent: sec.parentNode, next: sec.nextSibling };
+    var vp = $('sacVoicePanel'), cp = $('sacCutPanel');
+    autoPanelDisp = { voice: vp ? vp.style.display : null, cut: cp ? cp.style.display : null };
+    if (vp) vp.style.display = 'none';
+    if (cp) cp.style.display = 'none';
+    slot.appendChild(sec);
+  }
+  function autoReturnBlocks() {
+    if (!autoBlockHome) return;
+    var sec = $('sacBlockSection');
+    autoBlockHome.parent.insertBefore(sec, autoBlockHome.next);
+    autoBlockHome = null;
+    if (autoPanelDisp) {
+      var vp = $('sacVoicePanel'), cp = $('sacCutPanel');
+      if (vp) vp.style.display = autoPanelDisp.voice || '';
+      if (cp) cp.style.display = autoPanelDisp.cut || '';
+      autoPanelDisp = null;
+    }
+  }
+
+  // Dựng lại danh sách block theo job đang chọn — blocks lưu trong job._blocks
+  // sau khi validate. Không làm vậy thì bảng block hiện kết quả của video khác.
+  function autoSyncBlocks(job) {
+    var sec = $('sacBlockSection');
+    if (!sec) return;
+    var blocks = (job && job._blocks) || [];
+    if (blocks.length) {
+      renderBlocks(blocks);
+      sec.style.display = 'flex';
+    } else {
+      var l = $('sacBlockList'); if (l) l.innerHTML = '';
+      var c = $('sacBlockCount'); if (c) c.textContent = '';
+      sec.style.display = 'none';
+    }
+  }
+
   var autoVoiceDropHome = null;
   function autoBorrowVoiceDrop() {
     var drop = $('vgVoiceDrop');
@@ -5074,11 +5119,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   function autoRenderTab() {
+    autoLogRows('renderTab');
     document.querySelectorAll('.sac-autoTab').forEach(function (t) {
       t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
     });
     autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
     autoLoadJobVoiceRatio(autoSet.jobs[autoActiveJob]);
+    autoSyncBlocks(autoSet.jobs[autoActiveJob]);
   }
 
   // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
@@ -5086,14 +5133,35 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // có. Bảng đọc ra rỗng trong khi job đang có script gần như luôn là lỗi thời
   // điểm (bảng chưa mượn về, vừa re-render, đang bị ẩn), không phải người dùng
   // cố ý xoá. Muốn xoá thật thì bấm "Xoá bảng" (nó gán [] tường minh).
+  // ── LOG TẠM (gỡ sau khi tìm ra nguyên nhân mất script) ──
+  // Ghi mọi lần rows của job bị đọc/ghi/dựng lại về bridge để dựng lại đúng
+  // trình tự thao tác. Xem: bridge/sac-debug.log, tag AUTOROWS.
+  function autoLogRows(where, extra) {
+    try {
+      var counts = (autoSet && autoSet.jobs || []).map(function (j) { return (j.rows || []).length; });
+      var tableRows = 0;
+      try { tableRows = document.querySelectorAll('#sacBody .sac-row').length; } catch (e) {}
+      fetch(BRIDGE_URL + '/sac/log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: 'AUTOROWS', data: {
+          where: where, activeJob: autoActiveJob, jobRowCounts: counts,
+          tableRowsInDom: tableRows, extra: extra || null,
+        }}),
+      });
+    } catch (e) {}
+  }
+
   function autoCaptureRows(job) {
     if (!job) return;
     var rows = autoReadTableRows();
-    if (rows.length || !(job.rows || []).length) job.rows = rows;
+    var wrote = (rows.length || !(job.rows || []).length);
+    autoLogRows('captureRows', { read: rows.length, had: (job.rows || []).length, wrote: wrote });
+    if (wrote) job.rows = rows;
   }
 
   function autoLoadJobRowsIntoTable(job) {
     var body = $('sacBody');
+    autoLogRows('loadRowsIntoTable', { jobRows: (job && job.rows || []).length, bodyFound: !!body });
     if (!body) return;
     body.innerHTML = '';
     rowSeq = 0;
@@ -5112,19 +5180,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // trả lại đúng state của workflow thủ công mà KHÔNG đụng vào sacJobContext.
   function autoReadTableRows() {
     var rows = [];
-    document.querySelectorAll('#sacBody .sac-row').forEach(function (row) {
-      var g = function (cls) {
-        var el = row.querySelector('.' + cls + ' input');
-        return el ? (el.value || '') : '';
-      };
-      var cells = [g('sac-col-text'), g('sac-col-time'), g('sac-col-src')];
-      // BỎ dòng trống hoàn toàn: createRow() luôn dựng sẵn 3 dòng rỗng, nếu giữ
-      // thì job.rows.length = 3 dù không có chữ nào → phép kiểm "chưa có script"
-      // sai, và validate sau đó báo lỗi khó hiểu.
+    // ĐỌC BẰNG sacInputBySem — KHÔNG dùng selector kiểu '.sac-col-text input'.
+    // Selector đó không khớp trong UXP: log thực tế cho thấy DOM có 14 dòng mà
+    // đọc ra 0 → job.rows bị ghi rỗng → mất sạch script. Chỉ số cột nằm trên
+    // chính input (dataset.colIdx), đó là cách parseBlocks() vẫn dùng.
+    Array.prototype.forEach.call($('sacBody').querySelectorAll('.sac-row'), function (row) {
+      var it = sacInputBySem(row, 0), im = sacInputBySem(row, 1), is = sacInputBySem(row, 2);
+      var cells = [it ? (it.value || '') : '', im ? (im.value || '') : '', is ? (is.value || '') : ''];
+      // Bỏ dòng trống hoàn toàn (createRow() luôn dựng sẵn 3 dòng rỗng).
       if ((cells[0] + cells[1] + cells[2]).trim()) rows.push(cells);
     });
     return rows;
   }
+
 
   function autoOpen() {
     // Chụp lại state bảng thủ công TRƯỚC khi bất kỳ bước nào của Auto page có thể
@@ -5141,7 +5209,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
     // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
     autoBorrowVoiceDrop();
+    autoLogRows('open:afterBorrow');
     autoLoadState();
+    autoLogRows('open:afterLoadState');
     // Nếu người dùng vừa nhập script ở bảng Manual rồi bấm sang Auto, video đang
     // chọn còn rỗng → MANG script đó sang. Không làm vậy thì bảng bị xoá trắng để
     // nạp rows rỗng của job, trông như plugin ăn mất việc đang làm (script vẫn nằm
@@ -5160,6 +5230,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoClose() {
     // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
     // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
+    autoLogRows('close:begin');
     autoCaptureRows(autoSet.jobs[autoActiveJob]);
     autoSaveState();
     if (window.releaseKeyboard) window.releaseKeyboard();
@@ -5167,6 +5238,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // công vào nó — nếu đảo thứ tự, rows thủ công sẽ được ghi vào bảng trong
     // khi nó còn nằm ở slot Auto rồi mới bị di chuyển, vẫn đúng DOM nhưng sai
     // ý nghĩa ngữ nghĩa (bảng "thuộc" Auto lúc ghi). Trả về trước cho rõ ràng.
+    autoReturnBlocks();
     autoReturnTable();
     // Trả dropdown voice về đúng vị trí gốc trong tab Voice Gen — autoSaveState()
     // ở trên đã đọc xong voiceId nên trả về sau không mất dữ liệu gì.
@@ -5279,18 +5351,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Đọc theo CLASS ngữ nghĩa, không theo chỉ số: sacApplyColOrder xáo thứ tự DOM
     // của các ô theo cột đang hiển thị, nên đọc theo index sẽ lệch cột.
     save: function (job) {
-      var rows = [];
-      document.querySelectorAll('#sacBody .sac-row').forEach(function (row) {
-        var g = function (cls) {
-          var el = row.querySelector('.' + cls + ' input');
-          return el ? (el.value || '') : '';
-        };
-        rows.push([g('sac-col-text'), g('sac-col-time'), g('sac-col-src')]);
-      });
-      // Ghi lại vào job.rows (không phải biến riêng) — validate có thể đã chuẩn hoá
-      // nội dung ô, và load() đọc chính job.rows.
-      if (rows.length) job.rows = rows;
-      job._blocks = parsedBlocks;
+    // Cùng lý do như autoReadTableRows(): đọc theo dataset.colIdx, không theo
+    // selector class lồng nhau (không khớp trong UXP).
+    var rows = [];
+    Array.prototype.forEach.call($('sacBody').querySelectorAll('.sac-row'), function (row) {
+      var it = sacInputBySem(row, 0), im = sacInputBySem(row, 1), is = sacInputBySem(row, 2);
+      rows.push([it ? (it.value || '') : '', im ? (im.value || '') : '', is ? (is.value || '') : '']);
+    });
+    if (rows.length) job.rows = rows;
+    job._blocks = parsedBlocks;
     },
     // Nạp rows của job vào bảng, dọn state của job trước.
     load: function (job) {
@@ -5312,6 +5381,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
+      autoLogRows('tabClick:begin', { to: Number(t.dataset.job) });
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
       autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
