@@ -1238,37 +1238,52 @@
       <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
     </div>
 
-    <div class="sac-autoCfg">
-      <label class="sac-autoLbl">Sản phẩm <input id="sacAutoProduct" class="sac-autoInp" type="text" /></label>
-      <label class="sac-autoLbl">CO <input id="sacAutoCO" class="sac-autoInp" type="text" /></label>
-      <label class="sac-autoLbl">Editor <input id="sacAutoEditor" class="sac-autoInp" type="text" /></label>
-      <label class="sac-autoLbl">Số bộ <input id="sacAutoSet" class="sac-autoInp" type="text" /></label>
-      <label class="sac-autoLbl">Bin sequence <input id="sacAutoSeqBin" class="sac-autoInp" type="text" /></label>
-      <label class="sac-autoLbl">Ratio
-        <select id="sacAutoRatio" class="sac-autoInp">
+    <div class="sac-autoScroll">
+      <div class="sac-autoCfg">
+        <label class="sac-nsf2-label">Sản phẩm</label>
+        <input id="sacAutoProduct" class="sac-nsf2-input" type="text" />
+
+        <label class="sac-nsf2-label">CO</label>
+        <input id="sacAutoCO" class="sac-nsf2-input" type="text" />
+
+        <label class="sac-nsf2-label">Editor</label>
+        <input id="sacAutoEditor" class="sac-nsf2-input" type="text" />
+
+        <label class="sac-nsf2-label">Số bộ</label>
+        <input id="sacAutoSet" class="sac-nsf2-input" type="text" />
+
+        <label class="sac-nsf2-label">Bin sequence</label>
+        <input id="sacAutoSeqBin" class="sac-nsf2-input" type="text" />
+
+        <label class="sac-nsf2-label">Ratio</label>
+        <select id="sacAutoRatio" class="sac-nsf2-select">
           <option value="1080x1920" selected>1080×1920 — 9:16</option>
           <option value="1080x1350">1080×1350 — 4:5</option>
           <option value="1080x1080">1080×1080 — 1:1</option>
           <option value="1920x1080">1920×1080 — 16:9</option>
           <option value="match">Match source clips</option>
         </select>
-      </label>
-      <label class="sac-autoLbl">Voice <select id="sacAutoVoice" class="sac-autoInp"></select></label>
-      <label class="sac-autoChk"><input type="checkbox" id="sacAutoSkipAudition" /> Bỏ qua nghe thử</label>
+
+        <label class="sac-nsf2-label">Voice</label>
+        <select id="sacAutoVoice" class="sac-nsf2-select"></select>
+
+        <label class="sac-cutNoVoiceToggle"><input type="checkbox" id="sacAutoSkipAudition" /> Bỏ qua nghe thử</label>
+      </div>
+
+      <div id="sacAutoPreview" class="sac-autoPreview"></div>
+
+      <div class="sac-autoTabs">
+        <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
+        <div class="sac-autoTab" data-job="1" role="button">.1</div>
+        <div class="sac-autoTab" data-job="2" role="button">.2</div>
+      </div>
+
+      <textarea id="sacAutoTsv" class="sac-autoTsv" spellcheck="false"
+        placeholder="Dán TSV từ Sheets cho video đang chọn (script / time / source)"></textarea>
+
+      <div id="sacAutoStatus" class="sac-autoStatus"></div>
     </div>
 
-    <div id="sacAutoPreview" class="sac-autoPreview"></div>
-
-    <div class="sac-autoTabs">
-      <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
-      <div class="sac-autoTab" data-job="1" role="button">.1</div>
-      <div class="sac-autoTab" data-job="2" role="button">.2</div>
-    </div>
-
-    <textarea id="sacAutoTsv" class="sac-autoTsv" spellcheck="false"
-      placeholder="Dán TSV từ Sheets cho video đang chọn (script / time / source)"></textarea>
-
-    <div id="sacAutoStatus" class="sac-autoStatus"></div>
     <div id="sacAutoRun" class="sac-autoRun" role="button"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
   </div>
 
