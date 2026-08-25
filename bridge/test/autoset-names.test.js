@@ -74,4 +74,20 @@ assert.strictEqual(buildSetNames(cfg, '0', 'mp3', 'Evelyn3')[0].voiceSubdir, '0x
 // 13. biến được dùng 2 lần trong mẫu ({sp}-{sp})
 assert.strictEqual(renderTemplate('{sp}-{sp}', { sp: 'X' }), 'X-X', 'biến dùng 2 lần được thay đúng');
 
+// 14. số bộ dài (>16 chữ số) giữ nguyên byte-for-byte, không rơi vào ký hiệu khoa học
+const outLong = buildSetNames(cfg, '9999999999999999999999', 'mp3', 'V');
+assert.strictEqual(outLong[0].voiceSubdir, '9999999999999999999999x', 'số bộ dài được giữ nguyên');
+
+// 15. tên sequence chứa đầy đủ các chữ số (không rút gọn hay ký hiệu khoa học)
+assert.ok(outLong[0].seqName.includes('vid9999999999999999999999.0'), 'seqName chứa số bộ dài đầy đủ');
+
+// 16. voiceSubdir không chứa ký hiệu khoa học "e+"
+assert.ok(!outLong[0].voiceSubdir.includes('e+'), 'không rơi vào ký hiệu khoa học');
+
+// 17. regression: "031" vẫn normalize thành "31x"
+assert.strictEqual(buildSetNames(cfg, '031', 'mp3', 'V')[0].voiceSubdir, '31x', 'regression 031 → 31x');
+
+// 18. regression: "0" vẫn được giữ lại thành "0x"
+assert.strictEqual(buildSetNames(cfg, '0', 'mp3', 'V')[0].voiceSubdir, '0x', 'regression 0 → 0x');
+
 console.log('OK autoset-names');

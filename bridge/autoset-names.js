@@ -30,8 +30,8 @@ function safeVoiceName(name) {
 function buildSetNames(cfg, setNumber, ext, voiceName) {
   var set = String(setNumber).trim();
   if (!/^\d+$/.test(set)) throw new Error('số bộ không hợp lệ: "' + setNumber + '"');
-  // Bỏ leading zeros: "031" → "31", "0" → "0"
-  set = String(parseInt(set, 10));
+  // Bỏ leading zeros: "031" → "31", "0" → "0" (dùng regex để tránh mất độ chính xác với số dài)
+  set = set.replace(/^0+(?=\d)/, '');
   var e = (ext || 'mp3').replace(/^\./, '');
   var vn = safeVoiceName(voiceName);
 
