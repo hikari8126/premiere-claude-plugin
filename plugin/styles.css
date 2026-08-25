@@ -4218,6 +4218,9 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    around label/field pairs: that pattern overlaps labels and fields in UXP
    even though it renders fine in a regular browser. */
 .sac-autoCfg { flex: 0 0 auto; }
+/* Nhóm cấu hình của RIÊNG video đang chọn: vạch tím bên trái để phân biệt với
+   các thiết lập dùng chung cho cả bộ. */
+.sac-autoVidCfg { flex: 0 0 auto; border-left: 2px solid var(--accent); padding-left: 8px; }
 /* Vùng cuộn BẮT BUỘC: .sac-panel có overflow:hidden, nếu để mọi thứ làm con
    trực tiếp thì panel bị kéo thấp sẽ CẮT nội dung và đẩy nút "Chạy cả bộ" ra
    ngoài khung (đã kiểm chứng ở panel 420px). Header + nút Run ghim ngoài vùng này. */
