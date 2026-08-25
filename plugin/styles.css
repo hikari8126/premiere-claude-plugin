@@ -4223,9 +4223,27 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    ngoài khung (đã kiểm chứng ở panel 420px). Header + nút Run ghim ngoài vùng này. */
 .sac-autoScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .sac-autoPreview { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); line-height: 1.5; white-space: pre-line; word-break: break-word; }
-.sac-autoTabs { flex: 0 0 auto; display: flex; gap: 4px; }
-.sac-autoTab { padding: 3px 12px; border-radius: 4px; background: #1e1b2e; color: #94a3b8; font-size: 12px; cursor: pointer; }
-.sac-autoTab.is-active { background: #7c3aed; color: #fff; }
+/* Hàng "Bộ" + "Video .0/.1/.2" — Bộ chiếm chỗ vừa đủ bên trái, tabs co dãn
+   chiếm phần còn lại; min-width:0 để không đẩy tràn ở panel ~300px. */
+.sac-autoTabRow { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sac-autoSetInline { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.sac-autoSetInline .sac-nsf2-label { margin: 0; white-space: nowrap; }
+.sac-autoSetInput {
+  width: 42px; padding: 6px 4px; text-align: center; font-size: 13px;
+  border-radius: 4px; border: 1px solid var(--border, #3a2f52);
+  background: var(--input-bg, #1e1b2e); color: var(--text);
+}
+.sac-autoSetInput:focus { outline: none; border-color: var(--accent); }
+.sac-autoTabsLabel { flex: 0 0 auto; font-size: 11px; color: #94a3b8; }
+.sac-autoTabs { flex: 1 1 0; min-width: 0; display: flex; gap: 4px; }
+/* Tab to hơn hẳn — vùng chạm rộng, chữ lớn, trạng thái active không thể nhầm. */
+.sac-autoTab {
+  flex: 1 1 0; min-width: 0; text-align: center;
+  padding: 8px 6px; border-radius: 6px; background: #1e1b2e; color: #94a3b8;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  border: 1px solid transparent;
+}
+.sac-autoTab.is-active { background: #7c3aed; color: #fff; border-color: #a78bfa; }
 /* Slot the real Manual table is borrowed into — must grow to fill the
    remaining vertical space or the table collapses to zero height. */
 .sac-autoTableSlot { flex: 1 1 auto; min-height: 160px; display: flex; flex-direction: column; }

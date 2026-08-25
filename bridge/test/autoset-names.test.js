@@ -117,4 +117,30 @@ assert.strictEqual(findVoiceOverDir(['vo', 'Voice Over']), 'vo', 'ứng viên đ
 // 26. findVoiceOverDir: chấp nhận khoảng trắng bao quanh, trả nguyên tên trên đĩa
 assert.strictEqual(findVoiceOverDir([' Voice Over ']), ' Voice Over ', 'giữ nguyên tên có khoảng trắng bao quanh');
 
+// 27. buildSetNames: voiceName dạng string vẫn áp cho cả 3 job (giữ nguyên hành vi cũ)
+const outStr = buildSetNames(cfg, 31, 'mp3', 'Advertising Voice 2');
+assert.strictEqual(outStr[0].voiceFile, '31.0 - Advertising Voice 2.mp3', 'string áp cho job 0');
+assert.strictEqual(outStr[1].voiceFile, '31.1 - Advertising Voice 2.mp3', 'string áp cho job 1');
+assert.strictEqual(outStr[2].voiceFile, '31.2 - Advertising Voice 2.mp3', 'string áp cho job 2');
+
+// 28. buildSetNames: mảng 3 tên → mỗi job dùng đúng voiceNames[idx]
+const outArr = buildSetNames(cfg, 31, 'mp3', ['Advertising Voice 2', 'Evelyn3', 'Audrey - Bustella']);
+assert.strictEqual(outArr[0].voiceFile, '31.0 - Advertising Voice 2.mp3', 'job 0 dùng voiceNames[0]');
+assert.strictEqual(outArr[1].voiceFile, '31.1 - Evelyn3.mp3', 'job 1 dùng voiceNames[1]');
+assert.strictEqual(outArr[2].voiceFile, '31.2 - Audrey - Bustella.mp3', 'job 2 dùng voiceNames[2]');
+
+// 29. buildSetNames: mảng có phần tử rỗng → ném (dùng safeVoiceName cho từng job)
+assert.throws(
+  () => buildSetNames(cfg, 31, 'mp3', ['Advertising Voice 2', '', 'Audrey - Bustella']),
+  /tên voice/i,
+  'phần tử rỗng trong mảng voiceNames bị chặn'
+);
+
+// 30. buildSetNames: mảng ngắn hơn 3 → ném lỗi rõ ràng
+assert.throws(
+  () => buildSetNames(cfg, 31, 'mp3', ['Advertising Voice 2', 'Evelyn3']),
+  /voiceName/i,
+  'mảng voiceNames thiếu phần tử bị chặn với lỗi rõ ràng'
+);
+
 console.log('OK autoset-names');

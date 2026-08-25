@@ -4950,8 +4950,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Hình dạng mặc định chuẩn — nguồn duy nhất để merge lên khi đọc localStorage,
   // tránh việc field mới thêm sau này bị mất khi user cũ có blob cũ trong storage.
   function autoDefaultSet() {
-    return { setNumber: '', ratio: '1080x1920', voiceId: '', skipAudition: false,
-              jobs: [{ rows: [] }, { rows: [] }, { rows: [] }] };
+    return { setNumber: '', skipAudition: false,
+              jobs: [{ rows: [], voiceId: '', ratio: '1080x1920' },
+                     { rows: [], voiceId: '', ratio: '1080x1920' },
+                     { rows: [], voiceId: '', ratio: '1080x1920' }] };
   }
 
   var autoSet = autoDefaultSet();
@@ -4961,13 +4963,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
   var autoTableHome = null;      // {parent, next} — vị trí gốc của #sacTableWrap trong panel Manual
 
-  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows array —
+  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
   // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
-  function autoNormalizeJobs(jobs) {
+  // legacyVoiceId/legacyRatio: giá trị top-level từ blob cũ (trước khi voice/ratio
+  // chuyển xuống theo job) — dùng làm fallback cho job chưa có giá trị riêng, để
+  // không lộ ra "undefined" khi migrate từ localStorage cũ.
+  function autoNormalizeJobs(jobs, legacyVoiceId, legacyRatio) {
     var out = [];
     for (var i = 0; i < 3; i++) {
       var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
-      out.push({ rows: Array.isArray(j.rows) ? j.rows : [] });
+      out.push({
+        rows:    Array.isArray(j.rows) ? j.rows : [],
+        voiceId: (j.voiceId !== undefined && j.voiceId !== null) ? j.voiceId : (legacyVoiceId || ''),
+        ratio:   j.ratio || legacyRatio || '1080x1920',
+      });
     }
     return out;
   }
@@ -5004,9 +5013,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch (e) {
       autoSet = autoDefaultSet();
     }
-    autoSet.jobs = autoNormalizeJobs(autoSet.jobs);
+    // Migrate blob cũ: voiceId/ratio từng ở top-level (chung cho cả bộ) — nếu còn
+    // đó, dùng làm fallback cho job chưa có giá trị riêng rồi xoá đi (per-job now).
+    autoSet.jobs = autoNormalizeJobs(autoSet.jobs, autoSet.voiceId, autoSet.ratio);
+    delete autoSet.voiceId;
+    delete autoSet.ratio;
     $('sacAutoSet').value = autoSet.setNumber || '';
-    $('sacAutoRatio').value = autoSet.ratio || '1080x1920';
     $('sacAutoSkipAudition').checked = !!autoSet.skipAudition;
     autoRenderTab();
   }
@@ -5020,11 +5032,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         seqBinTpl: $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
       }));
       autoSet.setNumber   = $('sacAutoSet').value.trim();
-      autoSet.ratio       = $('sacAutoRatio').value;
-      autoSet.voiceId     = $('sacAutoVoice').value;
+      autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
+      autoSet.jobs[autoActiveJob].voiceId = $('sacAutoVoice').value;
       autoSet.skipAudition= $('sacAutoSkipAudition').checked;
       localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet));
     } catch (e) {}
+  }
+
+  // Chuyển tab: lưu voice+ratio của select hiện tại vào job đang rời, rồi nạp
+  // voice+ratio của job sắp vào lên các select — fallback về mặc định hợp lý
+  // nếu job đó chưa từng chọn (ratio '1080x1920', voice là option đầu tiên).
+  function autoLoadJobVoiceRatio(job) {
+    var ratioSel = $('sacAutoRatio');
+    var voiceSel = $('sacAutoVoice');
+    if (ratioSel) ratioSel.value = job.ratio || '1080x1920';
+    if (voiceSel) {
+      if (job.voiceId) {
+        voiceSel.value = job.voiceId;
+      } else if (voiceSel.options.length) {
+        voiceSel.selectedIndex = 0;
+        job.voiceId = voiceSel.value;
+      }
+    }
   }
 
   function autoRenderTab() {
@@ -5032,6 +5061,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
     });
     autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
+    autoLoadJobVoiceRatio(autoSet.jobs[autoActiveJob]);
   }
 
   // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
@@ -5062,7 +5092,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       o.value = v.voice_id; o.textContent = v.label;
       sel.appendChild(o);
     });
-    if (autoSet.voiceId) sel.value = autoSet.voiceId;
+    var job = autoSet.jobs[autoActiveJob];
+    if (job && job.voiceId) sel.value = job.voiceId;
   }
 
   // Đọc bảng #sacBody hiện tại thành rows [[text,time,src], ...] — cùng cách đọc
@@ -5129,12 +5160,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
-  // Label voice đang chọn — vào tên file: "31.0 - Advertising Voice 2.mp3".
-  function autoVoiceLabel() {
-    var sel = $('sacAutoVoice');
-    if (!sel || !sel.value) return '';
-    var opt = sel.options[sel.selectedIndex];
-    return (opt && opt.textContent) || '';
+  // Label của một voiceId — vào tên file: "31.0 - Advertising Voice 2.mp3".
+  // Tra theo danh sách voice của VoiceGen, KHÔNG đọc select (mỗi job có voice
+  // riêng, select chỉ đang hiển thị job đang active).
+  function autoVoiceLabelFor(voiceId) {
+    if (!voiceId) return '';
+    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+    var hit = list.filter(function (v) { return !v.isSep && v.voice_id === voiceId; })[0];
+    return (hit && hit.label) || '';
+  }
+
+  // Mảng 3 label voice theo đúng thứ tự job — job đang active lấy trực tiếp từ
+  // select (phản ánh lựa chọn chưa kịp lưu vào autoSet.jobs), job khác tra theo
+  // voiceId đã lưu.
+  function autoVoiceLabels() {
+    return autoSet.jobs.map(function (job, i) {
+      var voiceId = (i === autoActiveJob) ? $('sacAutoVoice').value : job.voiceId;
+      return autoVoiceLabelFor(voiceId);
+    });
   }
 
   function autoBuildCfg() {
@@ -5153,7 +5196,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var res = await fetch(BRIDGE_URL + '/autoset/names', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config: autoBuildCfg(), setNumber: $('sacAutoSet').value.trim(),
-                             ext: 'mp3', voiceName: autoVoiceLabel() }),
+                             ext: 'mp3', voiceName: autoVoiceLabels() }),
     });
     var j = await res.json();
     if (!j || !j.ok) throw new Error((j && j.error) || 'không dựng được tên');
@@ -5213,7 +5256,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
-      autoSet.jobs[autoActiveJob].rows = autoReadTableRows();   // lưu tab đang rời
+      // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
+      autoSet.jobs[autoActiveJob].rows    = autoReadTableRows();
+      autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
+      autoSet.jobs[autoActiveJob].voiceId = $('sacAutoVoice').value;
       autoActiveJob = Number(t.dataset.job);
       autoRenderTab();
       autoSaveState();
@@ -5233,17 +5279,27 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   });
 
   // Gear button — mở/đóng overlay cấu hình theo project (Sản phẩm/CO/Editor/Bin).
+  // UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể z-index/thứ tự DOM — một
+  // backdrop mờ không che được chữ trong bảng script phía sau. Cách duy nhất là
+  // thật sự ẩn (display:none) nội dung phía sau khi Settings mở, và trả lại khi
+  // đóng. Header vẫn để hiện để giữ ngữ cảnh (tên trang, nút đóng).
   var sacAutoSettingsBtn = $('sacAutoSettingsBtn');
   var sacAutoSettingsEl  = $('sacAutoSettings');
+  var sacAutoScrollEl    = document.querySelector('.sac-autoScroll');
+  var sacAutoRunEl       = $('sacAutoRun');
   if (sacAutoSettingsBtn && sacAutoSettingsEl) {
     sacAutoSettingsBtn.addEventListener('click', function () {
       sacAutoSettingsEl.hidden = false;
+      if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+      if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
     });
   }
   var sacAutoSettingsCloseBtn = $('sacAutoSettingsClose');
   if (sacAutoSettingsCloseBtn && sacAutoSettingsEl) {
     sacAutoSettingsCloseBtn.addEventListener('click', function () {
       sacAutoSettingsEl.hidden = true;
+      if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+      if (sacAutoRunEl) sacAutoRunEl.style.display = '';
       autoSaveState();
       autoRenderPreview();
     });
@@ -5284,7 +5340,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var job = jobs[i];
       autoStatus('⏳ Validate .' + job.idx + '…');
       try {
-        job.rows = autoSet.jobs[job.idx].rows || [];
+        job.rows    = autoSet.jobs[job.idx].rows || [];
+        job.voiceId = autoSet.jobs[job.idx].voiceId || '';
+        job.ratio   = autoSet.jobs[job.idx].ratio || '1080x1920';
         if (!job.rows.length) throw new Error('chưa có script');
         sacJobContext.load(job);
         // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
@@ -5391,7 +5449,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var scriptText = (job.rows || []).map(function (r) { return r[0]; }).filter(Boolean).join('\n');
         if (!scriptText) throw new Error('không có lời đọc');
 
-        window.VoiceGenPushScript(scriptText, autoSet.voiceId, true, false);
+        window.VoiceGenPushScript(scriptText, job.voiceId, true, false);
         var got = await autoWaitVariation();
 
         var dir = await autoVoiceDir(job.voiceSubdir);
@@ -5466,7 +5524,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         await autoWaitAlign(job.voicePath);
 
         $('sacNewSeqName').value  = job.seqName;
-        $('sacNewSeqRatio').value = autoSet.ratio;
+        $('sacNewSeqRatio').value = job.ratio;
         await sacRunAutoCut('new');
 
         await autoMoveSeqToBin(job.seqName, job.seqBin);

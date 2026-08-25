@@ -1094,13 +1094,10 @@
 
       <div class="sac-autoScroll">
         <div class="sac-autoCfg">
-          <label class="sac-nsf2-label">Số bộ</label>
-          <input id="sacAutoSet" class="sac-nsf2-input" type="text" />
-
-          <label class="sac-nsf2-label">Voice</label>
+          <label class="sac-nsf2-label">Voice (video đang chọn)</label>
           <select id="sacAutoVoice" class="sac-nsf2-select"></select>
 
-          <label class="sac-nsf2-label">Ratio</label>
+          <label class="sac-nsf2-label">Ratio (video đang chọn)</label>
           <select id="sacAutoRatio" class="sac-nsf2-select">
             <option value="1080x1920" selected>1080×1920 — 9:16</option>
             <option value="1080x1350">1080×1350 — 4:5</option>
@@ -1114,10 +1111,17 @@
 
         <div id="sacAutoPreview" class="sac-autoPreview"></div>
 
-        <div class="sac-autoTabs">
-          <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
-          <div class="sac-autoTab" data-job="1" role="button">.1</div>
-          <div class="sac-autoTab" data-job="2" role="button">.2</div>
+        <div class="sac-autoTabRow">
+          <div class="sac-autoSetInline">
+            <label class="sac-nsf2-label" for="sacAutoSet">Bộ</label>
+            <input id="sacAutoSet" class="sac-autoSetInput" type="text" />
+          </div>
+          <span class="sac-autoTabsLabel">Video</span>
+          <div class="sac-autoTabs">
+            <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
+            <div class="sac-autoTab" data-job="1" role="button">.1</div>
+            <div class="sac-autoTab" data-job="2" role="button">.2</div>
+          </div>
         </div>
 
         <div id="sacAutoTableSlot" class="sac-autoTableSlot"></div>
