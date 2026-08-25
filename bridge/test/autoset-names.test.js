@@ -50,4 +50,28 @@ assert.throws(() => buildSetNames(cfg, 31, 'mp3', ''), /tên voice/i, 'thiếu t
 // 6. đuôi file đổi được
 assert.strictEqual(buildSetNames(cfg, 31, 'wav', 'Evelyn3')[0].voiceFile, '31.0 - Evelyn3.wav', 'đuôi wav');
 
+// 7. tên voice kết thúc bằng dấu chấm → xóa chấm thừa, không để thành ".."
+assert.strictEqual(buildSetNames(cfg, 31, 'mp3', 'Advertising Voice 2.')[0].voiceFile, '31.0 - Advertising Voice 2.mp3', 'xóa dấu chấm ở cuối');
+
+// 8. tên voice kết thúc bằng khoảng trắng → xóa đi, không để thành "Voice  ."
+assert.strictEqual(buildSetNames(cfg, 31, 'mp3', 'Advertising Voice 2  ')[0].voiceFile, '31.0 - Advertising Voice 2.mp3', 'xóa khoảng trắng ở cuối');
+
+// 9. tên voice chỉ có khoảng trắng/dấu chấm (". .") → ném thiếu tên voice
+assert.throws(() => buildSetNames(cfg, 31, 'mp3', '. .'), /tên voice/i, 'chỉ dấu chấm/khoảng trắng → ném');
+
+// 10. khoảng trắng BÊN TRONG được giữ nguyên ("Advertising Voice 2" vẫn có khoảng trắng)
+assert.strictEqual(buildSetNames(cfg, 31, 'mp3', 'Advertising Voice 2')[0].voiceFile, '31.0 - Advertising Voice 2.mp3', 'giữ khoảng trắng bên trong');
+
+// 11. số bộ có leading zeros → bỏ zeros, "031" thành "31"
+const out031 = buildSetNames(cfg, '031', 'mp3', 'Evelyn3');
+assert.strictEqual(out031[0].seqName, 'SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]', 'leading zeros loại bỏ trong tên sequence');
+assert.strictEqual(out031[0].voiceSubdir, '31x', 'leading zeros loại bỏ trong thư mục');
+assert.strictEqual(out031[0].voiceFile, '31.0 - Evelyn3.mp3', 'leading zeros loại bỏ trong tên file');
+
+// 12. số 0 không bị xóa ("0" vẫn là "0", không thành rỗng)
+assert.strictEqual(buildSetNames(cfg, '0', 'mp3', 'Evelyn3')[0].voiceSubdir, '0x', 'số 0 được giữ lại');
+
+// 13. biến được dùng 2 lần trong mẫu ({sp}-{sp})
+assert.strictEqual(renderTemplate('{sp}-{sp}', { sp: 'X' }), 'X-X', 'biến dùng 2 lần được thay đúng');
+
 console.log('OK autoset-names');

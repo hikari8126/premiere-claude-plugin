@@ -18,12 +18,20 @@ function renderTemplate(tpl, vars) {
 function safeVoiceName(name) {
   var n = String(name || '').trim();
   if (!n) throw new Error('thiếu tên voice');
-  return n.replace(/[\/\\:*?"<>|]/g, '-');
+  // Thay các ký tự không hợp lệ
+  n = n.replace(/[\/\\:*?"<>|]/g, '-');
+  // Xóa dấu chấm và khoảng trắng ở cuối
+  n = n.replace(/[\s.]+$/, '');
+  // Kiểm tra lại nếu rỗng sau khi xóa trailing chars
+  if (!n) throw new Error('thiếu tên voice');
+  return n;
 }
 
 function buildSetNames(cfg, setNumber, ext, voiceName) {
   var set = String(setNumber).trim();
   if (!/^\d+$/.test(set)) throw new Error('số bộ không hợp lệ: "' + setNumber + '"');
+  // Bỏ leading zeros: "031" → "31", "0" → "0"
+  set = String(parseInt(set, 10));
   var e = (ext || 'mp3').replace(/^\./, '');
   var vn = safeVoiceName(voiceName);
 
