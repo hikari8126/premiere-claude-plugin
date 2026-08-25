@@ -4221,13 +4221,18 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoCfg { flex: 0 0 auto; }
 /* Nhóm cấu hình của RIÊNG video đang chọn: vạch tím bên trái để phân biệt với
    các thiết lập dùng chung cho cả bộ. */
-.sac-autoVidCfg { flex: 0 0 auto; display: flex; flex-direction: row; gap: 8px; border-left: 2px solid var(--accent); padding-left: 8px; }
+.sac-autoVidCfg { flex: 0 0 auto; display: flex; flex-direction: row; align-items: flex-start; gap: 8px; border-left: 2px solid var(--accent); padding-left: 8px; }
 /* Mỗi cột là block container thường (KHÔNG flex-column) chứa label rồi field
    theo luồng block bình thường — tránh lỗi label/field đè nhau trong UXP đã
    ghi chú ở trên. .sac-autoVidCfg chỉ làm hàng ngang cho 2 cột này. */
 .sac-autoVidCfgCol { flex: 1 1 0; min-width: 0; }
 .sac-autoVidCfgCol .sac-nsf2-select,
 .sac-autoVidCfgCol .sac-autoVoiceSlot { width: 100%; box-sizing: border-box; }
+/* UXP render <select> native với metric riêng (cao hơn, có margin ngầm) nên ô
+   Ratio bị tụt thấp hơn ô Voice. Ép cùng chiều cao + bỏ margin để 2 cột thẳng đầu. */
+.sac-autoVidCfgCol .sac-nsf2-select,
+.sac-autoVidCfgCol .vg-voiceDropTrigger { height: 30px; margin: 0; box-sizing: border-box; }
+.sac-autoVidCfgCol .sac-nsf2-label { margin: 0 0 4px; }
 .sac-autoVoiceSlot { min-width: 0; }
 .sac-autoVoiceSlot .vg-voiceDrop { width: 100%; }
 .sac-autoVoiceSlot .vg-voiceDropTrigger { width: 100%; box-sizing: border-box; }
@@ -4242,7 +4247,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoSetInline { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
 .sac-autoSetInline .sac-nsf2-label { margin: 0; white-space: nowrap; }
 .sac-autoSetInput {
-  width: 42px; padding: 6px 4px; text-align: center; font-size: 13px;
+  width: 58px; padding: 6px 4px; text-align: center; font-size: 13px;
   border-radius: 4px; border: 1px solid var(--border, #3a2f52);
   background: var(--input-bg, #1e1b2e); color: var(--text);
 }

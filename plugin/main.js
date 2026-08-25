@@ -5177,14 +5177,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // select (phản ánh lựa chọn chưa kịp lưu vào autoSet.jobs), job khác tra theo
   // voiceId đã lưu.
   function autoVoiceLabels() {
+    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+    var loaded = list.filter(function (v) { return v && !v.isSep; }).length;
     return autoSet.jobs.map(function (job, i) {
       var voiceId = (i === autoActiveJob && typeof window.VoiceGenGetVoiceId === 'function')
         ? (window.VoiceGenGetVoiceId() || job.voiceId) : job.voiceId;
       var label = autoVoiceLabelFor(voiceId);
+      // Voice clone/custom chưa nằm trong VG_VOICES_DATA, hoặc danh sách chưa nạp
+      // → dùng đúng nhãn dropdown đang hiện, vì đó là thứ người dùng đang thấy.
+      if (!label && i === autoActiveJob) {
+        var el = $('vgVoiceDropLabel');
+        var shown = el ? String(el.textContent || '').trim() : '';
+        if (shown) label = shown;
+      }
       if (!label) {
-        // Không để tên voice rỗng lọt xuống bridge (nó sẽ throw khó hiểu) —
-        // báo lỗi rõ ràng ngay tại đây, video thứ mấy (.0/.1/.2) thiếu voice.
-        throw new Error('Video .' + i + ' chưa chọn được voice hợp lệ — vào tab đó và chọn lại voice.');
+        // Phân biệt 2 nguyên nhân: chưa nạp danh sách vs job chưa chọn voice.
+        if (!loaded) {
+          throw new Error('Danh sách voice chưa nạp — mở tab Voice Gen (cần API key ElevenLabs) rồi quay lại.');
+        }
+        throw new Error('Video .' + i + ' chưa chọn voice — bấm tab .' + i + ' rồi chọn voice.');
       }
       return label;
     });
