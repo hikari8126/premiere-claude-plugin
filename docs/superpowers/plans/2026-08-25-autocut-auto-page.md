@@ -1030,6 +1030,10 @@ async function autoStage2(jobs) {
     var job = jobs[i];
     autoStatus('⏳ Gen voice .' + job.idx + '…');
     try {
+      // HOÃN normalize-script: endpoint đó cần {provider, model, apiKey} (cấu hình
+      // AI mà trang Auto không thu thập) và gắn với cancel-token của luồng tương
+      // tác. Gen voice không cần nó. Gửi thẳng lời đọc như khi người dùng tự gõ
+      // vào Voice Gen. Nếu sau này muốn normalize, phải bổ sung cấu hình AI trước.
       var scriptText = (job.rows || []).map(function (r) { return r[0]; }).filter(Boolean).join('\n');
       if (!scriptText) throw new Error('không có lời đọc');
 
