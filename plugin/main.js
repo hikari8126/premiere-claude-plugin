@@ -5072,6 +5072,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoVoiceDropHome = null;
   }
 
+  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
+  // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
+  // legacyVoiceId/legacyRatio: giá trị top-level từ blob cũ (trước khi voice/ratio
+  // chuyển xuống theo job) — dùng làm fallback cho job chưa có giá trị riêng, để
+  // không lộ ra "undefined" khi migrate từ localStorage cũ.
+  function autoNormalizeJobs(jobs, legacyVoiceId, legacyRatio) {
+    var out = [];
+    for (var i = 0; i < 3; i++) {
+      var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
+      out.push({
+        rows:    Array.isArray(j.rows) ? j.rows : [],
+        voiceId: (j.voiceId !== undefined && j.voiceId !== null) ? j.voiceId : (legacyVoiceId || ''),
+        ratio:   j.ratio || legacyRatio || '1080x1920',
+      });
+    }
+    return out;
+  }
+
   function autoLoadState() {
     try {
       var c = JSON.parse(localStorage.getItem(AUTO_CFG_KEY) || '{}');
