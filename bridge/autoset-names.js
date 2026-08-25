@@ -50,4 +50,14 @@ function buildSetNames(cfg, setNumber, ext, voiceName) {
   return jobs;
 }
 
-module.exports = { renderTemplate, safeVoiceName, buildSetNames };
+// Chọn thư mục voice-over trong danh sách tên có sẵn (không phân biệt hoa/thường).
+// Trả về tên ĐÚNG NHƯ TRÊN ĐĨA, hoặc null nếu không có.
+function findVoiceOverDir(names) {
+  var list = names || [];
+  for (var i = 0; i < list.length; i++) {
+    if (/^(voice\s*over|voiceover|vo)$/i.test(String(list[i]).trim())) return list[i];
+  }
+  return null;
+}
+
+module.exports = { renderTemplate, safeVoiceName, buildSetNames, findVoiceOverDir };

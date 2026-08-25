@@ -3105,6 +3105,30 @@ app.post('/autoset/names', (req, res) => {
   }
 });
 
+// ── POST /autoset/voicedir — giải quyết thư mục lưu voice ──────────────────
+// Nhận đường dẫn file .prproj + thư mục con theo bộ ("31x"), trả về đường dẫn
+// tuyệt đối đã tạo sẵn. Thư mục Voice Over nằm CÙNG CẤP với file .prproj.
+app.post('/autoset/voicedir', (req, res) => {
+  try {
+    const { projectPath, subdir } = req.body || {};
+    if (!projectPath) throw new Error('thiếu projectPath — project chưa được lưu?');
+    if (!subdir) throw new Error('thiếu subdir');
+    const projDir = path.dirname(projectPath);
+    if (!fs.existsSync(projDir)) throw new Error('không thấy thư mục project: ' + projDir);
+    const names = fs.readdirSync(projDir).filter(function (n) {
+      try { return fs.statSync(path.join(projDir, n)).isDirectory(); } catch (e) { return false; }
+    });
+    const hit = autosetNames.findVoiceOverDir(names);
+    const voDir = path.join(projDir, hit || 'Voice Over');
+    ensureDir(voDir);
+    const outDir = path.join(voDir, subdir);
+    ensureDir(outDir);
+    res.json({ ok: true, dir: outDir, voiceOverDir: voDir, created: !hit });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /host-key ─────────────────────────────────────────────────────────
 // macOS only. Drives Premiere's native Copy/Paste via AppleScript keystrokes so
 // the UN-NEST feature can copy real track items (effects intact) between

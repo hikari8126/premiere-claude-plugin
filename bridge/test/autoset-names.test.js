@@ -1,6 +1,6 @@
 // bridge/test/autoset-names.test.js
 const assert = require('assert');
-const { renderTemplate, buildSetNames } = require('../autoset-names.js');
+const { renderTemplate, buildSetNames, findVoiceOverDir } = require('../autoset-names.js');
 
 const cfg = {
   product: 'SonaShape',
@@ -89,5 +89,32 @@ assert.strictEqual(buildSetNames(cfg, '031', 'mp3', 'V')[0].voiceSubdir, '31x', 
 
 // 18. regression: "0" vẫn được giữ lại thành "0x"
 assert.strictEqual(buildSetNames(cfg, '0', 'mp3', 'V')[0].voiceSubdir, '0x', 'regression 0 → 0x');
+
+// 19. findVoiceOverDir: khớp chính xác
+assert.strictEqual(findVoiceOverDir(['Images', 'Voice Over', 'Videos']), 'Voice Over', 'khớp chính xác Voice Over');
+
+// 20. findVoiceOverDir: chữ thường
+assert.strictEqual(findVoiceOverDir(['voice over']), 'voice over', 'khớp chữ thường, trả nguyên tên trên đĩa');
+
+// 21. findVoiceOverDir: không có khoảng trắng
+assert.strictEqual(findVoiceOverDir(['VoiceOver']), 'VoiceOver', 'khớp VoiceOver liền');
+
+// 22. findVoiceOverDir: dạng viết tắt "vo"
+assert.strictEqual(findVoiceOverDir(['vo']), 'vo', 'khớp dạng viết tắt vo');
+
+// 23. findVoiceOverDir: không khớp trả null
+assert.strictEqual(findVoiceOverDir(['Voices']), null, '"Voices" không khớp');
+assert.strictEqual(findVoiceOverDir(['Video']), null, '"Video" không khớp');
+assert.strictEqual(findVoiceOverDir(['Voice Overs']), null, '"Voice Overs" không được khớp nhầm');
+
+// 24. findVoiceOverDir: input rỗng/thiếu không được ném lỗi
+assert.strictEqual(findVoiceOverDir([]), null, 'mảng rỗng trả null');
+assert.strictEqual(findVoiceOverDir(), null, 'không truyền tham số trả null, không ném lỗi');
+
+// 25. findVoiceOverDir: khớp đầu tiên thắng
+assert.strictEqual(findVoiceOverDir(['vo', 'Voice Over']), 'vo', 'ứng viên đầu tiên thắng');
+
+// 26. findVoiceOverDir: chấp nhận khoảng trắng bao quanh, trả nguyên tên trên đĩa
+assert.strictEqual(findVoiceOverDir([' Voice Over ']), ' Voice Over ', 'giữ nguyên tên có khoảng trắng bao quanh');
 
 console.log('OK autoset-names');
