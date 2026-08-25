@@ -4946,6 +4946,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var autoSet = autoDefaultSet();
   var autoActiveJob = 0;
+  var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
 
   // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có tsv string —
   // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
@@ -5309,8 +5310,80 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return ok;
   }
 
+  // Chờ sacAlignVoice xong. Dùng CỜ THẬT (sacVoiceBusy/sacVoicePath), không đọc
+  // chữ trong #sacVoiceInfo — text của job trước còn nằm đó nên job thứ 2 sẽ
+  // tưởng xong ngay.
+  // Bẫy: nhánh "chưa có script" (main.js:4493) cũng tắt busy + gán sacVoicePath,
+  // tức GIẢ DẠNG thành công → sau khi chờ phải kiểm tra align có sinh mốc voice.
+  function autoWaitAlign(audioPath) {
+    return new Promise(function (resolve, reject) {
+      var waited = 0;
+      var t = setInterval(function () {
+        waited += 300;
+        if (!sacVoiceBusy && sacVoicePath === audioPath) {
+          clearInterval(t);
+          var hasVoice = (parsedBlocks || []).some(function (b) { return b.voiceStart != null; });
+          if (!hasVoice) {
+            var info = $('sacVoiceInfo');
+            return reject(new Error('align không khớp voice: ' +
+              ((info && info.textContent) || 'không rõ')));
+          }
+          return resolve();
+        }
+        if (waited > 120000) { clearInterval(t); reject(new Error('align voice quá 2 phút')); }
+      }, 300);
+    });
+  }
+
+  // Chuyển sequence vừa tạo vào bin. ppGetOrCreateBin đã hỗ trợ 'A / B / C'.
+  async function autoMoveSeqToBin(seqName, binPath) {
+    var proj = await getActiveProject();
+    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+    var all = await sacCollectBinItems(root);
+    var hit = all.filter(function (it) { return it.name === seqName; })[0];
+    if (!hit) throw new Error('không tìm thấy sequence ' + seqName);
+    // Thứ tự tham số: (item, proj, binName) — sai thứ tự fail ÂM THẦM.
+    var r = await ppMoveToBin(hit.item, proj, binPath);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'chuyển bin thất bại');
+  }
+
+  // Chặng 3: align voice + dựng timeline + chuyển sequence vào bin.
+  // sacRunAutoCut('new') ĐỌC TÊN/RATIO TỪ DOM → phải ghi vào 2 input trước khi gọi.
+  async function autoStage3(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i];
+      autoStatus('⏳ Dựng .' + job.idx + '…');
+      try {
+        sacJobContext.load(job);
+        sacAlignVoice(job.voicePath);        // không await: hàm này báo xong qua cờ
+        await autoWaitAlign(job.voicePath);
+
+        $('sacNewSeqName').value  = job.seqName;
+        $('sacNewSeqRatio').value = autoSet.ratio;
+        await sacRunAutoCut('new');
+
+        await autoMoveSeqToBin(job.seqName, job.seqBin);
+        job.state = 'built';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+    }
+    var ok = jobs.filter(function (j) { return j.state === 'built'; });
+    var msg = 'Bộ ' + autoSet.setNumber + ': ' + ok.length + '/' + jobs.length + ' timeline xong';
+    autoStatus('✓ ' + msg);
+    autoNotify('Autocut xong', msg);
+  }
+
   var sacAutoRunBtn = $('sacAutoRun');
   if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
+    if (autoPendingBuild) {                 // lần bấm thứ 2 = đã duyệt voice
+      var pending = autoPendingBuild;
+      autoPendingBuild = null;
+      await autoStage3(pending);
+      return;
+    }
     autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;
     autoSaveState();
     try {
@@ -5319,6 +5392,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!ok.length) return;
       var voiced = await autoStage2(ok);
       if (!voiced.length) return;
+      if (!autoSet.skipAudition) {
+        autoStatus('⏸ Nghe thử 3 voice rồi bấm "Chạy cả bộ" lần nữa để dựng timeline.');
+        autoPendingBuild = voiced;
+        return;
+      }
+      await autoStage3(voiced);
     } catch (e) {
       autoStatus('✗ ' + e.message);
       autoNotify('Autocut — lỗi', e.message);
