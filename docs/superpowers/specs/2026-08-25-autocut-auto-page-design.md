@@ -103,7 +103,7 @@ Từ số bộ `31` với cấu hình ví dụ trên:
 |---|---|
 | Sequence | `SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]` (và `.1`, `.2`) |
 | Bin sequence | `Sequence / FB / 31x` |
-| File voice | `<gốc sản phẩm>/…/voice over/31x/31.0.mp3` |
+| File voice | `<thư mục chứa .prproj>/Voice Over/31x/31.0 - Advertising Voice 2.mp3` |
 | Bin voice | `voice over / 31x` |
 
 **Đặt sequence vào bin:** dùng `ppGetOrCreateBin` (`plugin/main.js:2673`) — hàm này
@@ -111,12 +111,26 @@ Từ số bộ `31` với cấu hình ví dụ trên:
 Luồng: tạo sequence → lấy `projectItem` → `ppMoveToBin` vào `Sequence / FB / 31x`.
 Không cần code mới cho phần lồng bin.
 
-**Gốc sản phẩm (trên đĩa):** suy ra từ vị trí file `.prproj` của project đang mở.
-Xem phần Rủi ro — cần dự phòng.
+**Gốc trên đĩa — ĐÃ XÁC MINH** (Premiere 25.6.5, 2026-08-25): `project.path` trả về
+đường dẫn đầy đủ tới file `.prproj`. Thư mục `Voice Over` nằm **cùng cấp với file
+.prproj**, nên chỉ cần cắt tên file:
 
-**Thư mục "voice over":** dò theo biến thể `voice over` / `voiceover` / `vo`
-(cùng quy tắc với logic bin sẵn có ở `plugin/main.js:2671`); không thấy thì tạo mới.
-Thư mục `31x` không có thì tạo.
+```
+…/Videos/Editing File/SonaShape.prproj
+…/Videos/Editing File/Voice Over/31x/          ← đích lưu voice
+```
+
+Lưu ý: thư mục sản phẩm (`SonaShape (BEVA AdoraBra) - …`) nằm **ba cấp trên** file
+project và KHÔNG phải là gốc cần tìm. Project nằm trên Google Drive shared drive nên
+đường dẫn có khoảng trắng và dấu ngoặc — phải quote cẩn thận.
+
+**Thư mục "Voice Over":** dò theo biến thể `voice over` / `voiceover` / `vo` (không
+phân biệt hoa thường); không thấy thì tạo. Thư mục `31x` không có thì tạo.
+
+**Tên file voice — ĐÃ XÁC MINH từ dữ liệu thật:** `{bộ}.{idx} - {tên voice}.mp3`,
+ví dụ `31.0 - Advertising Voice 2.mp3`. Tên voice là label ElevenLabs đầy đủ.
+Quy ước này từng khác ở các bộ cũ (`9x` dùng tên xuất thô ElevenLabs, `29x` dùng
+`v29.0 - …`) — lấy theo bộ mới nhất (`31x`).
 
 ## Thực thi: ba chặng, gom điểm dừng
 
@@ -202,11 +216,11 @@ phải chuyển ngữ cảnh.
 
 ## Rủi ro & dự phòng
 
-1. **Đường dẫn `.prproj` chưa xác minh.** Không có chỗ nào trong code hiện tại dùng
-   đường dẫn file project, nên chưa biết UXP có trả về hay không — phải thử trong
-   Premiere thật ở bước đầu triển khai.
-   *Dự phòng:* nếu API không cho, chuyển sang "chọn thư mục sản phẩm một lần rồi nhớ"
-   (localStorage per project).
+1. ~~Đường dẫn `.prproj` chưa xác minh.~~ **ĐÃ GIẢI QUYẾT** (2026-08-25): probe trên
+   Premiere 25.6.5 xác nhận `project.path` trả về đường dẫn đầy đủ; `project.name` trả
+   về `SonaShape.prproj`. Không cần phương án dự phòng chọn thư mục tay.
+   *Vẫn phải xử lý:* project chưa lưu lần nào → `path` rỗng → báo lỗi rõ, yêu cầu lưu
+   project trước.
 2. **Rate limit ElevenLabs** khi gen 3 voice liên tiếp → chạy tuần tự, không song song.
 3. **Hỏng workflow cũ** do state toàn cục → xem phần `sacJobContext`.
 
@@ -218,7 +232,8 @@ phải chuyển ngữ cảnh.
 - Số bộ `31` + cấu hình project → sinh đúng `SonaShape vid31.0 [c.ha.ttdo]
   [hoang.vietnguyen]` (giữ nguyên ngoặc vuông, dấu cách, tiền tố `c.`).
 - Sequence mới nằm đúng trong bin `Sequence / FB / 31x`; bin thiếu cấp → tự tạo.
-- File voice vào đúng `voice over/31x/31.0.mp3`.
+- File voice vào đúng `Voice Over/31x/31.0 - {tên voice}.mp3`.
+- Project chưa lưu (`path` rỗng) → báo lỗi yêu cầu lưu, không ghi bừa.
 - Thư mục "voice over" viết hoa/biến thể → dò được; không có → tạo.
 - Tick bỏ qua nghe thử → chạy một mạch, không chờ.
 - Mở/đóng trang Auto → workflow Autocut cũ vẫn nguyên vẹn.
