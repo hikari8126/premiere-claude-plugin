@@ -5082,6 +5082,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
+  // Ghi rows từ bảng vào job — nhưng KHÔNG cho phép ghi rỗng đè lên script đang
+  // có. Bảng đọc ra rỗng trong khi job đang có script gần như luôn là lỗi thời
+  // điểm (bảng chưa mượn về, vừa re-render, đang bị ẩn), không phải người dùng
+  // cố ý xoá. Muốn xoá thật thì bấm "Xoá bảng" (nó gán [] tường minh).
+  function autoCaptureRows(job) {
+    if (!job) return;
+    var rows = autoReadTableRows();
+    if (rows.length || !(job.rows || []).length) job.rows = rows;
+  }
+
   function autoLoadJobRowsIntoTable(job) {
     var body = $('sacBody');
     if (!body) return;
@@ -5150,7 +5160,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoClose() {
     // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
     // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
-    autoSet.jobs[autoActiveJob].rows = autoReadTableRows();
+    autoCaptureRows(autoSet.jobs[autoActiveJob]);
     autoSaveState();
     if (window.releaseKeyboard) window.releaseKeyboard();
     // Trả bảng về đúng vị trí gốc trong panel Manual TRƯỚC khi ghi rows thủ
@@ -5197,6 +5207,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return autoSet.jobs.map(function (job, i) {
       var voiceId = (i === autoActiveJob && typeof window.VoiceGenGetVoiceId === 'function')
         ? (window.VoiceGenGetVoiceId() || job.voiceId) : job.voiceId;
+      // Job chưa từng được ghé thăm sẽ không có voiceId. Thừa hưởng voice đang
+      // chọn thay vì bắt người dùng bấm vào từng tab chỉ để set lại cùng 1 giọng.
+      if (!voiceId && typeof window.VoiceGenGetVoiceId === 'function') {
+        voiceId = window.VoiceGenGetVoiceId() || '';
+        if (voiceId) job.voiceId = voiceId;
+      }
       var label = autoVoiceLabelFor(voiceId);
       // Voice clone/custom chưa nằm trong VG_VOICES_DATA, hoặc danh sách chưa nạp
       // → dùng đúng nhãn dropdown đang hiện, vì đó là thứ người dùng đang thấy.
@@ -5296,7 +5312,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
-      autoSet.jobs[autoActiveJob].rows    = autoReadTableRows();
+      autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
       autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoActiveJob = Number(t.dataset.job);
@@ -5315,8 +5331,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     $('sacBody').innerHTML = '';
     rowSeq = 0;
     createRow(); createRow(); createRow();
+    // Xoá tường minh trong job — autoCaptureRows() cố ý không ghi rỗng đè lên
+    // script đang có, nên phải nói rõ "lần này là người dùng muốn xoá".
+    autoSet.jobs[autoActiveJob].rows = [];
+    autoSaveState();
   });
-
   // Gear button — mở/đóng overlay cấu hình theo project (Sản phẩm/CO/Editor/Bin).
   // UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể z-index/thứ tự DOM — một
   // backdrop mờ không che được chữ trong bảng script phía sau. Cách duy nhất là
@@ -5595,7 +5614,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return;
     }
     if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
-    autoSet.jobs[autoActiveJob].rows = autoReadTableRows();
+    autoCaptureRows(autoSet.jobs[autoActiveJob]);
     autoSaveState();
     // Chặn sớm: không chạy pipeline (và không chạm vào bảng) khi chưa có gì.
     var filled = autoSet.jobs.filter(function (j) { return (j.rows || []).length; });
