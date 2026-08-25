@@ -4205,3 +4205,21 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   max-height: 220px; overflow-y: auto; margin-top: 6px;
 }
 .vcx-range { width: 100%; }
+
+/* ── AUTO PAGE ── */
+.sac-autoPage { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.sac-autoHeader { display: flex; align-items: center; justify-content: space-between; }
+.sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; }
+.sac-autoClose { padding: 2px 6px; cursor: pointer; }
+.sac-autoCfg { display: flex; flex-direction: column; gap: 6px; }
+.sac-autoLbl { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #cbd5e1; }
+.sac-autoInp { width: 60%; }
+.sac-autoChk { font-size: 11px; color: #cbd5e1; }
+.sac-autoPreview { font-size: 10px; color: #94a3b8; line-height: 1.5; }
+.sac-autoTabs { display: flex; gap: 4px; }
+.sac-autoTab { padding: 3px 12px; border-radius: 4px; background: #1e1b2e; color: #94a3b8; font-size: 12px; cursor: pointer; }
+.sac-autoTab.is-active { background: #7c3aed; color: #fff; }
+.sac-autoTsv { flex: 1 1 0; min-height: 120px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+.sac-autoStatus { font-size: 11px; color: #94a3b8; min-height: 16px; }
+.sac-autoRun { padding: 6px; text-align: center; border-radius: 4px; background: #7c3aed; color: #fff; font-size: 12px; cursor: pointer; }
+/* ── /AUTO PAGE ── */

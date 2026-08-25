@@ -4931,6 +4931,122 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (window.releaseKeyboard) window.releaseKeyboard();
   }
 
+  // ── AUTO PAGE ──────────────────────────────────────────────────────────────
+  // Trang riêng cho bộ 3 video. Tách khỏi workflow Autocut hiện tại: chỉ ẩn/hiện
+  // .sac-app như modal New-seq, không sửa hàm cũ.
+  var AUTO_CFG_KEY = 'sac_auto_cfg';       // cấu hình theo project
+  var AUTO_SET_KEY = 'sac_auto_set';       // 3 job đang soạn
+
+  var autoSet = { setNumber: '', ratio: '1080x1920', voiceId: '', skipAudition: false,
+                  jobs: [{ tsv: '' }, { tsv: '' }, { tsv: '' }] };
+  var autoActiveJob = 0;
+
+  function autoLoadState() {
+    try {
+      var c = JSON.parse(localStorage.getItem(AUTO_CFG_KEY) || '{}');
+      if (c.product) $('sacAutoProduct').value = c.product;
+      if (c.co)      $('sacAutoCO').value     = c.co;
+      if (c.editor)  $('sacAutoEditor').value = c.editor;
+      // Mẫu bin sửa được: đổi nền tảng (FB → TT) chỉ cần sửa ô này, không sửa code.
+      $('sacAutoSeqBin').value = c.seqBinTpl || 'Sequence / FB / {set}x';
+    } catch (e) {}
+    try {
+      var s = JSON.parse(localStorage.getItem(AUTO_SET_KEY) || 'null');
+      if (s && Array.isArray(s.jobs) && s.jobs.length === 3) autoSet = s;
+    } catch (e) {}
+    $('sacAutoSet').value = autoSet.setNumber || '';
+    $('sacAutoRatio').value = autoSet.ratio || '1080x1920';
+    $('sacAutoSkipAudition').checked = !!autoSet.skipAudition;
+    autoRenderTab();
+  }
+
+  function autoSaveState() {
+    try {
+      localStorage.setItem(AUTO_CFG_KEY, JSON.stringify({
+        product: $('sacAutoProduct').value.trim(),
+        co:      $('sacAutoCO').value.trim(),
+        editor:  $('sacAutoEditor').value.trim(),
+        seqBinTpl: $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
+      }));
+      autoSet.setNumber   = $('sacAutoSet').value.trim();
+      autoSet.ratio       = $('sacAutoRatio').value;
+      autoSet.voiceId     = $('sacAutoVoice').value;
+      autoSet.skipAudition= $('sacAutoSkipAudition').checked;
+      localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet));
+    } catch (e) {}
+  }
+
+  function autoRenderTab() {
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
+    });
+    $('sacAutoTsv').value = autoSet.jobs[autoActiveJob].tsv || '';
+  }
+
+  function autoFillVoices() {
+    var sel = $('sacAutoVoice');
+    if (!sel) return;
+    sel.innerHTML = '';
+    // VG_VOICES_DATA nằm trong IIFE VoiceGen → BẮT BUỘC qua window accessor.
+    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+    list.forEach(function (v) {
+      if (v.isSep) return;
+      var o = document.createElement('option');
+      o.value = v.voice_id; o.textContent = v.label;
+      sel.appendChild(o);
+    });
+    if (autoSet.voiceId) sel.value = autoSet.voiceId;
+  }
+
+  function autoOpen() {
+    var app = document.querySelector('#tab-autocut .sac-app');
+    if (app) app.style.display = 'none';
+    $('sacAutoPage').hidden = false;
+    autoFillVoices();
+    autoLoadState();
+    if (window.claimKeyboard) window.claimKeyboard();
+  }
+
+  function autoClose() {
+    autoSaveState();
+    $('sacAutoPage').hidden = true;
+    var app = document.querySelector('#tab-autocut .sac-app');
+    if (app) app.style.display = '';
+    if (window.releaseKeyboard) window.releaseKeyboard();
+  }
+
+  var sacAutoBtn = $('sacAutoBtn');
+  if (sacAutoBtn) sacAutoBtn.addEventListener('click', autoOpen);
+  var sacAutoCloseBtn = $('sacAutoClose');
+  if (sacAutoCloseBtn) sacAutoCloseBtn.addEventListener('click', autoClose);
+
+  document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;   // lưu tab đang rời
+      autoActiveJob = Number(t.dataset.job);
+      autoRenderTab();
+      autoSaveState();
+    });
+  });
+
+  var autoTsvEl = $('sacAutoTsv');
+  if (autoTsvEl) {
+    autoTsvEl.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+    autoTsvEl.addEventListener('blur',  function () {
+      autoSet.jobs[autoActiveJob].tsv = autoTsvEl.value;
+      autoSaveState();
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    });
+  }
+
+  ['sacAutoProduct','sacAutoCO','sacAutoEditor','sacAutoSet','sacAutoSeqBin'].forEach(function (id) {
+    var el = $(id);
+    if (!el) return;
+    el.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+    el.addEventListener('blur',  function () { autoSaveState(); if (window.releaseKeyboard) window.releaseKeyboard(); });
+  });
+  // ── /AUTO PAGE ──
+
   var sacCutNewBtn = $('sacCutNew');
   if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', sacOpenNewSeqModal);
 
