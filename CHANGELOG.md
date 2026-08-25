@@ -3,6 +3,23 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.0 / bridge 3.10 (server 1.15.0) — 2026-08-25
+
+> ⚠ **Bắt buộc bridge ≥ 1.15.0** (Bridge app 3.10).
+
+**Autocut: Trang Auto cho bộ 3 video** — Một form duy nhất nhập số bộ + voice + ratio + 3 ô TSV → xử lý cả 3 video liền mạch: validate → gen voice (thông báo macOS) → dựng timeline (dừng cho nghe thử). Plugin tự suy ra tên sequence/bin/voice theo config project. Job lỗi không chặn 2 job còn lại.
+
+### ✅ Thêm mới
+- **Trang Auto** trong tab Autocut — form tập trung cho cả bộ 3 video (set), ghi một lần thay vì lặp 3 lần.
+- **Tự suy ra tên** — sequence `[c.ha.ttdo] [user]`, bin `Sequence / {channel} / {set}x`, voice file `Voice Over/{set}x/{set}.{i} - {voice_name}.mp3` theo cấu hình project.
+- **Thông báo macOS** — plugin không chặn UI lúc bridge gen voice, bấm "Đợi" rồi làm việc khác, macOS notify khi xong hoặc lỗi.
+- **Job resilience** — validate/gen/build 3 timeline song song; lỗi ở video này không dừng 2 video còn lại. Báo chi tiết: video nào, lỗi gì (VO file missing, timeline build failed).
+
+### 🔧 Kỹ thuật / Approach
+- Bridge POST `/autoset/names` → tên cho 3 video + 3 bin từ 1 call (tránh gọi 3 lần); POST `/autoset/voicedir` → tìm/tạo thư mục cạnh `.prproj`.
+- Plugin tích hợp `window.requestIdleCallback` + `Promise.allSettled` → gen/build không chặn UI; thông báo qua POST `/notify` (osascript).
+- Trữ lại "bộ cuối" (set number) trong localStorage → mở lại plugin mở sẵn set vừa làm.
+
 ## v5.5.0 / bridge 3.9 (server 1.14.0) — 2026-08-24
 
 > ⚠ **Bắt buộc bridge ≥ 1.14.0** (Bridge app 3.9). Plugin cảnh báo đỏ + chặn Tạo SRT nếu bridge cũ.
