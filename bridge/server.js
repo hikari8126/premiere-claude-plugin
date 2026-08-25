@@ -3068,6 +3068,25 @@ app.post('/superautocut/split-voice', async (req, res) => {
   }
 });
 
+// ── POST /notify — thông báo macOS khi pipeline chạm mốc ────────────────────
+// Dùng chung khuôn execFile + osascript với /host-key.
+function escAppleScript(s) { return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
+function buildNotifyScript(title, body) {
+  var t = escAppleScript(title || 'Claude AI').slice(0, 120);
+  var b = escAppleScript(body || '').slice(0, 400);
+  return 'display notification "' + b + '" with title "' + t + '"';
+}
+
+app.post('/notify', (req, res) => {
+  const { title, body } = req.body || {};
+  const script = buildNotifyScript(title, body);
+  const { execFile } = require('child_process');
+  execFile('osascript', ['-e', script], { timeout: 8000 }, (err, _o, stderr) => {
+    if (err) return res.status(500).json({ ok: false, error: (stderr || err.message || '').trim() });
+    res.json({ ok: true });
+  });
+});
+
 // ── POST /host-key ─────────────────────────────────────────────────────────
 // macOS only. Drives Premiere's native Copy/Paste via AppleScript keystrokes so
 // the UN-NEST feature can copy real track items (effects intact) between
@@ -3280,4 +3299,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = Object.assign(module.exports || {}, { buildMultipartBody });
+module.exports = Object.assign(module.exports || {}, { buildMultipartBody, buildNotifyScript });
