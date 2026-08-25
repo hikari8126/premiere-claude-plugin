@@ -706,7 +706,7 @@ Kỳ vọng thấy đúng ba dòng:
 • SonaShape vid31.0 [c.ha.ttdo] [hoang.vietnguyen]  →  Sequence / FB / 31x
 • SonaShape vid31.1 [c.ha.ttdo] [hoang.vietnguyen]  →  Sequence / FB / 31x
 • SonaShape vid31.2 [c.ha.ttdo] [hoang.vietnguyen]  →  Sequence / FB / 31x
-• voice: voice over / 31x/31.0.mp3
+• voice: Voice Over / 31x/31.0 - Advertising Voice 2.mp3
 ```
 
 Xoá ô Số bộ → rời ô → thấy dòng đỏ `✗ số bộ không hợp lệ: ""`.
