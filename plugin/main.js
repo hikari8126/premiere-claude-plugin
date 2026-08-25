@@ -2971,6 +2971,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // ── Method switching ────────────────────────────────────────────────────
+  // node có nằm trong anc không. Tự đi ngược parentNode thay vì Node.contains()
+  // — DOM của UXP chỉ có một phần API, đừng phụ thuộc thứ chưa xác minh.
+  function sacIsInside(node, anc) {
+    for (var n = node; n; n = n.parentNode) if (n === anc) return true;
+    return false;
+  }
   var sacActiveMethod = 'manual';
   document.querySelectorAll('.sac-methodBtn').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -2983,10 +2989,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       $('sacPanelManual').style.display     = (method === 'manual')     ? 'flex' : 'none';
       $('sacPanelScreenshot').style.display = (method === 'screenshot') ? 'flex' : 'none';
       $('sacPanelAuto').style.display       = (method === 'auto')       ? 'flex' : 'none';
-      if (method === 'auto' && prevMethod !== 'auto') {
-        autoOpen();
-      } else if (method !== 'auto' && prevMethod === 'auto') {
-        autoClose();
+      // Bọc try/catch: autoOpen/autoClose động vào DOM thật của panel Manual
+      // (mượn/trả). Một lỗi giữa chừng từng làm panel kẹt trong slot Auto →
+      // Manual trống trơn. Bắt lỗi rồi tự sửa lại vị trí + display ở dưới.
+      try {
+        if (method === 'auto' && prevMethod !== 'auto') {
+          autoOpen();
+        } else if (method !== 'auto' && prevMethod === 'auto') {
+          autoClose();
+        }
+      } catch (e) { console.error('[SAC] chuyển mode lỗi:', e); }
+      // Chốt lại trạng thái hiển thị SAU autoOpen/autoClose — đây là nguồn quyết
+      // định duy nhất, không để hàm nào ghi đè.
+      var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
+      var borrowed = !!(slot && pm && sacIsInside(pm, slot));
+      if (method === 'auto') {
+        if (pm) pm.style.display = 'flex';        // đang nằm trong trang Auto
+      } else {
+        if (borrowed) { try { autoReturnManual(); } catch (e) {} }
+        if (pm) pm.style.display = (method === 'manual') ? 'flex' : 'none';
       }
       sacActiveMethod = method;
     });
@@ -4971,10 +4992,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoBorrowManual() {
     var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
     if (!pm || !slot || autoManualHome) return;
+    // Để lại PLACEHOLDER ở đúng chỗ cũ thay vì ghi nhớ nextSibling: ở UXP,
+    // nextSibling có thể là text/comment node và insertBefore với ref node kiểu
+    // đó ném lỗi — autoClose() đứt giữa chừng, panel kẹt trong slot Auto (đang
+    // display:none) nên Manual trống trơn. Placeholder thì swap luôn, không lỗi.
+    //
     // KHÔNG chụp pm.style.display: bộ chuyển mode set display TRƯỚC khi gọi
     // autoOpen/autoClose, nên lúc này nó đã là 'none' (stale) — khôi phục giá trị
     // đó khi trả về sẽ ẩn mất cả panel Manual, kể cả bảng script.
-    autoManualHome = { parent: pm.parentNode, next: pm.nextSibling };
+    var ph = document.createElement('div');
+    ph.id = 'sacManualHomeMark';
+    ph.style.display = 'none';
+    pm.parentNode.insertBefore(ph, pm);
+    autoManualHome = { mark: ph };
     slot.appendChild(pm);
     pm.style.display = 'flex';   // switcher vừa set 'none' vì method !== 'manual'
     // Ẩn nút Validate: ở trang Auto thì "Chạy cả bộ" đã validate cả 3 video, để
@@ -4991,10 +5021,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoHiddenBtns = null;
     }
     var pm = $('sacPanelManual');
-    autoManualHome.parent.insertBefore(pm, autoManualHome.next);
+    var mark = autoManualHome.mark;
+    autoManualHome = null;
+    // Trả về đúng chỗ placeholder rồi gỡ placeholder. Bọc try/catch: nếu bước
+    // này hỏng mà không ai bắt, cả phần còn lại của autoClose() (khôi phục bảng
+    // thủ công) sẽ không chạy — hỏng nhỏ thành mất panel.
+    try {
+      if (mark && mark.parentNode) mark.parentNode.insertBefore(pm, mark);
+    } catch (e) { console.error('[SAC] autoReturnManual insert lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
+    // Panel PHẢI nằm ngoài trang Auto. Nếu cả 2 bước trên đều hỏng thì nó vẫn
+    // kẹt trong slot (display:none) → Manual trống trơn. Ném về #sacTabAutocut
+    // còn hơn biến mất.
+    var slot = $('sacAutoManualSlot');
+    if (slot && sacIsInside(pm, slot)) {
+      var host = $('sacPanelScreenshot');
+      if (host && host.parentNode) host.parentNode.insertBefore(pm, host);
+    }
     // display do bộ chuyển mode quyết định (đã set trước khi gọi autoClose):
     // về Manual → 'flex', sang mode khác → 'none'. Đừng ghi đè ở đây.
-    autoManualHome = null;
   }
 
   function autoBorrowVoiceDrop() {
