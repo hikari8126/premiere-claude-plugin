@@ -894,7 +894,7 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.14.0'; // Plugin v5.5.0+ cần bridge ≥1.14.0 (Voice Changer + Tạo Sub: fix speed clip + trộn đúng lớp track)
+var REQUIRED_BRIDGE = '1.15.0'; // Plugin v5.6.0+ cần bridge ≥1.15.0 (trang Auto: /notify, /autoset/names, /autoset/voicedir — thiếu là trang Auto 404)
 
 // Compare semver strings: returns -1/0/1
 function compareVersions(a, b) {
