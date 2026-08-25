@@ -3072,8 +3072,8 @@ app.post('/superautocut/split-voice', async (req, res) => {
 // Dùng chung khuôn execFile + osascript với /host-key.
 function escAppleScript(s) { return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
 function buildNotifyScript(title, body) {
-  var t = escAppleScript(title || 'Claude AI').slice(0, 120);
-  var b = escAppleScript(body || '').slice(0, 400);
+  var t = escAppleScript(String(title || 'Claude AI').slice(0, 120));
+  var b = escAppleScript(String(body || '').slice(0, 400));
   return 'display notification "' + b + '" with title "' + t + '"';
 }
 
@@ -3082,7 +3082,11 @@ app.post('/notify', (req, res) => {
   const script = buildNotifyScript(title, body);
   const { execFile } = require('child_process');
   execFile('osascript', ['-e', script], { timeout: 8000 }, (err, _o, stderr) => {
-    if (err) return res.status(500).json({ ok: false, error: (stderr || err.message || '').trim() });
+    if (err) {
+      const msg = (stderr || err.message || '').trim();
+      console.error('[notify] osascript lỗi:', msg);
+      return res.status(500).json({ ok: false, error: msg });
+    }
     res.json({ ok: true });
   });
 });
