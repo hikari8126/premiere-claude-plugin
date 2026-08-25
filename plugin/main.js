@@ -5209,6 +5209,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
     // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
     autoBorrowVoiceDrop();
+    autoBorrowBlocks();
     autoLogRows('open:afterBorrow');
     autoLoadState();
     autoLogRows('open:afterLoadState');
