@@ -3091,6 +3091,20 @@ app.post('/notify', (req, res) => {
   });
 });
 
+// ── POST /autoset/names — dựng tên cho cả bộ 3 video ───────────────────────
+const autosetNames = require('./autoset-names.js');
+
+app.post('/autoset/names', (req, res) => {
+  try {
+    const { config, setNumber, ext, voiceName } = req.body || {};
+    if (!config) return res.status(400).json({ ok: false, error: 'thiếu config' });
+    const jobs = autosetNames.buildSetNames(config, setNumber, ext, voiceName);
+    res.json({ ok: true, jobs });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
 // ── POST /host-key ─────────────────────────────────────────────────────────
 // macOS only. Drives Premiere's native Copy/Paste via AppleScript keystrokes so
 // the UN-NEST feature can copy real track items (effects intact) between
