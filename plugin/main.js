@@ -5169,6 +5169,65 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoRenderPreview();
     });
   }
+  function autoNotify(title, body) {
+    try {
+      fetch(BRIDGE_URL + '/notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, body: body }),
+      });
+    } catch (e) {}
+  }
+
+  function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
+
+  // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
+  async function autoStage1(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i];
+      autoStatus('⏳ Validate .' + job.idx + '…');
+      try {
+        job.rows = autoTsvToRows(autoSet.jobs[job.idx].tsv || '');
+        if (!job.rows.length) throw new Error('chưa dán TSV');
+        sacJobContext.load(job);
+        // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
+        // skipVoiceAsk BẮT BUỘC: nếu không, sacAskGenVoice() sẽ chặn pipeline 3 lần.
+        sacValidatePassed = false;
+        await sacValidateAll({ skipVoiceAsk: true });
+        if (!sacValidatePassed) {
+          var st = ($('sacStatus').textContent || '').replace(/^[❌⚠✅⏳]\s*/, '');
+          throw new Error(st || 'validate thất bại');
+        }
+        sacJobContext.save(job);
+        job.state = 'validated';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+    }
+    var bad = jobs.filter(function (j) { return j.state === 'error'; });
+    if (bad.length) {
+      var msg = bad.map(function (j) { return '.' + j.idx + ': ' + j.error; }).join(' · ');
+      autoStatus('✗ ' + msg);
+      autoNotify('Autocut — validate lỗi', msg);
+    } else {
+      autoStatus('✓ Validate 3/3 xong');
+    }
+    return jobs.filter(function (j) { return j.state === 'validated'; });
+  }
+
+  var sacAutoRunBtn = $('sacAutoRun');
+  if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
+    autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;
+    autoSaveState();
+    try {
+      var jobs = await autoFetchNames();
+      var ok = await autoStage1(jobs);
+      autoStatus('✓ ' + ok.length + '/3 job sẵn sàng gen voice');
+    } catch (e) {
+      autoStatus('✗ ' + e.message);
+      autoNotify('Autocut — lỗi', e.message);
+    }
+  });
   // ── /AUTO PAGE ──
 
   var sacCutNewBtn = $('sacCutNew');
