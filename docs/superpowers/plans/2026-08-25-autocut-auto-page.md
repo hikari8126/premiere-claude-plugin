@@ -248,7 +248,6 @@ assert.ok(s.includes('with title "Xong"'), 'có title');
 
 // 2. dấu " và \ trong nội dung phải được escape, không làm vỡ script
 const s2 = buildNotifyScript('A"B', 'C\\D"E');
-assert.ok(!/[^\\]"[^\s)]/.test(s2.replace(/with title|display notification/g, '')) || true);
 assert.ok(s2.includes('A\\"B'), 'escape dấu " trong title');
 assert.ok(s2.includes('C\\\\D\\"E'), 'escape \\ và " trong body');
 
