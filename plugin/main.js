@@ -5084,7 +5084,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   function autoRenderTab() {
-    autoLogRows('renderTab');
     document.querySelectorAll('.sac-autoTab').forEach(function (t) {
       t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
     });
@@ -5097,35 +5096,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // có. Bảng đọc ra rỗng trong khi job đang có script gần như luôn là lỗi thời
   // điểm (bảng chưa mượn về, vừa re-render, đang bị ẩn), không phải người dùng
   // cố ý xoá. Muốn xoá thật thì bấm "Xoá bảng" (nó gán [] tường minh).
-  // ── LOG TẠM (gỡ sau khi tìm ra nguyên nhân mất script) ──
-  // Ghi mọi lần rows của job bị đọc/ghi/dựng lại về bridge để dựng lại đúng
-  // trình tự thao tác. Xem: bridge/sac-debug.log, tag AUTOROWS.
-  function autoLogRows(where, extra) {
-    try {
-      var counts = (autoSet && autoSet.jobs || []).map(function (j) { return (j.rows || []).length; });
-      var tableRows = 0;
-      try { tableRows = document.querySelectorAll('#sacBody .sac-row').length; } catch (e) {}
-      fetch(BRIDGE_URL + '/sac/log', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag: 'AUTOROWS', data: {
-          where: where, activeJob: autoActiveJob, jobRowCounts: counts,
-          tableRowsInDom: tableRows, extra: extra || null,
-        }}),
-      });
-    } catch (e) {}
-  }
+
 
   function autoCaptureRows(job) {
     if (!job) return;
     var rows = autoReadTableRows();
     var wrote = (rows.length || !(job.rows || []).length);
-    autoLogRows('captureRows', { read: rows.length, had: (job.rows || []).length, wrote: wrote });
     if (wrote) job.rows = rows;
   }
 
   function autoLoadJobRowsIntoTable(job) {
     var body = $('sacBody');
-    autoLogRows('loadRowsIntoTable', { jobRows: (job && job.rows || []).length, bodyFound: !!body });
     if (!body) return;
     body.innerHTML = '';
     rowSeq = 0;
@@ -5173,9 +5154,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
     // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
     autoBorrowVoiceDrop();
-    autoLogRows('open:afterBorrow');
     autoLoadState();
-    autoLogRows('open:afterLoadState');
     // Nếu người dùng vừa nhập script ở bảng Manual rồi bấm sang Auto, video đang
     // chọn còn rỗng → MANG script đó sang. Không làm vậy thì bảng bị xoá trắng để
     // nạp rows rỗng của job, trông như plugin ăn mất việc đang làm (script vẫn nằm
@@ -5194,7 +5173,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoClose() {
     // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
     // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
-    autoLogRows('close:begin');
     autoCaptureRows(autoSet.jobs[autoActiveJob]);
     autoSaveState();
     if (window.releaseKeyboard) window.releaseKeyboard();
@@ -5344,7 +5322,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
-      autoLogRows('tabClick:begin', { to: Number(t.dataset.job) });
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
       autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
