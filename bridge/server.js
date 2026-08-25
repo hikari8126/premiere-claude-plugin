@@ -2806,45 +2806,6 @@ async function callLLM(prompt, opts) {
   return (result.stdout || '').trim();
 }
 
-// ── POST /superautocut/parse-cutsheet ───────────────────────────────────────
-// AI parse a messy pasted cutsheet (TSV from Google Sheets) → normalized rows.
-app.post('/superautocut/parse-cutsheet', async (req, res) => {
-  const { text, provider, model, apiKey } = req.body;
-  if (!text || !String(text).trim()) return res.status(400).json({ ok: false, error: 'No text' });
-  const prompt =
-`Bạn là trợ lý phân tích "cutsheet" (bảng dựng video) dán từ Google Sheets — định dạng lộn xộn do người làm tay.
-Cột thường có: LỜI THOẠI (voice/script), TIMECODE (in→out), SOURCE (tên clip/footage). Thứ tự cột có thể khác; có ô gộp nên vài ô trống.
-
-Chuyển thành MẢNG JSON, mỗi phần tử = một SOURCE cần cắt:
-{ "text": "<lời thoại của block, '' nếu không có>", "time": "<timecode in-out>", "source": "<tên source/clip>" }
-
-Quy tắc:
-- Mỗi source = 1 phần tử. Nếu một ô chứa nhiều source/timecode (ngăn bởi xuống dòng, "/", "&", "và") → tách thành nhiều phần tử, ghép timecode↔source theo đúng thứ tự.
-- time: bỏ tiền tố "Giây/giây/s"; giữ dạng "in-out" (vd "0-3", "1:09-1:10"); bỏ ghi chú "(speed up)", "tua nhanh", "(kéo cọ...)". Nếu timecode nằm CHUNG trong ô source (vd "Borrow trượt nước 0-3", "K6 + K15 (2s đầu)") thì tách ra, để lại tên source.
-- text: lấy từ cột thoại; không có thì "". Các dòng thoại liên tiếp của cùng 1 cảnh có thể gộp.
-- KHÔNG bịa; giữ nguyên tên source (kể cả .mp4, mã như K10/K14opt4, số như 22).
-- CHỈ trả JSON mảng, KHÔNG markdown, KHÔNG giải thích.
-
-Cutsheet:
-<<<
-${text}
->>>`;
-  try {
-    const out = await callLLM(prompt, { provider, model, apiKey, maxTokens: 4096 });
-    var jsonStr = out;
-    var m = out.match(/\[[\s\S]*\]/); // strip any prose/markdown around the array
-    if (m) jsonStr = m[0];
-    var rows;
-    try { rows = JSON.parse(jsonStr); }
-    catch (e) { return res.json({ ok: false, error: 'AI trả về không phải JSON hợp lệ', raw: out.slice(0, 600) }); }
-    if (!Array.isArray(rows)) return res.json({ ok: false, error: 'AI không trả mảng JSON' });
-    rows = rows.map(function (r) {
-      return { text: String((r && r.text) || ''), time: String((r && r.time) || ''), source: String((r && r.source) || '') };
-    }).filter(function (r) { return r.text || r.time || r.source; });
-    res.json({ ok: true, rows: rows });
-  } catch (e) { res.json({ ok: false, error: e.message }); }
-});
-
 // Tách output normalize thành 1 dòng / mỗi thẻ [emotion] — KHÔNG phụ thuộc model
 // có xuống dòng hay không. Bỏ ```fence, ép line-break TRƯỚC mọi thẻ [..], gom khoảng
 // trắng, bỏ số thứ tự lỡ thêm, drop dòng trống.
