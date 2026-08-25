@@ -4996,6 +4996,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoTableHome = null;
   }
 
+  // Mượn dropdown voice có tìm kiếm của tab Voice Gen (#vgVoiceDrop) vào slot
+  // của Auto — cùng pattern với autoBorrowTable/autoReturnTable, để không bao
+  // giờ fork lại UI/logic của nó (fix bug ở đó tự động áp dụng ở đây).
+  var autoVoiceDropHome = null;
+  function autoBorrowVoiceDrop() {
+    var drop = $('vgVoiceDrop');
+    var slot = $('sacAutoVoiceSlot');
+    if (!drop || !slot || autoVoiceDropHome) return;
+    autoVoiceDropHome = { parent: drop.parentNode, next: drop.nextSibling };
+    slot.appendChild(drop);
+  }
+  function autoReturnVoiceDrop() {
+    if (!autoVoiceDropHome) return;
+    var drop = $('vgVoiceDrop');
+    if (drop) autoVoiceDropHome.parent.insertBefore(drop, autoVoiceDropHome.next);
+    autoVoiceDropHome = null;
+  }
+
   function autoLoadState() {
     try {
       var c = JSON.parse(localStorage.getItem(AUTO_CFG_KEY) || '{}');
@@ -5033,7 +5051,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }));
       autoSet.setNumber   = $('sacAutoSet').value.trim();
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
-      autoSet.jobs[autoActiveJob].voiceId = $('sacAutoVoice').value;
+      autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoSet.skipAudition= $('sacAutoSkipAudition').checked;
       localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet));
     } catch (e) {}
@@ -5044,15 +5062,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // nếu job đó chưa từng chọn (ratio '1080x1920', voice là option đầu tiên).
   function autoLoadJobVoiceRatio(job) {
     var ratioSel = $('sacAutoRatio');
-    var voiceSel = $('sacAutoVoice');
     if (ratioSel) ratioSel.value = job.ratio || '1080x1920';
-    if (voiceSel) {
-      if (job.voiceId) {
-        voiceSel.value = job.voiceId;
-      } else if (voiceSel.options.length) {
-        voiceSel.selectedIndex = 0;
-        job.voiceId = voiceSel.value;
-      }
+    if (job.voiceId) {
+      if (typeof window.VoiceGenSetVoice === 'function') window.VoiceGenSetVoice(job.voiceId);
+    } else {
+      // Job chưa từng chọn voice riêng — giữ nguyên voice picker đang hiển thị
+      // (không ép về rỗng) và lưu lại đó làm voiceId của job để không bao giờ
+      // để trống (tên file voice sẽ cần label này).
+      job.voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
     }
   }
 
@@ -5078,22 +5095,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } else {
       createRow(); createRow(); createRow();
     }
-  }
-
-  function autoFillVoices() {
-    var sel = $('sacAutoVoice');
-    if (!sel) return;
-    sel.innerHTML = '';
-    // VG_VOICES_DATA nằm trong IIFE VoiceGen → BẮT BUỘC qua window accessor.
-    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
-    list.forEach(function (v) {
-      if (v.isSep) return;
-      var o = document.createElement('option');
-      o.value = v.voice_id; o.textContent = v.label;
-      sel.appendChild(o);
-    });
-    var job = autoSet.jobs[autoActiveJob];
-    if (job && job.voiceId) sel.value = job.voiceId;
   }
 
   // Đọc bảng #sacBody hiện tại thành rows [[text,time,src], ...] — cùng cách đọc
@@ -5123,11 +5124,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Mượn bảng thật của Manual TRƯỚC khi nạp state — autoLoadState() gọi
     // autoRenderTab() sẽ nạp rows của job đang active vào #sacBody ngay.
     autoBorrowTable();
-    // Nạp state (gồm voiceId đã lưu) TRƯỚC khi build danh sách voice — nếu đảo
-    // ngược thứ tự, autoFillVoices() sẽ set sel.value theo autoSet mặc định
-    // (voiceId rỗng) vì autoLoadState() chưa kịp chạy để khôi phục từ localStorage.
+    // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
+    // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
+    autoBorrowVoiceDrop();
     autoLoadState();
-    autoFillVoices();
     if (window.claimKeyboard) window.claimKeyboard();
     autoRenderPreview();
   }
@@ -5143,6 +5143,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // khi nó còn nằm ở slot Auto rồi mới bị di chuyển, vẫn đúng DOM nhưng sai
     // ý nghĩa ngữ nghĩa (bảng "thuộc" Auto lúc ghi). Trả về trước cho rõ ràng.
     autoReturnTable();
+    // Trả dropdown voice về đúng vị trí gốc trong tab Voice Gen — autoSaveState()
+    // ở trên đã đọc xong voiceId nên trả về sau không mất dữ liệu gì.
+    autoReturnVoiceDrop();
     // Trả lại bảng thủ công đúng như lúc mở trang Auto — nếu không, bảng/
     // parsedBlocks/sacValidatePassed sẽ còn giữ dữ liệu của job cuối cùng đã
     // chạy qua pipeline (thường là .2), khiến editor tưởng đó là phiên thủ công
@@ -5175,8 +5178,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // voiceId đã lưu.
   function autoVoiceLabels() {
     return autoSet.jobs.map(function (job, i) {
-      var voiceId = (i === autoActiveJob) ? $('sacAutoVoice').value : job.voiceId;
-      return autoVoiceLabelFor(voiceId);
+      var voiceId = (i === autoActiveJob && typeof window.VoiceGenGetVoiceId === 'function')
+        ? (window.VoiceGenGetVoiceId() || job.voiceId) : job.voiceId;
+      var label = autoVoiceLabelFor(voiceId);
+      if (!label) {
+        // Không để tên voice rỗng lọt xuống bridge (nó sẽ throw khó hiểu) —
+        // báo lỗi rõ ràng ngay tại đây, video thứ mấy (.0/.1/.2) thiếu voice.
+        throw new Error('Video .' + i + ' chưa chọn được voice hợp lệ — vào tab đó và chọn lại voice.');
+      }
+      return label;
     });
   }
 
@@ -5259,7 +5269,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
       autoSet.jobs[autoActiveJob].rows    = autoReadTableRows();
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
-      autoSet.jobs[autoActiveJob].voiceId = $('sacAutoVoice').value;
+      autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoActiveJob = Number(t.dataset.job);
       autoRenderTab();
       autoSaveState();
@@ -5316,13 +5326,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
   });
 
-  var sacAutoVoiceSel = $('sacAutoVoice');
-  if (sacAutoVoiceSel) {
-    sacAutoVoiceSel.addEventListener('change', function () {
-      autoSaveState();
-      autoRenderPreview();
-    });
-  }
   function autoNotify(title, body) {
     try {
       fetch(BRIDGE_URL + '/notify', {
@@ -7071,8 +7074,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function repositionVoiceDrop() {
     var panel = $('vgVoiceDropPanel');
     var trigger = $('vgVoiceDropTrigger');
-    var container = document.getElementById('tab-voicegen');
-    if (!panel || !trigger || !container) return;
+    if (!panel || !trigger) return;
+    // Portal target = nearest ancestor .tab-panel of the TRIGGER (not a fixed
+    // #tab-voicegen), so the panel still shows up correctly when the trigger
+    // (and its parent #vgVoiceDrop) has been borrowed into another tab (e.g.
+    // the Auto page). No Element.closest() — UXP's DOM support is partial.
+    var container = null;
+    var node = trigger.parentNode;
+    while (node) {
+      if (node.classList && node.classList.contains('tab-panel')) { container = node; break; }
+      node = node.parentNode;
+    }
+    if (!container) container = document.getElementById('tab-voicegen');
+    if (!container) container = document.body;
+    if (!container) return;
+    if (panel.parentNode !== container) container.appendChild(panel);
     var triggerRect = trigger.getBoundingClientRect();
     var contRect    = container.getBoundingClientRect();
     panel.style.top   = (triggerRect.bottom - contRect.top)  + 'px';
@@ -8801,6 +8817,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   window.VoiceGenGetLastVariations = function() {
     return (lastVariations || []).slice(); // trả bản copy
+  };
+
+  // Accessors so the Auto page (Autocut IIFE) can drive the borrowed
+  // #vgVoiceDrop picker without duplicating vgSetVoice/vgCurrentVoiceId.
+  window.VoiceGenSetVoice = function(voiceId) {
+    if (voiceId) vgSetVoice(voiceId);
+  };
+  window.VoiceGenGetVoiceId = function() {
+    return vgCurrentVoiceId || '';
   };
 
   // ── Voice Create (Clone + Design) ────────────────────────────────────────

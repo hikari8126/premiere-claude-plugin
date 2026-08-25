@@ -1113,17 +1113,20 @@
         <!-- Cấu hình RIÊNG của video đang chọn — nằm ngay dưới hàng chọn video
              để thấy rõ nó thuộc video nào. -->
         <div class="sac-autoVidCfg">
-          <label class="sac-nsf2-label">Voice (video đang chọn)</label>
-          <select id="sacAutoVoice" class="sac-nsf2-select"></select>
-
-          <label class="sac-nsf2-label">Ratio (video đang chọn)</label>
-          <select id="sacAutoRatio" class="sac-nsf2-select">
-            <option value="1080x1920" selected>1080×1920 — 9:16</option>
-            <option value="1080x1350">1080×1350 — 4:5</option>
-            <option value="1080x1080">1080×1080 — 1:1</option>
-            <option value="1920x1080">1920×1080 — 16:9</option>
-            <option value="match">Match source clips</option>
-          </select>
+          <div class="sac-autoVidCfgCol">
+            <label class="sac-nsf2-label">Voice (video đang chọn)</label>
+            <div id="sacAutoVoiceSlot" class="sac-autoVoiceSlot"></div>
+          </div>
+          <div class="sac-autoVidCfgCol">
+            <label class="sac-nsf2-label">Ratio (video đang chọn)</label>
+            <select id="sacAutoRatio" class="sac-nsf2-select">
+              <option value="1080x1920" selected>1080×1920 — 9:16</option>
+              <option value="1080x1350">1080×1350 — 4:5</option>
+              <option value="1080x1080">1080×1080 — 1:1</option>
+              <option value="1920x1080">1920×1080 — 16:9</option>
+              <option value="match">Match source clips</option>
+            </select>
+          </div>
         </div>
 
         <div class="sac-autoCfg">
