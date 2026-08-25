@@ -92,7 +92,7 @@ Accessor đã có: `window.VoiceGenGetVoices`, `VoiceGenGetLastVariations`,
 dễ sai và hậu quả nặng nhất (tên deliverable) được đẩy sang nơi test được.
 
 Việc thư mục cũng ở bridge (`POST /autoset/voicedir`): UXP bị sandbox
-(`tryLoadByPath` ở `main.js:2201` viết kiểu best-effort, try/catch trả `false`),
+(`tryLoadByPath` ở `main.js:2202` viết kiểu best-effort, try/catch trả `false`),
 project lại nằm trên Google Drive nên không chắc phân biệt hoa/thường. Node `fs`
 không có vấn đề đó và test được.
 
