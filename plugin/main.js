@@ -5188,7 +5188,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!label && i === autoActiveJob) {
         var el = $('vgVoiceDropLabel');
         var shown = el ? String(el.textContent || '').trim() : '';
-        if (shown) label = shown;
+        // Nếu nhãn dropdown ĐÚNG BẰNG voiceId thì đó không phải tên thật — chính
+        // vgSetVoice() fallback về ID khi không tra được. Nhận nó sẽ nhồi ID thô
+        // vào tên file giao khách ("31.0 - 0dPqNXnhg2bmxQv1WKDp.mp3"), nên bỏ.
+        if (shown && shown !== voiceId) label = shown;
       }
       if (!label) {
         // Phân biệt 2 nguyên nhân: chưa nạp danh sách vs job chưa chọn voice.
@@ -7273,6 +7276,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
 
       renderVoiceDrop();
+      // Danh sách voice vừa về → set LẠI nhãn trigger. renderVoiceDrop() chỉ dựng
+      // lại các dòng trong panel, không chạm nhãn; nếu vgSetVoice() đã được gọi
+      // lúc list còn rỗng (voice clone/user chưa có) thì nhãn kẹt ở ID thô kiểu
+      // "0dPqNXnhg2bmxQv1WKDp" cho tới khi người dùng tự bấm chọn lại.
+      if (vgCurrentVoiceId) { try { vgSetVoice(vgCurrentVoiceId); } catch (e) {} }
       voicesLoaded = true;
 
       if (userVoices.length === 0) {
