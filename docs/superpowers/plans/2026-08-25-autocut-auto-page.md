@@ -937,65 +937,95 @@ grep -n "lastVariations" plugin/main.js | head -5
 
 Ghi lại cách lấy `audioPath` của bản vừa gen.
 
-- [ ] **Step 2: Lấy thư mục chứa file project**
+- [ ] **Step 2: Thư mục voice — làm ở BRIDGE, không dùng UXP fs**
 
-Task 1 đã xác minh `project.path` là **string đồng bộ** chứa đường dẫn `.prproj`.
+**Lý do đổi so với thiết kế ban đầu:** UXP bị sandbox, `getEntryWithUrl` trong plugin
+đang được dùng kiểu best-effort (bọc try/catch, trả `false` khi hỏng — xem
+`tryLoadByPath`, `plugin/main.js:2201`). Thêm nữa project nằm trên Google Drive nên
+không chắc phân biệt hoa/thường. Bridge chạy Node fs: không sandbox, không hỏi quyền,
+và **test được**. Plugin chỉ cần lấy `project.path` rồi nhờ bridge lo thư mục.
+
+**2a. Hàm thuần + test trong `bridge/autoset-names.js`:**
 
 ```javascript
-// Thư mục chứa .prproj — Voice Over nằm CÙNG CẤP với file này (đã kiểm chứng).
-async function autoProjectDir() {
-  var proj = await getActiveProject();
-  var p = String(proj.path || '');
-  if (!p) throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
-  var cut = p.lastIndexOf('/');
-  if (cut < 0) throw new Error('đường dẫn project lạ: ' + p);
-  return p.slice(0, cut);
+// Chọn thư mục voice-over trong danh sách tên có sẵn (không phân biệt hoa/thường).
+// Trả về tên đúng như trên đĩa, hoặc null nếu không có.
+function findVoiceOverDir(names) {
+  var list = names || [];
+  for (var i = 0; i < list.length; i++) {
+    if (/^(voice\s*over|voiceover|vo)$/i.test(String(list[i]).trim())) return list[i];
+  }
+  return null;
 }
 ```
 
-- [ ] **Step 2c: Thêm accessor `lastVariations` vào IIFE VoiceGen**
+Export nó cùng các hàm đang có. Test cần phủ: `'Voice Over'`, `'voice over'`,
+`'VoiceOver'`, `'vo'`, không khớp (`'Voices'`, `'Video'`), danh sách rỗng, và
+**ưu tiên phần tử khớp đầu tiên** khi có nhiều.
 
-`lastVariations` nằm trong IIFE VoiceGen nên trang Auto không đọc trực tiếp được.
-Thêm accessor ngay **cạnh `window.VoiceGenGetVoices`** (khoảng dòng 8140), theo đúng
-lối đã có:
-
-```javascript
-  window.VoiceGenGetLastVariations = function() {
-    return (lastVariations || []).slice(); // trả bản copy
-  };
-```
-
-Kiểm chứng trong Console của UXP Developer Tool sau khi reload:
+**2b. Endpoint `POST /autoset/voicedir` trong `bridge/server.js`:**
 
 ```javascript
-typeof window.VoiceGenGetLastVariations
+// ── POST /autoset/voicedir — giải quyết thư mục lưu voice ──────────────────
+// Nhận đường dẫn file .prproj + thư mục con theo bộ ("31x"), trả về đường dẫn
+// tuyệt đối đã tạo sẵn. Thư mục Voice Over nằm CÙNG CẤP với file .prproj.
+app.post('/autoset/voicedir', (req, res) => {
+  try {
+    const { projectPath, subdir } = req.body || {};
+    if (!projectPath) throw new Error('thiếu projectPath — project chưa được lưu?');
+    if (!subdir) throw new Error('thiếu subdir');
+    const projDir = path.dirname(projectPath);
+    if (!fs.existsSync(projDir)) throw new Error('không thấy thư mục project: ' + projDir);
+    const names = fs.readdirSync(projDir).filter(function (n) {
+      try { return fs.statSync(path.join(projDir, n)).isDirectory(); } catch (e) { return false; }
+    });
+    const hit = autosetNames.findVoiceOverDir(names);
+    const voDir = path.join(projDir, hit || 'Voice Over');
+    ensureDir(voDir);
+    const outDir = path.join(voDir, subdir);
+    ensureDir(outDir);
+    res.json({ ok: true, dir: outDir, voiceOverDir: voDir, created: !hit });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
 ```
-Expected: `"function"`
+
+**2c. Kiểm chứng trên project thật:**
+
+```bash
+curl -s -X POST http://localhost:3030/autoset/voicedir -H "Content-Type: application/json" \
+  -d '{"projectPath":"/Users/crossian/Library/CloudStorage/GoogleDrive-hoang.vietnguyen@crossian.com/Shared drives/CPM.Content Storage_Team 04/SonaShape (BEVA AdoraBra) - Seamless Lifting Bra 3D/Videos/Editing File/SonaShape.prproj","subdir":"32x"}'
+```
+Expected: `created:false` (đã có `Voice Over`) và `dir` kết thúc bằng `Voice Over/32x`.
+
+**2d. Phía plugin — lấy đường dẫn project:**
+
+```javascript
+// project.path là STRING đồng bộ (đã xác minh trên Premiere 25.6.5, Task 1).
+async function autoProjectPath() {
+  var proj = await getActiveProject();
+  var p = String(proj.path || '');
+  if (!p) throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
+  return p;
+}
+
+// Nhờ bridge tạo/giải quyết thư mục lưu voice.
+async function autoVoiceDir(subdir) {
+  var r = await fetch(BRIDGE_URL + '/autoset/voicedir', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectPath: await autoProjectPath(), subdir: subdir }),
+  }).then(function (x) { return x.json(); });
+  if (!r || !r.ok) throw new Error((r && r.error) || 'không tạo được thư mục voice');
+  return r.dir;
+}
+```
 
 - [ ] **Step 3: Viết chặng 2**
 
 ```javascript
-// Dò thư mục voice over dưới gốc sản phẩm (chấp nhận biến thể tên), tạo nếu thiếu.
-async function autoVoiceDir(root, subdir) {  // root = thư mục chứa .prproj
-  var fs = require('uxp').storage.localFileSystem;
-  var rootEntry = await fs.getEntryWithUrl('file://' + root);
-  var entries = await rootEntry.getEntries();
-  var vo = null;
-  for (var i = 0; i < entries.length; i++) {
-    if (entries[i].isFolder && /^(voice\s*over|voiceover|vo)$/i.test(entries[i].name)) { vo = entries[i]; break; }
-  }
-  if (!vo) vo = await rootEntry.createFolder('Voice Over');
-  var subs = await vo.getEntries();
-  for (var k = 0; k < subs.length; k++) {
-    if (subs[k].isFolder && subs[k].name === subdir) return subs[k].nativePath;
-  }
-  var made = await vo.createFolder(subdir);
-  return made.nativePath;
-}
-
 // Chặng 2: normalize → gen voice → move về đúng path → nạp vào bin.
 async function autoStage2(jobs) {
-  var root = await autoProjectDir();
   for (var i = 0; i < jobs.length; i++) {
     var job = jobs[i];
     autoStatus('⏳ Gen voice .' + job.idx + '…');
@@ -1008,7 +1038,7 @@ async function autoStage2(jobs) {
       window.VoiceGenPushScript(scriptText, autoSet.voiceId, true, false);
       var got = await autoWaitVariation();
 
-      var dir = await autoVoiceDir(root, job.voiceSubdir);
+      var dir = await autoVoiceDir(job.voiceSubdir);
       var mv = await fetch(BRIDGE_URL + '/tts/move', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourcePath: got.audioPath, targetDir: dir,
