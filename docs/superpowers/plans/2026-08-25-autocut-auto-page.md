@@ -16,6 +16,24 @@
 
 Đọc kỹ mục này, nếu không sẽ phá workflow hiện tại.
 
+**BẢN ĐỒ SCOPE — đọc trước khi viết dòng code nào.** `main.js` chia thành nhiều IIFE
+tách biệt. Code trang Auto sẽ nằm trong **IIFE Autocut (dòng 2803–5827)**. Từ đó:
+
+| Thứ | Ở đâu | Truy cập được từ Auto page? |
+|---|---|---|
+| `$`, `parsedBlocks`, `parseTSV`, `expandRows`, `createRow`, `sacAlignVoice`, `sacRunAutoCut`, `sacVP`, `SAC_COL_ORDER` | IIFE Autocut | ✅ trực tiếp |
+| `getActiveProject`, `ppGetOrCreateBin`, `ppMoveToBin`, `sacCollectBinItems` | top-level file | ✅ trực tiếp |
+| `VG_VOICES_DATA`, `lastVariations` | IIFE VoiceGen (5832–9884) | ❌ **KHÔNG** — phải qua `window.*` |
+
+Hai module giao tiếp bằng `window.*` (đã có sẵn `window.VoiceGenGetVoices`,
+`window.VoiceGenPushScript`, `window.AutocutPushVoice`). Đừng tham chiếu trực tiếp
+biến của IIFE khác — sẽ ném `ReferenceError` lúc chạy.
+
+**Chữ ký thật cần dùng đúng:**
+- `ppMoveToBin(item, proj, binName)` — thứ tự là **item trước, proj sau**.
+- `sacCollectBinItems(rootItem)` — nhận **rootItem**, không phải project.
+- `window.VoiceGenGetVoices()` → mảng `{voice_id, label, isSep}` (lọc `isSep`).
+
 **Ràng buộc UXP (bắt buộc):**
 - `plugin/main.js` là script **non-module** — không `import`/`export`. Mọi thứ nằm trong IIFE/scope sẵn có.
 - Không dùng `position:fixed`, `z-index`, `display:grid`, `window.innerWidth`, thuộc tính `title=""`, `new Audio()`.
@@ -34,8 +52,9 @@
 | `ppGetOrCreateBin(proj, path)` | `plugin/main.js:2673` | tìm/tạo bin, **đã hỗ trợ lồng cấp** với phân cách `' / '` |
 | `ppMoveToBin(...)` | `plugin/main.js:2745` | chuyển item vào bin |
 | `VoiceGenPushScript(text, voiceId, autoGenerate, switchTab)` | `plugin/main.js:8890` | đẩy script sang Voice Gen; `switchTab=false` = chạy ngầm |
-| `AutocutPushVoice(path)` | `plugin/main.js:8074` | → `sacAlignVoice(path)` |
-| `VG_VOICES_DATA` | `plugin/main.js:5998` | danh sách voice `{voice_id, label}` |
+| `sacAlignVoice(path)` | `plugin/main.js:4486` | align voice — gọi trực tiếp, cùng IIFE |
+| `sacCollectBinItems(rootItem)` | `plugin/main.js:2455` | đi khắp cây project |
+| `window.VoiceGenGetVoices()` | `plugin/main.js:8140` | danh sách voice `{voice_id, label, isSep}` — **dùng cái này**, không phải `VG_VOICES_DATA` |
 | `getActiveProject()` | `plugin/main.js:303` | project đang mở |
 | `BRIDGE_URL` | `plugin/main.js:805` | `http://localhost:3030` |
 
@@ -511,7 +530,9 @@ function autoFillVoices() {
   var sel = $('sacAutoVoice');
   if (!sel) return;
   sel.innerHTML = '';
-  (VG_VOICES_DATA || []).forEach(function (v) {
+  // VG_VOICES_DATA nằm trong IIFE VoiceGen → BẮT BUỘC qua window accessor.
+  var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+  list.forEach(function (v) {
     if (v.isSep) return;
     var o = document.createElement('option');
     o.value = v.voice_id; o.textContent = v.label;
@@ -913,6 +934,25 @@ async function autoProjectDir() {
 }
 ```
 
+- [ ] **Step 2c: Thêm accessor `lastVariations` vào IIFE VoiceGen**
+
+`lastVariations` nằm trong IIFE VoiceGen nên trang Auto không đọc trực tiếp được.
+Thêm accessor ngay **cạnh `window.VoiceGenGetVoices`** (khoảng dòng 8140), theo đúng
+lối đã có:
+
+```javascript
+  window.VoiceGenGetLastVariations = function() {
+    return (lastVariations || []).slice(); // trả bản copy
+  };
+```
+
+Kiểm chứng trong Console của UXP Developer Tool sau khi reload:
+
+```javascript
+typeof window.VoiceGenGetLastVariations
+```
+Expected: `"function"`
+
 - [ ] **Step 3: Viết chặng 2**
 
 ```javascript
@@ -945,7 +985,8 @@ async function autoStage2(jobs) {
       if (!scriptText) throw new Error('không có lời đọc');
 
       // Gen ngầm ở tab Voice Gen (switchTab = false để không nhảy tab).
-      VoiceGenPushScript(scriptText, autoSet.voiceId, true, false);
+      // window.* vì hàm này thuộc IIFE VoiceGen.
+      window.VoiceGenPushScript(scriptText, autoSet.voiceId, true, false);
       var got = await autoWaitVariation();
 
       var dir = await autoVoiceDir(root, job.voiceSubdir);
@@ -969,14 +1010,21 @@ async function autoStage2(jobs) {
   return ok;
 }
 
-// Chờ Voice Gen đẩy ra bản mới. Không có callback nên phải poll lastVariations.
+// Chờ Voice Gen đẩy ra bản mới. Không có callback nên phải poll.
+// lastVariations thuộc IIFE VoiceGen → đọc qua accessor (thêm ở Step 2c).
+function autoLastVariation() {
+  if (typeof window.VoiceGenGetLastVariations !== 'function') return null;
+  var v = window.VoiceGenGetLastVariations();
+  return (v && v[0]) || null;
+}
 function autoWaitVariation() {
-  var before = (lastVariations && lastVariations[0] && lastVariations[0].audioPath) || '';
+  var b0 = autoLastVariation();
+  var before = (b0 && b0.audioPath) || '';
   return new Promise(function (resolve, reject) {
     var waited = 0;
     var t = setInterval(function () {
       waited += 500;
-      var v = lastVariations && lastVariations[0];
+      var v = autoLastVariation();
       if (v && v.audioPath && v.audioPath !== before) { clearInterval(t); resolve(v); return; }
       if (waited > 180000) { clearInterval(t); reject(new Error('gen voice quá 3 phút')); }
     }, 500);
@@ -1032,7 +1080,9 @@ async function autoStage3(jobs) {
     autoStatus('⏳ Dựng .' + job.idx + '…');
     try {
       sacJobContext.load(job);
-      AutocutPushVoice(job.voicePath);
+      // Gọi sacAlignVoice TRỰC TIẾP (cùng IIFE) thay vì window.AutocutPushVoice —
+      // hàm kia còn click sang tab/panel, gây nhiễu overlay trang Auto.
+      sacAlignVoice(job.voicePath);
       await autoWaitAlign();
 
       $('sacNewSeqName').value  = job.seqName;
@@ -1068,22 +1118,28 @@ function autoWaitAlign() {
 // Chuyển sequence vừa tạo vào bin. ppGetOrCreateBin đã hỗ trợ 'A / B / C'.
 async function autoMoveSeqToBin(seqName, binPath) {
   var proj = await getActiveProject();
-  var bin = await ppGetOrCreateBin(proj, binPath);
-  if (!bin) throw new Error('không tạo được bin ' + binPath);
-  var all = await sacWalkProject(proj);        // ← xác nhận tên hàm walk ở Step 2
+  var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+  if (root && typeof root.then === 'function') root = await root;
+  var all = await sacCollectBinItems(root);   // nhận rootItem, KHÔNG phải project
   var hit = all.filter(function (it) { return it.name === seqName; })[0];
   if (!hit) throw new Error('không tìm thấy sequence ' + seqName);
-  await ppMoveToBin(proj, hit.item, binPath);
+  // Thứ tự tham số: (item, proj, binName) — sai thứ tự sẽ fail ÂM THẦM
+  // ({ok:false,'thiếu item/project'}) chứ không ném.
+  var r = await ppMoveToBin(hit.item, proj, binPath);
+  if (!r || !r.ok) throw new Error((r && r.error) || 'chuyển bin thất bại');
 }
 ```
 
-- [ ] **Step 2: Xác nhận tên hàm walk project và chữ ký `ppMoveToBin`**
+- [ ] **Step 2: Xác nhận lại chữ ký trước khi tin code ở Step 1**
 
 ```bash
-grep -n "ppMoveToBin\s*=\|function ppMoveToBin\|async function sacWalk\|sacAllProjectItems" plugin/main.js | head
+grep -n "async function ppMoveToBin\|async function sacCollectBinItems" plugin/main.js
+sed -n '2746,2748p;2455,2457p' plugin/main.js
 ```
 
-Sửa `sacWalkProject` và lời gọi `ppMoveToBin` ở Step 1 cho khớp chữ ký thật. **Không đoán tham số.**
+Đã xác minh (2026-08-25): `ppMoveToBin(item, proj, binName)` và
+`sacCollectBinItems(rootItem)`. Nếu chữ ký đã đổi so với ghi chú này thì sửa Step 1
+cho khớp — **không đoán tham số**.
 
 - [ ] **Step 3: Nối chặng 3 + bước duyệt**
 
