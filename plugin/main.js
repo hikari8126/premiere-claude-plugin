@@ -5086,6 +5086,47 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
+  // Bảng script + blocks + voice là state TOÀN CỤC dùng chung một bảng DOM.
+  // Lớp này là chỗ DUY NHẤT được nạp/lưu state đó cho từng job.
+  var sacJobContext = {
+    // Lưu state hiện tại của bảng vào job.
+    // Đọc theo CLASS ngữ nghĩa, không theo chỉ số: sacApplyColOrder xáo thứ tự DOM
+    // của các ô theo cột đang hiển thị, nên đọc theo index sẽ lệch cột.
+    save: function (job) {
+      var rows = [];
+      document.querySelectorAll('#sacBody .sac-row').forEach(function (row) {
+        var g = function (cls) {
+          var el = row.querySelector('.' + cls + ' input');
+          return el ? (el.value || '') : '';
+        };
+        rows.push([g('sac-col-text'), g('sac-col-time'), g('sac-col-src')]);
+      });
+      // Ghi lại vào job.rows (không phải biến riêng) — validate có thể đã chuẩn hoá
+      // nội dung ô, và load() đọc chính job.rows.
+      if (rows.length) job.rows = rows;
+      job._blocks = parsedBlocks;
+    },
+    // Nạp rows của job vào bảng, dọn state của job trước.
+    load: function (job) {
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      (job.rows || []).forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+      parsedBlocks = job._blocks || [];
+    },
+  };
+
+  // TSV của job → rows [[text,time,src], ...] qua đúng đường manual paste.
+  function autoTsvToRows(tsv) {
+    var parsed = parseTSV(tsv).map(function (cols) {
+      var o = ['', '', ''];
+      for (var d = 0; d < 3; d++) o[SAC_SEM[SAC_COL_ORDER[d]]] = cols[d] || '';
+      return o;
+    });
+    return expandRows(parsed);
+  }
+
   var sacAutoBtn = $('sacAutoBtn');
   if (sacAutoBtn) sacAutoBtn.addEventListener('click', autoOpen);
   var sacAutoCloseBtn = $('sacAutoClose');
