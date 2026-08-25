@@ -4211,16 +4211,21 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    the flex/min-height/overflow shape shared by all method panels — this
    class only adds the gap between the header/scroll/run rows. */
 .sac-autoPage { gap: 8px; }
-.sac-autoScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; }
-.sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; }
-.sac-autoClose { padding: 2px 6px; cursor: pointer; }
-.sac-autoCfg { flex: 0 0 auto; display: flex; flex-direction: column; }
-.sac-autoPreview { font-size: 10px; color: #94a3b8; line-height: 1.5; }
-.sac-autoTabs { display: flex; gap: 4px; }
+.sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; flex: 1 1 0; min-width: 0; }
+.sac-autoClose { padding: 2px 6px; cursor: pointer; flex: 0 0 auto; }
+/* Plain block container — mirrors .sac-newseq-box. NO flex-column wrapper
+   around label/field pairs: that pattern overlaps labels and fields in UXP
+   even though it renders fine in a regular browser. */
+.sac-autoCfg { flex: 0 0 auto; }
+.sac-autoPreview { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); line-height: 1.5; white-space: pre-line; word-break: break-word; }
+.sac-autoTabs { flex: 0 0 auto; display: flex; gap: 4px; }
 .sac-autoTab { padding: 3px 12px; border-radius: 4px; background: #1e1b2e; color: #94a3b8; font-size: 12px; cursor: pointer; }
 .sac-autoTab.is-active { background: #7c3aed; color: #fff; }
-.sac-autoTsv { flex: 1 1 0; min-height: 120px; overflow-y: auto; font-family: monospace; font-size: 11px; }
-.sac-autoStatus { font-size: 11px; color: #94a3b8; min-height: 16px; }
-.sac-autoRun { padding: 6px; text-align: center; border-radius: 4px; background: #7c3aed; color: #fff; font-size: 12px; cursor: pointer; }
+/* Slot the real Manual table is borrowed into — must grow to fill the
+   remaining vertical space or the table collapses to zero height. */
+.sac-autoTableSlot { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
+.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: #94a3b8; min-height: 16px; }
+.sac-autoRun { flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px; background: #7c3aed; color: #fff; font-size: 12px; cursor: pointer; }
 /* ── /AUTO PAGE ── */

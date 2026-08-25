@@ -4951,7 +4951,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // tránh việc field mới thêm sau này bị mất khi user cũ có blob cũ trong storage.
   function autoDefaultSet() {
     return { setNumber: '', ratio: '1080x1920', voiceId: '', skipAudition: false,
-              jobs: [{ tsv: '' }, { tsv: '' }, { tsv: '' }] };
+              jobs: [{ rows: [] }, { rows: [] }, { rows: [] }] };
   }
 
   var autoSet = autoDefaultSet();
@@ -4959,16 +4959,32 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
   var autoRunning = false;       // đang chạy pipeline (stage 1/2 hoặc stage 3) — chặn bấm lại
   var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
+  var autoTableHome = null;      // {parent, next} — vị trí gốc của #sacTableWrap trong panel Manual
 
-  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có tsv string —
+  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows array —
   // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
   function autoNormalizeJobs(jobs) {
     var out = [];
     for (var i = 0; i < 3; i++) {
       var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
-      out.push({ tsv: (typeof j.tsv === 'string') ? j.tsv : '' });
+      out.push({ rows: Array.isArray(j.rows) ? j.rows : [] });
     }
     return out;
+  }
+
+  // Mượn bảng thật của Manual vào slot của Auto — nhớ đúng vị trí gốc để trả
+  // lại byte-for-byte khi đóng trang.
+  function autoBorrowTable() {
+    var w = $('sacTableWrap');
+    if (!w || autoTableHome) return;
+    autoTableHome = { parent: w.parentNode, next: w.nextSibling };
+    $('sacAutoTableSlot').appendChild(w);
+  }
+  function autoReturnTable() {
+    if (!autoTableHome) return;
+    var w = $('sacTableWrap');
+    autoTableHome.parent.insertBefore(w, autoTableHome.next);
+    autoTableHome = null;
   }
 
   function autoLoadState() {
@@ -5015,7 +5031,23 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     document.querySelectorAll('.sac-autoTab').forEach(function (t) {
       t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
     });
-    $('sacAutoTsv').value = autoSet.jobs[autoActiveJob].tsv || '';
+    autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
+  }
+
+  // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
+  function autoLoadJobRowsIntoTable(job) {
+    var body = $('sacBody');
+    if (!body) return;
+    body.innerHTML = '';
+    rowSeq = 0;
+    var rows = (job && job.rows) || [];
+    if (rows.length) {
+      rows.forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+    } else {
+      createRow(); createRow(); createRow();
+    }
   }
 
   function autoFillVoices() {
@@ -5057,6 +5089,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       parsedBlocks: parsedBlocks,
       sacValidatePassed: sacValidatePassed,
     };
+    // Mượn bảng thật của Manual TRƯỚC khi nạp state — autoLoadState() gọi
+    // autoRenderTab() sẽ nạp rows của job đang active vào #sacBody ngay.
+    autoBorrowTable();
     // Nạp state (gồm voiceId đã lưu) TRƯỚC khi build danh sách voice — nếu đảo
     // ngược thứ tự, autoFillVoices() sẽ set sel.value theo autoSet mặc định
     // (voiceId rỗng) vì autoLoadState() chưa kịp chạy để khôi phục từ localStorage.
@@ -5067,8 +5102,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   function autoClose() {
+    // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
+    // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
+    autoSet.jobs[autoActiveJob].rows = autoReadTableRows();
     autoSaveState();
     if (window.releaseKeyboard) window.releaseKeyboard();
+    // Trả bảng về đúng vị trí gốc trong panel Manual TRƯỚC khi ghi rows thủ
+    // công vào nó — nếu đảo thứ tự, rows thủ công sẽ được ghi vào bảng trong
+    // khi nó còn nằm ở slot Auto rồi mới bị di chuyển, vẫn đúng DOM nhưng sai
+    // ý nghĩa ngữ nghĩa (bảng "thuộc" Auto lúc ghi). Trả về trước cho rõ ràng.
+    autoReturnTable();
     // Trả lại bảng thủ công đúng như lúc mở trang Auto — nếu không, bảng/
     // parsedBlocks/sacValidatePassed sẽ còn giữ dữ liệu của job cuối cùng đã
     // chạy qua pipeline (thường là .2), khiến editor tưởng đó là phiên thủ công
@@ -5162,16 +5205,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     },
   };
 
-  // TSV của job → rows [[text,time,src], ...] qua đúng đường manual paste.
-  function autoTsvToRows(tsv) {
-    var parsed = parseTSV(tsv).map(function (cols) {
-      var o = ['', '', ''];
-      for (var d = 0; d < 3; d++) o[SAC_SEM[SAC_COL_ORDER[d]]] = cols[d] || '';
-      return o;
-    });
-    return expandRows(parsed);
-  }
-
   var sacAutoCloseBtn = $('sacAutoClose');
   if (sacAutoCloseBtn) sacAutoCloseBtn.addEventListener('click', function () {
     var manualBtn = document.querySelector('.sac-methodBtn[data-method="manual"]');
@@ -5180,20 +5213,39 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
-      autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;   // lưu tab đang rời
+      autoSet.jobs[autoActiveJob].rows = autoReadTableRows();   // lưu tab đang rời
       autoActiveJob = Number(t.dataset.job);
       autoRenderTab();
       autoSaveState();
     });
   });
 
-  var autoTsvEl = $('sacAutoTsv');
-  if (autoTsvEl) {
-    autoTsvEl.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
-    autoTsvEl.addEventListener('blur',  function () {
-      autoSet.jobs[autoActiveJob].tsv = autoTsvEl.value;
+  // + Row / Xoá bảng — thao tác trực tiếp trên #sacBody đã mượn, dùng lại
+  // đúng createRow() của Manual, không fork logic tạo dòng.
+  var sacAutoAddRowBtn = $('sacAutoAddRow');
+  if (sacAutoAddRowBtn) sacAutoAddRowBtn.addEventListener('click', function () { createRow(); });
+
+  var sacAutoClearRowsBtn = $('sacAutoClearRows');
+  if (sacAutoClearRowsBtn) sacAutoClearRowsBtn.addEventListener('click', function () {
+    $('sacBody').innerHTML = '';
+    rowSeq = 0;
+    createRow(); createRow(); createRow();
+  });
+
+  // Gear button — mở/đóng overlay cấu hình theo project (Sản phẩm/CO/Editor/Bin).
+  var sacAutoSettingsBtn = $('sacAutoSettingsBtn');
+  var sacAutoSettingsEl  = $('sacAutoSettings');
+  if (sacAutoSettingsBtn && sacAutoSettingsEl) {
+    sacAutoSettingsBtn.addEventListener('click', function () {
+      sacAutoSettingsEl.hidden = false;
+    });
+  }
+  var sacAutoSettingsCloseBtn = $('sacAutoSettingsClose');
+  if (sacAutoSettingsCloseBtn && sacAutoSettingsEl) {
+    sacAutoSettingsCloseBtn.addEventListener('click', function () {
+      sacAutoSettingsEl.hidden = true;
       autoSaveState();
-      if (window.releaseKeyboard) window.releaseKeyboard();
+      autoRenderPreview();
     });
   }
 
@@ -5232,8 +5284,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var job = jobs[i];
       autoStatus('⏳ Validate .' + job.idx + '…');
       try {
-        job.rows = autoTsvToRows(autoSet.jobs[job.idx].tsv || '');
-        if (!job.rows.length) throw new Error('chưa dán TSV');
+        job.rows = autoSet.jobs[job.idx].rows || [];
+        if (!job.rows.length) throw new Error('chưa có script');
         sacJobContext.load(job);
         // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
         // skipVoiceAsk BẮT BUỘC: nếu không, sacAskGenVoice() sẽ chặn pipeline 3 lần.
@@ -5453,7 +5505,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return;
     }
     if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
-    autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;
+    autoSet.jobs[autoActiveJob].rows = autoReadTableRows();
     autoSaveState();
     autoRunning = true;
     sacAutoRunBtn.style.opacity = '0.5';
