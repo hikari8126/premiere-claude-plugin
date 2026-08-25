@@ -4937,9 +4937,26 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var AUTO_CFG_KEY = 'sac_auto_cfg';       // cấu hình theo project
   var AUTO_SET_KEY = 'sac_auto_set';       // 3 job đang soạn
 
-  var autoSet = { setNumber: '', ratio: '1080x1920', voiceId: '', skipAudition: false,
-                  jobs: [{ tsv: '' }, { tsv: '' }, { tsv: '' }] };
+  // Hình dạng mặc định chuẩn — nguồn duy nhất để merge lên khi đọc localStorage,
+  // tránh việc field mới thêm sau này bị mất khi user cũ có blob cũ trong storage.
+  function autoDefaultSet() {
+    return { setNumber: '', ratio: '1080x1920', voiceId: '', skipAudition: false,
+              jobs: [{ tsv: '' }, { tsv: '' }, { tsv: '' }] };
+  }
+
+  var autoSet = autoDefaultSet();
   var autoActiveJob = 0;
+
+  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có tsv string —
+  // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
+  function autoNormalizeJobs(jobs) {
+    var out = [];
+    for (var i = 0; i < 3; i++) {
+      var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
+      out.push({ tsv: (typeof j.tsv === 'string') ? j.tsv : '' });
+    }
+    return out;
+  }
 
   function autoLoadState() {
     try {
@@ -4952,8 +4969,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch (e) {}
     try {
       var s = JSON.parse(localStorage.getItem(AUTO_SET_KEY) || 'null');
-      if (s && Array.isArray(s.jobs) && s.jobs.length === 3) autoSet = s;
-    } catch (e) {}
+      // Merge nông lên default thay vì thay thế toàn bộ — field mới thêm sau này
+      // (voice/ratio riêng theo job, v.v.) sẽ không bị mất với blob cũ của user.
+      autoSet = (s && typeof s === 'object') ? Object.assign({}, autoDefaultSet(), s) : autoDefaultSet();
+    } catch (e) {
+      autoSet = autoDefaultSet();
+    }
+    autoSet.jobs = autoNormalizeJobs(autoSet.jobs);
     $('sacAutoSet').value = autoSet.setNumber || '';
     $('sacAutoRatio').value = autoSet.ratio || '1080x1920';
     $('sacAutoSkipAudition').checked = !!autoSet.skipAudition;
@@ -5002,8 +5024,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var app = document.querySelector('#tab-autocut .sac-app');
     if (app) app.style.display = 'none';
     $('sacAutoPage').hidden = false;
-    autoFillVoices();
+    // Nạp state (gồm voiceId đã lưu) TRƯỚC khi build danh sách voice — nếu đảo
+    // ngược thứ tự, autoFillVoices() sẽ set sel.value theo autoSet mặc định
+    // (voiceId rỗng) vì autoLoadState() chưa kịp chạy để khôi phục từ localStorage.
     autoLoadState();
+    autoFillVoices();
     if (window.claimKeyboard) window.claimKeyboard();
   }
 
