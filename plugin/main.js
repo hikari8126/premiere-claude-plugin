@@ -5030,6 +5030,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoLoadState();
     autoFillVoices();
     if (window.claimKeyboard) window.claimKeyboard();
+    autoRenderPreview();
   }
 
   function autoClose() {
@@ -5038,6 +5039,51 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var app = document.querySelector('#tab-autocut .sac-app');
     if (app) app.style.display = '';
     if (window.releaseKeyboard) window.releaseKeyboard();
+  }
+
+  // Label voice đang chọn — vào tên file: "31.0 - Advertising Voice 2.mp3".
+  function autoVoiceLabel() {
+    var sel = $('sacAutoVoice');
+    if (!sel || !sel.value) return '';
+    var opt = sel.options[sel.selectedIndex];
+    return (opt && opt.textContent) || '';
+  }
+
+  function autoBuildCfg() {
+    return {
+      product:     $('sacAutoProduct').value.trim(),
+      co:          $('sacAutoCO').value.trim(),
+      editor:      $('sacAutoEditor').value.trim(),
+      seqNameTpl:  '{sp} vid{set}.{idx} [c.{CO}] [{Editor}]',
+      seqBinTpl:   $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
+      voiceBinTpl: 'Voice Over / {set}x',
+    };
+  }
+
+  // Trả về mảng 3 job có seqName/seqBin/voiceBin/voiceFile, hoặc ném nếu lỗi.
+  async function autoFetchNames() {
+    var res = await fetch(BRIDGE_URL + '/autoset/names', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: autoBuildCfg(), setNumber: $('sacAutoSet').value.trim(),
+                             ext: 'mp3', voiceName: autoVoiceLabel() }),
+    });
+    var j = await res.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || 'không dựng được tên');
+    return j.jobs;
+  }
+
+  async function autoRenderPreview() {
+    var box = $('sacAutoPreview');
+    if (!box) return;
+    try {
+      var jobs = await autoFetchNames();
+      box.textContent = jobs.map(function (j) { return '• ' + j.seqName + '  →  ' + j.seqBin; }).join('\n')
+        + '\n• voice: ' + jobs[0].voiceBin + '/' + jobs[0].voiceFile;
+      box.style.color = '#94a3b8';
+    } catch (e) {
+      box.textContent = '✗ ' + e.message;
+      box.style.color = '#f87171';
+    }
   }
 
   var sacAutoBtn = $('sacAutoBtn');
@@ -5068,8 +5114,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var el = $(id);
     if (!el) return;
     el.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
-    el.addEventListener('blur',  function () { autoSaveState(); if (window.releaseKeyboard) window.releaseKeyboard(); });
+    el.addEventListener('blur',  function () {
+      autoSaveState();
+      autoRenderPreview();
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    });
   });
+
+  var sacAutoVoiceSel = $('sacAutoVoice');
+  if (sacAutoVoiceSel) {
+    sacAutoVoiceSel.addEventListener('change', function () {
+      autoSaveState();
+      autoRenderPreview();
+    });
+  }
   // ── /AUTO PAGE ──
 
   var sacCutNewBtn = $('sacCutNew');
