@@ -4948,6 +4948,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var autoSet = autoDefaultSet();
   var autoActiveJob = 0;
   var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
+  var autoRunning = false;       // đang chạy pipeline (stage 1/2 hoặc stage 3) — chặn bấm lại
+  var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
 
   // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có tsv string —
   // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
@@ -5022,7 +5024,30 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (autoSet.voiceId) sel.value = autoSet.voiceId;
   }
 
+  // Đọc bảng #sacBody hiện tại thành rows [[text,time,src], ...] — cùng cách đọc
+  // theo class ngữ nghĩa như sacJobContext.save, để autoOpen/autoClose chụp và
+  // trả lại đúng state của workflow thủ công mà KHÔNG đụng vào sacJobContext.
+  function autoReadTableRows() {
+    var rows = [];
+    document.querySelectorAll('#sacBody .sac-row').forEach(function (row) {
+      var g = function (cls) {
+        var el = row.querySelector('.' + cls + ' input');
+        return el ? (el.value || '') : '';
+      };
+      rows.push([g('sac-col-text'), g('sac-col-time'), g('sac-col-src')]);
+    });
+    return rows;
+  }
+
   function autoOpen() {
+    // Chụp lại state bảng thủ công TRƯỚC khi bất kỳ bước nào của Auto page có thể
+    // ghi đè #sacBody / parsedBlocks / sacValidatePassed (autoStage1 gọi
+    // sacJobContext.load() ngay ở lượt đầu tiên).
+    autoManualSnapshot = {
+      rows: autoReadTableRows(),
+      parsedBlocks: parsedBlocks,
+      sacValidatePassed: sacValidatePassed,
+    };
     var app = document.querySelector('#tab-autocut .sac-app');
     if (app) app.style.display = 'none';
     $('sacAutoPage').hidden = false;
@@ -5041,6 +5066,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var app = document.querySelector('#tab-autocut .sac-app');
     if (app) app.style.display = '';
     if (window.releaseKeyboard) window.releaseKeyboard();
+    // Trả lại bảng thủ công đúng như lúc mở trang Auto — nếu không, bảng/
+    // parsedBlocks/sacValidatePassed sẽ còn giữ dữ liệu của job cuối cùng đã
+    // chạy qua pipeline (thường là .2), khiến editor tưởng đó là phiên thủ công
+    // của mình.
+    if (autoManualSnapshot) {
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      autoManualSnapshot.rows.forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+      parsedBlocks = autoManualSnapshot.parsedBlocks;
+      sacValidatePassed = autoManualSnapshot.sacValidatePassed;
+      autoManualSnapshot = null;
+      if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
+    }
   }
 
   // Label voice đang chọn — vào tên file: "31.0 - Advertising Voice 2.mp3".
@@ -5220,9 +5260,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // project.path là STRING đồng bộ (đã xác minh trên Premiere 25.6.5).
   async function autoProjectPath() {
     var proj = await getActiveProject();
-    var p = String(proj.path || '');
-    if (!p) throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
-    return p;
+    var raw = proj.path;
+    // path thường là string đồng bộ (đã xác minh trên Premiere 25.6.5), nhưng phòng
+    // build khác trả về Promise — String(aPromise) ra "[object Promise]", KHÔNG
+    // rỗng, nên guard cũ sẽ lọt qua và gửi đường dẫn rác lên /autoset/voicedir.
+    if (raw && typeof raw.then === 'function') raw = await raw;
+    if (raw === undefined || raw === null || raw === '') {
+      throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
+    }
+    if (typeof raw !== 'string' || raw.charAt(0) !== '/') {
+      throw new Error('project.path không hợp lệ (không phải đường dẫn tuyệt đối) — kiểm tra lại phiên bản Premiere');
+    }
+    return raw;
   }
 
   // Nhờ bridge tạo/giải quyết thư mục lưu voice (UXP bị sandbox nên không tự làm).
@@ -5379,14 +5428,31 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var sacAutoRunBtn = $('sacAutoRun');
   if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
+    // Kiểm tra autoPendingBuild TRƯỚC autoRunning cố ý: lần bấm duyệt audition
+    // (lần bấm thứ 2) phải luôn hoạt động khi không có gì đang chạy — nếu đảo thứ
+    // tự, không có khác biệt vì autoRunning chắc chắn là false ở đây (không có
+    // pipeline nào khác đang chạy đồng thời với việc đang chờ duyệt). Nhưng giữ
+    // autoPendingBuild lên trước vẫn đúng ngữ nghĩa: "đã duyệt" ưu tiên hơn
+    // "đang chạy" vì khi pending, không có gì đang autoRunning cả.
     if (autoPendingBuild) {                 // lần bấm thứ 2 = đã duyệt voice
+      if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
       var pending = autoPendingBuild;
       autoPendingBuild = null;
-      await autoStage3(pending);
+      autoRunning = true;
+      sacAutoRunBtn.style.opacity = '0.5';
+      try {
+        await autoStage3(pending);
+      } finally {
+        autoRunning = false;
+        sacAutoRunBtn.style.opacity = '';
+      }
       return;
     }
+    if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
     autoSet.jobs[autoActiveJob].tsv = $('sacAutoTsv').value;
     autoSaveState();
+    autoRunning = true;
+    sacAutoRunBtn.style.opacity = '0.5';
     try {
       var jobs = await autoFetchNames();
       var ok = await autoStage1(jobs);
@@ -5402,6 +5468,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch (e) {
       autoStatus('✗ ' + e.message);
       autoNotify('Autocut — lỗi', e.message);
+    } finally {
+      autoRunning = false;
+      sacAutoRunBtn.style.opacity = '';
     }
   });
   // ── /AUTO PAGE ──
