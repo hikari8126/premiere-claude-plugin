@@ -4971,7 +4971,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoBorrowManual() {
     var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
     if (!pm || !slot || autoManualHome) return;
-    autoManualHome = { parent: pm.parentNode, next: pm.nextSibling, display: pm.style.display };
+    // KHÔNG chụp pm.style.display: bộ chuyển mode set display TRƯỚC khi gọi
+    // autoOpen/autoClose, nên lúc này nó đã là 'none' (stale) — khôi phục giá trị
+    // đó khi trả về sẽ ẩn mất cả panel Manual, kể cả bảng script.
+    autoManualHome = { parent: pm.parentNode, next: pm.nextSibling };
     slot.appendChild(pm);
     pm.style.display = 'flex';   // switcher vừa set 'none' vì method !== 'manual'
     // Ẩn nút Validate: ở trang Auto thì "Chạy cả bộ" đã validate cả 3 video, để
@@ -4989,7 +4992,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
     var pm = $('sacPanelManual');
     autoManualHome.parent.insertBefore(pm, autoManualHome.next);
-    pm.style.display = autoManualHome.display || '';
+    // display do bộ chuyển mode quyết định (đã set trước khi gọi autoClose):
+    // về Manual → 'flex', sang mode khác → 'none'. Đừng ghi đè ở đây.
     autoManualHome = null;
   }
 
