@@ -5973,6 +5973,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoSubStatus('⏳ Đang mở sequence ' + job.seqName + '…');
     try {
       await autoActivateSeqForJob(job);
+      // Quét track SAU khi đã đổi sequence — stScanTracks() đọc active sequence.
+      if (typeof window.SubtextScanTracks === 'function') await window.SubtextScanTracks();
       autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu → Tạo SRT".');
     } catch (e) {
       autoSubStatus('✗ ' + e.message);
@@ -11399,6 +11401,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Điền script KHÔNG kích hoạt chạy: stStartCountdown() chỉ được gọi từ MỘT chỗ,
   // ở cuối bước transcribe, tức là sau khi người dùng đã bấm nút.
   window.SubtextSetScript = function (lines) { stSetScript(lines); };
+  // Quét lại track audio của sequence ĐANG active. Trang Auto Sub cần gọi tay:
+  // stScanTracks() vốn chỉ chạy khi bấm nút tab TẠO SUB, hoặc qua __subtextSync
+  // vốn đòi #tab-subtext phải đang .active — mà trang Auto Sub đã mượn .st-app
+  // ra khỏi panel đó nên không đường nào chạy, danh sách track đứng nguyên ở
+  // "— đang đọc sequence…".
+  window.SubtextScanTracks = function () { return stScanTracks(); };
 
   function stStartCountdown() {
     stStopCountdown();
