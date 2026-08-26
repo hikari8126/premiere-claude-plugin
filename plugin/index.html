@@ -1121,6 +1121,33 @@
       <div id="sacAutoRun" class="sac-autoRun" role="button"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
     </div>
 
+    <!-- ── AUTO SUB PANEL ── -->
+    <!-- Thay trang success cho luồng Auto. MƯỢN node .st-app từ tab TẠO SUB
+         (autoBorrowSub) đúng cơ chế autoBorrowManual — không nhân bản. -->
+    <div class="sac-panel sac-autoPage" id="sacPanelAutoSub" style="display:none">
+      <div class="sac-autoHeader">
+        <span class="sac-autoTitle" id="sacAutoSubTitle">Auto Sub</span>
+        <div class="sac-autoHeaderBtns">
+          <div id="sacAutoSubBack" class="sac-autoSubBack" role="button"><span data-ic="arrow_left" data-ic-size="12"></span> Về cut</div>
+        </div>
+      </div>
+
+      <div class="sac-autoTabRow">
+        <span class="sac-autoTabsLabel">Video</span>
+        <div class="sac-autoTabs">
+          <div class="sac-autoSubTab is-active" data-job="0" role="button">.0</div>
+          <div class="sac-autoSubTab" data-job="1" role="button">.1</div>
+          <div class="sac-autoSubTab" data-job="2" role="button">.2</div>
+        </div>
+      </div>
+
+      <div id="sacAutoSubSlot" class="sac-autoSubSlot"></div>
+
+      <!-- Status RIÊNG: #sacAutoStatus nằm trong #sacPanelAuto, mà panel đó bị ẩn
+           khi trang Sub mở → autoStatus() ghi vào chỗ không ai thấy. -->
+      <div id="sacAutoSubStatus" class="sac-autoStatus"></div>
+    </div>
+
   </div><!-- /sac-app -->
 
   <!-- Auto settings overlay — per-project config, opened by the gear button.

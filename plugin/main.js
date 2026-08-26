@@ -5070,6 +5070,31 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
   }
 
+  // Trang Auto Sub mượn nguyên node .st-app của tab TẠO SUB — cùng nguyên tắc
+  // với autoBorrowManual: dùng lại thứ đã chạy, đừng nhân bản.
+  var autoSubHome = null;    // placeholder ở vị trí gốc của .st-app trong tab TẠO SUB
+  function autoBorrowSub() {
+    var app = document.querySelector('.st-app');
+    var slot = $('sacAutoSubSlot');
+    if (!app || !slot || autoSubHome) return;
+    var ph = document.createElement('div');
+    ph.id = 'stAppHomeMark';
+    ph.style.display = 'none';
+    app.parentNode.insertBefore(ph, app);
+    autoSubHome = { mark: ph };
+    slot.appendChild(app);
+  }
+  function autoReturnSub() {
+    if (!autoSubHome) return;
+    var app = document.querySelector('.st-app');
+    var mark = autoSubHome.mark;
+    autoSubHome = null;
+    if (!app) return;
+    try { if (mark && mark.parentNode) mark.parentNode.insertBefore(app, mark); }
+    catch (e) { console.error('[SAC] autoReturnSub lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
+  }
+
   // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
   // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
   // legacyVoiceId/legacyRatio: giá trị top-level từ blob cũ (trước khi voice/ratio
