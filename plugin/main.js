@@ -5164,9 +5164,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         seqBinTpl: $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
       }));
       autoSet.setNumber   = $('sacAutoSet').value.trim();
-      autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
-      autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoSet.skipAudition= $('sacAutoSkipAudition').checked;
+      // Cùng lý do như autoCaptureRows: khi pipeline đang chạy, select voice/ratio
+      // không còn phản ánh tab đang active — đừng chép chúng vào job.
+      if (!autoRunning) {
+        autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
+        autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
+      }
       // Lược mọi khoá bắt đầu bằng '_' (blocks, srcMap) trước khi stringify:
       // chúng chứa ProjectItem của Premiere — JSON.stringify sẽ ném lỗi, mà chỗ
       // này bọc try/catch rỗng nên state sẽ ÂM THẦM không được lưu nữa.
@@ -5322,8 +5326,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoClose() {
     // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
     // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
-    autoCaptureRows(autoSet.jobs[autoActiveJob]);
-    autoSaveState();
+    // NHƯNG bỏ qua khi pipeline đang chạy: lúc đó bảng thuộc về video pipeline
+    // đang xử lý, chụp lại sẽ ghi đè job đang active bằng nội dung video khác.
+    if (!autoRunning) {
+      autoCaptureRows(autoSet.jobs[autoActiveJob]);
+      autoSaveState();
+    }
     if (window.releaseKeyboard) window.releaseKeyboard();
     // Trả bảng về đúng vị trí gốc trong panel Manual TRƯỚC khi ghi rows thủ
     // công vào nó — nếu đảo thứ tự, rows thủ công sẽ được ghi vào bảng trong
@@ -5489,6 +5497,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
+      // KHÔNG cho đổi tab khi pipeline đang chạy. Bảng script, parsedBlocks và
+      // sacSourceMap là state dùng chung mà pipeline đang mượn cho video NÓ đang
+      // xử lý — không phải video bạn đang nhìn. Đổi tab lúc đó sẽ:
+      //   • cất blocks của video pipeline đang làm đè lên tab đang rời, và
+      //   • ghi rows của video đó đè lên tab đang rời (autoCaptureRows),
+      // rồi autoRenderTab() nạp rows của tab mới vào bảng — cướp bảng khỏi
+      // pipeline giữa chừng. Log đã bắt được đúng chuỗi này: chặng 1 cất đúng cả
+      // 3, sang chặng 2 người dùng bấm .0 → .1 và .0 bị ghi đè bằng .2.
+      if (autoRunning) {
+        autoStatus('⏳ Đang chạy — không đổi tab được. Bảng đang dùng cho video pipeline xử lý.');
+        return;
+      }
       console.log('[AUTO-DBG] ── BẤM TAB .' + autoActiveJob + ' → .' + t.dataset.job + ' ──');
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoStashJobState(autoActiveJob);
@@ -5601,6 +5621,23 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
 
   // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
+  // Trong lúc pipeline chạy, bảng + Blocks thuộc về video pipeline ĐANG xử lý,
+  // không phải tab bạn đang đứng. Nếu tab vẫn chỉ .0 mà Blocks đã là của .2 thì
+  // nhìn như hỏng. Nên đánh dấu tab theo video pipeline đang làm — chỉ đổi hiển
+  // thị, KHÔNG đổi autoActiveJob (tab của bạn) để cuối lượt còn trả về đúng chỗ.
+  function autoMarkRunningTab(idx) {
+    var on = (idx != null);
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      var mine = Number(t.dataset.job) === idx;
+      t.classList.toggle('is-running', on && mine);
+      // Bỏ hẳn dấu "tab của bạn" khi đang chạy: để cả 2 cùng sáng thì không phân
+      // biệt được tab nào đang hiển thị nội dung. Đang chạy → CHỈ MỘT tab sáng,
+      // và nó là video pipeline đang làm. Xong thì autoRenderTab() bật lại
+      // is-active theo autoActiveJob (không hề bị đổi).
+      if (on) t.classList.remove('is-active');
+    });
+  }
+
   // Chuyển hẳn sang tab một video và nạp đúng bảng + Blocks + voice/ratio của nó.
   function autoFocusJob(idx) {
     autoActiveJob = idx;
@@ -5618,6 +5655,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     for (var i = 0; i < jobs.length; i++) {
       if (autoStopHere('validate')) break;
       var job = jobs[i];
+      autoMarkRunningTab(job.idx);
       autoStatus('⏳ Validate .' + job.idx + '…');
       try {
         job.rows    = autoSet.jobs[job.idx].rows || [];
@@ -5735,6 +5773,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     for (var i = 0; i < jobs.length; i++) {
       if (autoStopHere('gen voice')) break;
       var job = jobs[i];
+      autoMarkRunningTab(job.idx);
       autoStatus('⏳ Gen voice .' + job.idx + '…');
       try {
         // HOÃN normalize-script: endpoint đó cần {provider, model, apiKey} (cấu hình
@@ -5815,6 +5854,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     for (var i = 0; i < jobs.length; i++) {
       if (autoStopHere('dựng timeline')) break;
       var job = jobs[i];
+      autoMarkRunningTab(job.idx);
       autoStatus('⏳ Dựng .' + job.idx + '…');
       try {
         sacJobContext.load(job);
@@ -5872,6 +5912,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Nút Run kiêm nút Huỷ. KHÔNG làm mờ nó khi đang chạy: mờ trông như bị vô hiệu
   // hoá, người dùng sẽ không nghĩ là bấm được để dừng.
   function autoSetRunBtn(running) {
+    // Tab khoá khi đang chạy — bấm vào sẽ bị chặn, nên phải cho thấy điều đó.
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      t.classList.toggle('is-locked', !!running);
+    });
+    if (!running) autoMarkRunningTab(null);
     var btn = $('sacAutoRun');
     if (!btn) return;
     btn.style.opacity = '';

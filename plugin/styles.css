@@ -4293,4 +4293,12 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.5);
 }
 .sac-autoResetGo:hover { background: rgba(239,68,68,0.3); color: #fff; }
+/* Tab của video pipeline ĐANG xử lý — khác hẳn tab bạn đang đứng (.is-active),
+   để không nhìn nhầm là Blocks hiển thị sai video. */
+.sac-autoTab.is-running {
+  background: var(--accent); color: var(--accent-fg); border-color: var(--accent-light);
+}
+/* Khoá khi đang chạy: bấm vào bị chặn nên phải cho thấy là không bấm được. */
+.sac-autoTab.is-locked { opacity: 0.5; cursor: default; }
+.sac-autoTab.is-locked.is-running { opacity: 1; }
 /* ── /AUTO PAGE ── */
