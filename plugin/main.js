@@ -2869,8 +2869,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var rowSeq = 0;
   var parsedBlocks = [];
-  // TẠM: ai gọi renderBlocks và vẽ blocks của video nào. Gỡ cùng autoDbgBlocks.
+  // Công tắc log chẩn đoán trang Auto. Bật bằng console:
+  //   localStorage.setItem('sac_auto_dbg','1')  rồi reload plugin.
+  // Log in ra: mỗi lần renderBlocks chạy (kèm stack), mỗi lần CẤT/NẠP state theo
+  // job, và mốc chuyển tab — đủ để dò lại đường đi của blocks giữa 3 video.
+  // Đây là cách đã tìm ra 2 lỗi khó nhất: "mất sạch script" và "tab .0 giữ
+  // blocks của .2". Giữ lại, đừng xoá.
+  var AUTO_DBG = false;
+  try { AUTO_DBG = localStorage.getItem('sac_auto_dbg') === '1'; } catch (e) {}
+
   function autoDbgRender(blocks) {
+    if (!AUTO_DBG) return;
     try {
       var b = blocks || [];
       var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
@@ -3018,6 +3027,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (borrowed) { try { autoReturnManual(); } catch (e) {} }
         if (pm) pm.style.display = (method === 'manual') ? 'flex' : 'none';
       }
+      // Chốt lại 2 panel của chế độ Auto SAU autoClose(): autoCloseSub() bật lại
+      // #sacPanelAuto khi đóng trang Sub, nên nếu không set lại ở đây thì rời
+      // sang Manual vẫn thấy trang Auto nằm đó.
+      var pa = $('sacPanelAuto'), pas = $('sacPanelAutoSub');
+      if (pa)  pa.style.display  = (method === 'auto') ? 'flex' : 'none';
+      if (pas) pas.style.display = 'none';
       sacActiveMethod = method;
     });
   });
@@ -5200,8 +5215,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Không cất theo job thì panel Blocks giữ nguyên bản vẽ lần cuối — bấm sang tab
   // .0 vẫn thấy blocks của .2, nên không thể nhìn ra .0 thiếu source nào.
   // Khoá đặt tiền tố '_' để autoSaveState() lược ra khi ghi localStorage.
-  // TẠM: log chẩn đoán blocks-theo-tab. Gỡ khi tìm ra nguyên nhân.
   function autoDbgBlocks(tag, idx, blocks) {
+    if (!AUTO_DBG) return;
     try {
       var b = blocks || [];
       var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
@@ -5324,6 +5339,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   function autoClose() {
+    // Trang Sub đang mở thì phải đóng trước: nó là panel riêng, bộ chuyển mode
+    // không biết tới nó nên sẽ để lại một panel lơ lửng, và node .st-app vẫn kẹt
+    // trong slot khiến tab TẠO SUB trống trơn.
+    if ($('sacPanelAutoSub') && $('sacPanelAutoSub').style.display !== 'none') {
+      autoCloseSub();
+    }
     // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
     // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
     // NHƯNG bỏ qua khi pipeline đang chạy: lúc đó bảng thuộc về video pipeline
@@ -5509,7 +5530,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         autoStatus('⏳ Đang chạy — không đổi tab được. Bảng đang dùng cho video pipeline xử lý.');
         return;
       }
-      console.log('[AUTO-DBG] ── BẤM TAB .' + autoActiveJob + ' → .' + t.dataset.job + ' ──');
+      if (AUTO_DBG) console.log('[AUTO-DBG] ── BẤM TAB .' + autoActiveJob + ' → .' + t.dataset.job + ' ──');
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoStashJobState(autoActiveJob);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
@@ -5848,6 +5869,106 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!r || !r.ok) throw new Error((r && r.error) || 'chuyển bin thất bại');
   }
 
+  // Kích hoạt sequence theo TÊN. Tra theo tên chứ không giữ object: object của
+  // sequence vừa tạo có thể stale sau khi Premiere xử lý xong. Tên là duy nhất
+  // vì tên chính là deliverable.
+  //
+  // CHƯA XÁC MINH: projectItem.getSequence() mới chỉ thấy dùng trên projectItem
+  // của clip nested (main.js ~11731), chưa thử trên projectItem của sequence
+  // thường. Nếu Premiere không hỗ trợ, hàm ném lỗi có nội dung rõ ràng thay vì
+  // fail âm thầm — đọc thông báo là biết phải đổi cách.
+  async function autoActivateSeqByName(seqName) {
+    var proj = await getActiveProject();
+    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+    var all = await sacCollectBinItems(root);
+    var hit = all.filter(function (it) { return it.name === seqName; })[0];
+    if (!hit) throw new Error('không tìm thấy sequence "' + seqName + '" trong project');
+    if (typeof hit.item.getSequence !== 'function') {
+      throw new Error('Premiere này không cho lấy sequence từ project item '
+                    + '(projectItem.getSequence không tồn tại) — không tự nhảy sequence được, '
+                    + 'bạn mở "' + seqName + '" thủ công trong Premiere rồi bấm lại tab.');
+    }
+    var seq = null;
+    try { seq = await hit.item.getSequence(); } catch (e) {
+      throw new Error('mở sequence "' + seqName + '" lỗi: ' + e.message);
+    }
+    if (!seq) throw new Error('không mở được sequence "' + seqName + '" (getSequence trả về rỗng)');
+    if (typeof proj.openSequence === 'function') await proj.openSequence(seq);
+    if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq);
+    // Sequence vừa kích hoạt mà chạm ngay là nguyên nhân crash quen thuộc —
+    // sacRunAutoCut cũng chờ 900ms sau khi activate vì lý do này.
+    await new Promise(function (r) { setTimeout(r, 900); });
+    return seq;
+  }
+
+  // ── Trang Auto Sub ──────────────────────────────────────────────────────
+  var autoSubActiveJob = 0;
+  var autoSubJobs = [];   // jobs từ autoStage3 (đã có seqName, idx, rows)
+
+  // KHÔNG dùng autoStatus() ở trang Sub: nó ghi vào #sacAutoStatus nằm trong
+  // #sacPanelAuto, mà panel đó đang bị ẩn → thông báo lỗi biến mất.
+  function autoSubStatus(msg) {
+    var el = $('sacAutoSubStatus');
+    if (el) el.textContent = msg;
+  }
+
+  function autoSubFillScript(job) {
+    var lines = ((job && job.rows) || [])
+      .map(function (c) { return (c[0] || '').trim(); })
+      .filter(Boolean);
+    if (typeof window.SubtextSetScript === 'function') window.SubtextSetScript(lines);
+  }
+
+  async function autoSubRenderTab() {
+    document.querySelectorAll('.sac-autoSubTab').forEach(function (t) {
+      t.classList.toggle('is-active', Number(t.dataset.job) === autoSubActiveJob);
+    });
+    var job = autoSubJobs[autoSubActiveJob];
+    var title = $('sacAutoSubTitle');
+    if (!job) {
+      if (title) title.textContent = 'Auto Sub';
+      autoSubStatus('✗ Video .' + autoSubActiveJob + ' chưa dựng được timeline — không có gì để làm phụ đề.');
+      return;
+    }
+    if (title) title.textContent = 'Auto Sub — ' + job.seqName;
+    autoSubFillScript(job);
+    autoSubStatus('⏳ Đang mở sequence ' + job.seqName + '…');
+    try {
+      await autoActivateSeqByName(job.seqName);
+      autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu → Tạo SRT".');
+    } catch (e) {
+      autoSubStatus('✗ ' + e.message);
+    }
+  }
+
+  function autoOpenSub(jobs) {
+    autoSubJobs = jobs || [];
+    var first = 0;
+    for (var i = 0; i < autoSubJobs.length; i++) {
+      if (autoSubJobs[i].state === 'built') { first = i; break; }
+    }
+    autoSubActiveJob = first;
+    autoBorrowSub();
+    $('sacPanelAuto').style.display = 'none';
+    $('sacPanelAutoSub').style.display = 'flex';
+    autoSubRenderTab();
+  }
+  function autoCloseSub() {
+    autoReturnSub();
+    $('sacPanelAutoSub').style.display = 'none';
+    $('sacPanelAuto').style.display = 'flex';
+  }
+
+  document.querySelectorAll('.sac-autoSubTab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      autoSubActiveJob = Number(t.dataset.job);
+      autoSubRenderTab();
+    });
+  });
+  var sacAutoSubBackBtn = $('sacAutoSubBack');
+  if (sacAutoSubBackBtn) sacAutoSubBackBtn.addEventListener('click', autoCloseSub);
+
   // Chặng 3: align voice + dựng timeline + chuyển sequence vào bin.
   // sacRunAutoCut('new') ĐỌC TÊN/RATIO TỪ DOM → phải ghi vào 2 input trước khi gọi.
   async function autoStage3(jobs) {
@@ -5877,6 +5998,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
             + (autoCancelRequested ? ' (đã dừng theo yêu cầu)' : '');
     autoStatus((autoCancelRequested ? '⏹ ' : '✓ ') + msg);
     autoNotify(autoCancelRequested ? 'Autocut — đã dừng' : 'Autocut xong', msg);
+    // Dựng xong thì đi thẳng sang làm phụ đề — script đã có sẵn trong job.
+    // Không timeline nào dựng được thì ở lại trang Auto để còn đọc lỗi.
+    if (ok.length) autoOpenSub(jobs);
   }
 
   // Mở modal confirm. UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể
@@ -11225,6 +11349,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try { stAutoResize(); } catch (e) {}
     try { vgReflowSoon(ta); } catch (e) {}
   }
+  // Cho trang Auto Sub đổ script vào. Ranh giới IIFE: trang Auto không thấy
+  // stSetScript trực tiếp, phải đi qua window.* (handoff §3.3).
+  // Điền script KHÔNG kích hoạt chạy: stStartCountdown() chỉ được gọi từ MỘT chỗ,
+  // ở cuối bước transcribe, tức là sau khi người dùng đã bấm nút.
+  window.SubtextSetScript = function (lines) { stSetScript(lines); };
 
   function stStartCountdown() {
     stStopCountdown();
