@@ -57,18 +57,40 @@ cơ chế song song với thứ đã chạy được:**
 
 → Trước khi viết hàm mới, `grep` xem Autocut/VoiceGen đã có hàm làm việc đó chưa.
 
+**Bổ sung (2026-08-26) — mượn DOM chỉ giải quyết được MARKUP, không giải quyết
+STATE.** Bảng `#sacBody`, `parsedBlocks`, `sacSourceMap`, `sacValidatePassed` đều
+là **một** bản dùng chung cho cả 3 video. Pipeline mượn chúng cho video nó đang
+xử lý, trong khi UI vẫn nói người dùng đang ở tab khác. Từ đó ra một loạt lỗi:
+
+| Triệu chứng | Nguyên nhân |
+|---|---|
+| Bấm chạy → Blocks ở tab .0 đổi thành .2 | Mỗi lần validate lại `renderBlocks()` vào cùng `#sacBlockList`, tab không đổi theo |
+| Tab .0 giữ script/blocks của .2 **vĩnh viễn** | Đổi tab giữa lúc chạy → `autoCaptureRows`/`autoStashJobState` chép nội dung video pipeline đang xử lý đè lên tab đang rời, rồi `autoSaveState()` ghi xuống localStorage |
+| vid.1 dựng ra không có hình | `sacJobContext` không lưu `sacSourceMap` — map toàn cục bị `sacValidateSources` reset mỗi lần validate, tới chặng 3 chỉ còn của job cuối |
+
+Đã vá bằng: cất/khôi phục state theo job (`autoStashJobState`/`autoApplyJobState`),
+tab bám theo video pipeline đang làm (`autoMarkRunningTab`), chặn đổi tab khi
+`autoRunning`. **Nhưng đây vẫn là vá quanh thiết kế state toàn cục.** Hướng sạch
+hơn: cho `sacValidateAll`/`renderBlocks`/`sacRunAutoCut` nhận tham số "làm việc
+trên state nào" thay vì đọc/ghi biến toàn cục — chưa làm, xem §7.
+
 ### 3.2 Cách trang Auto tái dùng Manual: MƯỢN DOM
 
 `autoBorrowManual()` **di chuyển** chính node `#sacPanelManual` vào
-`#sacAutoManualSlot`, `autoReturnManual()` trả về đúng vị trí cũ
-(`{parent, nextSibling, display}`).
+`#sacAutoManualSlot`, `autoReturnManual()` trả về đúng vị trí cũ.
+
+**Cả 3 cặp borrow/return đều dùng PLACEHOLDER, không dùng `nextSibling`:**
+`autoBorrowManual`/`Return`, `autoBorrowVoiceDrop`/`Return`, `autoBorrowSub`/`Return`.
+Lúc mượn thì chèn một `<div>` ẩn vào đúng chỗ cũ, lúc trả thì `insertBefore` vào
+placeholder đó. Lý do ở §4 mục 10.
 
 Nhờ vậy bảng script, Parse cutsheet AI, Validate, Blocks, voice panel, cut panel
 đều là **chính** phần tử của Manual — không có bản sao để lệch hành vi. Handler
 gắn theo id nên đổi cha không ảnh hưởng.
 
 Tương tự: `autoBorrowVoiceDrop()` mượn `#vgVoiceDrop` (dropdown voice có tìm
-kiếm) từ tab Voice Gen.
+kiếm) từ tab Voice Gen, và `autoBorrowSub()` mượn `.st-app` (cả tab TẠO SUB) vào
+`#sacAutoSubSlot` cho trang Auto Sub.
 
 **Nút Validate bị ẩn** khi ở Auto ("Chạy cả bộ" đã validate cả 3), trả lại khi thoát.
 
@@ -116,6 +138,15 @@ không có vấn đề đó và test được.
 6. **`white-space` mặc định gộp `\n`** → preview 4 dòng dồn thành 1 đoạn. Cần
    `white-space: pre-line`.
 7. Cấm: `position:fixed`, `z-index`, `display:grid`. `position:absolute` thì được.
+10. **`insertBefore(node, ref)` với `ref` là text/comment node NÉM LỖI.** Nhớ
+    `nextSibling` lúc mượn rồi trả về bằng nó là bẫy: trong UXP `nextSibling`
+    thường là text node giữa 2 thẻ. Lỗi ném ra làm đứt hàm gọi giữa chừng, panel
+    kẹt trong slot đang `display:none` → **trống trơn**. Dùng placeholder.
+11. **`white-space: pre-line` GỘP khoảng trắng đầu dòng** (chỉ giữ `\n`). Cần
+    thụt lề thì phải `pre-wrap`.
+12. **`JSON.stringify` với giá trị là ProjectItem sẽ ném lỗi.** `autoSaveState()`
+    bọc `try/catch` rỗng nên state sẽ **âm thầm ngừng được lưu**. Mọi khoá tiền
+    tố `_` (`_blocks`, `_srcMap`) bị lược khi serialize vì lý do này.
 8. Input phải `window.claimKeyboard()` / `releaseKeyboard()` on focus/blur, nếu
    không Premiere ăn phím đơn (b, v, c…).
 9. **Đường dẫn project:** `project.path` là **string đồng bộ** (xác minh trên
@@ -160,8 +191,13 @@ dùng báo "đã chạy được" nhưng chưa rõ đã đi hết chặng 2–3 
 
 ## 7. Việc còn treo
 
-1. **Chạy end-to-end một bộ thật** — nên dùng số bộ nháp (vd 99) để không đụng
-   dữ liệu thật. Đây là việc quan trọng nhất còn lại.
+0. **XÁC MINH `projectItem.getSequence()`** — trang Auto Sub dựa vào nó để nhảy
+   sequence theo tab, mà API này mới chỉ thấy dùng trên projectItem của clip
+   nested (`main.js` ~11731), **chưa xác minh trên sequence thường**. Nếu Premiere
+   không hỗ trợ, `autoActivateSeqByName()` ném lỗi có hướng dẫn làm thủ công —
+   đọc thông báo trong `#sacAutoSubStatus` là biết. Đây là việc cần kiểm đầu tiên.
+1. **Tách state trang Auto khỏi biến toàn cục của Manual** — xem §3.1. Đây là
+   nguồn của phần lớn lỗi khó trong tính năng này; các fix hiện tại là vá quanh.
 2. **Xoá thư mục rỗng `Voice Over/32x`** trên Google Drive (tôi tạo khi kiểm
    chứng `/autoset/voicedir`).
 3. **Quyết định về tính năng ảnh (tab "Ảnh" cũ):** đã bỏ nút khỏi UI nhưng
@@ -172,8 +208,13 @@ dùng báo "đã chạy được" nhưng chưa rõ đã đi hết chặng 2–3 
    câu + gắn `[emotion]` cho ElevenLabs. Muốn bật thì phải bổ sung cấu hình AI.
 5. **Voice panel của Manual ("Gen voice", "Without voice") hiện trong Auto** —
    giữ nguyên vì đã bê cả panel. Nếu dễ bấm nhầm thì ẩn như đã làm với Validate.
-6. **`.sac-autoPreview` dài** khi tên sản phẩm dài — đang `white-space: pre-line`
-   + `word-break`, chưa kiểm ở panel rất hẹp (<280px).
+6. **Trang Auto Sub chưa chạy thật lần nào** — markup, tab, đổ script đã viết
+   xong nhưng chưa kiểm trong Premiere.
+7. **Log chẩn đoán `AUTO_DBG`** — tắt mặc định. Bật:
+   `localStorage.setItem('sac_auto_dbg','1')` rồi reload. In ra mỗi lần
+   `renderBlocks` (kèm stack), mỗi lần CẤT/NẠP state theo job, và mốc chuyển tab.
+   Đây là cách đã tìm ra cả "mất sạch script" lẫn "tab .0 giữ blocks của .2" —
+   giữ lại, đừng xoá.
 
 ---
 

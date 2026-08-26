@@ -3,6 +3,37 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.1 — 2026-08-26
+
+> Bridge không đổi (vẫn 1.15.0).
+
+**Autocut trang Auto: gọn UI + trang Auto Sub + loạt fix state dùng chung.** Bấm chạy không còn thấy Blocks nhảy sang video khác; dựng xong đi thẳng sang làm phụ đề với script đã nạp sẵn.
+
+### ✅ Thêm mới
+- **Popup confirm trước khi chạy** — liệt kê đủ **cả 3 video**: tên sequence + bin + đường dẫn voice. Thay khối preview inline (vốn chỉ hiện voice của 1 video). Tên là deliverable giao cho CO nên đây là điểm dừng bắt buộc duy nhất chắc chắn có người đọc.
+- **Trang Auto Sub** thay trang success cho luồng Auto — mượn nguyên node `.st-app` của tab TẠO SUB, có tab `.0/.1/.2`: bấm tab nào thì `openSequence` + `setActiveSequence` sang sequence đó và tự đổ script của đúng video vào ô script. Nút ← Về cut trả node về chỗ cũ.
+- **Nút Huỷ** — dừng ở **ranh giới giữa 2 video**, không cắt ngang. Giữa chừng là đang gen voice (ElevenLabs), align (Whisper) hoặc dựng timeline (Premiere API); cắt ngang để lại file voice dở, sequence dở, và chạm sequence sai lúc là nguồn crash quen thuộc.
+- **Nút Xoá sạch cả bộ** — xoá 3 job + số bộ + `AUTO_SET_KEY` trong localStorage, **giữ lại** cấu hình project (Sản phẩm/CO/Editor/mẫu bin). Có bước xác nhận vì không hoàn tác được.
+- **Tab bám theo video pipeline đang xử lý** — trong lúc chạy chỉ một tab sáng và đó là video đang được vẽ Blocks, hết cảnh "tab nói .0 mà Blocks là .2".
+
+### 🐛 Sửa lỗi
+- **Panel Manual trống trơn khi chuyển Manual ↔ Auto** — `insertBefore(node, nextSibling)` ném lỗi khi ref là text/comment node (rất hay gặp trong UXP), làm `autoClose()` đứt giữa chừng và panel kẹt trong slot đang `display:none`. Cả 3 cặp borrow/return chuyển sang **placeholder**.
+- **`autoNormalizeJobs` bị xoá nhầm** trong một refactor trước, chỗ gọi vẫn còn → `ReferenceError` ngay sau khi mượn panel, nên bảng không có dòng nào.
+- **Timeline dựng ra không có hình** — `sacJobContext` không lưu `sacSourceMap`; map toàn cục này bị `sacValidateSources` reset mỗi lần validate nên tới chặng 3 chỉ còn của job cuối. Nay lưu/khôi phục theo từng job (cả `window.sacSourceMap`).
+- **Cả 3 video bị ghi đè thành nội dung video cuối** — đổi tab hoặc rời trang giữa lúc pipeline chạy làm `autoCaptureRows`/`autoStashJobState` chép state của video pipeline đang xử lý đè lên tab đang rời, rồi `autoSaveState()` ghi xuống localStorage (hỏng vĩnh viễn, reload không chữa). Nay chặn đổi tab khi đang chạy và bỏ qua chụp state trong `autoClose()`/`autoSaveState()`.
+- **Blocks không đổi theo tab** — `renderBlocks()` vẽ vào `#sacBlockList` dùng chung mà `autoRenderTab()` không gọi lại. Nay cất/khôi phục `parsedBlocks` + `sacSourceMap` theo job.
+- **Validate lỗi thì chạy tiếp, không sửa được** — nay **dừng hẳn** và tự nhảy về tab video hỏng với đúng bảng + Blocks để bind source thiếu. Đảo lại quyết định "không chặn 2 video kia" của bản trước: chạy tiếp chỉ tốn credit ElevenLabs cho một bộ chắc chắn phải làm lại.
+- **Trang success chen vào giữa lúc chạy bộ 3 video** — `sacRunAutoCut()` được gọi 3 lần trong chặng 3; nay chặn bằng cờ `autoRunning` (luồng Manual giữ nguyên trang success).
+- **Trang Auto không theo màu chủ đề** — khối CSS hardcode hex nên đổi accent thì trang Auto đứng im. Nay dùng token `--accent*`/`--surface2`/`--text-dim`.
+
+### 🗑 Gỡ bỏ
+- **Parse cutsheet rối bằng AI** — gỡ khỏi plugin lẫn endpoint `POST /superautocut/parse-cutsheet` ở bridge.
+
+### 🔧 Kỹ thuật / Approach
+- **Bẫy UXP mới ghi nhận:** `insertBefore` với ref là text/comment node ném lỗi → dùng placeholder; `white-space: pre-line` **gộp khoảng trắng đầu dòng** (cần thụt lề thì `pre-wrap`); `JSON.stringify` gặp ProjectItem sẽ ném lỗi, mà `autoSaveState()` bọc `try/catch` rỗng nên state **âm thầm ngừng được lưu** — mọi khoá tiền tố `_` bị lược khi serialize.
+- **Log chẩn đoán `AUTO_DBG`** (tắt mặc định, bật bằng `localStorage.setItem('sac_auto_dbg','1')`) — in mỗi lần `renderBlocks` kèm stack, mỗi lần cất/nạp state theo job, và mốc chuyển tab. Đây là cách tìm ra 2 lỗi khó nhất của tính năng này.
+- **Chưa xác minh:** `projectItem.getSequence()` trên projectItem của sequence thường — trang Auto Sub dựa vào nó để nhảy sequence. Không hỗ trợ thì `autoActivateSeqByName()` ném lỗi có hướng dẫn làm thủ công.
+
 ## v5.6.0 / bridge 3.10 (server 1.15.0) — 2026-08-25
 
 > ⚠ **Bắt buộc bridge ≥ 1.15.0** (Bridge app 3.10).
