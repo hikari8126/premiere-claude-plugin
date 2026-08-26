@@ -6514,8 +6514,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           (sacNoVoiceMode ? ' · without voice' : '');
       }
       status.style.display = 'none';
-      $('sacPanelManual').style.display = 'none';
-      $('sacSuccessPanel').style.display = 'flex';
+      // Trang Auto gọi sacRunAutoCut('new') 3 lần trong autoStage3. Nếu không
+      // chặn, trang success chen vào GIỮA lúc chạy bộ 3 video và ẩn mất panel
+      // Manual đang được mượn. Luồng Manual (autoRunning = false) giữ nguyên
+      // trang success như cũ. Một cổng duy nhất ở đây — KHÔNG rải if vào hàm khác.
+      if (!autoRunning) {
+        $('sacPanelManual').style.display = 'none';
+        $('sacSuccessPanel').style.display = 'flex';
+      }
 
     } catch(e) {
       status.textContent = '❌ ' + e.message;
