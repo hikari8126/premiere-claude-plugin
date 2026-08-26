@@ -5482,6 +5482,57 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // backdrop mờ không che được chữ trong bảng script phía sau. Cách duy nhất là
   // thật sự ẩn (display:none) nội dung phía sau khi Settings mở, và trả lại khi
   // đóng. Header vẫn để hiện để giữ ngữ cảnh (tên trang, nút đóng).
+  // ── Xoá sạch cả bộ ──────────────────────────────────────────────────────
+  // Chỉ xoá 3 job (AUTO_SET_KEY). KHÔNG đụng AUTO_CFG_KEY — Sản phẩm/CO/Editor/
+  // mẫu bin là cấu hình theo project, gõ lại mỗi lần là phiền và dễ gõ sai, mà
+  // sai thì ra tên deliverable sai.
+  function autoOpenReset() {
+    var modal = $('sacAutoResetConfirm'), body = $('sacAutoResetBody');
+    if (!modal || !body) return;
+    var counts = autoSet.jobs.map(function (j, i) {
+      return '.' + i + '  ' + ((j.rows || []).length) + ' dòng script';
+    });
+    body.textContent = 'Sẽ xoá:\n' + counts.join('\n')
+      + '\n\nCùng với blocks, voice/ratio của cả 3 và số bộ "'
+      + ($('sacAutoSet').value.trim() || '(trống)') + '".'
+      + '\n\nGIỮ LẠI: Sản phẩm, CO, Editor, mẫu bin (cấu hình theo project).'
+      + '\n\nKhông hoàn tác được.';
+    modal.hidden = false;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
+  }
+  function autoCloseReset() {
+    var modal = $('sacAutoResetConfirm');
+    if (modal) modal.hidden = true;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = '';
+  }
+  function autoResetAll() {
+    autoSet = autoDefaultSet();
+    autoActiveJob = 0;
+    autoPendingBuild = null;
+    try { localStorage.removeItem(AUTO_SET_KEY); } catch (e) {}
+    $('sacAutoSet').value = '';
+    $('sacAutoSkipAudition').checked = false;
+    // autoRenderTab() nạp job rỗng → bảng về 3 dòng trống, và autoApplyJobState()
+    // đặt parsedBlocks = [] rồi ẩn panel Blocks.
+    autoRenderTab();
+    autoStatus('✓ Đã xoá sạch cả bộ. Cấu hình project vẫn giữ nguyên.');
+  }
+
+  var sacAutoResetBtn = $('sacAutoResetBtn');
+  if (sacAutoResetBtn) sacAutoResetBtn.addEventListener('click', function () {
+    if (autoRunning) { autoStatus('⏳ Đang chạy — bấm Huỷ trước đã.'); return; }
+    autoOpenReset();
+  });
+  var sacAutoResetCancelBtn = $('sacAutoResetCancel');
+  if (sacAutoResetCancelBtn) sacAutoResetCancelBtn.addEventListener('click', autoCloseReset);
+  var sacAutoResetGoBtn = $('sacAutoResetGo');
+  if (sacAutoResetGoBtn) sacAutoResetGoBtn.addEventListener('click', function () {
+    autoCloseReset();
+    autoResetAll();
+  });
+
   var sacAutoSettingsBtn = $('sacAutoSettingsBtn');
   var sacAutoSettingsEl  = $('sacAutoSettings');
   var sacAutoScrollEl    = document.querySelector('.sac-autoScroll');

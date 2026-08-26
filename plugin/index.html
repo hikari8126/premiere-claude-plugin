@@ -1067,6 +1067,7 @@
         <!-- Gộp 2 nút vào 1 nhóm: header 3 con + space-between làm UXP đẩy nút
              ⚙ ra giữa (browser thì không, vì title giãn được). 2 con thì chắc ăn. -->
         <div class="sac-autoHeaderBtns">
+          <div id="sacAutoResetBtn" class="sac-autoClose" role="button" data-tip="Xoá sạch cả bộ — script, blocks, voice/ratio, số bộ"><span data-ic="trash" data-ic-size="13"></span></div>
           <div id="sacAutoSettingsBtn" class="sac-autoClose" role="button"><span data-ic="gear" data-ic-size="13"></span></div>
           <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
         </div>
@@ -1168,6 +1169,19 @@
       <input id="sacAutoSeqBin" class="sac-nsf2-input" type="text" />
 
       <div id="sacAutoSettingsClose" class="sac-autoRun" role="button" style="margin-top:12px">Xong</div>
+    </div>
+  </div>
+
+  <!-- Xác nhận xoá sạch. Thao tác này không hoàn tác được và xoá cả localStorage,
+       nên phải có bước chặn — không dùng nút bấm-một-phát. -->
+  <div id="sacAutoResetConfirm" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <div class="sac-autoConfirmHead">Xoá sạch cả bộ?</div>
+      <div class="sac-autoConfirmBody" id="sacAutoResetBody"></div>
+      <div class="sac-autoConfirmActions">
+        <div id="sacAutoResetCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
+        <div id="sacAutoResetGo" class="sac-autoResetGo" role="button" style="flex:1 1 0"><span data-ic="trash" data-ic-size="13"></span> Xoá sạch</div>
+      </div>
     </div>
   </div>
 
