@@ -5233,7 +5233,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
                + ' — bảng Manual vẫn được giữ, trả lại khi bạn thoát trang Auto.');
     }
     if (window.claimKeyboard) window.claimKeyboard();
-    autoRenderPreview();
   }
 
   function autoClose() {
@@ -5341,18 +5340,18 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return j.jobs;
   }
 
-  async function autoRenderPreview() {
-    var box = $('sacAutoPreview');
-    if (!box) return;
-    try {
-      var jobs = await autoFetchNames();
-      box.textContent = jobs.map(function (j) { return '• ' + j.seqName + '  →  ' + j.seqBin; }).join('\n')
-        + '\n• voice: ' + jobs[0].voiceBin + '/' + jobs[0].voiceFile;
-      box.style.color = '#94a3b8';
-    } catch (e) {
-      box.textContent = '✗ ' + e.message;
-      box.style.color = '#f87171';
-    }
+  // Dựng các dòng xác nhận cho ĐỦ 3 video. Trả về mảng string, KHÔNG chạm DOM —
+  // để modal confirm dùng lại. Tên do bridge /autoset/names sinh (nơi duy nhất có
+  // test cho logic tên); đừng dựng lại tên ở đây.
+  async function autoBuildConfirmLines() {
+    var jobs = await autoFetchNames();
+    var out = [];
+    jobs.forEach(function (j) {
+      out.push('.' + j.idx + '  ' + j.seqName);
+      out.push('     ' + j.seqBin);
+      out.push('     ' + j.voiceBin + '/' + j.voiceFile);
+    });
+    return out;
   }
 
   // Bảng script + blocks + voice là state TOÀN CỤC dùng chung một bảng DOM.
@@ -5426,7 +5425,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
       if (sacAutoRunEl) sacAutoRunEl.style.display = '';
       autoSaveState();
-      autoRenderPreview();
     });
   }
 
@@ -5436,7 +5434,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     el.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
     el.addEventListener('blur',  function () {
       autoSaveState();
-      autoRenderPreview();
       if (window.releaseKeyboard) window.releaseKeyboard();
     });
   });
