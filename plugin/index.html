@@ -949,35 +949,11 @@
     <!-- Method bar -->
     <div class="sac-methodBar">
       <div class="sac-methodBtn is-active" role="button" data-method="manual"><span data-ic="file" data-ic-size="13"></span> Manual</div>
-      <div class="sac-methodBtn" role="button" data-method="screenshot"><span data-ic="image" data-ic-size="13"></span> Ảnh</div>
+      <div class="sac-methodBtn" role="button" data-method="auto"><span data-ic="bolt" data-ic-size="13"></span> Auto</div>
     </div>
 
     <!-- ── MANUAL PANEL ── -->
     <div class="sac-panel" id="sacPanelManual">
-
-      <!-- ✨ AI parse: paste a messy cutsheet → AI normalizes → preview/edit → fill -->
-      <div class="sac-aiParse">
-        <div class="sac-sectionToggle" id="sacAiToggle">
-          <span class="sac-blockChevron" id="sacAiChevron">▸</span>
-          <span><span data-ic="wand_magic_sparkles" data-ic-size="12" style="margin-right:6px"></span>Parse cutsheet rối bằng AI</span>
-        </div>
-        <div id="sacAiBody" style="display:none">
-          <textarea id="sacAiRaw" class="sac-aiRaw" spellcheck="false"
-            placeholder="Dán NGUYÊN cutsheet copy từ Google Sheets (gồm cả cột lời thoại)…"></textarea>
-          <div class="sac-aiRow">
-            <select id="sacAiModel" class="sac-aiModel" title="Model parse: Gemini (cần key) · Sonnet (chạy CLI, không cần key)">
-              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
-              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
-            </select>
-            <div id="sacAiParseBtn" class="sac-aiBtn sac-aiPrimary" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Parse AI</div>
-          </div>
-          <div id="sacAiStatus" class="sac-aiStatus"></div>
-          <textarea id="sacAiPreview" class="sac-aiPreview" spellcheck="false" style="display:none"
-            placeholder="Kết quả (Thoại ⇥ Time ⇥ Source) — sửa nếu cần rồi Đổ vào bảng"></textarea>
-          <div id="sacAiFill" class="sac-aiBtn sac-aiPrimary" role="button" style="display:none"><span data-ic="download" data-ic-size="13"></span> Đổ vào bảng script</div>
-        </div>
-      </div>
 
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
@@ -1084,7 +1060,143 @@
       <div id="sacImgStatus" class="sac-statusMsg"></div>
     </div>
 
+    <!-- ── AUTO PANEL ── -->
+    <div class="sac-panel sac-autoPage" id="sacPanelAuto" style="display:none">
+      <div class="sac-autoHeader">
+        <span class="sac-autoTitle">Auto — bộ 3 video</span>
+        <!-- Gộp 2 nút vào 1 nhóm: header 3 con + space-between làm UXP đẩy nút
+             ⚙ ra giữa (browser thì không, vì title giãn được). 2 con thì chắc ăn. -->
+        <div class="sac-autoHeaderBtns">
+          <div id="sacAutoResetBtn" class="sac-autoClose" role="button" data-tip="Xoá sạch cả bộ — script, blocks, voice/ratio, số bộ"><span data-ic="trash" data-ic-size="13"></span></div>
+          <div id="sacAutoSettingsBtn" class="sac-autoClose" role="button"><span data-ic="gear" data-ic-size="13"></span></div>
+          <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
+        </div>
+      </div>
+
+      <div class="sac-autoScroll">
+        <div class="sac-autoTabRow">
+          <div class="sac-autoSetInline">
+            <label class="sac-nsf2-label" for="sacAutoSet">Bộ</label>
+            <input id="sacAutoSet" class="sac-autoSetInput" type="text" />
+          </div>
+          <span class="sac-autoTabsLabel">Video</span>
+          <div class="sac-autoTabs">
+            <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
+            <div class="sac-autoTab" data-job="1" role="button">.1</div>
+            <div class="sac-autoTab" data-job="2" role="button">.2</div>
+          </div>
+        </div>
+
+        <!-- Cấu hình RIÊNG của video đang chọn — nằm ngay dưới hàng chọn video
+             để thấy rõ nó thuộc video nào. -->
+        <div class="sac-autoVidCfg">
+          <div class="sac-autoVidCfgCol">
+            <label class="sac-nsf2-label">Voice</label>
+            <div id="sacAutoVoiceSlot" class="sac-autoVoiceSlot"></div>
+          </div>
+          <div class="sac-autoVidCfgCol">
+            <label class="sac-nsf2-label">Ratio</label>
+            <select id="sacAutoRatio" class="sac-nsf2-select">
+              <option value="1080x1920" selected>1080×1920 — 9:16</option>
+              <option value="1080x1350">1080×1350 — 4:5</option>
+              <option value="1080x1080">1080×1080 — 1:1</option>
+              <option value="1920x1080">1920×1080 — 16:9</option>
+              <option value="match">Match source clips</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sac-autoCfg">
+          <label class="sac-cutNoVoiceToggle"><input type="checkbox" id="sacAutoSkipAudition" /> Bỏ qua nghe thử</label>
+        </div>
+
+        <!-- BÊ NGUYÊN panel Manual vào đây lúc chạy (autoBorrowManual).
+             Trước đây mượn từng mảnh (bảng / blocks / voice panel) — lần nào cũng
+             thiếu một thứ và sinh lỗi mới. Mượn cả panel thì Parse AI, bảng,
+             Validate, Blocks, voice panel, cut panel chạy y như ở tab Manual. -->
+        <div id="sacAutoManualSlot" class="sac-autoManualSlot"></div>
+      </div>
+
+      <div id="sacAutoStatus" class="sac-autoStatus"></div>
+
+      <div id="sacAutoRun" class="sac-autoRun" role="button"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
+    </div>
+
+    <!-- ── AUTO SUB PANEL ── -->
+    <!-- Thay trang success cho luồng Auto. MƯỢN node .st-app từ tab TẠO SUB
+         (autoBorrowSub) đúng cơ chế autoBorrowManual — không nhân bản. -->
+    <div class="sac-panel sac-autoPage" id="sacPanelAutoSub" style="display:none">
+      <div class="sac-autoHeader">
+        <span class="sac-autoTitle" id="sacAutoSubTitle">Auto Sub</span>
+        <div class="sac-autoHeaderBtns">
+          <div id="sacAutoSubBack" class="sac-autoSubBack" role="button"><span data-ic="arrow_left" data-ic-size="12"></span> Về cut</div>
+        </div>
+      </div>
+
+      <div class="sac-autoTabRow">
+        <span class="sac-autoTabsLabel">Video</span>
+        <div class="sac-autoTabs">
+          <div class="sac-autoSubTab is-active" data-job="0" role="button">.0</div>
+          <div class="sac-autoSubTab" data-job="1" role="button">.1</div>
+          <div class="sac-autoSubTab" data-job="2" role="button">.2</div>
+        </div>
+      </div>
+
+      <div id="sacAutoSubSlot" class="sac-autoSubSlot"></div>
+
+      <!-- Status RIÊNG: #sacAutoStatus nằm trong #sacPanelAuto, mà panel đó bị ẩn
+           khi trang Sub mở → autoStatus() ghi vào chỗ không ai thấy. -->
+      <div id="sacAutoSubStatus" class="sac-autoStatus"></div>
+    </div>
+
   </div><!-- /sac-app -->
+
+  <!-- Auto settings overlay — per-project config, opened by the gear button.
+       Sibling of .sac-app (like #sacNewSeqModal) so it positions against
+       #tab-autocut (position:relative), not squeezed inside the flex panel. -->
+  <div id="sacAutoSettings" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <label class="sac-nsf2-label">Sản phẩm</label>
+      <input id="sacAutoProduct" class="sac-nsf2-input" type="text" />
+
+      <label class="sac-nsf2-label">CO</label>
+      <input id="sacAutoCO" class="sac-nsf2-input" type="text" />
+
+      <label class="sac-nsf2-label">Editor</label>
+      <input id="sacAutoEditor" class="sac-nsf2-input" type="text" />
+
+      <label class="sac-nsf2-label">Bin sequence template</label>
+      <input id="sacAutoSeqBin" class="sac-nsf2-input" type="text" />
+
+      <div id="sacAutoSettingsClose" class="sac-autoRun" role="button" style="margin-top:12px">Xong</div>
+    </div>
+  </div>
+
+  <!-- Xác nhận xoá sạch. Thao tác này không hoàn tác được và xoá cả localStorage,
+       nên phải có bước chặn — không dùng nút bấm-một-phát. -->
+  <div id="sacAutoResetConfirm" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <div class="sac-autoConfirmHead">Xoá sạch cả bộ?</div>
+      <div class="sac-autoConfirmBody" id="sacAutoResetBody"></div>
+      <div class="sac-autoConfirmActions">
+        <div id="sacAutoResetCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
+        <div id="sacAutoResetGo" class="sac-autoResetGo" role="button" style="flex:1 1 0"><span data-ic="trash" data-ic-size="13"></span> Xoá sạch</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Xác nhận trước khi chạy bộ 3 video. Tên là deliverable giao cho CO —
+       đây là điểm dừng bắt buộc duy nhất chắc chắn người dùng có đọc. -->
+  <div id="sacAutoConfirm" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <div class="sac-autoConfirmHead" id="sacAutoConfirmHead"></div>
+      <div class="sac-autoConfirmBody" id="sacAutoConfirmBody"></div>
+      <div class="sac-autoConfirmActions">
+        <div id="sacAutoConfirmCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
+        <div id="sacAutoConfirmGo" class="sac-autoRun" role="button" style="flex:1 1 0"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
+      </div>
+    </div>
+  </div>
 
   <!-- legacy hidden shell kept for reference only -->
   <div class="ac-app" style="display:none">
@@ -1338,31 +1450,6 @@
         <div class="vg-scriptGrow">
           <div class="vg-scriptSizer" id="stScriptSizer"></div>
           <textarea id="stScript" class="vg-script" placeholder="Dán script để text chuẩn theo bạn viết (mỗi dòng = 1 ý). Bỏ trống = dùng chữ Whisper nghe được."></textarea>
-        </div>
-      </div>
-
-      <div class="st-section">
-        <div class="st-label">3 · Độ dài mỗi dòng phụ đề</div>
-        <div class="st-slideRow">
-          <span class="st-slideLbl">Từ</span>
-          <div class="st-cslider" id="stMaxWordsC" data-min="1" data-max="20" data-step="1">
-            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
-          </div>
-          <input type="number" id="stMaxWords" class="st-num" min="1" max="20" step="1" value="5" />
-        </div>
-        <div class="st-slideRow">
-          <span class="st-slideLbl">Ký tự</span>
-          <div class="st-cslider" id="stMaxCharsC" data-min="8" data-max="80" data-step="1">
-            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
-          </div>
-          <input type="number" id="stMaxChars" class="st-num" min="8" max="80" step="1" value="30" />
-        </div>
-        <div class="st-slideRow">
-          <span class="st-slideLbl">Giây</span>
-          <div class="st-cslider" id="stMaxDurC" data-min="0.5" data-max="8" data-step="0.5">
-            <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
-          </div>
-          <input type="number" id="stMaxDur" class="st-num" min="0.5" max="8" step="0.5" value="3" />
         </div>
       </div>
 

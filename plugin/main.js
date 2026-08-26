@@ -791,7 +791,8 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.5.0';  // CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
+var PLUGIN_VERSION = 'v5.6.1';  // CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+// v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
 // v5.1.5 — Fix Autocut: (1) ghi chú "(...)" trong ô timestamp (có dấu phẩy + số) không còn bị cắt thành clip ma; (2) fuzzy match chặt hơn — dãy số phải khớp tuyệt đối (K34 O4 hết match nhầm K30 O4), vẫn cho typo phần chữ.
@@ -822,10 +823,9 @@ function sacResolveOrganizeModel() {
   if (ORGANIZE_MODELS.indexOf(ORGANIZE_MODEL) >= 0) return ORGANIZE_MODEL;
   return GEMINI_KEY ? 'gemini-3.1-flash-lite' : 'claude-sonnet-4-6';
 }
-// Đồng bộ 2 dropdown Organize về model đang hiệu lực (gọi khi load + khi đổi key).
+// Đồng bộ dropdown Organize về model đang hiệu lực (gọi khi load + khi đổi key).
 window.sacSyncOrganizeModelUI = function() {
   var m = sacResolveOrganizeModel();
-  var a = document.getElementById('sacAiModel');      if (a) a.value = m;
   var b = document.getElementById('vgOrganizeModel'); if (b) b.value = m;
 };
 
@@ -893,7 +893,7 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.14.0'; // Plugin v5.5.0+ cần bridge ≥1.14.0 (Voice Changer + Tạo Sub: fix speed clip + trộn đúng lớp track)
+var REQUIRED_BRIDGE = '1.15.0'; // Plugin v5.6.0+ cần bridge ≥1.15.0 (trang Auto: /notify, /autoset/names, /autoset/voicedir — thiếu là trang Auto 404)
 
 // Compare semver strings: returns -1/0/1
 function compareVersions(a, b) {
@@ -2869,6 +2869,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var rowSeq = 0;
   var parsedBlocks = [];
+  // Công tắc log chẩn đoán trang Auto. Bật bằng console:
+  //   localStorage.setItem('sac_auto_dbg','1')  rồi reload plugin.
+  // Log in ra: mỗi lần renderBlocks chạy (kèm stack), mỗi lần CẤT/NẠP state theo
+  // job, và mốc chuyển tab — đủ để dò lại đường đi của blocks giữa 3 video.
+  // Đây là cách đã tìm ra 2 lỗi khó nhất: "mất sạch script" và "tab .0 giữ
+  // blocks của .2". Giữ lại, đừng xoá.
+  var AUTO_DBG = false;
+  try { AUTO_DBG = localStorage.getItem('sac_auto_dbg') === '1'; } catch (e) {}
+
+  function autoDbgRender(blocks) {
+    if (!AUTO_DBG) return;
+    try {
+      var b = blocks || [];
+      var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
+      console.log('[AUTO-DBG] VẼ    blocks=' + b.length + ' | source đầu: ' + first);
+      console.log(new Error('[AUTO-DBG] ai gọi renderBlocks').stack);
+    } catch (e) {}
+  }
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
   var sacBindOverrides = {}; // sacNorm(originalCutsheetName) → bound display name (survives re-parse)
@@ -2971,6 +2989,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // ── Method switching ────────────────────────────────────────────────────
+  // node có nằm trong anc không. Tự đi ngược parentNode thay vì Node.contains()
+  // — DOM của UXP chỉ có một phần API, đừng phụ thuộc thứ chưa xác minh.
+  function sacIsInside(node, anc) {
+    for (var n = node; n; n = n.parentNode) if (n === anc) return true;
+    return false;
+  }
+  var sacActiveMethod = 'manual';
   document.querySelectorAll('.sac-methodBtn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       document.querySelectorAll('.sac-methodBtn').forEach(function(b) {
@@ -2978,8 +3003,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       });
       btn.classList.add('is-active');
       var method = btn.dataset.method;
+      var prevMethod = sacActiveMethod;
       $('sacPanelManual').style.display     = (method === 'manual')     ? 'flex' : 'none';
       $('sacPanelScreenshot').style.display = (method === 'screenshot') ? 'flex' : 'none';
+      $('sacPanelAuto').style.display       = (method === 'auto')       ? 'flex' : 'none';
+      // Bọc try/catch: autoOpen/autoClose động vào DOM thật của panel Manual
+      // (mượn/trả). Một lỗi giữa chừng từng làm panel kẹt trong slot Auto →
+      // Manual trống trơn. Bắt lỗi rồi tự sửa lại vị trí + display ở dưới.
+      try {
+        if (method === 'auto' && prevMethod !== 'auto') {
+          autoOpen();
+        } else if (method !== 'auto' && prevMethod === 'auto') {
+          autoClose();
+        }
+      } catch (e) { console.error('[SAC] chuyển mode lỗi:', e); }
+      // Chốt lại trạng thái hiển thị SAU autoOpen/autoClose — đây là nguồn quyết
+      // định duy nhất, không để hàm nào ghi đè.
+      var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
+      var borrowed = !!(slot && pm && sacIsInside(pm, slot));
+      if (method === 'auto') {
+        if (pm) pm.style.display = 'flex';        // đang nằm trong trang Auto
+      } else {
+        if (borrowed) { try { autoReturnManual(); } catch (e) {} }
+        if (pm) pm.style.display = (method === 'manual') ? 'flex' : 'none';
+      }
+      // Chốt lại 2 panel của chế độ Auto SAU autoClose(): autoCloseSub() bật lại
+      // #sacPanelAuto khi đóng trang Sub, nên nếu không set lại ở đây thì rời
+      // sang Manual vẫn thấy trang Auto nằm đó.
+      var pa = $('sacPanelAuto'), pas = $('sacPanelAutoSub');
+      if (pa)  pa.style.display  = (method === 'auto') ? 'flex' : 'none';
+      if (pas) pas.style.display = 'none';
+      sacActiveMethod = method;
     });
   });
 
@@ -3610,6 +3664,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
 
     parsedBlocks = blocks;
+    if (typeof autoDbgRender === 'function') autoDbgRender(blocks);
     $('sacBlockSection').style.display = 'flex';
     // Re-rendering invalidates both gates — must re-validate + re-align.
     sacValidatePassed = false;
@@ -4931,6 +4986,1201 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (window.releaseKeyboard) window.releaseKeyboard();
   }
 
+  // ── AUTO PAGE ──────────────────────────────────────────────────────────────
+  // Trang riêng cho bộ 3 video. Tách khỏi workflow Autocut hiện tại: chỉ ẩn/hiện
+  // .sac-app như modal New-seq, không sửa hàm cũ.
+  var AUTO_CFG_KEY = 'sac_auto_cfg';       // cấu hình theo project
+  var AUTO_SET_KEY = 'sac_auto_set';       // 3 job đang soạn
+
+  // Hình dạng mặc định chuẩn — nguồn duy nhất để merge lên khi đọc localStorage,
+  // tránh việc field mới thêm sau này bị mất khi user cũ có blob cũ trong storage.
+  function autoDefaultSet() {
+    return { setNumber: '', skipAudition: false,
+              jobs: [{ rows: [], voiceId: '', ratio: '1080x1920' },
+                     { rows: [], voiceId: '', ratio: '1080x1920' },
+                     { rows: [], voiceId: '', ratio: '1080x1920' }] };
+  }
+
+  var autoSet = autoDefaultSet();
+  var autoActiveJob = 0;
+  var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
+  var autoRunning = false;       // đang chạy pipeline (stage 1/2 hoặc stage 3) — chặn bấm lại
+  // Huỷ ở RANH GIỚI GIỮA 2 VIDEO, không cắt ngang. Giữa chừng là đang gen voice
+  // (ElevenLabs), đang align (Whisper) hoặc đang dựng timeline (Premiere API) —
+  // cắt ngang để lại file voice dở, sequence dựng dở, và chạm sequence sai lúc là
+  // nguồn crash Premiere quen thuộc. Mỗi vòng lặp chặng kiểm cờ ở ĐẦU lượt.
+  var autoCancelRequested = false;
+  var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
+  var autoManualHome = null;     // vị trí gốc của #sacPanelManual
+  var autoVoiceDropHome = null;  // vị trí gốc của #vgVoiceDrop (ở tab Voice Gen)
+
+  // BÊ NGUYÊN panel Manual sang trang Auto. Mượn từng mảnh là sai hướng: lần nào
+  // cũng thiếu một thứ. Mượn cả panel thì bảng, Parse AI, Validate, Blocks, voice
+  // panel, cut panel chạy y như ở tab Manual — không có bản sao nào để lệch.
+  var autoHiddenBtns = null;     // display gốc của các nút Manual bị ẩn trong Auto
+
+  function autoBorrowManual() {
+    var pm = $('sacPanelManual'), slot = $('sacAutoManualSlot');
+    if (!pm || !slot || autoManualHome) return;
+    // Để lại PLACEHOLDER ở đúng chỗ cũ thay vì ghi nhớ nextSibling: ở UXP,
+    // nextSibling có thể là text/comment node và insertBefore với ref node kiểu
+    // đó ném lỗi — autoClose() đứt giữa chừng, panel kẹt trong slot Auto (đang
+    // display:none) nên Manual trống trơn. Placeholder thì swap luôn, không lỗi.
+    //
+    // KHÔNG chụp pm.style.display: bộ chuyển mode set display TRƯỚC khi gọi
+    // autoOpen/autoClose, nên lúc này nó đã là 'none' (stale) — khôi phục giá trị
+    // đó khi trả về sẽ ẩn mất cả panel Manual, kể cả bảng script.
+    var ph = document.createElement('div');
+    ph.id = 'sacManualHomeMark';
+    ph.style.display = 'none';
+    pm.parentNode.insertBefore(ph, pm);
+    autoManualHome = { mark: ph };
+    slot.appendChild(pm);
+    pm.style.display = 'flex';   // switcher vừa set 'none' vì method !== 'manual'
+    // Ẩn nút Validate: ở trang Auto thì "Chạy cả bộ" đã validate cả 3 video, để
+    // lại chỉ gây nhầm (validate 1 video rồi tưởng đã xong cả bộ).
+    var vb = $('sacPreviewBtn');
+    autoHiddenBtns = { validate: vb ? vb.style.display : null };
+    if (vb) vb.style.display = 'none';
+  }
+  function autoReturnManual() {
+    if (!autoManualHome) return;
+    if (autoHiddenBtns) {
+      var vb = $('sacPreviewBtn');
+      if (vb) vb.style.display = autoHiddenBtns.validate || '';
+      autoHiddenBtns = null;
+    }
+    var pm = $('sacPanelManual');
+    var mark = autoManualHome.mark;
+    autoManualHome = null;
+    // Trả về đúng chỗ placeholder rồi gỡ placeholder. Bọc try/catch: nếu bước
+    // này hỏng mà không ai bắt, cả phần còn lại của autoClose() (khôi phục bảng
+    // thủ công) sẽ không chạy — hỏng nhỏ thành mất panel.
+    try {
+      if (mark && mark.parentNode) mark.parentNode.insertBefore(pm, mark);
+    } catch (e) { console.error('[SAC] autoReturnManual insert lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
+    // Panel PHẢI nằm ngoài trang Auto. Nếu cả 2 bước trên đều hỏng thì nó vẫn
+    // kẹt trong slot (display:none) → Manual trống trơn. Ném về #sacTabAutocut
+    // còn hơn biến mất.
+    var slot = $('sacAutoManualSlot');
+    if (slot && sacIsInside(pm, slot)) {
+      var host = $('sacPanelScreenshot');
+      if (host && host.parentNode) host.parentNode.insertBefore(pm, host);
+    }
+    // display do bộ chuyển mode quyết định (đã set trước khi gọi autoClose):
+    // về Manual → 'flex', sang mode khác → 'none'. Đừng ghi đè ở đây.
+  }
+
+
+
+
+  // Placeholder thay vì nhớ nextSibling — cùng lý do đã làm panel Manual biến mất
+  // (commit fee1cdd): ở UXP nextSibling có thể là text/comment node và
+  // insertBefore với ref node kiểu đó ném lỗi.
+  function autoBorrowVoiceDrop() {
+    var drop = $('vgVoiceDrop');
+    var slot = $('sacAutoVoiceSlot');
+    if (!drop || !slot || autoVoiceDropHome) return;
+    var ph = document.createElement('div');
+    ph.id = 'vgVoiceDropHomeMark';
+    ph.style.display = 'none';
+    drop.parentNode.insertBefore(ph, drop);
+    autoVoiceDropHome = { mark: ph };
+    slot.appendChild(drop);
+  }
+  function autoReturnVoiceDrop() {
+    if (!autoVoiceDropHome) return;
+    var drop = $('vgVoiceDrop');
+    var mark = autoVoiceDropHome.mark;
+    autoVoiceDropHome = null;
+    if (!drop) return;
+    try { if (mark && mark.parentNode) mark.parentNode.insertBefore(drop, mark); }
+    catch (e) { console.error('[SAC] autoReturnVoiceDrop lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
+  }
+
+  // Trang Auto Sub mượn nguyên node .st-app của tab TẠO SUB — cùng nguyên tắc
+  // với autoBorrowManual: dùng lại thứ đã chạy, đừng nhân bản.
+  var autoSubHome = null;    // placeholder ở vị trí gốc của .st-app trong tab TẠO SUB
+  function autoBorrowSub() {
+    var app = document.querySelector('.st-app');
+    var slot = $('sacAutoSubSlot');
+    if (!app || !slot || autoSubHome) return;
+    var ph = document.createElement('div');
+    ph.id = 'stAppHomeMark';
+    ph.style.display = 'none';
+    app.parentNode.insertBefore(ph, app);
+    autoSubHome = { mark: ph };
+    slot.appendChild(app);
+  }
+  function autoReturnSub() {
+    if (!autoSubHome) return;
+    var app = document.querySelector('.st-app');
+    var mark = autoSubHome.mark;
+    autoSubHome = null;
+    if (!app) return;
+    try { if (mark && mark.parentNode) mark.parentNode.insertBefore(app, mark); }
+    catch (e) { console.error('[SAC] autoReturnSub lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
+  }
+
+  // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
+  // để autoRenderTab() index autoSet.jobs[autoActiveJob] không bao giờ throw.
+  // legacyVoiceId/legacyRatio: giá trị top-level từ blob cũ (trước khi voice/ratio
+  // chuyển xuống theo job) — dùng làm fallback cho job chưa có giá trị riêng, để
+  // không lộ ra "undefined" khi migrate từ localStorage cũ.
+  function autoNormalizeJobs(jobs, legacyVoiceId, legacyRatio) {
+    var out = [];
+    for (var i = 0; i < 3; i++) {
+      var j = (Array.isArray(jobs) && jobs[i] && typeof jobs[i] === 'object') ? jobs[i] : {};
+      out.push({
+        rows:    Array.isArray(j.rows) ? j.rows : [],
+        voiceId: (j.voiceId !== undefined && j.voiceId !== null) ? j.voiceId : (legacyVoiceId || ''),
+        ratio:   j.ratio || legacyRatio || '1080x1920',
+      });
+    }
+    return out;
+  }
+
+  function autoLoadState() {
+    try {
+      var c = JSON.parse(localStorage.getItem(AUTO_CFG_KEY) || '{}');
+      if (c.product) $('sacAutoProduct').value = c.product;
+      if (c.co)      $('sacAutoCO').value     = c.co;
+      if (c.editor)  $('sacAutoEditor').value = c.editor;
+      // Mẫu bin sửa được: đổi nền tảng (FB → TT) chỉ cần sửa ô này, không sửa code.
+      $('sacAutoSeqBin').value = c.seqBinTpl || 'Sequence / FB / {set}x';
+    } catch (e) {}
+    try {
+      var s = JSON.parse(localStorage.getItem(AUTO_SET_KEY) || 'null');
+      // Merge nông lên default thay vì thay thế toàn bộ — field mới thêm sau này
+      // (voice/ratio riêng theo job, v.v.) sẽ không bị mất với blob cũ của user.
+      autoSet = (s && typeof s === 'object') ? Object.assign({}, autoDefaultSet(), s) : autoDefaultSet();
+    } catch (e) {
+      autoSet = autoDefaultSet();
+    }
+    // Migrate blob cũ: voiceId/ratio từng ở top-level (chung cho cả bộ) — nếu còn
+    // đó, dùng làm fallback cho job chưa có giá trị riêng rồi xoá đi (per-job now).
+    autoSet.jobs = autoNormalizeJobs(autoSet.jobs, autoSet.voiceId, autoSet.ratio);
+    delete autoSet.voiceId;
+    delete autoSet.ratio;
+    $('sacAutoSet').value = autoSet.setNumber || '';
+    $('sacAutoSkipAudition').checked = !!autoSet.skipAudition;
+    autoRenderTab();
+  }
+
+  function autoSaveState() {
+    try {
+      localStorage.setItem(AUTO_CFG_KEY, JSON.stringify({
+        product: $('sacAutoProduct').value.trim(),
+        co:      $('sacAutoCO').value.trim(),
+        editor:  $('sacAutoEditor').value.trim(),
+        seqBinTpl: $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
+      }));
+      autoSet.setNumber   = $('sacAutoSet').value.trim();
+      autoSet.skipAudition= $('sacAutoSkipAudition').checked;
+      // Cùng lý do như autoCaptureRows: khi pipeline đang chạy, select voice/ratio
+      // không còn phản ánh tab đang active — đừng chép chúng vào job.
+      if (!autoRunning) {
+        autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
+        autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
+      }
+      // Lược mọi khoá bắt đầu bằng '_' (blocks, srcMap) trước khi stringify:
+      // chúng chứa ProjectItem của Premiere — JSON.stringify sẽ ném lỗi, mà chỗ
+      // này bọc try/catch rỗng nên state sẽ ÂM THẦM không được lưu nữa.
+      localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet, function (k, v) {
+        return (k && k.charAt(0) === '_') ? undefined : v;
+      }));
+    } catch (e) {}
+  }
+
+  // Chuyển tab: lưu voice+ratio của select hiện tại vào job đang rời, rồi nạp
+  // voice+ratio của job sắp vào lên các select — fallback về mặc định hợp lý
+  // nếu job đó chưa từng chọn (ratio '1080x1920', voice là option đầu tiên).
+  function autoLoadJobVoiceRatio(job) {
+    var ratioSel = $('sacAutoRatio');
+    if (ratioSel) ratioSel.value = job.ratio || '1080x1920';
+    if (job.voiceId) {
+      if (typeof window.VoiceGenSetVoice === 'function') window.VoiceGenSetVoice(job.voiceId);
+    } else {
+      // Job chưa từng chọn voice riêng — giữ nguyên voice picker đang hiển thị
+      // (không ép về rỗng) và lưu lại đó làm voiceId của job để không bao giờ
+      // để trống (tên file voice sẽ cần label này).
+      job.voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
+    }
+  }
+
+  // Blocks + sourceMap là state TOÀN CỤC dùng chung một DOM (#sacBlockList).
+  // Không cất theo job thì panel Blocks giữ nguyên bản vẽ lần cuối — bấm sang tab
+  // .0 vẫn thấy blocks của .2, nên không thể nhìn ra .0 thiếu source nào.
+  // Khoá đặt tiền tố '_' để autoSaveState() lược ra khi ghi localStorage.
+  function autoDbgBlocks(tag, idx, blocks) {
+    if (!AUTO_DBG) return;
+    try {
+      var b = blocks || [];
+      var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
+      var firstText = (b[0] && (b[0].text || (b[0].texts && b[0].texts[0]))) || '(không có thoại)';
+      console.log('[AUTO-DBG] ' + tag + ' job=.' + idx + ' blocks=' + b.length
+                + ' | source đầu: ' + first
+                + ' | thoại đầu: ' + String(firstText).slice(0, 40));
+    } catch (e) { console.log('[AUTO-DBG] ' + tag + ' job=.' + idx + ' (log lỗi: ' + e.message + ')'); }
+  }
+
+  function autoStashJobState(idx) {
+    var j = autoSet.jobs[idx];
+    if (!j) return;
+    autoDbgBlocks('CẤT  ', idx, parsedBlocks);
+    j._blocks = parsedBlocks;
+    j._srcMap = {};
+    Object.keys(sacSourceMap).forEach(function (k) { j._srcMap[k] = sacSourceMap[k]; });
+  }
+  function autoApplyJobState(job) {
+    autoDbgBlocks('NẠP  ', autoActiveJob, (job && job._blocks) || []);
+    parsedBlocks = (job && job._blocks) || [];
+    if (job && job._srcMap) {
+      sacSourceMap = job._srcMap;
+      window.sacSourceMap = sacSourceMap;
+    }
+    var sec = $('sacBlockSection');
+    if (parsedBlocks.length) {
+      renderBlocks(parsedBlocks);
+      if (sec) sec.style.display = 'flex';
+    } else if (sec) {
+      sec.style.display = 'none';
+    }
+  }
+
+  function autoRenderTab() {
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
+    });
+    autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
+    autoLoadJobVoiceRatio(autoSet.jobs[autoActiveJob]);
+    autoApplyJobState(autoSet.jobs[autoActiveJob]);
+  }
+
+  // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
+  // Ghi rows từ bảng vào job — nhưng KHÔNG cho phép ghi rỗng đè lên script đang
+  // có. Bảng đọc ra rỗng trong khi job đang có script gần như luôn là lỗi thời
+  // điểm (bảng chưa mượn về, vừa re-render, đang bị ẩn), không phải người dùng
+  // cố ý xoá. Muốn xoá thật thì bấm "Xoá bảng" (nó gán [] tường minh).
+
+
+  function autoCaptureRows(job) {
+    if (!job) return;
+    var rows = autoReadTableRows();
+    var wrote = (rows.length || !(job.rows || []).length);
+    if (wrote) job.rows = rows;
+  }
+
+  function autoLoadJobRowsIntoTable(job) {
+    var body = $('sacBody');
+    if (!body) return;
+    body.innerHTML = '';
+    rowSeq = 0;
+    var rows = (job && job.rows) || [];
+    if (rows.length) {
+      rows.forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+    } else {
+      createRow(); createRow(); createRow();
+    }
+  }
+
+  // Đọc bảng #sacBody hiện tại thành rows [[text,time,src], ...] — cùng cách đọc
+  // theo class ngữ nghĩa như sacJobContext.save, để autoOpen/autoClose chụp và
+  // trả lại đúng state của workflow thủ công mà KHÔNG đụng vào sacJobContext.
+  function autoReadTableRows() {
+    var rows = [];
+    // ĐỌC BẰNG sacInputBySem — KHÔNG dùng selector kiểu '.sac-col-text input'.
+    // Selector đó không khớp trong UXP: log thực tế cho thấy DOM có 14 dòng mà
+    // đọc ra 0 → job.rows bị ghi rỗng → mất sạch script. Chỉ số cột nằm trên
+    // chính input (dataset.colIdx), đó là cách parseBlocks() vẫn dùng.
+    Array.prototype.forEach.call($('sacBody').querySelectorAll('.sac-row'), function (row) {
+      var it = sacInputBySem(row, 0), im = sacInputBySem(row, 1), is = sacInputBySem(row, 2);
+      var cells = [it ? (it.value || '') : '', im ? (im.value || '') : '', is ? (is.value || '') : ''];
+      // Bỏ dòng trống hoàn toàn (createRow() luôn dựng sẵn 3 dòng rỗng).
+      if ((cells[0] + cells[1] + cells[2]).trim()) rows.push(cells);
+    });
+    return rows;
+  }
+
+
+  function autoOpen() {
+    // Chụp lại state bảng thủ công TRƯỚC khi bất kỳ bước nào của Auto page có thể
+    // ghi đè #sacBody / parsedBlocks / sacValidatePassed (autoStage1 gọi
+    // sacJobContext.load() ngay ở lượt đầu tiên).
+    autoManualSnapshot = {
+      rows: autoReadTableRows(),
+      parsedBlocks: parsedBlocks,
+      sacValidatePassed: sacValidatePassed,
+    };
+    // Mượn bảng thật của Manual TRƯỚC khi nạp state — autoLoadState() gọi
+    // autoRenderTab() sẽ nạp rows của job đang active vào #sacBody ngay.
+    autoBorrowManual();
+    // Mượn dropdown voice của Voice Gen — autoRenderTab() (gọi trong
+    // autoLoadState) cần nó đã có mặt trong DOM của trang Auto để set voice.
+    autoBorrowVoiceDrop();
+    autoLoadState();
+    // Nếu người dùng vừa nhập script ở bảng Manual rồi bấm sang Auto, video đang
+    // chọn còn rỗng → MANG script đó sang. Không làm vậy thì bảng bị xoá trắng để
+    // nạp rows rỗng của job, trông như plugin ăn mất việc đang làm (script vẫn nằm
+    // trong autoManualSnapshot nhưng người dùng không thể biết điều đó).
+    var snapRows = (autoManualSnapshot && autoManualSnapshot.rows) || [];
+    if (snapRows.length && !(autoSet.jobs[autoActiveJob].rows || []).length) {
+      autoSet.jobs[autoActiveJob].rows = snapRows;
+      autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
+      autoStatus('↪ Đã mang script từ bảng Manual sang video .' + autoActiveJob
+               + ' — bảng Manual vẫn được giữ, trả lại khi bạn thoát trang Auto.');
+    }
+    if (window.claimKeyboard) window.claimKeyboard();
+  }
+
+  function autoClose() {
+    // Trang Sub đang mở thì phải đóng trước: nó là panel riêng, bộ chuyển mode
+    // không biết tới nó nên sẽ để lại một panel lơ lửng, và node .st-app vẫn kẹt
+    // trong slot khiến tab TẠO SUB trống trơn.
+    if ($('sacPanelAutoSub') && $('sacPanelAutoSub').style.display !== 'none') {
+      autoCloseSub();
+    }
+    // Ghi rows của tab đang mở vào job trước khi lưu — nếu không, chỉnh sửa
+    // cuối cùng trong bảng sẽ mất khi đóng trang Auto mà chưa chuyển tab.
+    // NHƯNG bỏ qua khi pipeline đang chạy: lúc đó bảng thuộc về video pipeline
+    // đang xử lý, chụp lại sẽ ghi đè job đang active bằng nội dung video khác.
+    if (!autoRunning) {
+      autoCaptureRows(autoSet.jobs[autoActiveJob]);
+      autoSaveState();
+    }
+    if (window.releaseKeyboard) window.releaseKeyboard();
+    // Trả bảng về đúng vị trí gốc trong panel Manual TRƯỚC khi ghi rows thủ
+    // công vào nó — nếu đảo thứ tự, rows thủ công sẽ được ghi vào bảng trong
+    // khi nó còn nằm ở slot Auto rồi mới bị di chuyển, vẫn đúng DOM nhưng sai
+    // ý nghĩa ngữ nghĩa (bảng "thuộc" Auto lúc ghi). Trả về trước cho rõ ràng.
+    autoReturnManual();
+    // Trả dropdown voice về đúng vị trí gốc trong tab Voice Gen — autoSaveState()
+    // ở trên đã đọc xong voiceId nên trả về sau không mất dữ liệu gì.
+    autoReturnVoiceDrop();
+    // Trả lại bảng thủ công đúng như lúc mở trang Auto — nếu không, bảng/
+    // parsedBlocks/sacValidatePassed sẽ còn giữ dữ liệu của job cuối cùng đã
+    // chạy qua pipeline (thường là .2), khiến editor tưởng đó là phiên thủ công
+    // của mình.
+    if (autoManualSnapshot) {
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      autoManualSnapshot.rows.forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+      // autoReadTableRows() bỏ dòng trống hoàn toàn, nên bảng Manual chưa nhập gì
+      // sẽ chụp ra mảng rỗng → dựng lại 0 dòng, bảng không còn cell nào để paste.
+      // Dựng lại 3 dòng rỗng đúng như trạng thái ban đầu.
+      if (!autoManualSnapshot.rows.length) { createRow(); createRow(); createRow(); }
+      parsedBlocks = autoManualSnapshot.parsedBlocks;
+      sacValidatePassed = autoManualSnapshot.sacValidatePassed;
+      autoManualSnapshot = null;
+      if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
+    }
+  }
+
+  // Label của một voiceId — vào tên file: "31.0 - Advertising Voice 2.mp3".
+  // Tra theo danh sách voice của VoiceGen, KHÔNG đọc select (mỗi job có voice
+  // riêng, select chỉ đang hiển thị job đang active).
+  function autoVoiceLabelFor(voiceId) {
+    if (!voiceId) return '';
+    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+    var hit = list.filter(function (v) { return !v.isSep && v.voice_id === voiceId; })[0];
+    return (hit && hit.label) || '';
+  }
+
+  // Mảng 3 label voice theo đúng thứ tự job — job đang active lấy trực tiếp từ
+  // select (phản ánh lựa chọn chưa kịp lưu vào autoSet.jobs), job khác tra theo
+  // voiceId đã lưu.
+  function autoVoiceLabels() {
+    var list = (typeof window.VoiceGenGetVoices === 'function') ? window.VoiceGenGetVoices() : [];
+    var loaded = list.filter(function (v) { return v && !v.isSep; }).length;
+    return autoSet.jobs.map(function (job, i) {
+      var voiceId = (i === autoActiveJob && typeof window.VoiceGenGetVoiceId === 'function')
+        ? (window.VoiceGenGetVoiceId() || job.voiceId) : job.voiceId;
+      // Job chưa từng được ghé thăm sẽ không có voiceId. Thừa hưởng voice đang
+      // chọn thay vì bắt người dùng bấm vào từng tab chỉ để set lại cùng 1 giọng.
+      if (!voiceId && typeof window.VoiceGenGetVoiceId === 'function') {
+        voiceId = window.VoiceGenGetVoiceId() || '';
+        if (voiceId) job.voiceId = voiceId;
+      }
+      var label = autoVoiceLabelFor(voiceId);
+      // Voice clone/custom chưa nằm trong VG_VOICES_DATA, hoặc danh sách chưa nạp
+      // → dùng đúng nhãn dropdown đang hiện, vì đó là thứ người dùng đang thấy.
+      if (!label && i === autoActiveJob) {
+        var el = $('vgVoiceDropLabel');
+        var shown = el ? String(el.textContent || '').trim() : '';
+        // Nếu nhãn dropdown ĐÚNG BẰNG voiceId thì đó không phải tên thật — chính
+        // vgSetVoice() fallback về ID khi không tra được. Nhận nó sẽ nhồi ID thô
+        // vào tên file giao khách ("31.0 - 0dPqNXnhg2bmxQv1WKDp.mp3"), nên bỏ.
+        if (shown && shown !== voiceId) label = shown;
+      }
+      if (!label) {
+        // Phân biệt 2 nguyên nhân: chưa nạp danh sách vs job chưa chọn voice.
+        if (!loaded) {
+          throw new Error('Danh sách voice chưa nạp — mở tab Voice Gen (cần API key ElevenLabs) rồi quay lại.');
+        }
+        throw new Error('Video .' + i + ' chưa chọn voice — bấm tab .' + i + ' rồi chọn voice.');
+      }
+      return label;
+    });
+  }
+
+  function autoBuildCfg() {
+    return {
+      product:     $('sacAutoProduct').value.trim(),
+      co:          $('sacAutoCO').value.trim(),
+      editor:      $('sacAutoEditor').value.trim(),
+      seqNameTpl:  '{sp} vid{set}.{idx} [c.{CO}] [{Editor}]',
+      seqBinTpl:   $('sacAutoSeqBin').value.trim() || 'Sequence / FB / {set}x',
+      voiceBinTpl: 'Voice Over / {set}x',
+    };
+  }
+
+  // Trả về mảng 3 job có seqName/seqBin/voiceBin/voiceFile, hoặc ném nếu lỗi.
+  async function autoFetchNames() {
+    var res = await fetch(BRIDGE_URL + '/autoset/names', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: autoBuildCfg(), setNumber: $('sacAutoSet').value.trim(),
+                             ext: 'mp3', voiceName: autoVoiceLabels() }),
+    });
+    var j = await res.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || 'không dựng được tên');
+    return j.jobs;
+  }
+
+  // Dựng các dòng xác nhận cho ĐỦ 3 video. Trả về mảng string, KHÔNG chạm DOM —
+  // để modal confirm dùng lại. Tên do bridge /autoset/names sinh (nơi duy nhất có
+  // test cho logic tên); đừng dựng lại tên ở đây.
+  async function autoBuildConfirmLines() {
+    var jobs = await autoFetchNames();
+    var out = [];
+    jobs.forEach(function (j) {
+      out.push('.' + j.idx + '  ' + j.seqName);
+      out.push('     ' + j.seqBin);
+      out.push('     ' + j.voiceBin + '/' + j.voiceFile);
+    });
+    return out;
+  }
+
+  // Bảng script + blocks + voice là state TOÀN CỤC dùng chung một bảng DOM.
+  // Lớp này là chỗ DUY NHẤT được nạp/lưu state đó cho từng job.
+  var sacJobContext = {
+    // Lưu state hiện tại của bảng vào job.
+    // Đọc theo CLASS ngữ nghĩa, không theo chỉ số: sacApplyColOrder xáo thứ tự DOM
+    // của các ô theo cột đang hiển thị, nên đọc theo index sẽ lệch cột.
+    save: function (job) {
+    // Cùng lý do như autoReadTableRows(): đọc theo dataset.colIdx, không theo
+    // selector class lồng nhau (không khớp trong UXP).
+    var rows = [];
+    Array.prototype.forEach.call($('sacBody').querySelectorAll('.sac-row'), function (row) {
+      var it = sacInputBySem(row, 0), im = sacInputBySem(row, 1), is = sacInputBySem(row, 2);
+      rows.push([it ? (it.value || '') : '', im ? (im.value || '') : '', is ? (is.value || '') : '']);
+    });
+    if (rows.length) job.rows = rows;
+    job._blocks = parsedBlocks;
+    // sacSourceMap (tên source → ProjectItem) là biến TOÀN CỤC và bị
+    // sacValidateSources RESET SẠCH mỗi lần validate. Không lưu theo job thì sau
+    // chặng 1, map chỉ còn của job validate cuối (.2); tới chặng 3 khâu ráp tra
+    // sacSourceMap[src.name] không thấy clip → timeline dựng ra KHÔNG CÓ HÌNH.
+    // Chụp nông là đủ: giá trị là ProjectItem, không cần sao chép sâu.
+    job._srcMap = {};
+    Object.keys(sacSourceMap).forEach(function (k) { job._srcMap[k] = sacSourceMap[k]; });
+    },
+    // Nạp rows của job vào bảng, dọn state của job trước.
+    load: function (job) {
+      $('sacBody').innerHTML = '';
+      rowSeq = 0;
+      (job.rows || []).forEach(function (c) {
+        createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
+      });
+      parsedBlocks = job._blocks || [];
+      // Khôi phục map source của ĐÚNG job này. Phải set cả window.sacSourceMap:
+      // khâu ráp đọc `sacSourceMap[x] || window.sacSourceMap[x]`, bỏ sót bản
+      // mirror thì nó rơi về map của job khác.
+      if (job._srcMap) {
+        sacSourceMap = job._srcMap;
+        window.sacSourceMap = sacSourceMap;
+      }
+    },
+  };
+
+  var sacAutoCloseBtn = $('sacAutoClose');
+  if (sacAutoCloseBtn) sacAutoCloseBtn.addEventListener('click', function () {
+    var manualBtn = document.querySelector('.sac-methodBtn[data-method="manual"]');
+    if (manualBtn) manualBtn.click();
+  });
+
+  document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
+      // KHÔNG cho đổi tab khi pipeline đang chạy. Bảng script, parsedBlocks và
+      // sacSourceMap là state dùng chung mà pipeline đang mượn cho video NÓ đang
+      // xử lý — không phải video bạn đang nhìn. Đổi tab lúc đó sẽ:
+      //   • cất blocks của video pipeline đang làm đè lên tab đang rời, và
+      //   • ghi rows của video đó đè lên tab đang rời (autoCaptureRows),
+      // rồi autoRenderTab() nạp rows của tab mới vào bảng — cướp bảng khỏi
+      // pipeline giữa chừng. Log đã bắt được đúng chuỗi này: chặng 1 cất đúng cả
+      // 3, sang chặng 2 người dùng bấm .0 → .1 và .0 bị ghi đè bằng .2.
+      if (autoRunning) {
+        autoStatus('⏳ Đang chạy — không đổi tab được. Bảng đang dùng cho video pipeline xử lý.');
+        return;
+      }
+      if (AUTO_DBG) console.log('[AUTO-DBG] ── BẤM TAB .' + autoActiveJob + ' → .' + t.dataset.job + ' ──');
+      autoCaptureRows(autoSet.jobs[autoActiveJob]);
+      autoStashJobState(autoActiveJob);
+      autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
+      autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
+      autoActiveJob = Number(t.dataset.job);
+      autoRenderTab();
+      autoSaveState();
+    });
+  });
+
+  // + Row / Xoá bảng — thao tác trực tiếp trên #sacBody đã mượn, dùng lại
+  // đúng createRow() của Manual, không fork logic tạo dòng.
+  // Gear button — mở/đóng overlay cấu hình theo project (Sản phẩm/CO/Editor/Bin).
+  // UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể z-index/thứ tự DOM — một
+  // backdrop mờ không che được chữ trong bảng script phía sau. Cách duy nhất là
+  // thật sự ẩn (display:none) nội dung phía sau khi Settings mở, và trả lại khi
+  // đóng. Header vẫn để hiện để giữ ngữ cảnh (tên trang, nút đóng).
+  // ── Xoá sạch cả bộ ──────────────────────────────────────────────────────
+  // Chỉ xoá 3 job (AUTO_SET_KEY). KHÔNG đụng AUTO_CFG_KEY — Sản phẩm/CO/Editor/
+  // mẫu bin là cấu hình theo project, gõ lại mỗi lần là phiền và dễ gõ sai, mà
+  // sai thì ra tên deliverable sai.
+  function autoOpenReset() {
+    var modal = $('sacAutoResetConfirm'), body = $('sacAutoResetBody');
+    if (!modal || !body) return;
+    var counts = autoSet.jobs.map(function (j, i) {
+      return '.' + i + '  ' + ((j.rows || []).length) + ' dòng script';
+    });
+    body.textContent = 'Sẽ xoá:\n' + counts.join('\n')
+      + '\n\nCùng với blocks, voice/ratio của cả 3 và số bộ "'
+      + ($('sacAutoSet').value.trim() || '(trống)') + '".'
+      + '\n\nGIỮ LẠI: Sản phẩm, CO, Editor, mẫu bin (cấu hình theo project).'
+      + '\n\nKhông hoàn tác được.';
+    modal.hidden = false;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
+  }
+  function autoCloseReset() {
+    var modal = $('sacAutoResetConfirm');
+    if (modal) modal.hidden = true;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = '';
+  }
+  function autoResetAll() {
+    autoSet = autoDefaultSet();
+    autoActiveJob = 0;
+    autoPendingBuild = null;
+    try { localStorage.removeItem(AUTO_SET_KEY); } catch (e) {}
+    $('sacAutoSet').value = '';
+    $('sacAutoSkipAudition').checked = false;
+    // autoRenderTab() nạp job rỗng → bảng về 3 dòng trống, và autoApplyJobState()
+    // đặt parsedBlocks = [] rồi ẩn panel Blocks.
+    autoRenderTab();
+    autoStatus('✓ Đã xoá sạch cả bộ. Cấu hình project vẫn giữ nguyên.');
+  }
+
+  var sacAutoResetBtn = $('sacAutoResetBtn');
+  if (sacAutoResetBtn) sacAutoResetBtn.addEventListener('click', function () {
+    if (autoRunning) { autoStatus('⏳ Đang chạy — bấm Huỷ trước đã.'); return; }
+    autoOpenReset();
+  });
+  var sacAutoResetCancelBtn = $('sacAutoResetCancel');
+  if (sacAutoResetCancelBtn) sacAutoResetCancelBtn.addEventListener('click', autoCloseReset);
+  var sacAutoResetGoBtn = $('sacAutoResetGo');
+  if (sacAutoResetGoBtn) sacAutoResetGoBtn.addEventListener('click', function () {
+    autoCloseReset();
+    autoResetAll();
+  });
+
+  var sacAutoSettingsBtn = $('sacAutoSettingsBtn');
+  var sacAutoSettingsEl  = $('sacAutoSettings');
+  var sacAutoScrollEl    = document.querySelector('.sac-autoScroll');
+  var sacAutoRunEl       = $('sacAutoRun');
+  if (sacAutoSettingsBtn && sacAutoSettingsEl) {
+    sacAutoSettingsBtn.addEventListener('click', function () {
+      sacAutoSettingsEl.hidden = false;
+      if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+      if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
+    });
+  }
+  var sacAutoSettingsCloseBtn = $('sacAutoSettingsClose');
+  if (sacAutoSettingsCloseBtn && sacAutoSettingsEl) {
+    sacAutoSettingsCloseBtn.addEventListener('click', function () {
+      sacAutoSettingsEl.hidden = true;
+      if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+      if (sacAutoRunEl) sacAutoRunEl.style.display = '';
+      autoSaveState();
+    });
+  }
+
+  ['sacAutoProduct','sacAutoCO','sacAutoEditor','sacAutoSet','sacAutoSeqBin'].forEach(function (id) {
+    var el = $(id);
+    if (!el) return;
+    el.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+    el.addEventListener('blur',  function () {
+      autoSaveState();
+      if (window.releaseKeyboard) window.releaseKeyboard();
+    });
+  });
+
+  function autoNotify(title, body) {
+    try {
+      fetch(BRIDGE_URL + '/notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, body: body }),
+      });
+    } catch (e) {}
+  }
+
+  function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
+
+  // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
+  // Trong lúc pipeline chạy, bảng + Blocks thuộc về video pipeline ĐANG xử lý,
+  // không phải tab bạn đang đứng. Nếu tab vẫn chỉ .0 mà Blocks đã là của .2 thì
+  // nhìn như hỏng. Nên đánh dấu tab theo video pipeline đang làm — chỉ đổi hiển
+  // thị, KHÔNG đổi autoActiveJob (tab của bạn) để cuối lượt còn trả về đúng chỗ.
+  function autoMarkRunningTab(idx) {
+    var on = (idx != null);
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      var mine = Number(t.dataset.job) === idx;
+      t.classList.toggle('is-running', on && mine);
+      // Bỏ hẳn dấu "tab của bạn" khi đang chạy: để cả 2 cùng sáng thì không phân
+      // biệt được tab nào đang hiển thị nội dung. Đang chạy → CHỈ MỘT tab sáng,
+      // và nó là video pipeline đang làm. Xong thì autoRenderTab() bật lại
+      // is-active theo autoActiveJob (không hề bị đổi).
+      if (on) t.classList.remove('is-active');
+    });
+  }
+
+  // Chuyển hẳn sang tab một video và nạp đúng bảng + Blocks + voice/ratio của nó.
+  function autoFocusJob(idx) {
+    autoActiveJob = idx;
+    autoRenderTab();
+  }
+
+  // Trả true nếu người dùng đã bấm Huỷ → chặng đang chạy thoát vòng lặp.
+  function autoStopHere(stage) {
+    if (!autoCancelRequested) return false;
+    autoStatus('⏹ Đã dừng theo yêu cầu (' + stage + '). Video đang làm dở đã chạy xong trọn vẹn.');
+    return true;
+  }
+
+  async function autoStage1(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('validate')) break;
+      var job = jobs[i];
+      autoMarkRunningTab(job.idx);
+      autoStatus('⏳ Validate .' + job.idx + '…');
+      try {
+        job.rows    = autoSet.jobs[job.idx].rows || [];
+        job.voiceId = autoSet.jobs[job.idx].voiceId || '';
+        job.ratio   = autoSet.jobs[job.idx].ratio || '1080x1920';
+        if (!job.rows.length) throw new Error('chưa có script — bấm tab .' + job.idx + ' rồi dán script vào bảng');
+        sacJobContext.load(job);
+        // sacValidateAll KHÔNG trả về gì — kết quả nằm ở cờ sacValidatePassed.
+        // skipVoiceAsk BẮT BUỘC: nếu không, sacAskGenVoice() sẽ chặn pipeline 3 lần.
+        sacValidatePassed = false;
+        await sacValidateAll({ skipVoiceAsk: true });
+        if (!sacValidatePassed) {
+          var st = ($('sacStatus').textContent || '').replace(/^[❌⚠✅⏳]\s*/, '');
+          throw new Error(st || 'validate thất bại');
+        }
+        sacJobContext.save(job);
+        job.state = 'validated';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+      // Cất state KỂ CẢ khi lỗi: người dùng cần nhìn đúng Blocks của video hỏng
+      // (có đánh dấu source thiếu) thì mới bind lại được.
+      autoStashJobState(job.idx);
+    }
+    var bad = jobs.filter(function (j) { return j.state === 'error'; });
+    // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
+    if (autoCancelRequested) {
+      // không làm gì
+    } else if (bad.length) {
+      // DỪNG HẲN, không chạy tiếp 2 video kia. Trước đây chạy tiếp rồi chỉ in một
+      // dòng lỗi — mà lúc người dùng nhìn thì bảng/Blocks đã là của video cuối,
+      // nên không có đường nào thấy được video hỏng thiếu source gì để sửa.
+      // Dừng cũng đỡ tốn credit ElevenLabs cho một bộ chắc chắn phải làm lại.
+      var msg = bad.map(function (j) { return '.' + j.idx + ': ' + j.error; }).join(' · ');
+      autoFocusJob(bad[0].idx);
+      autoStatus('✗ Dừng — ' + msg + '\n→ Đang mở video .' + bad[0].idx
+               + ': sửa source thiếu ở bảng/Blocks rồi bấm "Chạy cả bộ" lại.');
+      autoNotify('Autocut — dừng ở validate', msg);
+      return [];
+    } else {
+      autoStatus('✓ Validate 3/3 xong');
+    }
+    return jobs.filter(function (j) { return j.state === 'validated'; });
+  }
+
+  // project.path là STRING đồng bộ (đã xác minh trên Premiere 25.6.5).
+  async function autoProjectPath() {
+    var proj = await getActiveProject();
+    var raw = proj.path;
+    // path thường là string đồng bộ (đã xác minh trên Premiere 25.6.5), nhưng phòng
+    // build khác trả về Promise — String(aPromise) ra "[object Promise]", KHÔNG
+    // rỗng, nên guard cũ sẽ lọt qua và gửi đường dẫn rác lên /autoset/voicedir.
+    if (raw && typeof raw.then === 'function') raw = await raw;
+    if (raw === undefined || raw === null || raw === '') {
+      throw new Error('project chưa được lưu — hãy lưu project trước khi chạy Auto');
+    }
+    if (typeof raw !== 'string' || raw.charAt(0) !== '/') {
+      throw new Error('project.path không hợp lệ (không phải đường dẫn tuyệt đối) — kiểm tra lại phiên bản Premiere');
+    }
+    return raw;
+  }
+
+  // Nhờ bridge tạo/giải quyết thư mục lưu voice (UXP bị sandbox nên không tự làm).
+  async function autoVoiceDir(subdir) {
+    var r = await fetch(BRIDGE_URL + '/autoset/voicedir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath: await autoProjectPath(), subdir: subdir }),
+    }).then(function (x) { return x.json(); });
+    if (!r || !r.ok) throw new Error((r && r.error) || 'không tạo được thư mục voice');
+    return r.dir;
+  }
+
+  // lastVariations thuộc IIFE VoiceGen → đọc qua accessor.
+  function autoLastVariation() {
+    if (typeof window.VoiceGenGetLastVariations !== 'function') return null;
+    var v = window.VoiceGenGetLastVariations();
+    return (v && v[0]) || null;
+  }
+
+  // Chờ Voice Gen đẩy ra bản mới. Không có callback nên phải poll.
+  function autoWaitVariation() {
+    var b0 = autoLastVariation();
+    var before = (b0 && b0.audioPath) || '';
+    return new Promise(function (resolve, reject) {
+      var waited = 0;
+      var t = setInterval(function () {
+        waited += 500;
+        var v = autoLastVariation();
+        if (v && v.audioPath && v.audioPath !== before) { clearInterval(t); resolve(v); return; }
+        if (waited > 180000) { clearInterval(t); reject(new Error('gen voice quá 3 phút')); }
+      }, 500);
+    });
+  }
+
+  // Import file voice vào bin của bộ. importFiles KHÔNG trả về ProjectItem nên phải
+  // tìm lại clip theo tên rồi mới chuyển bin.
+  async function autoImportVoice(filePath, fileName, binPath) {
+    var proj = await getActiveProject();
+    if (typeof proj.importFiles !== 'function') throw new Error('không có API importFiles');
+    await proj.importFiles([filePath]);
+    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+    var all = await sacCollectBinItems(root);
+    var hit = all.filter(function (it) { return it.name === fileName; })[0];
+    if (!hit) throw new Error('import xong nhưng không thấy "' + fileName + '" trong project');
+    // Thứ tự tham số: (item, proj, binName) — sai thứ tự fail ÂM THẦM.
+    var mv = await ppMoveToBin(hit.item, proj, binPath);
+    if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển voice vào bin thất bại');
+  }
+
+  // Chặng 2: gen voice → lưu đúng path → import vào bin. Tuần tự để không chạm
+  // rate limit ElevenLabs.
+  async function autoStage2(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('gen voice')) break;
+      var job = jobs[i];
+      autoMarkRunningTab(job.idx);
+      autoStatus('⏳ Gen voice .' + job.idx + '…');
+      try {
+        // HOÃN normalize-script: endpoint đó cần {provider, model, apiKey} (cấu hình
+        // AI mà trang Auto không thu thập) và gắn với cancel-token của luồng tương
+        // tác. Gen voice không cần nó. Gửi thẳng lời đọc như khi người dùng tự gõ.
+        var scriptText = (job.rows || []).map(function (r) { return r[0]; }).filter(Boolean).join('\n');
+        if (!scriptText) throw new Error('không có lời đọc');
+
+        window.VoiceGenPushScript(scriptText, job.voiceId, true, false);
+        var got = await autoWaitVariation();
+
+        var dir = await autoVoiceDir(job.voiceSubdir);
+        var mv = await fetch(BRIDGE_URL + '/tts/move', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath: got.audioPath, targetDir: dir,
+                                 targetName: job.voiceFile, noOverwrite: true }),
+        }).then(function (r) { return r.json(); });
+        if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'move file thất bại');
+
+        job.voicePath = mv.targetPath;
+        await autoImportVoice(job.voicePath, mv.name || job.voiceFile, job.voiceBin);
+        job.state = 'voiced';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+    }
+    var ok = jobs.filter(function (j) { return j.state === 'voiced'; });
+    // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
+    if (!autoCancelRequested) {
+      autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong');
+      autoNotify('Voice xong', ok.length + '/' + jobs.length + ' bản — chờ duyệt');
+    }
+    return ok;
+  }
+
+  // Chờ sacAlignVoice xong. Dùng CỜ THẬT (sacVoiceBusy/sacVoicePath), không đọc
+  // chữ trong #sacVoiceInfo — text của job trước còn nằm đó nên job thứ 2 sẽ
+  // tưởng xong ngay.
+  // Bẫy: nhánh "chưa có script" (main.js:4493) cũng tắt busy + gán sacVoicePath,
+  // tức GIẢ DẠNG thành công → sau khi chờ phải kiểm tra align có sinh mốc voice.
+  function autoWaitAlign(audioPath) {
+    return new Promise(function (resolve, reject) {
+      var waited = 0;
+      var t = setInterval(function () {
+        waited += 300;
+        if (!sacVoiceBusy && sacVoicePath === audioPath) {
+          clearInterval(t);
+          var hasVoice = (parsedBlocks || []).some(function (b) { return b.voiceStart != null; });
+          if (!hasVoice) {
+            var info = $('sacVoiceInfo');
+            return reject(new Error('align không khớp voice: ' +
+              ((info && info.textContent) || 'không rõ')));
+          }
+          return resolve();
+        }
+        if (waited > 120000) { clearInterval(t); reject(new Error('align voice quá 2 phút')); }
+      }, 300);
+    });
+  }
+
+  // Chuyển sequence vừa tạo vào bin. ppGetOrCreateBin đã hỗ trợ 'A / B / C'.
+  async function autoMoveSeqToBin(seqName, binPath) {
+    var proj = await getActiveProject();
+    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+    if (root && typeof root.then === 'function') root = await root;
+    var all = await sacCollectBinItems(root);
+    var hit = all.filter(function (it) { return it.name === seqName; })[0];
+    if (!hit) throw new Error('không tìm thấy sequence ' + seqName);
+    // Thứ tự tham số: (item, proj, binName) — sai thứ tự fail ÂM THẦM.
+    var r = await ppMoveToBin(hit.item, proj, binPath);
+    if (!r || !r.ok) throw new Error((r && r.error) || 'chuyển bin thất bại');
+  }
+
+  // ĐÃ XÁC MINH (2026-08-26): `projectItem.getSequence` KHÔNG tồn tại trên
+  // Premiere 25.6.x — không có đường tra ngược từ TÊN ra object Sequence.
+  // Luồng cut không vướng chuyện này vì nó tự `project.createSequence()` nên
+  // luôn cầm sẵn object; trang Auto Sub thì chỉ có tên, nên phải GIỮ object lại
+  // từ lúc dựng (job._seq, gán ở autoStage3).
+  //
+  // Tìm object Sequence cho một job, theo thứ tự rẻ → đắt.
+  // KHÔNG có API tra ngược từ tên ra Sequence trên bản Premiere này, nên đường
+  // chính là object đã giữ lúc dựng (job._seq).
+  async function autoResolveSeq(job, proj) {
+    if (job && job._seq) return job._seq;                 // 1. object giữ lúc dựng
+    // 2. project.getSequences() — có ở một số bản Premiere.
+    if (typeof proj.getSequences === 'function') {
+      try {
+        var list = await proj.getSequences();
+        for (var i = 0; i < (list || []).length; i++) {
+          var nm = list[i] && (list[i].name || (list[i].getName && await list[i].getName()));
+          if (nm === job.seqName) return list[i];
+        }
+      } catch (e) {}
+    }
+    // 3. projectItem.getSequence() — KHÔNG tồn tại trên Premiere của người dùng
+    //    (đã xác minh), nhưng có trên projectItem của clip nested nên vẫn thử.
+    try {
+      var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+      if (root && typeof root.then === 'function') root = await root;
+      var all = await sacCollectBinItems(root);
+      var hit = all.filter(function (it) { return it.name === job.seqName; })[0];
+      if (hit && typeof hit.item.getSequence === 'function') {
+        var s2 = await hit.item.getSequence();
+        if (s2) return s2;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async function autoActivateSeqForJob(job) {
+    var proj = await getActiveProject();
+    var seq = await autoResolveSeq(job, proj);
+    if (!seq) {
+      throw new Error('không mở được sequence "' + job.seqName + '" — '
+                    + 'bạn bấm đúp vào nó trong project panel để mở, rồi bấm lại tab này.');
+    }
+    try {
+      if (typeof proj.openSequence === 'function') await proj.openSequence(seq);
+      if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq);
+    } catch (e) {
+      // Object giữ từ lúc dựng có thể hết hạn ("The script object is no longer
+      // valid" — đã thấy trong log với clip). Vứt nó đi rồi thử lại bằng các
+      // đường còn lại, thay vì báo lỗi cho một nguyên nhân sửa được.
+      if (job._seq) {
+        job._seq = null;
+        var seq2 = await autoResolveSeq(job, proj);
+        if (!seq2) {
+          throw new Error('sequence "' + job.seqName + '" không còn dùng được ('
+                        + e.message + ') — bấm đúp vào nó trong project panel rồi bấm lại tab này.');
+        }
+        if (typeof proj.openSequence === 'function') await proj.openSequence(seq2);
+        if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq2);
+        seq = seq2;
+      } else {
+        throw e;
+      }
+    }
+    // Sequence vừa kích hoạt mà chạm ngay là nguyên nhân crash quen thuộc —
+    // sacRunAutoCut cũng chờ 900ms sau khi activate vì lý do này.
+    await new Promise(function (r) { setTimeout(r, 900); });
+    return seq;
+  }
+
+  // ── Trang Auto Sub ──────────────────────────────────────────────────────
+  var autoSubActiveJob = 0;
+  var autoSubJobs = [];   // jobs từ autoStage3 (đã có seqName, idx, rows)
+
+  // KHÔNG dùng autoStatus() ở trang Sub: nó ghi vào #sacAutoStatus nằm trong
+  // #sacPanelAuto, mà panel đó đang bị ẩn → thông báo lỗi biến mất.
+  function autoSubStatus(msg) {
+    var el = $('sacAutoSubStatus');
+    if (el) el.textContent = msg;
+  }
+
+  function autoSubFillScript(job) {
+    var lines = ((job && job.rows) || [])
+      .map(function (c) { return (c[0] || '').trim(); })
+      .filter(Boolean);
+    if (typeof window.SubtextSetScript === 'function') window.SubtextSetScript(lines);
+  }
+
+  async function autoSubRenderTab() {
+    document.querySelectorAll('.sac-autoSubTab').forEach(function (t) {
+      t.classList.toggle('is-active', Number(t.dataset.job) === autoSubActiveJob);
+    });
+    var job = autoSubJobs[autoSubActiveJob];
+    var title = $('sacAutoSubTitle');
+    if (!job) {
+      if (title) title.textContent = 'Auto Sub';
+      autoSubStatus('✗ Video .' + autoSubActiveJob + ' chưa dựng được timeline — không có gì để làm phụ đề.');
+      return;
+    }
+    if (title) title.textContent = 'Auto Sub — ' + job.seqName;
+    autoSubFillScript(job);
+    autoSubStatus('⏳ Đang mở sequence ' + job.seqName + '…');
+    try {
+      await autoActivateSeqForJob(job);
+      // Quét track SAU khi đã đổi sequence — stScanTracks() đọc active sequence.
+      if (typeof window.SubtextScanTracks === 'function') await window.SubtextScanTracks();
+      autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu → Tạo SRT".');
+    } catch (e) {
+      autoSubStatus('✗ ' + e.message);
+    }
+  }
+
+  function autoOpenSub(jobs) {
+    autoSubJobs = jobs || [];
+    var first = 0;
+    for (var i = 0; i < autoSubJobs.length; i++) {
+      if (autoSubJobs[i].state === 'built') { first = i; break; }
+    }
+    autoSubActiveJob = first;
+    autoBorrowSub();
+    $('sacPanelAuto').style.display = 'none';
+    $('sacPanelAutoSub').style.display = 'flex';
+    autoSubRenderTab();
+  }
+  function autoCloseSub() {
+    autoReturnSub();
+    $('sacPanelAutoSub').style.display = 'none';
+    $('sacPanelAuto').style.display = 'flex';
+  }
+
+  document.querySelectorAll('.sac-autoSubTab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      autoSubActiveJob = Number(t.dataset.job);
+      autoSubRenderTab();
+    });
+  });
+  var sacAutoSubBackBtn = $('sacAutoSubBack');
+  if (sacAutoSubBackBtn) sacAutoSubBackBtn.addEventListener('click', autoCloseSub);
+
+  // Chặng 3: align voice + dựng timeline + chuyển sequence vào bin.
+  // sacRunAutoCut('new') ĐỌC TÊN/RATIO TỪ DOM → phải ghi vào 2 input trước khi gọi.
+  async function autoStage3(jobs) {
+    for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('dựng timeline')) break;
+      var job = jobs[i];
+      autoMarkRunningTab(job.idx);
+      autoStatus('⏳ Dựng .' + job.idx + '…');
+      try {
+        sacJobContext.load(job);
+        sacAlignVoice(job.voicePath);        // không await: hàm này báo xong qua cờ
+        await autoWaitAlign(job.voicePath);
+
+        $('sacNewSeqName').value  = job.seqName;
+        $('sacNewSeqRatio').value = job.ratio;
+        await sacRunAutoCut('new');
+
+        // GIỮ LẠI object sequence ngay đây. sacRunAutoCut('new') vừa tạo và kích
+        // hoạt nó, nên active sequence lúc này CHÍNH LÀ timeline vừa dựng.
+        // Trang Auto Sub cần object này để nhảy sequence: tra ngược từ tên qua
+        // projectItem.getSequence() KHÔNG chạy được — hàm đó không tồn tại trên
+        // Premiere của người dùng (đã xác minh). Luồng cut không gặp vấn đề vì nó
+        // tự createSequence() nên luôn cầm sẵn object.
+        try { job._seq = await getActiveSequence(); } catch (eSeq) { job._seq = null; }
+
+        await autoMoveSeqToBin(job.seqName, job.seqBin);
+        job.state = 'built';
+      } catch (e) {
+        job.state = 'error';
+        job.error = e.message;
+      }
+    }
+    var ok = jobs.filter(function (j) { return j.state === 'built'; });
+    var msg = 'Bộ ' + autoSet.setNumber + ': ' + ok.length + '/' + jobs.length + ' timeline xong'
+            + (autoCancelRequested ? ' (đã dừng theo yêu cầu)' : '');
+    autoStatus((autoCancelRequested ? '⏹ ' : '✓ ') + msg);
+    autoNotify(autoCancelRequested ? 'Autocut — đã dừng' : 'Autocut xong', msg);
+    // Dựng xong thì đi thẳng sang làm phụ đề — script đã có sẵn trong job.
+    // Không timeline nào dựng được thì ở lại trang Auto để còn đọc lỗi.
+    if (ok.length) autoOpenSub(jobs);
+  }
+
+  // Mở modal confirm. UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể
+  // z-index — backdrop mờ không che được bảng script phía sau. Cách duy nhất là
+  // ẩn hẳn nội dung phía sau, y như modal Settings đang làm.
+  async function autoOpenConfirm() {
+    var modal = $('sacAutoConfirm');
+    var head  = $('sacAutoConfirmHead');
+    var body  = $('sacAutoConfirmBody');
+    if (!modal || !head || !body) return false;
+    var cfg = autoBuildCfg();
+    head.textContent = 'Bộ ' + ($('sacAutoSet').value.trim() || '?')
+      + ' · ' + (cfg.product || '?') + ' · ' + (cfg.co || '?') + ' · ' + (cfg.editor || '?');
+    body.textContent = '⏳ Đang dựng tên…';
+    modal.hidden = false;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
+    try {
+      body.textContent = (await autoBuildConfirmLines()).join('\n');
+    } catch (e) {
+      body.textContent = '✗ ' + e.message;
+      return false;
+    }
+    return true;
+  }
+  function autoCloseConfirm() {
+    var modal = $('sacAutoConfirm');
+    if (modal) modal.hidden = true;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = '';
+  }
+
+  // Nút Run kiêm nút Huỷ. KHÔNG làm mờ nó khi đang chạy: mờ trông như bị vô hiệu
+  // hoá, người dùng sẽ không nghĩ là bấm được để dừng.
+  function autoSetRunBtn(running) {
+    // Tab khoá khi đang chạy — bấm vào sẽ bị chặn, nên phải cho thấy điều đó.
+    document.querySelectorAll('.sac-autoTab').forEach(function (t) {
+      t.classList.toggle('is-locked', !!running);
+    });
+    if (!running) autoMarkRunningTab(null);
+    var btn = $('sacAutoRun');
+    if (!btn) return;
+    btn.style.opacity = '';
+    btn.innerHTML = running
+      ? '<span data-ic="stop" data-ic-size="13"></span> Huỷ sau video này'
+      : '<span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ';
+    if (typeof pluginRenderIcons === 'function') { try { pluginRenderIcons(btn); } catch (e) {} }
+  }
+
+  var sacAutoRunBtn = $('sacAutoRun');
+  if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
+    // Nút này có 3 vai theo trạng thái, kiểm theo đúng thứ tự dưới:
+    //   1. autoRunning  → là nút HUỶ (trước đây chỉ báo "đang chạy" rồi thôi,
+    //                     không có đường nào dừng lại).
+    //   2. autoPendingBuild → lần bấm thứ 2 sau khi nghe thử = đã duyệt, dựng tiếp.
+    //   3. còn lại      → mở modal confirm rồi chạy từ đầu.
+    // autoRunning phải lên trước: khi đang chạy thì autoPendingBuild chắc chắn
+    // null, nhưng để pending lên trước sẽ khiến nhánh 1 không bao giờ tới được
+    // nếu sau này có trạng thái vừa pending vừa running.
+    if (autoRunning) {
+      autoCancelRequested = true;
+      autoStatus('⏹ Sẽ dừng sau khi xong video đang làm — không cắt ngang giữa chừng.');
+      return;
+    }
+    if (autoPendingBuild) {                 // lần bấm thứ 2 = đã duyệt voice
+      var pending = autoPendingBuild;
+      autoPendingBuild = null;
+      autoRunning = true;
+      autoCancelRequested = false;
+      autoSetRunBtn(true);
+      try {
+        await autoStage3(pending);
+      } finally {
+        autoRunning = false;
+        autoSetRunBtn(false);
+        autoRenderTab();   // cùng lý do như nhánh chạy đầy đủ ở dưới
+      }
+      return;
+    }
+    autoCaptureRows(autoSet.jobs[autoActiveJob]);
+    autoSaveState();
+    // Chặn sớm: không chạy pipeline (và không chạm vào bảng) khi chưa có gì.
+    var filled = autoSet.jobs.filter(function (j) { return (j.rows || []).length; });
+    if (!filled.length) {
+      autoStatus('✗ Cả 3 video chưa có script — dán script vào bảng ở từng tab .0 / .1 / .2.');
+      return;
+    }
+    // Xác nhận tên trước khi chạy. Chỉ hiện modal; pipeline do nút TRONG modal
+    // kích hoạt (handler ngay dưới), nên ở đây dừng lại.
+    await autoOpenConfirm();
+  });
+
+  // Nút "Chạy cả bộ" TRONG modal — đây mới là chỗ chạy pipeline thật.
+  var sacAutoConfirmGoBtn = $('sacAutoConfirmGo');
+  if (sacAutoConfirmGoBtn) sacAutoConfirmGoBtn.addEventListener('click', async function () {
+    autoCloseConfirm();
+    if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
+    autoRunning = true;
+    autoCancelRequested = false;
+    autoSetRunBtn(true);
+    try {
+      var jobs = await autoFetchNames();
+      var ok = await autoStage1(jobs);
+      // break trong một chặng chỉ thoát vòng lặp CỦA chặng đó — phải chặn thêm ở
+      // đây, không thì huỷ ở chặng validate xong vẫn chạy tiếp sang gen voice.
+      if (autoCancelRequested || !ok.length) return;
+      var voiced = await autoStage2(ok);
+      if (autoCancelRequested || !voiced.length) return;
+      if (!autoSet.skipAudition) {
+        autoStatus('⏸ Nghe thử 3 voice rồi bấm "Chạy cả bộ" lần nữa để dựng timeline.');
+        autoPendingBuild = voiced;
+        return;
+      }
+      await autoStage3(voiced);
+    } catch (e) {
+      autoStatus('✗ ' + e.message);
+      autoNotify('Autocut — lỗi', e.message);
+    } finally {
+      autoRunning = false;
+      autoSetRunBtn(false);
+      // BẮT BUỘC: pipeline dùng CHUNG một bảng DOM, chạy xong nó còn giữ rows của
+      // job cuối (.2) còn select voice/ratio thì chưa đồng bộ lại. Nếu để nguyên,
+      // thao tác tiếp theo sẽ ghi nhầm: autoCaptureRows() nhét rows của .2 vào job
+      // đang active, autoSaveState() nhét voice/ratio đang hiển thị vào đó rồi ghi
+      // xuống localStorage — cả 3 video biến thành .2 và hỏng vĩnh viễn.
+      autoRenderTab();
+    }
+  });
+  var sacAutoConfirmCancelBtn = $('sacAutoConfirmCancel');
+  if (sacAutoConfirmCancelBtn) sacAutoConfirmCancelBtn.addEventListener('click', autoCloseConfirm);
+
+  // ── /AUTO PAGE ──
+
   var sacCutNewBtn = $('sacCutNew');
   if (sacCutNewBtn) sacCutNewBtn.addEventListener('click', sacOpenNewSeqModal);
 
@@ -5694,8 +6944,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           (sacNoVoiceMode ? ' · without voice' : '');
       }
       status.style.display = 'none';
-      $('sacPanelManual').style.display = 'none';
-      $('sacSuccessPanel').style.display = 'flex';
+      // Trang Auto gọi sacRunAutoCut('new') 3 lần trong autoStage3. Nếu không
+      // chặn, trang success chen vào GIỮA lúc chạy bộ 3 video và ẩn mất panel
+      // Manual đang được mượn. Luồng Manual (autoRunning = false) giữ nguyên
+      // trang success như cũ. Một cổng duy nhất ở đây — KHÔNG rải if vào hàm khác.
+      if (!autoRunning) {
+        $('sacPanelManual').style.display = 'none';
+        $('sacSuccessPanel').style.display = 'flex';
+      }
 
     } catch(e) {
       status.textContent = '❌ ' + e.message;
@@ -5704,74 +6960,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // ── Collapse/expand the script input section ─────────────────────────────
-  // ── ✨ AI cutsheet parse (paste raw → AI → preview/edit → fill spreadsheet) ──
-  var sacAiToggle = $('sacAiToggle');
-  if (sacAiToggle) sacAiToggle.addEventListener('click', function() {
-    var body = $('sacAiBody');
-    var open = body.style.display !== 'none';
-    body.style.display = open ? 'none' : 'block';
-    $('sacAiChevron').textContent = open ? '▸' : '▾';
-  });
-  ['sacAiRaw', 'sacAiPreview'].forEach(function(id) {
-    var ta = $(id);
-    if (!ta) return;
-    ta.addEventListener('focus', function() { if (window.claimKeyboard) window.claimKeyboard(); });
-    ta.addEventListener('blur',  function() { if (window.releaseKeyboard) window.releaseKeyboard(); });
-  });
-  // Model picker (shared with VoiceGen Organize via ORGANIZE_MODEL). Claude → runs
-  // via CLI (no key needed); Gemini → needs a Gemini key.
-  var sacAiModel = $('sacAiModel');
-  if (sacAiModel) {
-    sacAiModel.value = sacResolveOrganizeModel(); // Gemini nếu có key, else Sonnet (hoặc pick của user)
-    sacAiModel.addEventListener('change', function() {
-      ORGANIZE_MODEL = sacAiModel.value;
-      localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
-      var vg = document.getElementById('vgOrganizeModel'); if (vg) vg.value = ORGANIZE_MODEL; // keep in sync
-    });
-  }
-  var sacAiParseBtn = $('sacAiParseBtn');
-  if (sacAiParseBtn) sacAiParseBtn.addEventListener('click', async function() {
-    var raw = ($('sacAiRaw').value || '').trim();
-    var st  = $('sacAiStatus');
-    if (!raw) { if (st) st.textContent = 'Dán cutsheet vào đã.'; return; }
-    var cfg = window.sacOrganizeConfig ? window.sacOrganizeConfig() : { provider: 'anthropic', model: null, apiKey: '' };
-    sacAiParseBtn.disabled = true;
-    if (st) st.textContent = '⏳ AI đang phân tích (' + cfg.model + ')...';
-    try {
-      var resp = await fetch(BRIDGE_URL + '/superautocut/parse-cutsheet', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: raw, provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey }),
-      });
-      var d = await resp.json();
-      if (d.ok && Array.isArray(d.rows) && d.rows.length) {
-        var pv = $('sacAiPreview');
-        pv.value = d.rows.map(function(r) { return [r.text || '', r.time || '', r.source || ''].join('\t'); }).join('\n');
-        pv.style.display = ''; $('sacAiFill').style.display = '';
-        if (st) st.textContent = '✓ ' + d.rows.length + ' dòng — kiểm tra/sửa (Thoại ⇥ Time ⇥ Source) rồi "Đổ vào bảng".';
-      } else {
-        if (st) st.textContent = '✗ ' + (d.error || 'AI không trả được dòng nào');
-      }
-    } catch(e) { if (st) st.textContent = '✗ Bridge lỗi: ' + e.message; }
-    finally { sacAiParseBtn.disabled = false; }
-  });
-  var sacAiFill = $('sacAiFill');
-  if (sacAiFill) sacAiFill.addEventListener('click', function() {
-    var pv = $('sacAiPreview');
-    var lines = (pv.value || '').split('\n').map(function(l) { return l.replace(/\r$/, ''); }).filter(function(l) { return l.trim(); });
-    if (!lines.length) return;
-    $('sacBody').innerHTML = ''; rowSeq = 0;
-    lines.forEach(function(l) {
-      var cols = l.split('\t');
-      createRow((cols[0] || '').trim(), (cols[1] || '').trim(), (cols[2] || '').trim());
-    });
-    parsedBlocks = [];
-    // Collapse the AI section, open the script editor so the user sees the result.
-    $('sacAiBody').style.display = 'none'; $('sacAiChevron').textContent = '▸';
-    $('sacTableWrap').style.display = ''; $('sacTableFooter').style.display = '';
-    $('sacScriptChevron').textContent = '▾';
-    var st = $('sacAiStatus'); if (st) st.textContent = '✓ Đã đổ ' + lines.length + ' dòng vào bảng — bấm Validate.';
-  });
-
   var sacScriptToggle = $('sacScriptToggle');
   if (sacScriptToggle) {
     sacScriptToggle.addEventListener('click', function() {
@@ -6413,8 +7601,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function repositionVoiceDrop() {
     var panel = $('vgVoiceDropPanel');
     var trigger = $('vgVoiceDropTrigger');
-    var container = document.getElementById('tab-voicegen');
-    if (!panel || !trigger || !container) return;
+    if (!panel || !trigger) return;
+    // Portal target = nearest ancestor .tab-panel of the TRIGGER (not a fixed
+    // #tab-voicegen), so the panel still shows up correctly when the trigger
+    // (and its parent #vgVoiceDrop) has been borrowed into another tab (e.g.
+    // the Auto page). No Element.closest() — UXP's DOM support is partial.
+    var container = null;
+    var node = trigger.parentNode;
+    while (node) {
+      if (node.classList && node.classList.contains('tab-panel')) { container = node; break; }
+      node = node.parentNode;
+    }
+    if (!container) container = document.getElementById('tab-voicegen');
+    if (!container) container = document.body;
+    if (!container) return;
+    if (panel.parentNode !== container) container.appendChild(panel);
     var triggerRect = trigger.getBoundingClientRect();
     var contRect    = container.getBoundingClientRect();
     panel.style.top   = (triggerRect.bottom - contRect.top)  + 'px';
@@ -6588,6 +7789,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
 
       renderVoiceDrop();
+      // Danh sách voice vừa về → set LẠI nhãn trigger. renderVoiceDrop() chỉ dựng
+      // lại các dòng trong panel, không chạm nhãn; nếu vgSetVoice() đã được gọi
+      // lúc list còn rỗng (voice clone/user chưa có) thì nhãn kẹt ở ID thô kiểu
+      // "0dPqNXnhg2bmxQv1WKDp" cho tới khi người dùng tự bấm chọn lại.
+      if (vgCurrentVoiceId) { try { vgSetVoice(vgCurrentVoiceId); } catch (e) {} }
       voicesLoaded = true;
 
       if (userVoices.length === 0) {
@@ -8042,7 +9248,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgOrgModel.addEventListener('change', function() {
       ORGANIZE_MODEL = vgOrgModel.value;
       localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);
-      var sa = document.getElementById('sacAiModel'); if (sa) sa.value = ORGANIZE_MODEL; // keep in sync
     });
   }
   var vgOrgBtn = $('vgOrganizeBtn');
@@ -8139,6 +9344,30 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Expose voice list so Claude chat can inject it into prompts
   window.VoiceGenGetVoices = function() {
     return VG_VOICES_DATA.slice(); // return a copy
+  };
+
+  window.VoiceGenGetLastVariations = function() {
+    return (lastVariations || []).slice(); // trả bản copy
+  };
+
+  // Accessors so the Auto page (Autocut IIFE) can drive the borrowed
+  // #vgVoiceDrop picker without duplicating vgSetVoice/vgCurrentVoiceId.
+  window.VoiceGenSetVoice = function(voiceId) {
+    if (voiceId) vgSetVoice(voiceId);
+  };
+  window.VoiceGenGetVoiceId = function() {
+    // Nhãn #vgVoiceDropLabel có chữ SẴN trong HTML ("Rachel · female · narrator"),
+    // nên trang Auto thấy như đã chọn giọng trong khi vgCurrentVoiceId vẫn rỗng
+    // (người dùng chưa bấm chọn lần nào) → báo "chưa chọn voice". Lùi về
+    // select.value, rồi về option đang selected của select.
+    if (vgCurrentVoiceId) return vgCurrentVoiceId;
+    var sel = els.voiceSelect;
+    if (sel && sel.value) return sel.value;
+    if (sel && sel.options && sel.options.length) {
+      var o = sel.options[sel.selectedIndex >= 0 ? sel.selectedIndex : 0];
+      if (o && o.value) return o.value;
+    }
+    return '';
   };
 
   // ── Voice Create (Clone + Design) ────────────────────────────────────────
@@ -10167,6 +11396,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try { stAutoResize(); } catch (e) {}
     try { vgReflowSoon(ta); } catch (e) {}
   }
+  // Cho trang Auto Sub đổ script vào. Ranh giới IIFE: trang Auto không thấy
+  // stSetScript trực tiếp, phải đi qua window.* (handoff §3.3).
+  // Điền script KHÔNG kích hoạt chạy: stStartCountdown() chỉ được gọi từ MỘT chỗ,
+  // ở cuối bước transcribe, tức là sau khi người dùng đã bấm nút.
+  window.SubtextSetScript = function (lines) { stSetScript(lines); };
+  // Quét lại track audio của sequence ĐANG active. Trang Auto Sub cần gọi tay:
+  // stScanTracks() vốn chỉ chạy khi bấm nút tab TẠO SUB, hoặc qua __subtextSync
+  // vốn đòi #tab-subtext phải đang .active — mà trang Auto Sub đã mượn .st-app
+  // ra khỏi panel đó nên không đường nào chạy, danh sách track đứng nguyên ở
+  // "— đang đọc sequence…".
+  window.SubtextScanTracks = function () { return stScanTracks(); };
 
   function stStartCountdown() {
     stStopCountdown();

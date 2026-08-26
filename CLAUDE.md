@@ -313,6 +313,9 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/tts/music` | POST | ElevenLabs Music |
 | `/transcribe` | POST | Whisper hoặc Premiere transcript |
 | `/align` | POST | Align script lines với word timestamps |
+| `/notify` | POST | Thông báo macOS khi pipeline chạm mốc |
+| `/autoset/names` | POST | Dựng tên sequence/bin/voice cho bộ 3 video |
+| `/autoset/voicedir` | POST | Tìm/tạo thư mục Voice Over/{bộ}x cạnh file .prproj |
 
 ### Lệnh dev thường dùng
 
