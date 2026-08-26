@@ -4192,7 +4192,7 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
    class only adds the gap between the header/scroll/run rows. */
 .sac-autoPage { gap: 8px; }
 .sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sac-autoTitle { font-weight: 600; font-size: 13px; color: #e9d5ff; flex: 1 1 0; min-width: 0; }
+.sac-autoTitle { font-weight: 600; font-size: 13px; color: var(--accent-lighter); flex: 1 1 0; min-width: 0; }
 .sac-autoHeaderBtns { flex: 0 0 auto; display: flex; gap: 2px; align-items: center; }
 .sac-autoClose { padding: 2px 6px; cursor: pointer; flex: 0 0 auto; }
 /* Plain block container — mirrors .sac-newseq-box. NO flex-column wrapper
@@ -4228,20 +4228,20 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoSetInline .sac-nsf2-label { margin: 0; white-space: nowrap; }
 .sac-autoSetInput {
   width: 58px; padding: 6px 4px; text-align: center; font-size: 13px;
-  border-radius: 4px; border: 1px solid var(--border, #3a2f52);
-  background: var(--input-bg, #1e1b2e); color: var(--text);
+  border-radius: 4px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text);
 }
 .sac-autoSetInput:focus { outline: none; border-color: var(--accent); }
-.sac-autoTabsLabel { flex: 0 0 auto; font-size: 11px; color: #94a3b8; }
+.sac-autoTabsLabel { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); }
 .sac-autoTabs { flex: 1 1 0; min-width: 0; display: flex; gap: 4px; }
 /* Tab to hơn hẳn — vùng chạm rộng, chữ lớn, trạng thái active không thể nhầm. */
 .sac-autoTab {
   flex: 1 1 0; min-width: 0; text-align: center;
-  padding: 8px 6px; border-radius: 6px; background: #1e1b2e; color: #94a3b8;
+  padding: 8px 6px; border-radius: 6px; background: var(--surface2); color: var(--text-dim);
   font-size: 15px; font-weight: 700; cursor: pointer;
   border: 1px solid transparent;
 }
-.sac-autoTab.is-active { background: #7c3aed; color: #fff; border-color: #a78bfa; }
+.sac-autoTab.is-active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent-light); }
 /* Slot the real Manual table is borrowed into — must grow to fill the
    remaining vertical space or the table collapses to zero height. */
 .sac-autoManualSlot { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }
@@ -4249,6 +4249,10 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 .sac-autoManualSlot .sac-panel { padding: 0; }
 .sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
 .sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
-.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: #94a3b8; min-height: 16px; }
-.sac-autoRun { flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px; background: #7c3aed; color: #fff; font-size: 12px; cursor: pointer; }
+.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); min-height: 16px; }
+.sac-autoRun {
+  flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px;
+  background: var(--accent); color: var(--accent-fg); font-size: 12px; cursor: pointer;
+}
+.sac-autoRun:hover { background: var(--accent-dark); }
 /* ── /AUTO PAGE ── */
