@@ -5655,6 +5655,36 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoNotify('Autocut xong', msg);
   }
 
+  // Mở modal confirm. UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể
+  // z-index — backdrop mờ không che được bảng script phía sau. Cách duy nhất là
+  // ẩn hẳn nội dung phía sau, y như modal Settings đang làm.
+  async function autoOpenConfirm() {
+    var modal = $('sacAutoConfirm');
+    var head  = $('sacAutoConfirmHead');
+    var body  = $('sacAutoConfirmBody');
+    if (!modal || !head || !body) return false;
+    var cfg = autoBuildCfg();
+    head.textContent = 'Bộ ' + ($('sacAutoSet').value.trim() || '?')
+      + ' · ' + (cfg.product || '?') + ' · ' + (cfg.co || '?') + ' · ' + (cfg.editor || '?');
+    body.textContent = '⏳ Đang dựng tên…';
+    modal.hidden = false;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = 'none';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = 'none';
+    try {
+      body.textContent = (await autoBuildConfirmLines()).join('\n');
+    } catch (e) {
+      body.textContent = '✗ ' + e.message;
+      return false;
+    }
+    return true;
+  }
+  function autoCloseConfirm() {
+    var modal = $('sacAutoConfirm');
+    if (modal) modal.hidden = true;
+    if (sacAutoScrollEl) sacAutoScrollEl.style.display = '';
+    if (sacAutoRunEl) sacAutoRunEl.style.display = '';
+  }
+
   var sacAutoRunBtn = $('sacAutoRun');
   if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
     // Kiểm tra autoPendingBuild TRƯỚC autoRunning cố ý: lần bấm duyệt audition
@@ -5686,6 +5716,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoStatus('✗ Cả 3 video chưa có script — dán script vào bảng ở từng tab .0 / .1 / .2.');
       return;
     }
+    // Xác nhận tên trước khi chạy. Chỉ hiện modal; pipeline do nút TRONG modal
+    // kích hoạt (handler ngay dưới), nên ở đây dừng lại.
+    await autoOpenConfirm();
+  });
+
+  // Nút "Chạy cả bộ" TRONG modal — đây mới là chỗ chạy pipeline thật.
+  var sacAutoConfirmGoBtn = $('sacAutoConfirmGo');
+  if (sacAutoConfirmGoBtn) sacAutoConfirmGoBtn.addEventListener('click', async function () {
+    autoCloseConfirm();
+    if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
     autoRunning = true;
     sacAutoRunBtn.style.opacity = '0.5';
     try {
@@ -5708,6 +5748,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       sacAutoRunBtn.style.opacity = '';
     }
   });
+  var sacAutoConfirmCancelBtn = $('sacAutoConfirmCancel');
+  if (sacAutoConfirmCancelBtn) sacAutoConfirmCancelBtn.addEventListener('click', autoCloseConfirm);
+
   // ── /AUTO PAGE ──
 
   var sacCutNewBtn = $('sacCutNew');
