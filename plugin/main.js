@@ -4980,6 +4980,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var autoActiveJob = 0;
   var autoPendingBuild = null;   // job đã gen voice, đang chờ người duyệt
   var autoRunning = false;       // đang chạy pipeline (stage 1/2 hoặc stage 3) — chặn bấm lại
+  // Huỷ ở RANH GIỚI GIỮA 2 VIDEO, không cắt ngang. Giữa chừng là đang gen voice
+  // (ElevenLabs), đang align (Whisper) hoặc đang dựng timeline (Premiere API) —
+  // cắt ngang để lại file voice dở, sequence dựng dở, và chạm sequence sai lúc là
+  // nguồn crash Premiere quen thuộc. Mỗi vòng lặp chặng kiểm cờ ở ĐẦU lượt.
+  var autoCancelRequested = false;
   var autoManualSnapshot = null; // ảnh chụp bảng/parsedBlocks/sacValidatePassed của workflow thủ công, để trả lại khi đóng trang
   var autoManualHome = null;     // vị trí gốc của #sacPanelManual
   var autoVoiceDropHome = null;  // vị trí gốc của #vgVoiceDrop (ở tab Voice Gen)
@@ -5487,8 +5492,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
 
   // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
+  // Trả true nếu người dùng đã bấm Huỷ → chặng đang chạy thoát vòng lặp.
+  function autoStopHere(stage) {
+    if (!autoCancelRequested) return false;
+    autoStatus('⏹ Đã dừng theo yêu cầu (' + stage + '). Video đang làm dở đã chạy xong trọn vẹn.');
+    return true;
+  }
+
   async function autoStage1(jobs) {
     for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('validate')) break;
       var job = jobs[i];
       autoStatus('⏳ Validate .' + job.idx + '…');
       try {
@@ -5513,7 +5526,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
     }
     var bad = jobs.filter(function (j) { return j.state === 'error'; });
-    if (bad.length) {
+    // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
+    if (autoCancelRequested) {
+      // không làm gì
+    } else if (bad.length) {
       var msg = bad.map(function (j) { return '.' + j.idx + ': ' + j.error; }).join(' · ');
       autoStatus('✗ ' + msg);
       autoNotify('Autocut — validate lỗi', msg);
@@ -5592,6 +5608,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // rate limit ElevenLabs.
   async function autoStage2(jobs) {
     for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('gen voice')) break;
       var job = jobs[i];
       autoStatus('⏳ Gen voice .' + job.idx + '…');
       try {
@@ -5621,8 +5638,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
     }
     var ok = jobs.filter(function (j) { return j.state === 'voiced'; });
-    autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong');
-    autoNotify('Voice xong', ok.length + '/' + jobs.length + ' bản — chờ duyệt');
+    // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
+    if (!autoCancelRequested) {
+      autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong');
+      autoNotify('Voice xong', ok.length + '/' + jobs.length + ' bản — chờ duyệt');
+    }
     return ok;
   }
 
@@ -5668,6 +5688,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // sacRunAutoCut('new') ĐỌC TÊN/RATIO TỪ DOM → phải ghi vào 2 input trước khi gọi.
   async function autoStage3(jobs) {
     for (var i = 0; i < jobs.length; i++) {
+      if (autoStopHere('dựng timeline')) break;
       var job = jobs[i];
       autoStatus('⏳ Dựng .' + job.idx + '…');
       try {
@@ -5687,9 +5708,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
     }
     var ok = jobs.filter(function (j) { return j.state === 'built'; });
-    var msg = 'Bộ ' + autoSet.setNumber + ': ' + ok.length + '/' + jobs.length + ' timeline xong';
-    autoStatus('✓ ' + msg);
-    autoNotify('Autocut xong', msg);
+    var msg = 'Bộ ' + autoSet.setNumber + ': ' + ok.length + '/' + jobs.length + ' timeline xong'
+            + (autoCancelRequested ? ' (đã dừng theo yêu cầu)' : '');
+    autoStatus((autoCancelRequested ? '⏹ ' : '✓ ') + msg);
+    autoNotify(autoCancelRequested ? 'Autocut — đã dừng' : 'Autocut xong', msg);
   }
 
   // Mở modal confirm. UXP vẽ input/select NATIVE đè lên MỌI overlay bất kể
@@ -5722,30 +5744,48 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (sacAutoRunEl) sacAutoRunEl.style.display = '';
   }
 
+  // Nút Run kiêm nút Huỷ. KHÔNG làm mờ nó khi đang chạy: mờ trông như bị vô hiệu
+  // hoá, người dùng sẽ không nghĩ là bấm được để dừng.
+  function autoSetRunBtn(running) {
+    var btn = $('sacAutoRun');
+    if (!btn) return;
+    btn.style.opacity = '';
+    btn.innerHTML = running
+      ? '<span data-ic="stop" data-ic-size="13"></span> Huỷ sau video này'
+      : '<span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ';
+    if (typeof pluginRenderIcons === 'function') { try { pluginRenderIcons(btn); } catch (e) {} }
+  }
+
   var sacAutoRunBtn = $('sacAutoRun');
   if (sacAutoRunBtn) sacAutoRunBtn.addEventListener('click', async function () {
-    // Kiểm tra autoPendingBuild TRƯỚC autoRunning cố ý: lần bấm duyệt audition
-    // (lần bấm thứ 2) phải luôn hoạt động khi không có gì đang chạy — nếu đảo thứ
-    // tự, không có khác biệt vì autoRunning chắc chắn là false ở đây (không có
-    // pipeline nào khác đang chạy đồng thời với việc đang chờ duyệt). Nhưng giữ
-    // autoPendingBuild lên trước vẫn đúng ngữ nghĩa: "đã duyệt" ưu tiên hơn
-    // "đang chạy" vì khi pending, không có gì đang autoRunning cả.
+    // Nút này có 3 vai theo trạng thái, kiểm theo đúng thứ tự dưới:
+    //   1. autoRunning  → là nút HUỶ (trước đây chỉ báo "đang chạy" rồi thôi,
+    //                     không có đường nào dừng lại).
+    //   2. autoPendingBuild → lần bấm thứ 2 sau khi nghe thử = đã duyệt, dựng tiếp.
+    //   3. còn lại      → mở modal confirm rồi chạy từ đầu.
+    // autoRunning phải lên trước: khi đang chạy thì autoPendingBuild chắc chắn
+    // null, nhưng để pending lên trước sẽ khiến nhánh 1 không bao giờ tới được
+    // nếu sau này có trạng thái vừa pending vừa running.
+    if (autoRunning) {
+      autoCancelRequested = true;
+      autoStatus('⏹ Sẽ dừng sau khi xong video đang làm — không cắt ngang giữa chừng.');
+      return;
+    }
     if (autoPendingBuild) {                 // lần bấm thứ 2 = đã duyệt voice
-      if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
       var pending = autoPendingBuild;
       autoPendingBuild = null;
       autoRunning = true;
-      sacAutoRunBtn.style.opacity = '0.5';
+      autoCancelRequested = false;
+      autoSetRunBtn(true);
       try {
         await autoStage3(pending);
       } finally {
         autoRunning = false;
-        sacAutoRunBtn.style.opacity = '';
+        autoSetRunBtn(false);
         autoRenderTab();   // cùng lý do như nhánh chạy đầy đủ ở dưới
       }
       return;
     }
-    if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
     autoCaptureRows(autoSet.jobs[autoActiveJob]);
     autoSaveState();
     // Chặn sớm: không chạy pipeline (và không chạm vào bảng) khi chưa có gì.
@@ -5765,13 +5805,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoCloseConfirm();
     if (autoRunning) { autoStatus('⏳ Đang chạy — chờ xong đã.'); return; }
     autoRunning = true;
-    sacAutoRunBtn.style.opacity = '0.5';
+    autoCancelRequested = false;
+    autoSetRunBtn(true);
     try {
       var jobs = await autoFetchNames();
       var ok = await autoStage1(jobs);
-      if (!ok.length) return;
+      // break trong một chặng chỉ thoát vòng lặp CỦA chặng đó — phải chặn thêm ở
+      // đây, không thì huỷ ở chặng validate xong vẫn chạy tiếp sang gen voice.
+      if (autoCancelRequested || !ok.length) return;
       var voiced = await autoStage2(ok);
-      if (!voiced.length) return;
+      if (autoCancelRequested || !voiced.length) return;
       if (!autoSet.skipAudition) {
         autoStatus('⏸ Nghe thử 3 voice rồi bấm "Chạy cả bộ" lần nữa để dựng timeline.');
         autoPendingBuild = voiced;
@@ -5783,7 +5826,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoNotify('Autocut — lỗi', e.message);
     } finally {
       autoRunning = false;
-      sacAutoRunBtn.style.opacity = '';
+      autoSetRunBtn(false);
       // BẮT BUỘC: pipeline dùng CHUNG một bảng DOM, chạy xong nó còn giữ rows của
       // job cuối (.2) còn select voice/ratio thì chưa đồng bộ lại. Nếu để nguyên,
       // thao tác tiếp theo sẽ ghi nhầm: autoCaptureRows() nhét rows của .2 vào job
