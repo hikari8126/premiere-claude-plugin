@@ -1109,8 +1109,6 @@
           <label class="sac-cutNoVoiceToggle"><input type="checkbox" id="sacAutoSkipAudition" /> Bỏ qua nghe thử</label>
         </div>
 
-        <div id="sacAutoPreview" class="sac-autoPreview"></div>
-
         <!-- BÊ NGUYÊN panel Manual vào đây lúc chạy (autoBorrowManual).
              Trước đây mượn từng mảnh (bảng / blocks / voice panel) — lần nào cũng
              thiếu một thứ và sinh lỗi mới. Mượn cả panel thì Parse AI, bảng,
@@ -1143,6 +1141,19 @@
       <input id="sacAutoSeqBin" class="sac-nsf2-input" type="text" />
 
       <div id="sacAutoSettingsClose" class="sac-autoRun" role="button" style="margin-top:12px">Xong</div>
+    </div>
+  </div>
+
+  <!-- Xác nhận trước khi chạy bộ 3 video. Tên là deliverable giao cho CO —
+       đây là điểm dừng bắt buộc duy nhất chắc chắn người dùng có đọc. -->
+  <div id="sacAutoConfirm" class="sac-newseq-modal" hidden>
+    <div class="sac-newseq-box">
+      <div class="sac-autoConfirmHead" id="sacAutoConfirmHead"></div>
+      <div class="sac-autoConfirmBody" id="sacAutoConfirmBody"></div>
+      <div class="sac-autoConfirmActions">
+        <div id="sacAutoConfirmCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
+        <div id="sacAutoConfirmGo" class="sac-autoRun" role="button" style="flex:1 1 0"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
+      </div>
     </div>
   </div>
 
