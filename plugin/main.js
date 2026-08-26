@@ -5489,6 +5489,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   document.querySelectorAll('.sac-autoTab').forEach(function (t) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
+      console.log('[AUTO-DBG] ── BẤM TAB .' + autoActiveJob + ' → .' + t.dataset.job + ' ──');
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
       autoStashJobState(autoActiveJob);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
