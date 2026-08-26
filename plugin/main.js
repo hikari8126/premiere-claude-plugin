@@ -5157,7 +5157,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
       autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoSet.skipAudition= $('sacAutoSkipAudition').checked;
-      localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet));
+      // Lược mọi khoá bắt đầu bằng '_' (blocks, srcMap) trước khi stringify:
+      // chúng chứa ProjectItem của Premiere — JSON.stringify sẽ ném lỗi, mà chỗ
+      // này bọc try/catch rỗng nên state sẽ ÂM THẦM không được lưu nữa.
+      localStorage.setItem(AUTO_SET_KEY, JSON.stringify(autoSet, function (k, v) {
+        return (k && k.charAt(0) === '_') ? undefined : v;
+      }));
     } catch (e) {}
   }
 
@@ -5177,12 +5182,39 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
+  // Blocks + sourceMap là state TOÀN CỤC dùng chung một DOM (#sacBlockList).
+  // Không cất theo job thì panel Blocks giữ nguyên bản vẽ lần cuối — bấm sang tab
+  // .0 vẫn thấy blocks của .2, nên không thể nhìn ra .0 thiếu source nào.
+  // Khoá đặt tiền tố '_' để autoSaveState() lược ra khi ghi localStorage.
+  function autoStashJobState(idx) {
+    var j = autoSet.jobs[idx];
+    if (!j) return;
+    j._blocks = parsedBlocks;
+    j._srcMap = {};
+    Object.keys(sacSourceMap).forEach(function (k) { j._srcMap[k] = sacSourceMap[k]; });
+  }
+  function autoApplyJobState(job) {
+    parsedBlocks = (job && job._blocks) || [];
+    if (job && job._srcMap) {
+      sacSourceMap = job._srcMap;
+      window.sacSourceMap = sacSourceMap;
+    }
+    var sec = $('sacBlockSection');
+    if (parsedBlocks.length) {
+      renderBlocks(parsedBlocks);
+      if (sec) sec.style.display = 'flex';
+    } else if (sec) {
+      sec.style.display = 'none';
+    }
+  }
+
   function autoRenderTab() {
     document.querySelectorAll('.sac-autoTab').forEach(function (t) {
       t.classList.toggle('is-active', Number(t.dataset.job) === autoActiveJob);
     });
     autoLoadJobRowsIntoTable(autoSet.jobs[autoActiveJob]);
     autoLoadJobVoiceRatio(autoSet.jobs[autoActiveJob]);
+    autoApplyJobState(autoSet.jobs[autoActiveJob]);
   }
 
   // Nạp rows của job vào bảng #sacBody. Job rỗng → tạo 3 dòng trống để dán vào.
@@ -5434,6 +5466,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     t.addEventListener('click', function () {
       // Lưu rows + voice/ratio đang chọn của tab đang rời trước khi chuyển.
       autoCaptureRows(autoSet.jobs[autoActiveJob]);
+      autoStashJobState(autoActiveJob);
       autoSet.jobs[autoActiveJob].ratio   = $('sacAutoRatio').value;
       autoSet.jobs[autoActiveJob].voiceId = (typeof window.VoiceGenGetVoiceId === 'function') ? window.VoiceGenGetVoiceId() : '';
       autoActiveJob = Number(t.dataset.job);
@@ -5492,6 +5525,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
 
   // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
+  // Chuyển hẳn sang tab một video và nạp đúng bảng + Blocks + voice/ratio của nó.
+  function autoFocusJob(idx) {
+    autoActiveJob = idx;
+    autoRenderTab();
+  }
+
   // Trả true nếu người dùng đã bấm Huỷ → chặng đang chạy thoát vòng lặp.
   function autoStopHere(stage) {
     if (!autoCancelRequested) return false;
@@ -5524,15 +5563,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         job.state = 'error';
         job.error = e.message;
       }
+      // Cất state KỂ CẢ khi lỗi: người dùng cần nhìn đúng Blocks của video hỏng
+      // (có đánh dấu source thiếu) thì mới bind lại được.
+      autoStashJobState(job.idx);
     }
     var bad = jobs.filter(function (j) { return j.state === 'error'; });
     // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
     if (autoCancelRequested) {
       // không làm gì
     } else if (bad.length) {
+      // DỪNG HẲN, không chạy tiếp 2 video kia. Trước đây chạy tiếp rồi chỉ in một
+      // dòng lỗi — mà lúc người dùng nhìn thì bảng/Blocks đã là của video cuối,
+      // nên không có đường nào thấy được video hỏng thiếu source gì để sửa.
+      // Dừng cũng đỡ tốn credit ElevenLabs cho một bộ chắc chắn phải làm lại.
       var msg = bad.map(function (j) { return '.' + j.idx + ': ' + j.error; }).join(' · ');
-      autoStatus('✗ ' + msg);
-      autoNotify('Autocut — validate lỗi', msg);
+      autoFocusJob(bad[0].idx);
+      autoStatus('✗ Dừng — ' + msg + '\n→ Đang mở video .' + bad[0].idx
+               + ': sửa source thiếu ở bảng/Blocks rồi bấm "Chạy cả bộ" lại.');
+      autoNotify('Autocut — dừng ở validate', msg);
+      return [];
     } else {
       autoStatus('✓ Validate 3/3 xong');
     }

@@ -33,7 +33,7 @@ riêng** → dán script vào bảng → bấm **Chạy cả bộ**.
 
 | Chặng | Việc | Ghi chú |
 |---|---|---|
-| 1 | Validate cả 3 video | Video lỗi bị đánh dấu, **không chặn** 2 video kia |
+| 1 | Validate cả 3 video | Có video lỗi → **DỪNG HẲN**, tự nhảy về tab video đó với đúng bảng + Blocks để sửa source thiếu |
 | 2 | Gen voice tuần tự → `/tts/move` vào `Voice Over/{bộ}x` → import vào bin | Tuần tự để tránh rate limit ElevenLabs |
 | ⏸ | Dừng cho nghe thử — bấm "Chạy cả bộ" **lần nữa** để tiếp | Tick "Bỏ qua nghe thử" thì chạy một mạch |
 | 3 | Align voice → `sacRunAutoCut('new')` → chuyển sequence vào bin | |
