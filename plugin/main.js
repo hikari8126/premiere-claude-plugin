@@ -5393,6 +5393,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
     if (rows.length) job.rows = rows;
     job._blocks = parsedBlocks;
+    // sacSourceMap (tên source → ProjectItem) là biến TOÀN CỤC và bị
+    // sacValidateSources RESET SẠCH mỗi lần validate. Không lưu theo job thì sau
+    // chặng 1, map chỉ còn của job validate cuối (.2); tới chặng 3 khâu ráp tra
+    // sacSourceMap[src.name] không thấy clip → timeline dựng ra KHÔNG CÓ HÌNH.
+    // Chụp nông là đủ: giá trị là ProjectItem, không cần sao chép sâu.
+    job._srcMap = {};
+    Object.keys(sacSourceMap).forEach(function (k) { job._srcMap[k] = sacSourceMap[k]; });
     },
     // Nạp rows của job vào bảng, dọn state của job trước.
     load: function (job) {
@@ -5402,6 +5409,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         createRow((c[0] || '').trim(), (c[1] || '').trim(), (c[2] || '').trim());
       });
       parsedBlocks = job._blocks || [];
+      // Khôi phục map source của ĐÚNG job này. Phải set cả window.sacSourceMap:
+      // khâu ráp đọc `sacSourceMap[x] || window.sacSourceMap[x]`, bỏ sót bản
+      // mirror thì nó rơi về map của job khác.
+      if (job._srcMap) {
+        sacSourceMap = job._srcMap;
+        window.sacSourceMap = sacSourceMap;
+      }
     },
   };
 
@@ -5727,6 +5741,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       } finally {
         autoRunning = false;
         sacAutoRunBtn.style.opacity = '';
+        autoRenderTab();   // cùng lý do như nhánh chạy đầy đủ ở dưới
       }
       return;
     }
@@ -5769,6 +5784,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } finally {
       autoRunning = false;
       sacAutoRunBtn.style.opacity = '';
+      // BẮT BUỘC: pipeline dùng CHUNG một bảng DOM, chạy xong nó còn giữ rows của
+      // job cuối (.2) còn select voice/ratio thì chưa đồng bộ lại. Nếu để nguyên,
+      // thao tác tiếp theo sẽ ghi nhầm: autoCaptureRows() nhét rows của .2 vào job
+      // đang active, autoSaveState() nhét voice/ratio đang hiển thị vào đó rồi ghi
+      // xuống localStorage — cả 3 video biến thành .2 và hỏng vĩnh viễn.
+      autoRenderTab();
     }
   });
   var sacAutoConfirmCancelBtn = $('sacAutoConfirmCancel');
