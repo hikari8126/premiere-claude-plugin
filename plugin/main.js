@@ -2869,6 +2869,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var rowSeq = 0;
   var parsedBlocks = [];
+  // TẠM: ai gọi renderBlocks và vẽ blocks của video nào. Gỡ cùng autoDbgBlocks.
+  function autoDbgRender(blocks) {
+    try {
+      var b = blocks || [];
+      var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
+      console.log('[AUTO-DBG] VẼ    blocks=' + b.length + ' | source đầu: ' + first);
+      console.log(new Error('[AUTO-DBG] ai gọi renderBlocks').stack);
+    } catch (e) {}
+  }
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
   var sacBindOverrides = {}; // sacNorm(originalCutsheetName) → bound display name (survives re-parse)
@@ -3640,6 +3649,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
 
     parsedBlocks = blocks;
+    if (typeof autoDbgRender === 'function') autoDbgRender(blocks);
     $('sacBlockSection').style.display = 'flex';
     // Re-rendering invalidates both gates — must re-validate + re-align.
     sacValidatePassed = false;
@@ -5186,14 +5196,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Không cất theo job thì panel Blocks giữ nguyên bản vẽ lần cuối — bấm sang tab
   // .0 vẫn thấy blocks của .2, nên không thể nhìn ra .0 thiếu source nào.
   // Khoá đặt tiền tố '_' để autoSaveState() lược ra khi ghi localStorage.
+  // TẠM: log chẩn đoán blocks-theo-tab. Gỡ khi tìm ra nguyên nhân.
+  function autoDbgBlocks(tag, idx, blocks) {
+    try {
+      var b = blocks || [];
+      var first = (b[0] && b[0].sources && b[0].sources[0] && b[0].sources[0].name) || '(không có source)';
+      var firstText = (b[0] && (b[0].text || (b[0].texts && b[0].texts[0]))) || '(không có thoại)';
+      console.log('[AUTO-DBG] ' + tag + ' job=.' + idx + ' blocks=' + b.length
+                + ' | source đầu: ' + first
+                + ' | thoại đầu: ' + String(firstText).slice(0, 40));
+    } catch (e) { console.log('[AUTO-DBG] ' + tag + ' job=.' + idx + ' (log lỗi: ' + e.message + ')'); }
+  }
+
   function autoStashJobState(idx) {
     var j = autoSet.jobs[idx];
     if (!j) return;
+    autoDbgBlocks('CẤT  ', idx, parsedBlocks);
     j._blocks = parsedBlocks;
     j._srcMap = {};
     Object.keys(sacSourceMap).forEach(function (k) { j._srcMap[k] = sacSourceMap[k]; });
   }
   function autoApplyJobState(job) {
+    autoDbgBlocks('NẠP  ', autoActiveJob, (job && job._blocks) || []);
     parsedBlocks = (job && job._blocks) || [];
     if (job && job._srcMap) {
       sacSourceMap = job._srcMap;
