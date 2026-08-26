@@ -5042,34 +5042,32 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // về Manual → 'flex', sang mode khác → 'none'. Đừng ghi đè ở đây.
   }
 
-  function autoBorrowVoiceDrop() {
-    var vd = $('vgVoiceDrop'), slot = $('sacAutoVoiceSlot');
-    if (!vd || !slot || autoVoiceDropHome) return;
-    autoVoiceDropHome = { parent: vd.parentNode, next: vd.nextSibling };
-    slot.appendChild(vd);
-  }
-  function autoReturnVoiceDrop() {
-    if (!autoVoiceDropHome) return;
-    var vd = $('vgVoiceDrop');
-    autoVoiceDropHome.parent.insertBefore(vd, autoVoiceDropHome.next);
-    autoVoiceDropHome = null;
-  }
 
 
 
-  var autoVoiceDropHome = null;
+  // Placeholder thay vì nhớ nextSibling — cùng lý do đã làm panel Manual biến mất
+  // (commit fee1cdd): ở UXP nextSibling có thể là text/comment node và
+  // insertBefore với ref node kiểu đó ném lỗi.
   function autoBorrowVoiceDrop() {
     var drop = $('vgVoiceDrop');
     var slot = $('sacAutoVoiceSlot');
     if (!drop || !slot || autoVoiceDropHome) return;
-    autoVoiceDropHome = { parent: drop.parentNode, next: drop.nextSibling };
+    var ph = document.createElement('div');
+    ph.id = 'vgVoiceDropHomeMark';
+    ph.style.display = 'none';
+    drop.parentNode.insertBefore(ph, drop);
+    autoVoiceDropHome = { mark: ph };
     slot.appendChild(drop);
   }
   function autoReturnVoiceDrop() {
     if (!autoVoiceDropHome) return;
     var drop = $('vgVoiceDrop');
-    if (drop) autoVoiceDropHome.parent.insertBefore(drop, autoVoiceDropHome.next);
+    var mark = autoVoiceDropHome.mark;
     autoVoiceDropHome = null;
+    if (!drop) return;
+    try { if (mark && mark.parentNode) mark.parentNode.insertBefore(drop, mark); }
+    catch (e) { console.error('[SAC] autoReturnVoiceDrop lỗi:', e); }
+    try { if (mark && mark.parentNode) mark.parentNode.removeChild(mark); } catch (e) {}
   }
 
   // Đảm bảo jobs luôn là mảng đúng 3 phần tử, mỗi phần tử có rows/voiceId/ratio —
