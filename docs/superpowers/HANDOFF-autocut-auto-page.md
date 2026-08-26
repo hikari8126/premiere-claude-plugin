@@ -191,11 +191,12 @@ dùng báo "đã chạy được" nhưng chưa rõ đã đi hết chặng 2–3 
 
 ## 7. Việc còn treo
 
-0. **XÁC MINH `projectItem.getSequence()`** — trang Auto Sub dựa vào nó để nhảy
-   sequence theo tab, mà API này mới chỉ thấy dùng trên projectItem của clip
-   nested (`main.js` ~11731), **chưa xác minh trên sequence thường**. Nếu Premiere
-   không hỗ trợ, `autoActivateSeqByName()` ném lỗi có hướng dẫn làm thủ công —
-   đọc thông báo trong `#sacAutoSubStatus` là biết. Đây là việc cần kiểm đầu tiên.
+0. ~~Xác minh `projectItem.getSequence()`~~ — **đã xác minh: KHÔNG tồn tại** trên
+   Premiere 25.6.x. Không có đường tra ngược từ TÊN ra object Sequence. Luồng cut
+   không vướng vì nó tự `project.createSequence()` nên luôn cầm sẵn object; trang
+   Auto Sub chỉ có tên nên phải **giữ object lại từ lúc dựng** (`job._seq`, gán ở
+   `autoStage3` ngay sau `sacRunAutoCut`). `autoResolveSeq()` thử 3 đường: object
+   đã giữ → `project.getSequences()` → `projectItem.getSequence()`.
 1. **Tách state trang Auto khỏi biến toàn cục của Manual** — xem §3.1. Đây là
    nguồn của phần lớn lỗi khó trong tính năng này; các fix hiện tại là vá quanh.
 2. **Xoá thư mục rỗng `Voice Over/32x`** trên Google Drive (tôi tạo khi kiểm

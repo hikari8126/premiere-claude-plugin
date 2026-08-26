@@ -5869,33 +5869,70 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!r || !r.ok) throw new Error((r && r.error) || 'chuyển bin thất bại');
   }
 
-  // Kích hoạt sequence theo TÊN. Tra theo tên chứ không giữ object: object của
-  // sequence vừa tạo có thể stale sau khi Premiere xử lý xong. Tên là duy nhất
-  // vì tên chính là deliverable.
+  // ĐÃ XÁC MINH (2026-08-26): `projectItem.getSequence` KHÔNG tồn tại trên
+  // Premiere 25.6.x — không có đường tra ngược từ TÊN ra object Sequence.
+  // Luồng cut không vướng chuyện này vì nó tự `project.createSequence()` nên
+  // luôn cầm sẵn object; trang Auto Sub thì chỉ có tên, nên phải GIỮ object lại
+  // từ lúc dựng (job._seq, gán ở autoStage3).
   //
-  // CHƯA XÁC MINH: projectItem.getSequence() mới chỉ thấy dùng trên projectItem
-  // của clip nested (main.js ~11731), chưa thử trên projectItem của sequence
-  // thường. Nếu Premiere không hỗ trợ, hàm ném lỗi có nội dung rõ ràng thay vì
-  // fail âm thầm — đọc thông báo là biết phải đổi cách.
-  async function autoActivateSeqByName(seqName) {
+  // Tìm object Sequence cho một job, theo thứ tự rẻ → đắt.
+  // KHÔNG có API tra ngược từ tên ra Sequence trên bản Premiere này, nên đường
+  // chính là object đã giữ lúc dựng (job._seq).
+  async function autoResolveSeq(job, proj) {
+    if (job && job._seq) return job._seq;                 // 1. object giữ lúc dựng
+    // 2. project.getSequences() — có ở một số bản Premiere.
+    if (typeof proj.getSequences === 'function') {
+      try {
+        var list = await proj.getSequences();
+        for (var i = 0; i < (list || []).length; i++) {
+          var nm = list[i] && (list[i].name || (list[i].getName && await list[i].getName()));
+          if (nm === job.seqName) return list[i];
+        }
+      } catch (e) {}
+    }
+    // 3. projectItem.getSequence() — KHÔNG tồn tại trên Premiere của người dùng
+    //    (đã xác minh), nhưng có trên projectItem của clip nested nên vẫn thử.
+    try {
+      var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
+      if (root && typeof root.then === 'function') root = await root;
+      var all = await sacCollectBinItems(root);
+      var hit = all.filter(function (it) { return it.name === job.seqName; })[0];
+      if (hit && typeof hit.item.getSequence === 'function') {
+        var s2 = await hit.item.getSequence();
+        if (s2) return s2;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async function autoActivateSeqForJob(job) {
     var proj = await getActiveProject();
-    var root = typeof proj.getRootItem === 'function' ? proj.getRootItem() : proj.rootItem;
-    if (root && typeof root.then === 'function') root = await root;
-    var all = await sacCollectBinItems(root);
-    var hit = all.filter(function (it) { return it.name === seqName; })[0];
-    if (!hit) throw new Error('không tìm thấy sequence "' + seqName + '" trong project');
-    if (typeof hit.item.getSequence !== 'function') {
-      throw new Error('Premiere này không cho lấy sequence từ project item '
-                    + '(projectItem.getSequence không tồn tại) — không tự nhảy sequence được, '
-                    + 'bạn mở "' + seqName + '" thủ công trong Premiere rồi bấm lại tab.');
+    var seq = await autoResolveSeq(job, proj);
+    if (!seq) {
+      throw new Error('không mở được sequence "' + job.seqName + '" — '
+                    + 'bạn bấm đúp vào nó trong project panel để mở, rồi bấm lại tab này.');
     }
-    var seq = null;
-    try { seq = await hit.item.getSequence(); } catch (e) {
-      throw new Error('mở sequence "' + seqName + '" lỗi: ' + e.message);
+    try {
+      if (typeof proj.openSequence === 'function') await proj.openSequence(seq);
+      if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq);
+    } catch (e) {
+      // Object giữ từ lúc dựng có thể hết hạn ("The script object is no longer
+      // valid" — đã thấy trong log với clip). Vứt nó đi rồi thử lại bằng các
+      // đường còn lại, thay vì báo lỗi cho một nguyên nhân sửa được.
+      if (job._seq) {
+        job._seq = null;
+        var seq2 = await autoResolveSeq(job, proj);
+        if (!seq2) {
+          throw new Error('sequence "' + job.seqName + '" không còn dùng được ('
+                        + e.message + ') — bấm đúp vào nó trong project panel rồi bấm lại tab này.');
+        }
+        if (typeof proj.openSequence === 'function') await proj.openSequence(seq2);
+        if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq2);
+        seq = seq2;
+      } else {
+        throw e;
+      }
     }
-    if (!seq) throw new Error('không mở được sequence "' + seqName + '" (getSequence trả về rỗng)');
-    if (typeof proj.openSequence === 'function') await proj.openSequence(seq);
-    if (typeof proj.setActiveSequence === 'function') await proj.setActiveSequence(seq);
     // Sequence vừa kích hoạt mà chạm ngay là nguyên nhân crash quen thuộc —
     // sacRunAutoCut cũng chờ 900ms sau khi activate vì lý do này.
     await new Promise(function (r) { setTimeout(r, 900); });
@@ -5935,7 +5972,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoSubFillScript(job);
     autoSubStatus('⏳ Đang mở sequence ' + job.seqName + '…');
     try {
-      await autoActivateSeqByName(job.seqName);
+      await autoActivateSeqForJob(job);
       autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu → Tạo SRT".');
     } catch (e) {
       autoSubStatus('✗ ' + e.message);
@@ -5985,6 +6022,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         $('sacNewSeqName').value  = job.seqName;
         $('sacNewSeqRatio').value = job.ratio;
         await sacRunAutoCut('new');
+
+        // GIỮ LẠI object sequence ngay đây. sacRunAutoCut('new') vừa tạo và kích
+        // hoạt nó, nên active sequence lúc này CHÍNH LÀ timeline vừa dựng.
+        // Trang Auto Sub cần object này để nhảy sequence: tra ngược từ tên qua
+        // projectItem.getSequence() KHÔNG chạy được — hàm đó không tồn tại trên
+        // Premiere của người dùng (đã xác minh). Luồng cut không gặp vấn đề vì nó
+        // tự createSequence() nên luôn cầm sẵn object.
+        try { job._seq = await getActiveSequence(); } catch (eSeq) { job._seq = null; }
 
         await autoMoveSeqToBin(job.seqName, job.seqBin);
         job.state = 'built';

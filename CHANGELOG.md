@@ -32,7 +32,7 @@
 ### 🔧 Kỹ thuật / Approach
 - **Bẫy UXP mới ghi nhận:** `insertBefore` với ref là text/comment node ném lỗi → dùng placeholder; `white-space: pre-line` **gộp khoảng trắng đầu dòng** (cần thụt lề thì `pre-wrap`); `JSON.stringify` gặp ProjectItem sẽ ném lỗi, mà `autoSaveState()` bọc `try/catch` rỗng nên state **âm thầm ngừng được lưu** — mọi khoá tiền tố `_` bị lược khi serialize.
 - **Log chẩn đoán `AUTO_DBG`** (tắt mặc định, bật bằng `localStorage.setItem('sac_auto_dbg','1')`) — in mỗi lần `renderBlocks` kèm stack, mỗi lần cất/nạp state theo job, và mốc chuyển tab. Đây là cách tìm ra 2 lỗi khó nhất của tính năng này.
-- **Chưa xác minh:** `projectItem.getSequence()` trên projectItem của sequence thường — trang Auto Sub dựa vào nó để nhảy sequence. Không hỗ trợ thì `autoActivateSeqByName()` ném lỗi có hướng dẫn làm thủ công.
+- **`projectItem.getSequence` KHÔNG tồn tại** trên Premiere 25.6.x — không có đường tra ngược từ tên sequence ra object Sequence. Luồng cut không vướng vì `project.createSequence()` trả về object luôn; trang Auto Sub phải **giữ object từ lúc dựng** (`job._seq`). `autoResolveSeq()` thử 3 đường (object đã giữ → `project.getSequences()` → `projectItem.getSequence()`), và nếu object hết hạn thì vứt đi thử lại thay vì báo lỗi.
 
 ## v5.6.0 / bridge 3.10 (server 1.15.0) — 2026-08-25
 
