@@ -11462,6 +11462,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return 'subtitle_' + Date.now();
   }
 
+  // Auto-save SRT bật/tắt (đặt trong settings Voice Gen). Chưa đặt → mặc định BẬT
+  // để giữ nguyên hành vi cũ (lưu cạnh VO). '0' = tắt (hỏi nơi lưu mỗi lần).
+  function stSrtAutoSaveOn() {
+    var v = localStorage.getItem('st_srt_autosave');
+    return v == null ? true : v === '1';
+  }
+
   // Chọn thư mục lưu .srt theo thứ tự ưu tiên:
   //   1. Thư mục của file VO hiện tại (theo re-link) — đúng kỳ vọng "srt cạnh VO".
   //   2. Thư mục lưu gần nhất đã nhớ (dùng chung với Voice Gen) — fallback.
@@ -11470,6 +11477,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Tên file lấy theo version của sequence (vd "v21.0.srt"); trùng tên sẽ ghi đè
   // (cùng version → thay bản mới).
   async function stResolveOutputPath(forcePrompt) {
+    var base = await stOutputBasename();
+    // Auto-save TẮT → luôn mở hộp thoại Save để user chọn thư mục + tên (bỏ qua tự tìm).
+    if (!stSrtAutoSaveOn()) {
+      try {
+        var lfsSave = require('uxp').storage.localFileSystem;
+        var file = await lfsSave.getFileForSaving(base + '.srt');
+        if (!file) return null; // user Cancel
+        var chosen = file.nativePath || file.path || '';
+        if (chosen) {
+          localStorage.setItem('vg_last_save_folder', chosen.replace(/[\/\\][^\/\\]*$/, ''));
+          return chosen;
+        }
+        return null;
+      } catch (e) { throw new Error('Không chọn được nơi lưu: ' + e.message); }
+    }
     var folder = '';
     if (!forcePrompt) {
       folder = await stVoMediaFolder();
@@ -11484,7 +11506,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (folder) localStorage.setItem('vg_last_save_folder', folder);
       } catch (e) { throw new Error('Không chọn được thư mục: ' + e.message); }
     }
-    var base = await stOutputBasename();
     return folder.replace(/[\/\\]+$/, '') + '/' + base + '.srt';
   }
 
@@ -11653,6 +11674,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   });
   var stUseAIEl = $('stUseAI');
   if (stUseAIEl) stUseAIEl.addEventListener('change', function () { if (stOrganized) stResetOrganize(); });
+  var stAutoSaveEl = $('stSrtAutoSave');
+  if (stAutoSaveEl) {
+    stAutoSaveEl.checked = stSrtAutoSaveOn();
+    stAutoSaveEl.addEventListener('change', function () {
+      localStorage.setItem('st_srt_autosave', stAutoSaveEl.checked ? '1' : '0');
+    });
+  }
   var revealBtn = $('stRevealBtn');
   if (revealBtn) revealBtn.addEventListener('click', async function () {
     if (!stLastPath) return;
