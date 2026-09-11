@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.6.1';  // CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.6.2';  // CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -11462,6 +11462,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return 'subtitle_' + Date.now();
   }
 
+  // Auto-save SRT bật/tắt (đặt trong settings Voice Gen). Chưa đặt → mặc định BẬT
+  // để giữ nguyên hành vi cũ (lưu cạnh VO). '0' = tắt (hỏi nơi lưu mỗi lần).
+  function stSrtAutoSaveOn() {
+    var v = localStorage.getItem('st_srt_autosave');
+    return v == null ? true : v === '1';
+  }
+
   // Chọn thư mục lưu .srt theo thứ tự ưu tiên:
   //   1. Thư mục của file VO hiện tại (theo re-link) — đúng kỳ vọng "srt cạnh VO".
   //   2. Thư mục lưu gần nhất đã nhớ (dùng chung với Voice Gen) — fallback.
@@ -11470,6 +11477,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Tên file lấy theo version của sequence (vd "v21.0.srt"); trùng tên sẽ ghi đè
   // (cùng version → thay bản mới).
   async function stResolveOutputPath(forcePrompt) {
+    var base = await stOutputBasename();
+    // Auto-save TẮT → luôn mở hộp thoại Save để user chọn thư mục + tên (bỏ qua tự tìm).
+    if (!stSrtAutoSaveOn()) {
+      try {
+        var lfsSave = require('uxp').storage.localFileSystem;
+        var file = await lfsSave.getFileForSaving(base + '.srt');
+        if (!file) return null; // user Cancel
+        var chosen = file.nativePath || file.path || '';
+        if (chosen) {
+          localStorage.setItem('vg_last_save_folder', chosen.replace(/[\/\\][^\/\\]*$/, ''));
+          return chosen;
+        }
+        return null;
+      } catch (e) { throw new Error('Không chọn được nơi lưu: ' + e.message); }
+    }
     var folder = '';
     if (!forcePrompt) {
       folder = await stVoMediaFolder();
@@ -11484,7 +11506,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (folder) localStorage.setItem('vg_last_save_folder', folder);
       } catch (e) { throw new Error('Không chọn được thư mục: ' + e.message); }
     }
-    var base = await stOutputBasename();
     return folder.replace(/[\/\\]+$/, '') + '/' + base + '.srt';
   }
 
@@ -11653,6 +11674,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   });
   var stUseAIEl = $('stUseAI');
   if (stUseAIEl) stUseAIEl.addEventListener('change', function () { if (stOrganized) stResetOrganize(); });
+  var stAutoSaveEl = $('stSrtAutoSave');
+  if (stAutoSaveEl) {
+    stAutoSaveEl.checked = stSrtAutoSaveOn();
+    stAutoSaveEl.addEventListener('change', function () {
+      localStorage.setItem('st_srt_autosave', stAutoSaveEl.checked ? '1' : '0');
+    });
+  }
   var revealBtn = $('stRevealBtn');
   if (revealBtn) revealBtn.addEventListener('click', async function () {
     if (!stLastPath) return;

@@ -3,6 +3,20 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.2 — 2026-09-09
+
+> Bridge không đổi (vẫn 1.15.0). Chỉ sửa plugin.
+
+**Tạo Sub: option bật/tắt tự động lưu SRT.** Thêm toggle "Tự động lưu SRT" trong Settings ▸ Voice Gen.
+
+### ✅ Thêm mới
+- **Toggle "Tự động lưu SRT"** (Settings ▸ Voice Gen) — mặc định BẬT, nhớ trạng thái qua localStorage (`st_srt_autosave`).
+- **BẬT** (như 5.6.1): `.srt` tự lưu cạnh file VO, tên theo version sequence.
+- **TẮT**: sau khi tạo xong mở hộp thoại **Save** (`getFileForSaving`) — chọn được cả thư mục lẫn tên, gợi ý sẵn tên theo version. Cancel → huỷ, không tạo file.
+
+### 🔧 Kỹ thuật
+- `stResolveOutputPath()` rẽ nhánh theo `stSrtAutoSaveOn()`; nhánh tắt dùng `localFileSystem.getFileForSaving(base + '.srt')`, nhớ thư mục vào `vg_last_save_folder`. Bridge (`fs.writeFileSync`) không đổi.
+
 ## v5.6.1 — 2026-08-26
 
 > Bridge không đổi (vẫn 1.15.0).
