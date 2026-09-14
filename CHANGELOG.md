@@ -64,9 +64,9 @@
 - **Log chẩn đoán `AUTO_DBG`** (tắt mặc định, bật bằng `localStorage.setItem('sac_auto_dbg','1')`) — in mỗi lần `renderBlocks` kèm stack, mỗi lần cất/nạp state theo job, và mốc chuyển tab. Đây là cách tìm ra 2 lỗi khó nhất của tính năng này.
 - **`projectItem.getSequence` KHÔNG tồn tại** trên Premiere 25.6.x — không có đường tra ngược từ tên sequence ra object Sequence. Luồng cut không vướng vì `project.createSequence()` trả về object luôn; trang Auto Sub phải **giữ object từ lúc dựng** (`job._seq`). `autoResolveSeq()` thử 3 đường (object đã giữ → `project.getSequences()` → `projectItem.getSequence()`), và nếu object hết hạn thì vứt đi thử lại thay vì báo lỗi.
 
-## v5.6.0 / bridge 3.10 (server 1.15.0) — 2026-08-25
+## v5.6.0 / bridge 3.9 (server 1.15.0) — 2026-08-25
 
-> ⚠ **Bắt buộc bridge ≥ 1.15.0** (Bridge app 3.10).
+> ⚠ **Bắt buộc bridge ≥ 1.15.0** (Bridge app 3.9).
 
 **Autocut: Trang Auto cho bộ 3 video** — Một form duy nhất nhập số bộ + voice + ratio + 3 ô TSV → xử lý cả 3 video liền mạch: validate → gen voice (thông báo macOS) → dựng timeline (dừng cho nghe thử). Plugin tự suy ra tên sequence/bin/voice theo config project. Job lỗi không chặn 2 job còn lại.
 
