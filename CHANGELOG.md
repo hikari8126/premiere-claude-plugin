@@ -3,6 +3,16 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.4 / bridge 3.9 (server 1.15.0) — 2026-09-14
+
+> Bridge không đổi. Sửa chỗ đặt chip quick switch của v5.6.3.
+
+**Chip đổi nhanh profile thành section riêng.** v5.6.3 đặt chip ở cuối `vg-modeBar` cạnh Create — hàng đó chia đều cho 4 nút mode nên chip bị bóp còn mỗi icon + 1 ký tự tên, đọc không ra profile nào.
+
+### 🔧 Sửa
+- Chip chuyển sang **section "Profile" trên cùng sidebar phải** (`.vg-rightScroll`), đặt ngoài `.vg-modeContent` vì API key dùng chung cho cả 4 mode.
+- Đổi kiểu: nút full-width có viền, tên dài bị ellipsis thay vì cắt cụt.
+
 ## v5.6.3 / bridge 3.9 (server 1.15.0) — 2026-09-14
 
 > Bridge không đổi (Bridge app 3.9, server 1.15.0). Chỉ sửa plugin.
