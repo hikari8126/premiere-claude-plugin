@@ -3,9 +3,9 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.6.3 — 2026-09-11
+## v5.6.3 / bridge 3.9 (server 1.15.0) — 2026-09-14
 
-> Bridge không đổi (vẫn 1.15.0). Chỉ sửa plugin.
+> Bridge không đổi (Bridge app 3.9, server 1.15.0). Chỉ sửa plugin.
 
 **Voice Gen: quick switch profile + nút ⚙ theo tab.** Đổi profile API key ElevenLabs không cần mở Settings nữa.
 
