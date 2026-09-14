@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.6.2';  // CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.6.3';  // CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile API key ở mode bar (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -1900,10 +1900,19 @@ function closeSettingsPanel() {
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = ''; });
 }
 
+// The ⚙ opens the settings panel belonging to the tab you're currently on.
+// 'subtext' has no panel of its own yet, so it falls back to General.
+var SETTINGS_TAB_FOR = { autocut: 'autocut', voicegen: 'voicegen', subtext: 'general' };
+function settingsTabForActivePanel() {
+  var active = document.querySelector('.tab-btn.active');
+  var which  = active ? active.getAttribute('data-tab') : '';
+  return SETTINGS_TAB_FOR[which] || 'general';
+}
+
 document.getElementById('settings-btn').addEventListener('click', function(e) {
   e.stopPropagation();
   if (settingsModal.style.display === 'block') closeSettingsPanel();
-  else openSettingsPanel('general');
+  else openSettingsPanel(settingsTabForActivePanel());
 });
 document.getElementById('close-settings').addEventListener('click', closeSettingsPanel);
 
@@ -9839,6 +9848,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var vgSaveKeyBtn       = $('vgSaveKey');
   var vgAddProfileBtn    = $('vgAddProfile');
   var vgDeleteProfileBtn = $('vgDeleteProfile');
+  var vgProfileChip      = $('vgProfileChip');
+  var vgProfileChipName  = $('vgProfileChipName');
 
   // ── ElevenLabs clone manager (direct API; current ELEVENLABS_KEY) ──────────
   var elvVoices = [];    // [{ id, name, category }] custom (non-premade) voices
@@ -10027,23 +10038,51 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       });
     }
     vgLoadProfileFields();
+    vgRenderProfileChip();
+  }
+
+  // Quick-switch chip in the mode bar. Only profiles with a key are reachable,
+  // so the chip is dead weight (and disabled) until there are at least two.
+  function vgKeyedProfiles() {
+    return EL_PROFILES.filter(function(p) { return !!p.key; });
+  }
+
+  function vgRenderProfileChip() {
+    if (!vgProfileChip) return;
+    var active = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+    if (vgProfileChipName) vgProfileChipName.textContent = active ? active.name : '—';
+    vgProfileChip.classList.toggle('is-disabled', vgKeyedProfiles().length < 2);
+  }
+
+  // Single place that makes a profile active — used by the Settings dropdown
+  // and by the quick-switch chip so the two can't drift apart.
+  function vgActivateProfile(id) {
+    var p = EL_PROFILES.find(function(p) { return p.id === id; });
+    if (!p) return;
+    EL_ACTIVE_PROFILE_ID = id;
+    ELEVENLABS_KEY = p.key;
+    voicesLoaded = false;
+    vgPersistProfiles();
+    vgRenderProfiles();
+    if (ELEVENLABS_KEY) loadVoices();
+    else setStatus('Add an API key to this profile', false);
   }
 
   // Switch active profile when dropdown changes
   if (vgProfileSelect) {
     vgProfileSelect.addEventListener('change', function() {
       var selId = vgProfileSelect.value;
-      if (!selId) return;
-      EL_ACTIVE_PROFILE_ID = selId;
-      var p = EL_PROFILES.find(function(p) { return p.id === selId; });
-      if (p) {
-        ELEVENLABS_KEY = p.key;
-        voicesLoaded = false;
-        vgPersistProfiles();
-        vgLoadProfileFields();
-        if (ELEVENLABS_KEY) loadVoices();
-        else setStatus('Add an API key to this profile', false);
-      }
+      if (selId) vgActivateProfile(selId);
+    });
+  }
+
+  if (vgProfileChip) {
+    vgProfileChip.addEventListener('click', function() {
+      var keyed = vgKeyedProfiles();
+      if (keyed.length < 2) return;
+      var at = keyed.findIndex(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+      // -1 (active profile has no key) wraps to index 0 — the first usable one.
+      vgActivateProfile(keyed[(at + 1) % keyed.length].id);
     });
   }
 

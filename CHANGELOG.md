@@ -3,6 +3,22 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.3 — 2026-09-11
+
+> Bridge không đổi (vẫn 1.15.0). Chỉ sửa plugin.
+
+**Voice Gen: quick switch profile + nút ⚙ theo tab.** Đổi profile API key ElevenLabs không cần mở Settings nữa.
+
+### ✅ Thêm mới
+- **Chip quick switch** ở cuối `vg-modeBar` (cạnh Create): hiện tên profile đang dùng, bấm một phát là xoay sang profile kế tiếp.
+- Chỉ xoay qua **profile có API key**; còn <2 profile dùng được thì chip mờ (`is-disabled`) và không phản hồi.
+- **Nút ⚙ trên thanh trên cùng mở thẳng settings của tab đang mở**: `autocut` → Autocut, `voicegen` → Voice Gen, `subtext` → General (chưa có panel riêng).
+
+### 🔧 Kỹ thuật
+- Tách `vgActivateProfile(id)` từ handler `change` của `vgProfileSelect` — dropdown trong Settings và chip dùng chung một đường, không còn hai bản logic song song.
+- `vgRenderProfiles()` gọi thêm `vgRenderProfileChip()` nên nhãn chip tự đúng khi thêm/sửa/xoá profile.
+- `settingsTabForActivePanel()` map `.tab-btn.active[data-tab]` → `data-stab`, mặc định `general`.
+
 ## v5.6.2 — 2026-09-09
 
 > Bridge không đổi (vẫn 1.15.0). Chỉ sửa plugin.

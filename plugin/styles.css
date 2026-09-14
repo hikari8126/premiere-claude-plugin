@@ -2193,6 +2193,31 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
   text-shadow: 0 0 9px var(--accent-a45);
 }
 
+/* Quick profile switch chip — sits at the end of the mode bar, cycles API key profiles. */
+.vg-profileChip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 9px 10px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; }
+.vg-profileChip:hover { color: var(--accent); }
+.vg-profileChip.is-disabled { opacity: 0.4; cursor: default; }
+.vg-profileChip.is-disabled:hover { color: var(--text-dim); }
+#vgProfileChipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Body: left + right ── */
 .vg-body {
   flex: 1 1 auto;
