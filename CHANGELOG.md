@@ -3,6 +3,24 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.6.5 / bridge app 3.10 (server 1.15.0) — 2026-09-15
+
+> Sửa 4 lỗi làm tính năng đính voice trong Autocut chết hẳn, trong đó có 1 lỗi khiến Bridge app treo cứng.
+
+**Đính voice từ folder báo `whisper exit 1` rồi kẹt mãi ở "Đang xử lý voice".** Ba lỗi độc lập cộng dồn.
+
+### 🔧 Sửa
+- **Whisper crash lúc import Python** (`FileNotFoundError: [Errno 2]` trong `inspect.py` → `os.path.abspath`). Nguyên nhân: `spawn(WHISPER_BIN, args, { env })` không set `cwd` nên kế thừa cwd của tiến trình cha; nếu thư mục đó đã bị di chuyển/xoá, Python chết ngay khi resolve đường dẫn module tương đối. Fix: `cwd: outDir` (thư mục tạm vừa `mkdtempSync`, luôn tồn tại).
+- **Cờ `sacVoiceBusy` kẹt `true` vĩnh viễn.** Nhánh `if (!d.ok) { ...; return; }` trong `sacAlignVoice()` thoát mà không reset cờ → mọi thao tác voice sau đó bị chặn bằng "⏳ Đang xử lý voice, đợi chút...", kể cả nút chọn folder. Fix: chuyển reset vào `finally` để mọi đường thoát đều nhả cờ.
+- **Bundle Bridge app thiếu `autoset-names.js`** → `MODULE_NOT_FOUND`, bridge trong app chết ngay khi boot (chạy `node server.js` từ `bridge/` thì bình thường, nên lỗi chỉ hiện ở bản đóng gói). Nguyên nhân: `build-app.sh` copy từng file một và bỏ sót. Fix: `cp bridge/*.js`, cộng 2 cửa kiểm trong build — quét mọi `require('./x')` đối chiếu bundle, và **chạy thật** server.js đã đóng gói 4s, gặp `MODULE_NOT_FOUND`/`SyntaxError` là fail build.
+- **Bridge app treo khi bấm "Khởi động lại Bridge".** Hệ quả của lỗi trên: bridge chết tức thì → auto-restart không giới hạn, mỗi vòng chạy `curl --max-time 2` + `lsof | xargs kill` + `Thread.sleep` **ngay trên main thread** → menu mở được nhưng handler của nút restart không bao giờ tới lượt. Xác nhận bằng `sample`: main thread lặp trong `startBridge()`, kẹt ở `waitUntilExit`/`nanosleep`.
+
+### 🔧 Kỹ thuật (bridge-app/main.swift → 3.10)
+- `startBridge()` tách phần chậm sang `DispatchQueue.global()`, dùng `shTimeout` thay `sh()` (bản cũ **không có timeout** — `lsof` kẹt là treo app vĩnh viễn); phần `Process.run()` hop về main qua `launchBridgeProcess()`.
+- `restartBridge()` cũng bỏ `sh()` + `Thread.sleep` khỏi main thread.
+- Auto-restart **cap 5 lần** (`maxAutoRestarts`), hết thì dừng và báo `❌ Bridge lỗi liên tục — xem Log (⌘L)`.
+- Thêm **watchdog 15s** (`healthCheck()`): bridge được "adopt" (không do app spawn) thì không có `terminationHandler`, chết là không ai biết — trước đây tray vẫn xanh trong khi plugin báo offline. Cờ `startPending` chặn watchdog đua với backoff timer.
+
 ## v5.6.4 / bridge 3.9 (server 1.15.0) — 2026-09-14
 
 > Bridge không đổi. Sửa chỗ đặt chip quick switch của v5.6.3.

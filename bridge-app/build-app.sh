@@ -50,13 +50,47 @@ echo "  ✅ Swift compiled — universal binary"
 echo ""
 echo "  📦 Bundling bridge server + node_modules..."
 
-cp    bridge/server.js          "${APP_DIR}/Contents/Resources/server/"
-cp    bridge/autosub-log.js     "${APP_DIR}/Contents/Resources/server/"
+# Copy EVERY top-level .js next to server.js — listing them one by one is how
+# autoset-names.js got left out of v3.9, which made the bundled bridge crash on
+# boot (MODULE_NOT_FOUND) and put the app in an endless restart loop.
+cp    bridge/*.js               "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/package.json       "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/.env.example       "${APP_DIR}/Contents/Resources/server/.env.example"
 cp -r bridge/node_modules       "${APP_DIR}/Contents/Resources/server/"
 
 echo "  ✅ server.js + node_modules bundled (no npm install needed)"
+
+# ── 3b. Verify every local require() resolved into the bundle ──────────────
+MISSING=""
+for m in $(grep -oE "require\('\./[A-Za-z0-9._-]+'\)" bridge/server.js | sed -E "s/require\('\.\///; s/'\)//"); do
+  f="${APP_DIR}/Contents/Resources/server/${m}"
+  [ -f "$f" ] || [ -f "${f}.js" ] || MISSING="${MISSING} ${m}"
+done
+if [ -n "$MISSING" ]; then
+  echo "  ❌ Bundle thiếu module:${MISSING}"
+  echo "     Bridge sẽ crash ngay khi khởi động. Dừng build."
+  exit 1
+fi
+echo "  ✅ Local require() đầy đủ trong bundle"
+
+# Smoke test: actually run the bundled server.js so runtime require() failures
+# (the kind `node --check` can't see) fail the BUILD, not the teammate's machine.
+# Port 3030 may already be taken by a running bridge — EADDRINUSE still means
+# every require resolved, so only module errors count as a failure.
+NODE_BIN=$(command -v node || true)
+if [ -n "$NODE_BIN" ]; then
+  ( cd "${APP_DIR}/Contents/Resources/server" && "$NODE_BIN" server.js >/tmp/cb-smoke.log 2>&1 ) &
+  SMOKE_PID=$!
+  sleep 4
+  kill -9 $SMOKE_PID 2>/dev/null || true
+  pkill -9 -f "Resources/server/server.js" 2>/dev/null || true
+  if grep -q "Cannot find module\|MODULE_NOT_FOUND\|SyntaxError" /tmp/cb-smoke.log; then
+    echo "  ❌ Smoke test FAIL — bundled bridge chết ngay khi boot:"
+    tail -20 /tmp/cb-smoke.log
+    exit 1
+  fi
+  echo "  ✅ Smoke test: bundled bridge load được toàn bộ module"
+fi
 
 # ── 4. Info.plist ─────────────────────────────────────────────────────────
 cat > "${APP_DIR}/Contents/Info.plist" << PLIST
@@ -76,7 +110,7 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
   <key>CFBundleVersion</key>
     <string>3.6</string>
   <key>CFBundleShortVersionString</key>
-    <string>3.9</string>
+    <string>3.10</string>
   <key>PluginVersion</key>
     <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>

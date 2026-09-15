@@ -622,7 +622,11 @@ async function transcribeWhisper(audioPath, language) {
     console.log('[whisper]', WHISPER_BIN, args.join(' '));
     const env = cleanEnv();
     env.PYTHONHTTPSVERIFY = '0';
-    const proc = spawn(WHISPER_BIN, args, { env });
+    // cwd MUST be a directory that exists: whisper's Python imports call
+    // os.path.abspath() on relative module paths, which raises
+    // FileNotFoundError(errno 2) when the inherited cwd is gone (the Bridge app
+    // can be launched from a folder that was later moved/deleted).
+    const proc = spawn(WHISPER_BIN, args, { env, cwd: outDir });
 
     let stderr = '';
     proc.stderr.on('data', d => { stderr += d.toString(); });

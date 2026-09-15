@@ -17,6 +17,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var bridgeTask: Process?
     var intentionalStop = false
     var restartCount    = 0
+    let maxAutoRestarts = 5
+    var healthTimer: Timer?
+    var startPending    = false   // a start/restart is already scheduled or running
     var logLines        = [String]()
     var logWindow:    NSWindow?
     var logTextView:  NSTextView?
@@ -41,6 +44,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { self.checkForUpdates() }
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
             self?.checkForUpdates()
+        }
+        // Watchdog: an ADOPTED bridge (one we didn't spawn) has no
+        // terminationHandler, so if it dies nothing noticed and the tray kept
+        // claiming "✅ Bridge" while the plugin saw "Bridge offline".
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self?.healthCheck()
+        }
+    }
+
+    // Non-blocking liveness probe. Only acts when we have no managed process —
+    // a managed crash is already handled by terminationHandler.
+    func healthCheck() {
+        // startPending: don't race the backoff timer — the log used to show two
+        // startBridge() runs a second apart, both clearing the port under each other.
+        guard !intentionalStop, !startPending, bridgeTask == nil,
+              restartCount <= maxAutoRestarts else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let h = self.shTimeout("curl -s --max-time 2 http://127.0.0.1:\(self.bridgePort)/health 2>/dev/null",
+                                   env: ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"], timeout: 5)
+            guard !h.out.contains("\"status\"") else { return }
+            DispatchQueue.main.async {
+                guard !self.intentionalStop, self.bridgeTask == nil else { return }
+                self.log("Watchdog: port \(self.bridgePort) không trả lời — khởi động lại Bridge")
+                self.startBridge()
+            }
         }
     }
 
@@ -431,24 +459,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: ─── Bridge ──────────────────────────────────────────────────────
+    // Blocking preflight (curl + lsof + sleep) MUST NOT run on the main thread:
+    // it used to freeze the whole menu bar app for seconds per attempt, and with a
+    // bridge that dies on start the auto-restart loop re-entered it forever — the
+    // menu opened but "Khởi động lại" could never be handled. Everything slow now
+    // runs on a background queue with a hard timeout, then hops back to main.
     func startBridge() {
         setStatus("⏳ Đang khởi động Bridge...", running: false)
+        startPending = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let shEnv = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"]
 
-        // ── If bridge is already healthy on port 3030, adopt it ───────────
-        let health = sh("curl -s --max-time 2 http://127.0.0.1:\(bridgePort)/health 2>/dev/null")
-        if health.out.contains("\"status\"") {
-            log("Port \(bridgePort) already serving — adopting existing bridge")
-            restartCount = 0
-            intentionalStop = false
-            updateStatusWithBridgeVersion()
-            return
+            // ── If bridge is already healthy on port 3030, adopt it ───────────
+            let health = self.shTimeout("curl -s --max-time 2 http://127.0.0.1:\(self.bridgePort)/health 2>/dev/null", env: shEnv, timeout: 5)
+            if health.out.contains("\"status\"") {
+                self.log("Port \(self.bridgePort) already serving — adopting existing bridge")
+                DispatchQueue.main.async {
+                    self.startPending = false
+                    self.restartCount = 0
+                    self.intentionalStop = false
+                    self.updateStatusWithBridgeVersion()
+                }
+                return
+            }
+
+            // ── Kill any zombie holding port 3030 ─────────────────────────────
+            let kill = self.shTimeout("lsof -ti :\(self.bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null; echo ok", env: shEnv, timeout: 8)
+            self.log("Cleared port \(self.bridgePort): \(kill.out.trimmingCharacters(in: .whitespacesAndNewlines))")
+            Thread.sleep(forTimeInterval: 0.4)
+
+            DispatchQueue.main.async { self.launchBridgeProcess() }
         }
+    }
 
-        // ── Kill any zombie holding port 3030 ─────────────────────────────
-        let kill = sh("lsof -ti :\(bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null; echo ok")
-        log("Cleared port \(bridgePort): \(kill.out.trimmingCharacters(in: .whitespacesAndNewlines))")
-        Thread.sleep(forTimeInterval: 0.4)
-
+    private func launchBridgeProcess() {
+        startPending = false
         guard let (nodePath, serverDir) = findNodeAndServer() else {
             setStatus("❌ Node.js chưa cài — tải tại nodejs.org", running: false)
             log("ERROR: Node.js not found. Install from https://nodejs.org")
@@ -479,8 +524,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.setStatus("❌ Bridge dừng", running: false)
                 guard !self.intentionalStop else { return }
                 self.restartCount += 1
+                // Give up after 5 failed attempts instead of respawning forever —
+                // an instantly-dying bridge (bad server.js, missing deps) otherwise
+                // pinned the app in a permanent restart loop.
+                guard self.restartCount <= self.maxAutoRestarts else {
+                    self.startPending = false
+                    self.log("Bridge chết \(self.restartCount) lần liên tiếp — dừng tự khởi động lại. Xem Log (⌘L) để biết lý do.")
+                    self.setStatus("❌ Bridge lỗi liên tục — xem Log (⌘L)", running: false)
+                    return
+                }
                 let delay = min(Double(self.restartCount) * 2.0, 30.0)
-                self.log("Auto-restart sau \(Int(delay))s (lần \(self.restartCount))...")
+                self.log("Auto-restart sau \(Int(delay))s (lần \(self.restartCount)/\(self.maxAutoRestarts))...")
+                self.startPending = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     self.startBridge()
                 }
@@ -503,6 +558,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 5) { self.checkWhisperOnce() }
             }
         } catch {
+            startPending = false
             setStatus("❌ Lỗi khởi động: \(error.localizedDescription)", running: false)
             log("ERROR starting bridge: \(error)")
         }
@@ -519,16 +575,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         log("Restart requested by user")
         setStatus("⏳ Đang khởi động lại Bridge...", running: false)
         intentionalStop = true
+        restartCount = 0            // a manual restart clears the give-up counter
         // Kill managed process
         bridgeTask?.interrupt()
         bridgeTask?.terminate()
         bridgeTask = nil
-        // Also force-kill anything on port — handles externally-started bridges
-        sh("lsof -ti :\(bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null")
-        Thread.sleep(forTimeInterval: 0.5)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.intentionalStop = false
-            self.startBridge()  // skip auth re-check on explicit restart
+        // Force-kill anything on port (handles externally-started bridges) on a
+        // background queue: lsof can block for a long time, and doing it here
+        // froze the menu bar app mid-click.
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.shTimeout("lsof -ti :\(self.bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null",
+                           env: ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"], timeout: 8)
+            Thread.sleep(forTimeInterval: 0.5)
+            DispatchQueue.main.async {
+                self.intentionalStop = false
+                self.startBridge()  // skip auth re-check on explicit restart
+            }
         }
     }
 
@@ -1124,6 +1186,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return (String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "", p.terminationStatus)
     }
 
+    @discardableResult
     func shTimeout(_ cmd: String, env: [String: String], timeout: TimeInterval) -> (out: String, status: Int32) {
         let p = Process()
         p.launchPath  = "/bin/bash"
