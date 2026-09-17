@@ -4455,7 +4455,10 @@ div[role="button"].vg-histReload.is-armed {
 /* Cây bin */
 .wf-tree { max-height: 180px; overflow-y: auto; border: 1px solid #2a2438;
            border-radius: 4px; padding: 6px; margin-bottom: 8px; }
-.wf-tree-row { padding: 2px 4px; cursor: pointer; border-radius: 3px; font-size: 12px; }
+.wf-tree-row { display: block; padding: 3px 4px; cursor: pointer; border-radius: 3px;
+                font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-tree-row .wf-tree-caret { color: #6b6478; margin-right: 4px; }
+.wf-tree-row .wf-tree-parent { color: #6b6478; }
 .wf-tree-row:hover { background: #2a2438; }
 .wf-tree-row.selected { background: #6d3ce0; }
 .wf-tree-new { color: #a78bfa; }

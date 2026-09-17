@@ -240,6 +240,18 @@
     }).sort(function (a, b) { return a.path.localeCompare(b.path); });
   }
 
+  // Thụt lề phải bằng padding chứ không bằng khoảng trắng trong textContent:
+  // HTML gộp khoảng trắng liên tiếp lại nên mọi cấp trông như nhau.
+  function binRowLabel(b) {
+    var wrap = document.createElement('span');
+    var caret = document.createElement('span');
+    caret.className = 'wf-tree-caret';
+    caret.textContent = '▸';
+    wrap.appendChild(caret);
+    wrap.appendChild(document.createTextNode(b.name));
+    return wrap;
+  }
+
   // ── Trạng thái UI ───────────────────────────────────────────────────────
   function setStatusUI(kind, text) {
     var dot = document.getElementById('wfDot');
@@ -395,18 +407,42 @@
 
       var bins = await readBinTree();
       tree.innerHTML = '';
+
+      // Project thật có hàng trăm bin — không có ô lọc thì phải cuộn mò.
+      var search = document.createElement('input');
+      search.type = 'text';
+      search.placeholder = 'Lọc bin… (' + bins.length + ' bin)';
+      search.style.width = '100%';
+      search.style.marginBottom = '6px';
+      bindKeyboard(search);
+      tree.appendChild(search);
+
+      var rowsBox = document.createElement('div');
+      tree.appendChild(rowsBox);
+
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var rows = rowsBox.children;
+        for (var i = 0; i < rows.length; i++) {
+          var p = rows[i].getAttribute('data-path') || '';
+          rows[i].hidden = !!q && p.toLowerCase().indexOf(q) < 0;
+        }
+      });
+
       bins.forEach(function (b) {
         var r = document.createElement('div');
         r.className = 'wf-tree-row' + (b.path === w.binPath ? ' selected' : '');
         r.setAttribute('role', 'button');
-        r.textContent = new Array(b.depth + 1).join('   ') + b.name;
+        r.style.paddingLeft = (4 + b.depth * 14) + 'px';
+        r.setAttribute('data-path', b.path);
+        r.appendChild(binRowLabel(b));
         r.addEventListener('click', function () {
           w.binPath = b.path;
           binLine.textContent = b.path.split('/').join(' / ');
           hint.textContent = '';
           tree.hidden = true; saveConfig(); renderWatches();
         });
-        tree.appendChild(r);
+        rowsBox.appendChild(r);
       });
 
       var mk = document.createElement('div');
