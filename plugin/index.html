@@ -796,6 +796,14 @@
           </div>
         </div>
 
+        <!-- Voice đã dùng gần đây. Chỉ mode TTS — SFX/Music không có voice.
+             Nằm ngoài .vg-modeContent (giống section Profile); JS ẩn/hiện theo mode. -->
+        <div class="vg-sg vg-histSection" id="vgHistSection" hidden>
+          <div class="vg-sl">Gần đây</div>
+          <div id="vgHistList"></div>
+          <div class="vg-histMore" id="vgHistMore" role="button" hidden></div>
+        </div>
+
         <!-- TTS settings -->
         <div class="vg-modeContent" data-mode="tts">
 
