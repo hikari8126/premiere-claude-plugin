@@ -3,6 +3,18 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.7.1 / bridge app 3.10 (server 1.15.0) — 2026-09-17
+
+> Sửa history "Gần đây" hiện cả voice không dùng được ở profile đang mở. **Không cần bridge mới.**
+
+### 🔧 Sửa
+- **History hiện voice của profile khác → bấm vào là gen lỗi.** Voice custom/clone gắn chặt với API key của profile tạo ra nó; v5.7.0 lưu chung một list và không lọc gì cả. Giờ mỗi mục lưu thêm `profileId`, khi render chỉ hiện mục mà voice của nó **có trong `VG_VOICES_DATA` hiện tại** (bao trọn 25 voice mặc định — key nào cũng dùng được) **hoặc** do chính profile đang active tạo ra. Vế sau là cần thiết: key chỉ có quyền TTS không đọc được danh sách voice custom, thiếu vế này thì chính profile đó cũng mất history của mình.
+- **Cap 20 giờ tính cho TỪNG profile.** Dùng chung một hạn mức thì một profile gen nhiều sẽ đẩy bay sạch history của profile khác.
+- Gọi lại `vgRenderHistory()` khi `loadVoices()` xong (lúc đó `VG_VOICES_DATA` mới là của profile mới) và khi đổi sang profile chưa có key (không ai nạp voice nên phải tự render).
+
+### 📌 Lưu ý
+- Mục history tạo ở v5.7.0 chưa có `profileId`: voice mặc định vẫn hiện bình thường, voice custom thì ẩn đi. Gen lại một lần là có lại.
+
 ## v5.7.0 / bridge app 3.10 (server 1.15.0) — 2026-09-17
 
 > Voice Gen nhớ những giọng đã dùng gần đây. **Không cần bridge mới** — thuần plugin.

@@ -14,8 +14,16 @@ script để nhận ra "lần đó là bài nào", bấm một phát là đổi 
 
 ## Quyết định thiết kế
 
-- **Phạm vi lưu:** một danh sách chung trên máy, **không tách theo profile ElevenLabs**.
-  Mỗi người cài plugin trên máy riêng nên `localStorage` đã tách sẵn theo người.
+- **Phạm vi lưu:** một danh sách chung trên máy. Mỗi người cài plugin trên máy riêng nên
+  `localStorage` đã tách sẵn theo người.
+- **Lọc theo voice dùng được với profile đang active** (sửa ngày 2026-09-17, v5.7.1 — bản
+  đầu không lọc gì cả và đó là lỗi). Voice custom/clone gắn chặt với API key của profile
+  tạo ra nó, còn 25 voice mặc định thì key nào cũng dùng được. Nên mỗi mục lưu thêm
+  `profileId`, và khi render chỉ hiện mục mà voice của nó có trong `VG_VOICES_DATA` hiện
+  tại, hoặc do chính profile đang active tạo ra (cần vế sau vì key chỉ có quyền TTS sẽ
+  không đọc được danh sách voice custom).
+- **Cap 20 tính cho TỪNG profile**, không phải cả list: dùng chung hạn mức thì một profile
+  gen nhiều sẽ đẩy bay sạch history của profile khác.
 - **Thời điểm ghi:** chỉ khi **generate TTS thành công**. Chọn voice trong dropdown không
   ghi — nếu ghi thì list đầy rác bởi những lần bấm thử rồi đổi ý.
 - **Mode:** chỉ **TTS**. SFX/Music không có voice.
@@ -40,7 +48,8 @@ Key `localStorage`: **`vg_voice_history`**, chứa JSON array, mới nhất đ�
 { voiceId: '21m00Tcm4TlvDq8ikWAM',
   voiceLabel: 'Rachel',
   script: 'Chào mừng các bạn đến với…',   // cắt còn 200 ký tự
-  ts: 1789000000000 }
+  ts: 1789000000000,
+  profileId: 'p_default' }                // profile đang active lúc gen
 ```
 
 `voiceLabel` được lưu kèm chứ không chỉ `voiceId`: danh sách voice phụ thuộc API key, nên
