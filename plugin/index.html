@@ -853,6 +853,13 @@
 
         <!-- Generated audio results (shared across modes) -->
         <div class="vg-results" id="vgResultSection" hidden>
+          <!-- Điều hướng qua lại các lần gen đã lưu trong history. Ẩn khi mode
+               đang mở chỉ có ≤1 lần gen. -->
+          <div class="vg-histNav" id="vgHistNav" hidden>
+            <div class="vg-histNavBtn" id="vgHistPrev" role="button">◀</div>
+            <div class="vg-histNavLabel" id="vgHistNavLabel">Lần gen 1/1</div>
+            <div class="vg-histNavBtn" id="vgHistNext" role="button">▶</div>
+          </div>
           <div id="vgSingleVars">
             <div class="vg-variation" id="vgVar1">
               <div class="vg-varHeader">

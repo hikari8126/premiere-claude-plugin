@@ -3,6 +3,29 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.9.0-beta.1 — 2026-09-17
+
+> Voice Gen: history lưu theo **lần gen**, gen lại không làm mất output cũ. **CHƯA RELEASE.**
+> Không cần bridge mới (vẫn server 1.15.0).
+> Số 5.9.0 chỉ để tránh đụng nhánh `feat/watch-folder` đang giữ 5.8.0; nhánh nào merge trước thì đánh số lại theo thứ tự thật khi ship.
+
+### ✨ Mới
+- **History theo lần gen.** Trước đây một mục = một cặp voice+script và bị gộp trùng, nên gen lại cùng script là mất đường vào output cũ — dù file mp3 vẫn nằm nguyên trên đĩa, chỉ là `lastVariations` bị ghi đè.
+- **Mỗi mục có 4 nút**: ▶ nghe ngay trong sidebar, **Import** vào project, **Mở lại** đưa nguyên lần gen lên khu kết quả (đủ Import / Timeline / Autocut), **Nạp script** như cũ.
+- **Đánh số lượt.** Trùng cả voice lẫn script thì hiện `Adam · lần 3` thay vì gộp làm một.
+- **Thanh điều hướng `◀ Lần gen 3/12 ▶`** ở khu kết quả, lật qua lại giữa các lần gen của mode đang mở.
+- **Multi-speaker và Voice Changer cũng vào history** — cả hai đều ghi đè `lastVariations` nên trước đây cũng mất output y hệt.
+
+### 🧠 Quyết định đáng nhớ
+- **Không kiểm tra file còn tồn tại lúc vẽ danh sách.** Mỗi mục một lệnh đọc đĩa, nhân 20 mục mỗi lần render là quá đắt cho thứ hiếm khi xảy ra. Bấm ▶ mà file đã bị dọn thì mới báo, và tô đỏ đúng mục đó.
+- **"Mở lại" một lần gen SFX/Music tự chuyển mode.** Không chuyển thì khu kết quả hiện output của mode khác, rất dễ nhầm là gen hỏng.
+- **`vgPlayPath` vốn đã huỷ lượt phát trước**, nên nghe ở sidebar tự dừng player ở khu kết quả — không phải viết thêm gì.
+- **Mục history cũ (chưa có `outputs`) vẫn đọc được**, chỉ là nút Play/Import mờ đi. Không cần migration localStorage.
+- **Selector nút phải kèm `[role="button"]`** mới thắng luật chung `div[role="button"]{...}` — class đơn (0-1-0) thua attribute selector (0-1-1).
+
+### 🎨 Giao diện
+- Mục history thành 2 dòng (voice + script ở trên, hàng nút ở dưới); sidebar phải nới 232→260px (chế độ hẹp 168→184px) để 4 nút không vỡ dòng.
+
 ## v5.7.1 / bridge app 3.10 (server 1.15.0) — 2026-09-17
 
 > Sửa history "Gần đây" hiện cả voice không dùng được ở profile đang mở. **Không cần bridge mới.**
