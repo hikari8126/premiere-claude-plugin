@@ -3,6 +3,27 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.8.0 / bridge server 1.16.0 — 2026-09-17
+
+> Tab **Watch**: theo dõi thư mục, tự import file mới vào bin. **Cần bridge ≥1.16.0.**
+
+### ✨ Mới
+- **Tab Watch Folder.** Nhiều thư mục cùng lúc, mỗi thư mục có bin đích riêng, lọc theo loại file + regex, mirror subfolder thành bin con tương ứng.
+- **Bridge quét theo chu kỳ thay vì `fs.watch`.** `fs.watch`/chokidar hay câm trên SMB/NAS, và dù dùng cách nào vẫn phải tự viết logic chờ file render xong — nên phần khó nhất không tiết kiệm được gì. Quét `readdir` + `stat` mỗi 3s, giãn lên 10s sau 2 phút không có gì, 15s nếu thư mục vượt 20.000 file.
+- **Không quét khi không cần.** Bridge chỉ quét trong lúc panel mở; đóng panel thì quét lượt cuối rồi ghi snapshot và dừng hẳn. Mở lại quét bù so với snapshot nên file rơi vào lúc Premiere đóng vẫn được import — mà lúc nghỉ tốn 0% CPU.
+- **Chờ file ghi xong mới import.** File chỉ vào hàng đợi khi `size` + `mtime` không đổi qua 2 lượt quét liên tiếp; file 0 byte luôn bị hoãn. Vì vậy mỗi file mất 6–9 giây từ lúc render xong tới lúc vào bin — đánh đổi có chủ ý.
+- **Bỏ qua file đã có trong project**, so theo đường dẫn media chứ không theo tên, vì hai thư mục khác nhau hoàn toàn có thể chứa file trùng tên.
+
+### 🧠 Quyết định đáng nhớ
+- **Regex lọc soi tên file KHÔNG kèm đuôi.** Luật quen thuộc nhất (`_proxy$`) mà soi cả đuôi thì không khớp `a_proxy.mp4` — test bắt được ngay khi viết.
+- **Plugin ack chứ không để bridge tự đánh dấu xong.** File chỉ coi là đã import khi `importFiles()` thành công thật; Premiere từ chối codec hay panel reload giữa chừng thì file quay lại hàng đợi, retry 3 lần rồi mới bỏ.
+- **Dùng lại `ppGetOrCreateBin`/`ppMoveToBin` của main.js.** `importFiles()` không nhận bin đích và không trả về ProjectItem; phần cast `FolderItem` + transaction đã được giải quyết ở `autoImportVoice`, viết lại chỉ để dính lại đúng những cái bẫy cũ.
+- **Watch lưu theo từng `.prproj`.** Bin đích của project này không tồn tại ở project khác, nên config toàn cục sẽ hỏng ngay khi mở project thứ hai.
+
+### 🧪 Test
+- Không nâng `REQUIRED_BRIDGE` của plugin: chỉ tab Watch cần bridge 1.16.0, nâng ngưỡng chung sẽ chặn cả plugin với cảnh báo "bridge quá cũ" cho người chỉ dùng Autocut/VoiceGen. Tab Watch tự báo khi endpoint `/watch/*` trả 404.
+- 5 file test mới cho bridge (`npm test` trong `bridge/`): luật lọc, quét thư mục, lưu trữ, engine, endpoint. Toàn bộ logic quét chạy được không cần Premiere.
+
 ## v5.7.1 / bridge app 3.10 (server 1.15.0) — 2026-09-17
 
 > Sửa history "Gần đây" hiện cả voice không dùng được ở profile đang mở. **Không cần bridge mới.**

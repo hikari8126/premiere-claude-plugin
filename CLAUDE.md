@@ -316,6 +316,12 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/notify` | POST | Thông báo macOS khi pipeline chạm mốc |
 | `/autoset/names` | POST | Dựng tên sequence/bin/voice cho bộ 3 video |
 | `/autoset/voicedir` | POST | Tìm/tạo thư mục Voice Over/{bộ}x cạnh file .prproj |
+| `/watch/session/start` | POST | Mở session watch cho một project, quét bù file rơi lúc panel đóng |
+| `/watch/session/stop` | POST | Quét lượt cuối, ghi snapshot, dừng quét |
+| `/watch/poll` | GET | Lấy tối đa 20 file chờ import + thống kê |
+| `/watch/ack` | POST | Báo file đã import xong / thất bại (thất bại 3 lần → dead) |
+| `/watch/config` | GET/POST | Đọc/ghi danh sách watch của project hiện tại |
+| `/watch/scan-now` | POST | Quét ép một watch, không đợi chu kỳ |
 
 ### Lệnh dev thường dùng
 
