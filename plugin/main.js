@@ -8702,15 +8702,23 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         return b;
       }
 
-      var out0 = (h.outputs && h.outputs[0]) || null;
+      var out0 = (h.outputs && h.outputs[0] && h.outputs[0].audioPath) ? h.outputs[0] : null;
+
+      // Mục tạo TRƯỚC bản 5.8.0 không có outputs. Trước đây tôi vẫn vẽ đủ nút
+      // rồi làm mờ đi — nhìn y hệt nút hỏng, bấm không phản ứng gì. Giờ nói
+      // thẳng là mục cũ và chỉ chừa lại "Nạp script" (thứ duy nhất còn chạy).
+      if (!out0) {
+        var oldNote = document.createElement('div');
+        oldNote.className = 'vg-histOldNote';
+        oldNote.textContent = 'mục cũ · không có bản ghi';
+        actions.appendChild(oldNote);
+      }
 
       // ▶ nghe ngay trong sidebar. vgPlayPath tự huỷ lượt phát trước nên không
       // cần thêm gì để tránh phát chồng với player ở khu kết quả.
-      var playBtn = mkHistBtn('▶', 'vg-histPlay');
-      if (!out0) playBtn.classList.add('is-disabled');
-      playBtn.addEventListener('click', function (e) {
+      var playBtn = out0 ? mkHistBtn('▶', 'vg-histPlay') : null;
+      if (playBtn) playBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        if (!out0) return;
         vgPlayPath(out0.audioPath, null,
           function () { playBtn.textContent = '▶'; },
           function (err) {
@@ -8724,19 +8732,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         playBtn.textContent = '❚❚';
       });
 
-      var importBtn = mkHistBtn('Import');
-      if (!out0) importBtn.classList.add('is-disabled');
-      importBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (out0) importVariation(out0);
-      });
+      if (out0) {
+        var importBtn = mkHistBtn('Import');
+        importBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          importVariation(out0);
+        });
 
-      var openBtn = mkHistBtn('Mở lại');
-      if (!out0) openBtn.classList.add('is-disabled');
-      openBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        vgHistOpen(h);
-      });
+        var openBtn = mkHistBtn('Mở lại');
+        openBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          vgHistOpen(h);
+        });
+      }
 
       var reload = mkHistBtn('Nạp script');
 

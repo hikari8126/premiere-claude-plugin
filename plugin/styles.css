@@ -4554,6 +4554,7 @@ div[role="button"].vg-histBtn.is-armed {
   color: var(--accent-fg); opacity: 1;
 }
 div[role="button"].vg-histPlay { min-width: 26px; padding: 0 6px; }
+.vg-histOldNote { font-size: 10px; color: rgba(255,255,255,0.3); font-style: italic; }
 
 /* Gập/mở cả section "Gần đây". Kèm [role="button"] để thắng luật chung
    div[role="button"]{display:inline-flex; justify-content:center}. */
