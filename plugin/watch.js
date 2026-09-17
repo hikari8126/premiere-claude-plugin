@@ -229,29 +229,6 @@
     return null;
   }
 
-  // ── Cây bin ─────────────────────────────────────────────────────────────
-  async function readBinTree() {
-    var proj = await getActiveProject();
-    if (!proj) return [];
-    var all = await collectAll(proj);
-    return all.filter(function (x) { return x.isFolder; }).map(function (x) {
-      var full = x.path ? x.path + '/' + x.name : x.name;
-      return { path: full, name: x.name, depth: full.split('/').length - 1 };
-    }).sort(function (a, b) { return a.path.localeCompare(b.path); });
-  }
-
-  // Thụt lề phải bằng padding chứ không bằng khoảng trắng trong textContent:
-  // HTML gộp khoảng trắng liên tiếp lại nên mọi cấp trông như nhau.
-  function binRowLabel(b) {
-    var wrap = document.createElement('span');
-    var caret = document.createElement('span');
-    caret.className = 'wf-tree-caret';
-    caret.textContent = '▸';
-    wrap.appendChild(caret);
-    wrap.appendChild(document.createTextNode(b.name));
-    return wrap;
-  }
-
   // ── Trạng thái UI ───────────────────────────────────────────────────────
   function setStatusUI(kind, text) {
     var dot = document.getElementById('wfDot');
@@ -390,83 +367,33 @@
     });
     body.appendChild(row('Thư mục', pickFolder));
 
-    // Bin đích + cây bin
-    var binLine = mkBtn(w.binPath ? w.binPath.split('/').join(' / ') : 'Chọn bin…');
-    var tree = document.createElement('div');
-    tree.className = 'wf-tree'; tree.hidden = true;
+    // Bin đích — mượn modal chọn bin của Voice Gen (window.vgPickBin): nó đã có
+    // cây gập/mở, sort tự nhiên (1x < 2x < 10x), tạo bin con và ô lọc. Tự vẽ lại
+    // chỉ để có một cây kém hơn và lệch hành vi với phần còn lại của plugin.
+    var binLine = mkBtn(w.binPath ? toBinName(w.binPath) : 'Chọn bin…');
     var hint = document.createElement('div');
     hint.className = 'wf-bin-hint';
 
-    binLine.addEventListener('click', async function () {
-      tree.hidden = !tree.hidden;
-      if (tree.hidden) return;
-      tree.innerHTML = '';
-      var loading = document.createElement('div');
-      loading.className = 'wf-bin-hint'; loading.textContent = 'Đang đọc cây bin…';
-      tree.appendChild(loading);
-
-      var bins = await readBinTree();
-      tree.innerHTML = '';
-
-      // Project thật có hàng trăm bin — không có ô lọc thì phải cuộn mò.
-      var search = document.createElement('input');
-      search.type = 'text';
-      search.placeholder = 'Lọc bin… (' + bins.length + ' bin)';
-      search.style.width = '100%';
-      search.style.marginBottom = '6px';
-      bindKeyboard(search);
-      tree.appendChild(search);
-
-      var rowsBox = document.createElement('div');
-      tree.appendChild(rowsBox);
-
-      search.addEventListener('input', function () {
-        var q = search.value.trim().toLowerCase();
-        var rows = rowsBox.children;
-        for (var i = 0; i < rows.length; i++) {
-          var p = rows[i].getAttribute('data-path') || '';
-          rows[i].hidden = !!q && p.toLowerCase().indexOf(q) < 0;
-        }
-      });
-
-      bins.forEach(function (b) {
-        var r = document.createElement('div');
-        r.className = 'wf-tree-row' + (b.path === w.binPath ? ' selected' : '');
-        r.setAttribute('role', 'button');
-        r.style.paddingLeft = (4 + b.depth * 14) + 'px';
-        r.setAttribute('data-path', b.path);
-        r.appendChild(binRowLabel(b));
-        r.addEventListener('click', function () {
-          w.binPath = b.path;
-          binLine.textContent = b.path.split('/').join(' / ');
+    binLine.addEventListener('click', function () {
+      if (typeof window.vgPickBin !== 'function') {
+        hint.textContent = 'Không mở được bảng chọn bin — thử reload plugin';
+        return;
+      }
+      window.vgPickBin({
+        title: 'Chọn bin cho Watch Folder',
+        current: w.binPath ? toBinName(w.binPath) : '',
+        onPick: function (full) {
+          // Modal trả full path phân tách ' / '; watch lưu bằng '/'.
+          w.binPath = String(full).split(' / ').map(function (x) { return x.trim(); })
+            .filter(Boolean).join('/');
+          binLine.textContent = toBinName(w.binPath);
           hint.textContent = '';
-          tree.hidden = true; saveConfig(); renderWatches();
-        });
-        rowsBox.appendChild(r);
+          saveConfig(); renderWatches();
+        },
       });
-
-      var mk = document.createElement('div');
-      mk.className = 'wf-tree-row wf-tree-new';
-      mk.setAttribute('role', 'button');
-      mk.textContent = '＋ Tạo bin mới…';
-      mk.addEventListener('click', function () {
-        var inp = document.createElement('input');
-        inp.type = 'text'; inp.value = w.binPath || 'Footage/';
-        bindKeyboard(inp);
-        inp.addEventListener('change', function () {
-          w.binPath = inp.value.replace(/^\/+|\/+$/g, '');
-          binLine.textContent = w.binPath.split('/').join(' / ');
-          hint.textContent = 'sẽ được tạo khi import';
-          tree.hidden = true; saveConfig(); renderWatches();
-        });
-        tree.innerHTML = ''; tree.appendChild(inp);
-        inp.focus();
-      });
-      tree.appendChild(mk);
     });
 
     body.appendChild(row('Bin đích', binLine));
-    body.appendChild(tree);
     body.appendChild(hint);
 
     // Loại file
@@ -592,6 +519,6 @@
   window.wfInternals = {
     state: wfState, api: api, log: wfLog,
     startSession: startSession, stopSession: stopSession,
-    currentProjectPath: currentProjectPath, readBinTree: readBinTree,
+    currentProjectPath: currentProjectPath,
   };
 })();

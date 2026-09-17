@@ -10667,6 +10667,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   var vgBinExpanded = {};   // fullPath → true
+  // Modal này dùng chung cho tab khác (tab Watch). Khi vgBinOnPick khác null thì
+  // "Chọn" trả kết quả qua callback thay vì ghi vào bin của Voice Gen.
+  var vgBinOnPick = null;
+  var vgBinHidden = [];     // các element đã ẩn để modal không bị input native đè
   var vgBinNewParent = null; // fullPath của bin đang mở ô "tạo bin con" (null = không mở)
 
   // Folder list comes from sacCollectBinItems(), which already tags each node with
@@ -10860,9 +10864,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgBinRenderList();
   }
 
-  async function vgBinOpen(mode) {
+  async function vgBinOpen(mode, opts) {
+    opts = opts || {};
     vgBinMode = mode;
-    vgBinChosen = vgBins[mode] || VG_BIN_DEFAULTS[mode];
+    vgBinOnPick = opts.onPick || null;
+    vgBinChosen = opts.current || vgBins[mode] || VG_BIN_DEFAULTS[mode];
     vgBinExpanded = {};
     vgBinNewParent = null;
     var modal = document.getElementById('vgBinModal');
@@ -10871,11 +10877,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var neu   = document.getElementById('vgBinNew');
     if (filt) filt.value = '';
     if (neu)  neu.value = '';
-    if (title) title.textContent = 'Chọn bin cho ' + (VG_MODE_LABEL[mode] || 'Voice');
+    if (title) title.textContent = opts.title || ('Chọn bin cho ' + (VG_MODE_LABEL[mode] || 'Voice'));
     // UXP has no z-index and native inputs paint over overlays — hide the panel
     // behind the modal, exactly as sacBindModal does.
+    vgBinHidden = [];
     var app = document.getElementById('vgApp');
-    if (app) app.style.display = 'none';
+    if (app) { app.style.display = 'none'; vgBinHidden.push(app); }
+    var activePanel = document.querySelector('.tab-panel.active');
+    if (activePanel && activePanel !== app) {
+      activePanel.style.display = 'none'; vgBinHidden.push(activePanel);
+    }
     if (modal) modal.hidden = false;
     vgBinStatus('⏳ Đang quét bin trong project...', '');
     try {
@@ -10902,8 +10913,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   function vgBinClose() {
     vgBinAutoStop();
+    vgBinOnPick = null;
     var m = document.getElementById('vgBinModal');
     if (m) m.hidden = true;
+    vgBinHidden.forEach(function (el) { el.style.display = ''; });
+    vgBinHidden = [];
     var app = document.getElementById('vgApp');
     if (app) app.style.display = '';
   }
@@ -10974,10 +10988,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var neu = document.getElementById('vgBinNew');
       var name = (neu && neu.value.trim()) || vgBinChosen;
       if (!name) { vgBinStatus('Chọn một bin hoặc gõ tên bin mới.', 'is-err'); return; }
+      var cb = vgBinOnPick;
+      if (cb) { vgBinClose(); cb(name); return; }   // close trước: nó xoá vgBinOnPick
       vgSetBin(vgBinMode, name);
       vgBinClose();
     });
     vgLoadBinsForProject();
+
+    // Cho tab khác mượn modal chọn bin: vgPickBin({ title, current, onPick }).
+    // current/onPick dùng full path phân tách bằng ' / ' — cùng định dạng
+    // ppGetOrCreateBin nhận.
+    window.vgPickBin = function (o) {
+      o = o || {};
+      return vgBinOpen(o.mode || 'tts', {
+        title: o.title, current: o.current, onPick: o.onPick,
+      });
+    };
   })();
 
   // ── Music prompt builder ──────────────────────────────────────────────────
