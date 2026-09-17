@@ -3,11 +3,16 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.8.0-beta.1 / bridge server 1.16.0-beta.1 — 2026-09-17
+## v5.8.0-beta.1 / bridge server 1.16.0-beta.2 — 2026-09-17
 
-> Tab **Watch**: theo dõi thư mục, tự import file mới vào bin. **Cần bridge ≥1.16.0.**
-> **CHƯA RELEASE** — bản beta, phần plugin chưa chạy thử trong Premiere.
-> `manifest.json` cố tình giữ `5.8.0` không hậu tố: Adobe CC báo error -4 khi cài `.ccx` có pre-release suffix (xem commit 60bdac4).
+> Hai mảng lớn trong một bản: **tab Watch** (theo dõi thư mục, tự import vào bin)
+> và **history theo lần gen** cho Voice Gen. **Cần bridge ≥1.16.0** cho tab Watch;
+> phần Voice Gen không cần bridge mới.
+> **CHƯA RELEASE** — bản beta, chưa chạy đủ checklist trong Premiere.
+> `manifest.json` cố tình giữ `5.8.0` không hậu tố: Adobe CC báo error -4 khi cài
+> `.ccx` có pre-release suffix (xem commit 60bdac4).
+
+# ══ Tab Watch Folder ══
 
 ### ✨ Mới
 - **Tab Watch Folder.** Nhiều thư mục cùng lúc, mỗi thư mục có bin đích riêng, lọc theo loại file + regex, mirror subfolder thành bin con tương ứng.
@@ -28,6 +33,25 @@
 ### 🧪 Test
 - Không nâng `REQUIRED_BRIDGE` của plugin: chỉ tab Watch cần bridge 1.16.0, nâng ngưỡng chung sẽ chặn cả plugin với cảnh báo "bridge quá cũ" cho người chỉ dùng Autocut/VoiceGen. Tab Watch tự báo khi endpoint `/watch/*` trả 404.
 - 5 file test mới cho bridge (`npm test` trong `bridge/`): luật lọc, quét thư mục, lưu trữ, engine, endpoint. Toàn bộ logic quét chạy được không cần Premiere.
+
+# ══ Voice Gen — history theo lần gen ══
+
+### ✨ Mới
+- **History theo lần gen.** Trước đây một mục = một cặp voice+script và bị gộp trùng, nên gen lại cùng script là mất đường vào output cũ — dù file mp3 vẫn nằm nguyên trên đĩa, chỉ là `lastVariations` bị ghi đè.
+- **Mỗi mục có 4 nút**: ▶ nghe ngay trong sidebar, **Import** vào project, **Mở lại** đưa nguyên lần gen lên khu kết quả (đủ Import / Timeline / Autocut), **Nạp script** như cũ.
+- **Đánh số lượt.** Trùng cả voice lẫn script thì hiện `Adam · lần 3` thay vì gộp làm một.
+- **Thanh điều hướng `◀ Lần gen 3/12 ▶`** ở khu kết quả, lật qua lại giữa các lần gen của mode đang mở.
+- **Multi-speaker và Voice Changer cũng vào history** — cả hai đều ghi đè `lastVariations` nên trước đây cũng mất output y hệt.
+
+### 🧠 Quyết định đáng nhớ
+- **Không kiểm tra file còn tồn tại lúc vẽ danh sách.** Mỗi mục một lệnh đọc đĩa, nhân 20 mục mỗi lần render là quá đắt cho thứ hiếm khi xảy ra. Bấm ▶ mà file đã bị dọn thì mới báo, và tô đỏ đúng mục đó.
+- **"Mở lại" một lần gen SFX/Music tự chuyển mode.** Không chuyển thì khu kết quả hiện output của mode khác, rất dễ nhầm là gen hỏng.
+- **`vgPlayPath` vốn đã huỷ lượt phát trước**, nên nghe ở sidebar tự dừng player ở khu kết quả — không phải viết thêm gì.
+- **Mục history cũ (chưa có `outputs`) vẫn đọc được**, chỉ là nút Play/Import mờ đi. Không cần migration localStorage.
+- **Selector nút phải kèm `[role="button"]`** mới thắng luật chung `div[role="button"]{...}` — class đơn (0-1-0) thua attribute selector (0-1-1).
+
+### 🎨 Giao diện
+- Mục history thành 2 dòng (voice + script ở trên, hàng nút ở dưới); sidebar phải nới 232→260px (chế độ hẹp 168→184px) để 4 nút không vỡ dòng.
 
 ## v5.7.1 / bridge app 3.10 (server 1.15.0) — 2026-09-17
 

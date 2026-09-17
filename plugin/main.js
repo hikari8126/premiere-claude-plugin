@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.8.0-beta.1';  // Watch Folder: tab mới theo dõi nhiều thư mục và tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con). Bridge quét theo chu kỳ chỉ khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. CẦN BRIDGE ≥1.16.0 cho tab Watch (các tab khác vẫn chạy với bridge cũ). v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.8.0-beta.1';  // Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -7899,6 +7899,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         resultCards.push({ speaker: sp, variations: resp.variations || [] });
       }
       renderMultiResults(resultCards);
+      // Multi-speaker cũng phải vào history, nếu không gen lại là mất sạch output.
+      // Chỉ lưu danh sách file phẳng: cấu trúc theo speaker không nằm trong
+      // lastVariations nên "Mở lại" không dựng lại được từng thẻ speaker.
+      var flat = [];
+      resultCards.forEach(function (c) {
+        (c.variations || []).forEach(function (v) { flat.push(v); });
+      });
+      var sp0 = active[0] || {};
+      vgHistPush(sp0.voiceId || 'multi',
+        active.length + ' speaker: ' + active.map(function (a) { return a.voiceName; }).join(', '),
+        active.map(function (a) { return a.text || ''; }).join(' / '),
+        { mode: 'tts', outputs: flat, multi: true });
+      vgHistNavReset();
       setStatus('✓ Generated ' + active.length + ' speakers', true);
     } catch(e) {
       setStatus('✗ ' + e.message, false);
@@ -8009,8 +8022,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Chỉ TTS single-speaker: SFX/Music không có voice, còn multi-speaker đã
       // return sớm ở trên (generateMultiSpeaker) nên không bao giờ tới đây.
       if (currentMode === 'tts') {
-        vgHistPush(body.voiceId, vgVoiceName(body.voiceId), body.text);
+        vgHistPush(body.voiceId, vgVoiceName(body.voiceId), body.text,
+          { mode: currentMode, outputs: lastVariations });
       }
+      vgHistNavReset();
     } catch(e) {
       setStatus('✗ ' + e.message, false);
     } finally {
@@ -8502,16 +8517,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch (e) { return []; }
   }
 
-  function vgHistPush(voiceId, voiceLabel, script) {
+  // Một mục = MỘT LẦN GEN, không phải một cặp voice+script. Lần gen trước không
+  // được biến mất chỉ vì gen lại cùng script — file mp3 vẫn nằm trên đĩa, chỉ là
+  // lastVariations bị ghi đè nên mất đường vào.
+  //
+  // opts = { mode, outputs, multi }. outputs chính là lastVariations của lần đó.
+  function vgHistPush(voiceId, voiceLabel, script, opts) {
     if (!voiceId) return;
+    var o = opts || {};
     var snip = String(script || '').trim().slice(0, VG_HIST_SNIP);
-    // Trùng CẢ voice lẫn script → gộp lên đầu thay vì sinh mục trùng.
-    var list = vgHistGet().filter(function (h) {
-      return !(h.voiceId === voiceId && h.script === snip);
+    var list = vgHistGet();
+    // Trùng cả voice lẫn script thì KHÔNG gộp nữa (output khác nhau) — đánh số
+    // lượt để phân biệt: "Adam · lần 3".
+    var take = 1;
+    list.forEach(function (h) {
+      if (h.voiceId === voiceId && h.script === snip) take = Math.max(take, (h.take || 1) + 1);
     });
     list.unshift({
+      id: 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       voiceId: voiceId, voiceLabel: voiceLabel || voiceId, script: snip,
-      ts: Date.now(), profileId: EL_ACTIVE_PROFILE_ID
+      ts: Date.now(), profileId: EL_ACTIVE_PROFILE_ID,
+      mode: o.mode || 'tts', take: take, multi: !!o.multi,
+      outputs: Array.isArray(o.outputs) ? o.outputs : [],
     });
     // Cap TỪNG profile chứ không cap cả list: một profile gen nhiều sẽ đẩy bay
     // sạch history của profile khác nếu dùng chung một hạn mức.
@@ -8542,6 +8569,60 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   // Dựng bằng DOM API (không innerHTML cho từng mục) — cùng lối với renderVoiceDrop.
   // KHÔNG dùng attribute title="" làm tooltip: UXP không hỗ trợ.
+  // ── Điều hướng giữa các lần gen ─────────────────────────────────────────
+  // Danh sách = history của mode đang mở và có file output. Index 0 = mới nhất.
+  var vgHistNavIdx = 0;
+
+  function vgHistNavList() {
+    return vgHistGet().filter(function (h) {
+      return h.outputs && h.outputs.length && (h.mode || 'tts') === currentMode && vgHistUsable(h);
+    });
+  }
+
+  function vgHistNavReset() { vgHistNavIdx = 0; vgHistNavRender(); }
+
+  function vgHistNavRender() {
+    var bar = $('vgHistNav'), lbl = $('vgHistNavLabel');
+    var prev = $('vgHistPrev'), next = $('vgHistNext');
+    if (!bar || !lbl) return;
+    var list = vgHistNavList();
+    if (list.length <= 1) { bar.hidden = true; return; }
+    bar.hidden = false;
+    lbl.textContent = 'Lần gen ' + (vgHistNavIdx + 1) + '/' + list.length;
+    // "Mới hơn" là index nhỏ hơn: danh sách xếp mới nhất trước.
+    if (prev) prev.classList.toggle('is-disabled', vgHistNavIdx <= 0);
+    if (next) next.classList.toggle('is-disabled', vgHistNavIdx >= list.length - 1);
+  }
+
+  function vgHistNavGo(delta) {
+    var list = vgHistNavList();
+    if (!list.length) return;
+    var i = vgHistNavIdx + delta;
+    if (i < 0 || i >= list.length) return;
+    vgHistNavIdx = i;
+    vgHistOpen(list[i], true);
+  }
+
+  // Mở lại một lần gen lên khu kết quả chính: đủ Import / Timeline / Autocut.
+  // fromNav = true thì giữ nguyên vị trí điều hướng đang duyệt.
+  function vgHistOpen(h, fromNav) {
+    if (!h || !h.outputs || !h.outputs.length) return;
+    var mode = h.mode || 'tts';
+    // Không chuyển mode thì khu kết quả hiện output của mode khác — rất dễ nhầm.
+    if (currentMode !== mode) switchMode(mode);
+    lastVariations = h.outputs.slice();
+    lastVariationsMode = mode;
+    renderVariations();
+    if (els.resultSection) els.resultSection.hidden = false;
+    if (!fromNav) {
+      var list = vgHistNavList();
+      for (var i = 0; i < list.length; i++) if (list[i].id === h.id) { vgHistNavIdx = i; break; }
+    }
+    vgHistNavRender();
+    setStatus('Đã mở lại: ' + (h.voiceLabel || h.voiceId)
+      + (h.take > 1 ? ' · lần ' + h.take : ''), true);
+  }
+
   function vgRenderHistory() {
     var sec  = $('vgHistSection');
     var list = $('vgHistList');
@@ -8562,12 +8643,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var item = document.createElement('div');
       item.className = 'vg-histItem';
 
+      var topRow = document.createElement('div');
+      topRow.className = 'vg-histTop';
+
       var textCol = document.createElement('div');
       textCol.className = 'vg-histText';
 
       var nameEl = document.createElement('div');
       nameEl.className = 'vg-histName';
       nameEl.textContent = h.voiceLabel || h.voiceId;
+      // Gen lại cùng voice + cùng script thì chỉ khác nhau ở số lượt.
+      if (h.take > 1) {
+        var takeEl = document.createElement('span');
+        takeEl.className = 'vg-histTake';
+        takeEl.textContent = ' · lần ' + h.take;
+        nameEl.appendChild(takeEl);
+      }
       textCol.appendChild(nameEl);
 
       var scriptEl = document.createElement('div');
@@ -8575,14 +8666,60 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       scriptEl.textContent = h.script || '(không có script)';
       textCol.appendChild(scriptEl);
 
-      item.appendChild(textCol);
+      topRow.appendChild(textCol);
+      item.appendChild(topRow);
 
-      var reload = document.createElement('div');
-      reload.className = 'vg-histReload';
-      reload.setAttribute('role', 'button');
-      piMakeButton(reload);
-      reload.textContent = 'Nạp script';
-      item.appendChild(reload);
+      var actions = document.createElement('div');
+      actions.className = 'vg-histActions';
+      item.appendChild(actions);
+
+      function mkHistBtn(label, cls) {
+        var b = document.createElement('div');
+        b.className = 'vg-histBtn ' + (cls || '');
+        b.setAttribute('role', 'button');
+        piMakeButton(b);
+        b.textContent = label;
+        actions.appendChild(b);
+        return b;
+      }
+
+      var out0 = (h.outputs && h.outputs[0]) || null;
+
+      // ▶ nghe ngay trong sidebar. vgPlayPath tự huỷ lượt phát trước nên không
+      // cần thêm gì để tránh phát chồng với player ở khu kết quả.
+      var playBtn = mkHistBtn('▶', 'vg-histPlay');
+      if (!out0) playBtn.classList.add('is-disabled');
+      playBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!out0) return;
+        vgPlayPath(out0.audioPath, null,
+          function () { playBtn.textContent = '▶'; },
+          function (err) {
+            // File tạm có thể đã bị dọn. Không kiểm tra trước mỗi lần vẽ danh
+            // sách (một lệnh đọc đĩa cho từng mục là quá đắt) — báo khi bấm.
+            playBtn.textContent = '▶';
+            playBtn.classList.add('is-err');
+            setStatus('✗ Không phát được (file có thể đã bị xoá): '
+              + (err && err.message ? err.message : out0.filename), false);
+          });
+        playBtn.textContent = '❚❚';
+      });
+
+      var importBtn = mkHistBtn('Import');
+      if (!out0) importBtn.classList.add('is-disabled');
+      importBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (out0) importVariation(out0);
+      });
+
+      var openBtn = mkHistBtn('Mở lại');
+      if (!out0) openBtn.classList.add('is-disabled');
+      openBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        vgHistOpen(h);
+      });
+
+      var reload = mkHistBtn('Nạp script');
 
       // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
       // hiện có đều chạy. Script đang gõ không bị đụng tới.
@@ -8628,12 +8765,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       list.appendChild(item);
     });
 
+    vgHistNavRender();
+
     if (hist.length > VG_HIST_SHOW) {
       more.hidden = false;
       more.textContent = vgHistExpanded ? 'Thu gọn' : ('Xem thêm (' + (hist.length - VG_HIST_SHOW) + ')');
     } else {
       more.hidden = true;
     }
+  }
+
+  var vgHistPrevBtn = $('vgHistPrev'), vgHistNextBtn = $('vgHistNext');
+  if (vgHistPrevBtn) {
+    piMakeButton(vgHistPrevBtn);
+    vgHistPrevBtn.addEventListener('click', function () { vgHistNavGo(-1); });
+  }
+  if (vgHistNextBtn) {
+    piMakeButton(vgHistNextBtn);
+    vgHistNextBtn.addEventListener('click', function () { vgHistNavGo(1); });
   }
 
   // Listener gắn NGOÀI hàm render: vgRenderHistory chạy lại mỗi lần gen, gắn bên
@@ -9373,6 +9522,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!resp.ok) throw new Error(resp.error || 'Đổi giọng thất bại');
       lastVariations = resp.variations || [];
       lastVariationsMode = 'tts'; // dùng chung bin/flow tab Voice
+      vgHistPush(vcxVoiceId || 'voicechange', (vcxVoiceLabel || 'Voice Changer') + ' (đổi giọng)',
+        body.filename || '', { mode: 'tts', outputs: lastVariations });
+      vgHistNavReset();
       renderVariations();
       if (els.resultSection) els.resultSection.hidden = false;
       var vgRight = document.querySelector('.vg-right');
