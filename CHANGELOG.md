@@ -3,12 +3,11 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.8.0-beta.1 / bridge server 1.16.0-beta.2 — 2026-09-17
+## v5.8.0 / bridge app 3.11 (server 1.16.0) — 2026-09-17
 
 > Hai mảng lớn trong một bản: **tab Watch** (theo dõi thư mục, tự import vào bin)
 > và **history theo lần gen** cho Voice Gen. **Cần bridge ≥1.16.0** cho tab Watch;
 > phần Voice Gen không cần bridge mới.
-> **CHƯA RELEASE** — bản beta, chưa chạy đủ checklist trong Premiere.
 > `manifest.json` cố tình giữ `5.8.0` không hậu tố: Adobe CC báo error -4 khi cài
 > `.ccx` có pre-release suffix (xem commit 60bdac4).
 
