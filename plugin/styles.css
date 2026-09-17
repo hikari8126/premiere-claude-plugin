@@ -2194,7 +2194,15 @@ div[role="button"].vg-modeBtn > .p-ic { margin-right: 8px; }
 }
 
 /* Quick profile switch — first section of the right sidebar, cycles API key profiles. */
-.vg-profileSection { border-bottom: 1px solid var(--border); }
+/* Nhãn và chip nằm CÙNG MỘT HÀNG cho gọn (mặc định .vg-sl là block, nhãn nằm
+   trên chip nằm dưới, tốn một dòng thừa trên sidebar vốn đã hẹp). */
+.vg-profileSection {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+.vg-profileSection > .vg-sl { margin-bottom: 0; margin-right: 8px; flex: 0 0 auto; }
+.vg-profileSection > .vg-profileChip { flex: 1 1 auto; min-width: 0; }
 .vg-profileChip {
   display: flex;
   align-items: center;
@@ -2273,7 +2281,6 @@ div[role="button"].vg-histReload {
   white-space: nowrap;
   cursor: pointer;
 }
-div[role="button"].vg-histReload > .p-ic { margin-right: 4px; flex: 0 0 auto; }
 div[role="button"].vg-histReload:hover {
   border-color: var(--accent);
   color: var(--accent);

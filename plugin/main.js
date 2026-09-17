@@ -8556,7 +8556,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       reload.className = 'vg-histReload';
       reload.setAttribute('role', 'button');
       piMakeButton(reload);
-      piSetBtn(reload, 'rotate_left', 'Nạp script', null, 11);
+      reload.textContent = 'Nạp script';
       item.appendChild(reload);
 
       // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
@@ -8578,7 +8578,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         histArmed = false;
         if (histArmTimer) { clearTimeout(histArmTimer); histArmTimer = null; }
         reload.classList.remove('is-armed');
-        piSetBtn(reload, 'rotate_left', 'Nạp script', null, 11);
+        reload.textContent = 'Nạp script';
       }
       reload.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -8589,7 +8589,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!histArmed && cur.trim() && cur.trim() !== next.trim()) {
           histArmed = true;
           reload.classList.add('is-armed');
-          piSetBtn(reload, 'rotate_left', 'Ghi đè?', null, 11);
+          reload.textContent = 'Ghi đè?';
           histArmTimer = setTimeout(histDisarm, 4000);
           return;
         }
