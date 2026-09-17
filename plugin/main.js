@@ -8004,6 +8004,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.importStatus.textContent = '';
       els.importStatus.className = 'ac-manualStatus';
       setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+      // Chỉ TTS single-speaker: SFX/Music không có voice, còn multi-speaker đã
+      // return sớm ở trên (generateMultiSpeaker) nên không bao giờ tới đây.
+      if (currentMode === 'tts') {
+        vgHistPush(body.voiceId, vgVoiceName(body.voiceId), body.text);
+      }
     } catch(e) {
       setStatus('✗ ' + e.message, false);
     } finally {
@@ -8030,6 +8035,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (footRow) footRow.style.display = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     vgRenderBinNames();   // Settings hiển thị bin của mode đang mở
+    vgRenderHistory();    // section nằm ngoài .vg-modeContent nên phải tự ẩn khi rời TTS
     // Giữ audio vừa gen theo TỪNG mode: quay lại mode đã gen → hiện lại kết quả;
     // sang mode khác → ẩn (không xoá lastVariations nên quay lại vẫn còn).
     if (els.resultSection) {
@@ -10267,6 +10273,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   vgRenderProfiles();
+  vgRenderHistory();
 
   // Auto-refresh when key changes (called from Settings save handler)
   window.VoiceGenOnKeyChange = function() {
