@@ -8531,10 +8531,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     list.innerHTML = '';
 
     hist.slice(0, shown).forEach(function (h) {
+      // Cha là div TRƠN — khớp mẫu .vg-dropItem trong renderVoiceDrop. Đặt
+      // role="button" lên cả hàng cha lẫn nút con là interactive lồng nhau,
+      // UXP nuốt sự kiện của cái bên trong.
       var item = document.createElement('div');
       item.className = 'vg-histItem';
-      item.setAttribute('role', 'button');
-      piMakeButton(item);
 
       var textCol = document.createElement('div');
       textCol.className = 'vg-histText';
@@ -8555,7 +8556,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       reload.className = 'vg-histReload';
       reload.setAttribute('role', 'button');
       piMakeButton(reload);
-      piSetBtn(reload, 'rotate_left', null, null, 11);
+      piSetBtn(reload, 'rotate_left', 'Nạp script', null, 11);
       item.appendChild(reload);
 
       // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
@@ -8567,19 +8568,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (els.voiceSelect) els.voiceSelect.dispatchEvent(evt);
       });
 
-      // Nút ↺ = nạp lại script. Thao tác phá huỷ → hỏi trước khi đè bài đang soạn.
+      // "Nạp script" = đè script đang soạn. Thao tác phá huỷ nên phải hỏi, nhưng
+      // KHÔNG dùng confirm() native: cả plugin chỉ có đúng một chỗ dùng nó và nằm
+      // ở đường ít đi qua, chưa có gì bảo đảm UXP chạy đúng. Thay bằng xác nhận
+      // hai bước ngay trên nút — chỉ đổi textContent + class, toàn thứ đã chứng
+      // minh chạy được. Ô trống hoặc đã đúng script đó thì nạp luôn, không hỏi.
+      var histArmed = false, histArmTimer = null;
+      function histDisarm() {
+        histArmed = false;
+        if (histArmTimer) { clearTimeout(histArmTimer); histArmTimer = null; }
+        reload.classList.remove('is-armed');
+        piSetBtn(reload, 'rotate_left', 'Nạp script', null, 11);
+      }
       reload.addEventListener('click', function (e) {
         e.stopPropagation();
+        console.log('[hist] "Nạp script" click — armed=' + histArmed);
         if (!els.script) return;
-        var cur = els.script.value == null ? '' : String(els.script.value);
+        var cur  = els.script.value == null ? '' : String(els.script.value);
         var next = h.script || '';
-        if (cur.trim() && cur.trim() !== next.trim()) {
-          if (!confirm('Thay script đang soạn bằng script của lần gen này?')) return;
+        if (!histArmed && cur.trim() && cur.trim() !== next.trim()) {
+          histArmed = true;
+          reload.classList.add('is-armed');
+          piSetBtn(reload, 'rotate_left', 'Ghi đè?', null, 11);
+          histArmTimer = setTimeout(histDisarm, 4000);
+          return;
         }
+        histDisarm();
         els.script.value = next;
         updateCharCount();
         vgAutoResize(els.script);
         vgReflowSoon(els.script);
+        setStatus('Đã nạp script của "' + (h.voiceLabel || h.voiceId) + '"', true);
       });
 
       list.appendChild(item);
