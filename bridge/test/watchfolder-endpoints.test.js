@@ -67,6 +67,23 @@ const server = app.listen(3031, async () => {
     const sn = await post('/watch/scan-now', { watchId: 'khong-co' });
     assert.strictEqual(sn.ok, false, 'watchId lạ → ok:false, không sập');
 
+    // 7b. browse: mở ở root sản phẩm (cấp cha của thư mục chứa .prproj)
+    // Dựng cây riêng trong thư mục tạm, KHÔNG dùng PROJ — cha của nó là thư mục
+    // temp hệ thống, tạo thư mục ở đó là xả rác ra ngoài phạm vi test.
+    const fsx = require('fs'), pathx = require('path');
+    const SP = pathx.join(process.env.WATCHFOLDER_DIR, 'SanPham');
+    fsx.mkdirSync(pathx.join(SP, 'Project'), { recursive: true });
+    fsx.mkdirSync(pathx.join(SP, 'Footage'), { recursive: true });
+    const PROJ2 = pathx.join(SP, 'Project', 'b.prproj');
+    fsx.writeFileSync(PROJ2, 'x');
+    const br = await get('/watch/browse?projectPath=' + encodeURIComponent(PROJ2));
+    assert.strictEqual(br.ok, true, 'browse chạy: ' + JSON.stringify(br));
+    assert.strictEqual(br.path, SP, 'mở ở cấp cha của thư mục chứa .prproj');
+    assert.ok(br.dirs.some(d => d.name === 'Footage'), 'liệt kê được thư mục con');
+
+    const br2 = await get('/watch/browse');
+    assert.strictEqual(br2.ok, false, 'thiếu cả path lẫn projectPath → từ chối');
+
     // 8. stop
     assert.strictEqual((await post('/watch/session/stop', {})).ok, true);
 

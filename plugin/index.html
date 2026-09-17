@@ -1603,6 +1603,29 @@
     </div>
   </div>
 
+<!-- Folder picker cho tab Watch. Cũng phải nằm NGOÀI mọi .tab-panel như #vgBinModal.
+     Lý do tồn tại: UXP getFolder() chỉ nhận initialDomain chứ không nhận đường dẫn,
+     nên không mở được hộp thoại hệ thống ngay tại thư mục project. Dữ liệu thư mục
+     do bridge cung cấp (plugin không cần tự đọc đĩa — chỉ bridge mới quét file). -->
+<div id="wfDirModal" class="sac-bind-modal" hidden>
+  <div class="sac-bind-box">
+    <div class="sac-bind-head">
+      <span id="wfDirTitle" class="sac-bind-title">Chọn thư mục theo dõi</span>
+      <div id="wfDirClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+    </div>
+    <div id="wfDirCrumb" class="wf-dir-crumb"></div>
+    <input id="wfDirFilter" type="text" class="sac-bind-filter" placeholder="🔍 Lọc theo tên thư mục..." />
+    <div id="wfDirList" class="sac-bind-list"></div>
+    <div id="wfDirStatus" class="vgm-status" hidden></div>
+    <div class="vg-binFoot">
+      <div id="wfDirUp" class="wf-btn wf-btn-sm" role="button">↑ Lên cấp trên</div>
+      <div id="wfDirNative" class="wf-btn wf-btn-sm" role="button">Duyệt thủ công…</div>
+      <div class="wf-spacer"></div>
+      <div id="wfDirSave" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn</div>
+    </div>
+  </div>
+</div>
+
 <script src="main.js"></script>
 <script src="watch.js"></script>
 </body>

@@ -240,6 +240,145 @@
     return null;
   }
 
+  // ── Bảng chọn thư mục ───────────────────────────────────────────────────
+  // UXP getFolder() chỉ nhận initialDomain nên không mở được hộp thoại hệ thống
+  // tại thư mục project. Thay bằng bảng duyệt trong plugin, dữ liệu do bridge
+  // cấp, mở sẵn ở root sản phẩm = cấp cha của thư mục chứa .prproj.
+  var wfDir = { cur: null, dirs: [], onPick: null, hidden: [], wired: false };
+
+  function wfDirStatus(msg, cls) {
+    var el = document.getElementById('wfDirStatus');
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg || '';
+    el.className = 'vgm-status' + (cls ? ' ' + cls : '');
+  }
+
+  async function wfDirLoad(p) {
+    var url = '/watch/browse?' + (p
+      ? 'path=' + encodeURIComponent(p)
+      : 'projectPath=' + encodeURIComponent(wfState.projectPath || ''));
+    wfDirStatus('⏳ Đang đọc thư mục…', '');
+    var r = await api('GET', url);
+    if (!r.ok) {
+      wfDirStatus('⚠ Không đọc được thư mục (' + (r.error || '?') + ')', 'is-warn');
+      return;
+    }
+    wfDirStatus('', '');
+    wfDir.cur = r.path;
+    wfDir.dirs = r.dirs;
+    var crumb = document.getElementById('wfDirCrumb');
+    if (crumb) crumb.textContent = r.path;
+    wfDirRender(r.dirs);
+  }
+
+  function wfDirRender(dirs) {
+    var host = document.getElementById('wfDirList');
+    if (!host) return;
+    host.innerHTML = '';
+    var filt = document.getElementById('wfDirFilter');
+    var q = (filt && filt.value.trim().toLowerCase()) || '';
+
+    if (!dirs.length) {
+      var empty = document.createElement('div');
+      empty.className = 'wf-bin-hint';
+      empty.textContent = 'Thư mục này không có thư mục con — bấm "Chọn" để theo dõi chính nó.';
+      host.appendChild(empty);
+      return;
+    }
+
+    dirs.forEach(function (d) {
+      if (q && d.name.toLowerCase().indexOf(q) < 0) return;
+      var row = document.createElement('div');
+      row.className = 'sac-bind-row';
+      row.style.paddingLeft = '8px';
+      row.setAttribute('role', 'button');
+
+      var caret = document.createElement('span');
+      caret.className = 'sac-bind-caret';
+      caret.textContent = d.hasChildren ? '▸' : '';
+      row.appendChild(caret);
+
+      var lbl = document.createElement('span');
+      lbl.textContent = d.name;
+      row.appendChild(lbl);
+
+      // Một click = đi vào trong. Chọn chính thư mục đang đứng thì bấm nút "Chọn"
+      // ở dưới — nhờ vậy không cần phân biệt click chọn với click mở.
+      row.addEventListener('click', function () { wfDirLoad(d.path); });
+      host.appendChild(row);
+    });
+  }
+
+  function wfDirClose() {
+    var m = document.getElementById('wfDirModal');
+    if (m) m.hidden = true;
+    wfDir.hidden.forEach(function (el) { el.style.display = ''; });
+    wfDir.hidden = [];
+    wfDir.onPick = null;
+  }
+
+  function wfDirWire() {
+    if (wfDir.wired) return;
+    wfDir.wired = true;
+
+    var close = document.getElementById('wfDirClose');
+    if (close) close.addEventListener('click', wfDirClose);
+
+    var filt = document.getElementById('wfDirFilter');
+    if (filt) {
+      bindKeyboard(filt);
+      // Lọc trên danh sách đã tải, không gọi lại bridge mỗi phím gõ.
+      filt.addEventListener('input', function () { wfDirRender(wfDir.dirs || []); });
+    }
+
+    var up = document.getElementById('wfDirUp');
+    if (up) up.addEventListener('click', function () {
+      if (!wfDir.cur) return;
+      var parent = wfDir.cur.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '/';
+      wfDirLoad(parent);
+    });
+
+    // Đường thoát khi thư mục nguồn nằm ngoài cây project (ổ ngoài, NAS).
+    var native = document.getElementById('wfDirNative');
+    if (native) native.addEventListener('click', async function () {
+      try {
+        var uxpFs = require('uxp').storage.localFileSystem;
+        var folder = await uxpFs.getFolder();
+        if (!folder) return;
+        var cb = wfDir.onPick;
+        wfDirClose();
+        if (cb) cb(folder.nativePath, folder.name);
+      } catch (e) { wfDirStatus('⚠ ' + e.message, 'is-warn'); }
+    });
+
+    var save = document.getElementById('wfDirSave');
+    if (save) save.addEventListener('click', function () {
+      if (!wfDir.cur) return;
+      var cb = wfDir.onPick;
+      var chosen = wfDir.cur;
+      wfDirClose();
+      if (cb) cb(chosen, chosen.split('/').pop());
+    });
+  }
+
+  async function wfPickFolder(opts) {
+    wfDirWire();
+    opts = opts || {};
+    wfDir.onPick = opts.onPick || null;
+
+    // UXP không có z-index: input native của tab đang mở sẽ vẽ đè lên modal.
+    wfDir.hidden = [];
+    var activePanel = document.querySelector('.tab-panel.active');
+    if (activePanel) { activePanel.style.display = 'none'; wfDir.hidden.push(activePanel); }
+    var modal = document.getElementById('wfDirModal');
+    if (modal) modal.hidden = false;
+    var filt = document.getElementById('wfDirFilter');
+    if (filt) filt.value = '';
+
+    await wfDirLoad(opts.start || null);
+  }
+
   // ── Trạng thái UI ───────────────────────────────────────────────────────
   function setStatusUI(kind, text) {
     var dot = document.getElementById('wfDot');
@@ -373,15 +512,15 @@
 
     // Thư mục
     var pickFolder = mkBtn(w.folder || 'Chọn thư mục…');
-    pickFolder.addEventListener('click', async function () {
-      try {
-        var uxpFs = require('uxp').storage.localFileSystem;
-        var folder = await uxpFs.getFolder();
-        if (!folder) return;
-        w.folder = folder.nativePath;
-        if (!w.label || w.label === 'Watch mới') w.label = folder.name;
-        saveConfig(); renderWatches();
-      } catch (e) { wfLog('Không chọn được thư mục — ' + e.message, true); }
+    pickFolder.addEventListener('click', function () {
+      wfPickFolder({
+        start: w.folder || null,          // sửa watch cũ thì mở lại đúng chỗ đang trỏ
+        onPick: function (p, name) {
+          w.folder = p;
+          if (!w.label || w.label === 'Watch mới') w.label = name;
+          saveConfig(); renderWatches();
+        },
+      });
     });
     body.appendChild(row('Thư mục', pickFolder));
 

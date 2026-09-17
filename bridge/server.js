@@ -2960,7 +2960,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.16.0-beta.1';  // Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.16.0-beta.2';  // Watch folder: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -3373,6 +3373,22 @@ app.post('/watch/config', (req, res) => {
     wfStore.writeConfig(b.projectPath, list);
     res.json({ ok: true, watches: list });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Duyệt thư mục cho bảng chọn "Thư mục" của tab Watch. Không truyền path thì mở
+// ở root sản phẩm = cấp cha của thư mục chứa .prproj.
+app.get('/watch/browse', (req, res) => {
+  try {
+    const wfBrowse = require('./watchfolder-browse.js');
+    let p = req.query.path || '';
+    const projectPath = req.query.projectPath || '';
+    if (!p) {
+      if (!projectPath) return res.status(400).json({ ok: false, error: 'thiếu path/projectPath' });
+      p = wfBrowse.productRoot(projectPath);
+    }
+    const out = wfBrowse.listDirs(p);
+    res.json(Object.assign({ root: projectPath ? wfBrowse.productRoot(projectPath) : null }, out));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message, dirs: [] }); }
 });
 
 app.post('/watch/scan-now', (req, res) => {

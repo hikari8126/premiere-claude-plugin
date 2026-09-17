@@ -4463,3 +4463,8 @@ div[role="button"].vg-histReload.is-armed {
           font-size: 11px; font-family: monospace; }
 .wf-log-line { padding: 1px 0; color: #b9b1c8; }
 .wf-log-line.err { color: #f87171; }
+
+/* Bảng chọn thư mục của tab Watch — mượn .sac-bind-* của bảng chọn bin */
+.wf-dir-crumb { padding: 4px 8px; font-size: 11px; color: #8b8299;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-dir-row-sub { color: #6b6478; margin-left: 6px; font-size: 11px; }

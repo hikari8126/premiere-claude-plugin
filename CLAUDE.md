@@ -321,7 +321,8 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/watch/poll` | GET | Lấy tối đa 20 file chờ import + thống kê |
 | `/watch/ack` | POST | Báo file đã import xong / thất bại (thất bại 3 lần → dead) |
 | `/watch/config` | GET/POST | Đọc/ghi danh sách watch của project hiện tại |
-| `/watch/scan-now` | POST | Quét ép một watch, không đợi chu kỳ |
+| `/watch/scan-now` | POST | Đối chiếu một watch: đẩy file đã có sẵn về hàng đợi để plugin so với project |
+| `/watch/browse` | GET | Liệt kê thư mục con (mặc định mở ở cấp cha của thư mục chứa .prproj) |
 
 ### Lệnh dev thường dùng
 
