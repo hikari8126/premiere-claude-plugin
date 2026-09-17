@@ -8478,6 +8478,35 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgSetNameList('vg_recent_folders', r);
   }
 
+  // ── History voice đã dùng ─────────────────────────────────────
+  // Lưu voiceLabel kèm voiceId chứ không chỉ id: danh sách voice phụ thuộc API
+  // key, nên khi đổi profile hoặc key hết hạn thì VG_VOICES_DATA không còn voice
+  // đó — vẫn phải hiện được tên người đọc hiểu được thay vì một chuỗi id.
+  var VG_HIST_KEY  = 'vg_voice_history';
+  var VG_HIST_CAP  = 20;   // số mục lưu tối đa
+  var VG_HIST_SHOW = 3;    // số mục hiện khi chưa bấm "Xem thêm"
+  var VG_HIST_SNIP = 200;  // độ dài script lưu lại (đủ nhận ra, không phình localStorage)
+
+  function vgHistGet() {
+    try {
+      var a = JSON.parse(localStorage.getItem(VG_HIST_KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+
+  function vgHistPush(voiceId, voiceLabel, script) {
+    if (!voiceId) return;
+    var snip = String(script || '').trim().slice(0, VG_HIST_SNIP);
+    // Trùng CẢ voice lẫn script → gộp lên đầu thay vì sinh mục trùng.
+    var list = vgHistGet().filter(function (h) {
+      return !(h.voiceId === voiceId && h.script === snip);
+    });
+    list.unshift({ voiceId: voiceId, voiceLabel: voiceLabel || voiceId, script: snip, ts: Date.now() });
+    if (list.length > VG_HIST_CAP) list = list.slice(0, VG_HIST_CAP);
+    try { localStorage.setItem(VG_HIST_KEY, JSON.stringify(list)); } catch (e) {}
+    if (typeof vgRenderHistory === 'function') vgRenderHistory();
+  }
+
   // Custom save modal: lets the user type a filename while showing (and remembering)
   // the destination folder. Resolves to { dir, name } or null if cancelled.
   // Needed because UXP's native getFileForSaving cannot open at a remembered folder.
