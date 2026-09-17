@@ -51,6 +51,7 @@
 - **Selector nút phải kèm `[role="button"]`** mới thắng luật chung `div[role="button"]{...}` — class đơn (0-1-0) thua attribute selector (0-1-1).
 
 ### 🎨 Giao diện
+- **Gập/mở cả section "Gần đây"** bằng cách bấm vào tiêu đề; nhớ trạng thái qua localStorage (`vg_hist_folded`). Khác với "Xem thêm" bên dưới — cái đó giãn 3 → 20 mục, cái này ẩn cả khối. Tiêu đề hiện thêm tổng số mục.
 - Mục history thành 2 dòng (voice + script ở trên, hàng nút ở dưới); sidebar phải nới 232→260px (chế độ hẹp 168→184px) để 4 nút không vỡ dòng.
 
 ## v5.7.1 / bridge app 3.10 (server 1.15.0) — 2026-09-17

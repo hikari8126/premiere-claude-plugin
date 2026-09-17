@@ -8554,6 +8554,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   var vgHistExpanded = false;
 
+  // Gập cả section "Gần đây" — khác với vgHistExpanded (giãn 3 → 20 mục).
+  // Nhớ qua localStorage để mở plugin lần sau vẫn như lúc rời đi.
+  var VG_HIST_FOLD_KEY = 'vg_hist_folded';
+  function vgHistFolded() {
+    try { return localStorage.getItem(VG_HIST_FOLD_KEY) === '1'; } catch (e) { return false; }
+  }
+  function vgHistSetFolded(v) {
+    try { localStorage.setItem(VG_HIST_FOLD_KEY, v ? '1' : '0'); } catch (e) {}
+  }
+
   // Voice custom/clone gắn chặt với API key của profile tạo ra nó; 25 voice mặc
   // định thì key nào cũng dùng được. Nên lọc theo "voice này có dùng được với
   // profile đang active không", không phải theo "mục này do profile nào tạo".
@@ -8632,6 +8642,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var hist = vgHistGet().filter(vgHistUsable);
     if (!hist.length || currentMode !== 'tts') { sec.hidden = true; return; }
     sec.hidden = false;
+
+    // Gập thì vẫn vẽ danh sách (rẻ, và mở ra là thấy ngay) nhưng ẩn phần thân.
+    var folded = vgHistFolded();
+    var body   = $('vgHistBody');
+    var caret  = $('vgHistCaret');
+    var count  = $('vgHistCount');
+    if (body)  body.hidden = folded;
+    if (caret) caret.textContent = folded ? '▸' : '▾';
+    if (count) count.textContent = hist.length ? ('(' + hist.length + ')') : '';
 
     var shown = vgHistExpanded ? hist.length : Math.min(VG_HIST_SHOW, hist.length);
     list.innerHTML = '';
@@ -8773,6 +8792,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } else {
       more.hidden = true;
     }
+  }
+
+  var vgHistHeadBtn = $('vgHistHead');
+  if (vgHistHeadBtn) {
+    piMakeButton(vgHistHeadBtn);
+    vgHistHeadBtn.addEventListener('click', function () {
+      vgHistSetFolded(!vgHistFolded());
+      vgRenderHistory();
+    });
   }
 
   var vgHistPrevBtn = $('vgHistPrev'), vgHistNextBtn = $('vgHistNext');

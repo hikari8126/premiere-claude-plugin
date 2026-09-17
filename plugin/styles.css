@@ -4554,3 +4554,13 @@ div[role="button"].vg-histBtn.is-armed {
   color: var(--accent-fg); opacity: 1;
 }
 div[role="button"].vg-histPlay { min-width: 26px; padding: 0 6px; }
+
+/* Gập/mở cả section "Gần đây". Kèm [role="button"] để thắng luật chung
+   div[role="button"]{display:inline-flex; justify-content:center}. */
+div[role="button"].vg-histHead {
+  display: flex; align-items: center; justify-content: flex-start;
+  width: 100%; cursor: pointer; padding: 0;
+}
+div[role="button"].vg-histHead:hover { color: rgba(255,255,255,0.7); }
+.vg-histCaret { display: inline-block; width: 12px; font-size: 9px;
+                color: rgba(255,255,255,0.45); }
