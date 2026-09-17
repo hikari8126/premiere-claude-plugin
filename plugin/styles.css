@@ -2219,6 +2219,50 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
   white-space: nowrap;
 }
 
+/* Voice đã dùng gần đây — mượn bảng token và lối trình bày của .vg-profileChip.
+   Không display:grid, không position:fixed, không z-index (UXP không hỗ trợ). */
+.vg-histSection { border-bottom: 1px solid var(--border); }
+.vg-histItem {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 7px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+.vg-histItem:hover { border-color: var(--accent); }
+/* flex:1 1 0 + min-width:0 là điều kiện để text-overflow:ellipsis hoạt động */
+.vg-histText { flex: 1 1 0; min-width: 0; }
+.vg-histName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vg-histScript {
+  font-size: 10px;
+  opacity: 0.6;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+div[role="button"].vg-histReload { flex: 0 0 auto; margin-left: 6px; opacity: 0.55; }
+div[role="button"].vg-histReload:hover { opacity: 1; }
+.vg-histMore {
+  font-size: 10px;
+  color: var(--accent);
+  text-align: center;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.vg-histMore:hover { text-decoration: underline; }
+
 /* ── Body: left + right ── */
 .vg-body {
   flex: 1 1 auto;
