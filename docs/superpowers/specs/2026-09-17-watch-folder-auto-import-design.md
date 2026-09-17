@@ -16,7 +16,7 @@ watch URL/cloud, tạo proxy.
 |---|---|
 | Phạm vi | Nhiều thư mục, mỗi cái có bin đích + rule lọc riêng |
 | Hành động | Chỉ import vào bin, không đụng timeline |
-| File có sẵn lúc bật watch | Bỏ qua, chỉ tính file xuất hiện sau đó |
+| File có sẵn lúc bật watch | Bỏ qua khi quét tự động; nút **Đối chiếu** kéo lại được khi cần |
 | Khi panel đóng | Ngừng quét hoàn toàn; mở lại thì quét bù so với snapshot → không bỏ lỡ file |
 | Lưu config | Theo từng project `.prproj` |
 | Chọn bin | Cây bin phân cấp + nhập path để tạo mới + mirror subfolder thành bin con |
@@ -166,7 +166,7 @@ macOS. Bật/tắt trong thanh trạng thái.
 | `GET /watch/poll` | Tối đa 20 item sẵn sàng + `stats` |
 | `POST /watch/ack` `{done, failed}` | Item lỗi quay lại queue; quá 3 lần → `dead` |
 | `GET/POST /watch/config` | Đọc/ghi config project hiện tại; validate regex khi ghi |
-| `POST /watch/scan-now` `{watchId}` | Quét ép một watch |
+| `POST /watch/scan-now` `{watchId}` | **Đối chiếu**: đẩy vào hàng đợi mọi file đã có trong snapshot để plugin so với project và import cái còn thiếu |
 
 ## Xử lý lỗi
 

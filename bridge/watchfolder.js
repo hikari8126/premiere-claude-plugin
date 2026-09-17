@@ -128,10 +128,12 @@ function createEngine(deps) {
 
   function enqueue(w, rel) {
     if (queue.length >= MAX_QUEUE) return;    // trần chống phình bộ nhớ
+    var abs = path.join(w.folder, rel.split('/').join(path.sep));
+    if (queue.some(function (it) { return it.filePath === abs; })) return;   // đã chờ rồi
     queue.push({
       id: 'q' + (++seq) + '_' + now(),
       watchId: w.id,
-      filePath: path.join(w.folder, rel.split('/').join(path.sep)),
+      filePath: abs,
       binPath: binPathFor(w, rel),
       tries: 0,
     });
@@ -149,12 +151,37 @@ function createEngine(deps) {
     flush(false);
   }
 
+  // "Quét ngay" KHÔNG phải là chạy sớm một lượt quét thường: một lượt tick không
+  // bao giờ đẩy được file nào (file phải ổn định qua stableChecks lượt), nên nút
+  // đó sẽ không làm gì cả.
+  //
+  // Nó là nút ĐỐI CHIẾU: đẩy vào hàng đợi mọi file đã có trong snapshot — tức đã
+  // tồn tại từ lượt quét trước, chắc chắn không phải đang ghi dở — để plugin so
+  // với project và import cái nào còn thiếu. Nhờ vậy file có sẵn lúc tạo watch,
+  // hoặc clip lỡ bị xoá khỏi project, vẫn kéo lại được mà không cần tạo watch mới.
+  //
+  // File chưa từng thấy thì KHÔNG đẩy — có thể đang render dở; cứ để nó đi qua
+  // đường ổn định như thường.
   function scanNow(watchId) {
     const w = watches.find(x => x.id === watchId);
     if (!w) return { ok: false, error: 'không tìm thấy watch' };
-    tickWatch(w);
+    if (w.enabled === false) return { ok: false, error: 'watch đang tắt' };
+
+    const before = queue.length;
+    const s = stateFor(w);
+    tickWatch(w);                       // cập nhật snapshot + bắt file mới như thường
+    if (s.status === 'unavailable') {
+      return { ok: false, error: 'không đọc được thư mục' };
+    }
+
+    const known = s.snapshot || {};
+    for (const rel of Object.keys(known)) {
+      if (!matchFile(w, rel)) continue;
+      if (known[rel] && known[rel][0] === 0) continue;   // file rỗng thì không import
+      enqueue(w, rel);
+    }
     flush(true);
-    return { ok: true };
+    return { ok: true, queued: queue.length - before, total: queue.length };
   }
 
   function poll(limit) {

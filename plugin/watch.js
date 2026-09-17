@@ -143,15 +143,23 @@
     if (!r.items || r.items.length === 0) return;
 
     wfState.importing = true;
-    var done = [], failed = [];
+    var done = [], failed = [], skipped = 0;
     try {
+      // Quét project MỘT lần cho cả mẻ. Đối chiếu có thể đẩy về hàng trăm file đã
+      // có sẵn trong project; quét lại toàn bộ cây cho từng file là không dùng được.
+      var proj0 = await getActiveProject();
+      var cache = proj0 ? { proj: proj0, items: await collectAll(proj0) } : null;
       for (var i = 0; i < r.items.length; i++) {
         var it = r.items[i];
         try {
-          await importOne(it);
+          var outcome = await importOne(it, cache);
           done.push(it.id);
-          wfState.sessionImported += 1;
-          wfLog('✓ ' + baseName(it.filePath) + ' → ' + it.binPath);
+          if (outcome === 'skipped') {
+            skipped += 1;   // không spam nhật ký: đối chiếu có thể bỏ qua hàng trăm file
+          } else {
+            wfState.sessionImported += 1;
+            wfLog('✓ ' + baseName(it.filePath) + ' → ' + it.binPath);
+          }
         } catch (e) {
           failed.push({ id: it.id, reason: e.message });
           wfLog('✗ ' + baseName(it.filePath) + ' — ' + e.message, true);
@@ -162,10 +170,11 @@
     }
 
     await api('POST', '/watch/ack', { done: done, failed: failed });
-    if (done.length > 0) {
+    if (skipped > 0) wfLog('· bỏ qua ' + skipped + ' file project đã có');
+    if (done.length - skipped > 0) {
       api('POST', '/notify', {
         title: 'Watch Folder',
-        body: 'Đã import ' + done.length + ' file',
+        body: 'Đã import ' + (done.length - skipped) + ' file',
       });
     }
   }
@@ -174,18 +183,19 @@
   // importFiles() KHÔNG trả về ProjectItem (main.js:2488), nên phải import rồi
   // tìm lại clip theo tên và chuyển bin bằng ppMoveToBin — đúng cách autoImportVoice
   // đang làm, thay vì tự viết lại phần cast FolderItem/transaction đầy bẫy.
-  async function importOne(item) {
-    var proj = await getActiveProject();
+  async function importOne(item, cache) {
+    var proj = (cache && cache.proj) || await getActiveProject();
     if (!proj) throw new Error('không có project đang mở');
 
-    var all = await collectAll(proj);
-    if (await findByMediaPath(all, item.filePath)) return;   // đã có trong project, bỏ qua
+    var all = (cache && cache.items) || await collectAll(proj);
+    if (await findByMediaPath(all, item.filePath)) return 'skipped';   // project đã có
 
     if (typeof proj.importFiles !== 'function') throw new Error('không có API importFiles');
     await proj.importFiles([item.filePath]);
 
     var name = baseName(item.filePath);
     var after = await collectAll(proj);
+    if (cache) cache.items = after;         // mẻ sau dùng lại, khỏi quét thêm lần nữa
     var hit = (await findByMediaPath(after, item.filePath))
            || after.filter(function (x) { return !x.isFolder && x.name === name; })[0];
     if (!hit) throw new Error('import xong nhưng không thấy "' + name + '" trong project');
@@ -193,6 +203,7 @@
     // Thứ tự tham số (item, proj, binName) — sai thứ tự fail ÂM THẦM.
     var mv = await ppMoveToBin(hit.item, proj, toBinName(item.binPath));
     if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển vào bin thất bại');
+    return 'imported';
   }
 
   async function collectAll(proj) {
@@ -312,9 +323,16 @@
 
     var spacer = document.createElement('div'); spacer.className = 'wf-spacer';
 
-    var scanNow = mkBtn('Quét ngay', 'wf-btn-sm');
-    scanNow.addEventListener('click', function () {
-      api('POST', '/watch/scan-now', { watchId: w.id });
+    // "Đối chiếu" chứ không phải "Quét ngay": nó so thư mục với project và import
+    // những file còn thiếu, kể cả file đã nằm sẵn từ trước khi tạo watch.
+    var scanNow = mkBtn('Đối chiếu', 'wf-btn-sm');
+    scanNow.addEventListener('click', async function () {
+      scanNow.textContent = 'Đang đối chiếu…';
+      var r = await api('POST', '/watch/scan-now', { watchId: w.id });
+      scanNow.textContent = 'Đối chiếu';
+      if (!r.ok) { wfLog('Đối chiếu "' + (w.label || w.id) + '" — ' + r.error, true); return; }
+      wfLog('Đối chiếu "' + (w.label || w.id) + '": ' + r.total
+        + ' file cần kiểm tra, import cái nào project còn thiếu');
     });
 
     var edit = mkBtn('Sửa', 'wf-btn-sm');

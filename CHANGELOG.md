@@ -14,10 +14,12 @@
 - **Bridge quét theo chu kỳ thay vì `fs.watch`.** `fs.watch`/chokidar hay câm trên SMB/NAS, và dù dùng cách nào vẫn phải tự viết logic chờ file render xong — nên phần khó nhất không tiết kiệm được gì. Quét `readdir` + `stat` mỗi 3s, giãn lên 10s sau 2 phút không có gì, 15s nếu thư mục vượt 20.000 file.
 - **Không quét khi không cần.** Bridge chỉ quét trong lúc panel mở; đóng panel thì quét lượt cuối rồi ghi snapshot và dừng hẳn. Mở lại quét bù so với snapshot nên file rơi vào lúc Premiere đóng vẫn được import — mà lúc nghỉ tốn 0% CPU.
 - **Chờ file ghi xong mới import.** File chỉ vào hàng đợi khi `size` + `mtime` không đổi qua 2 lượt quét liên tiếp; file 0 byte luôn bị hoãn. Vì vậy mỗi file mất 6–9 giây từ lúc render xong tới lúc vào bin — đánh đổi có chủ ý.
+- **Nút Đối chiếu trên mỗi watch.** So thư mục với project và import những file còn thiếu — dùng cho file đã nằm sẵn trước khi tạo watch, hoặc clip lỡ bị xoá khỏi project. Chỉ đụng tới file đã thấy ở lượt quét trước (chắc chắn không phải đang render dở); file mới toanh vẫn đi qua đường chờ-ổn-định như thường.
 - **Bỏ qua file đã có trong project**, so theo đường dẫn media chứ không theo tên, vì hai thư mục khác nhau hoàn toàn có thể chứa file trùng tên.
 
 ### 🧠 Quyết định đáng nhớ
 - **Regex lọc soi tên file KHÔNG kèm đuôi.** Luật quen thuộc nhất (`_proxy$`) mà soi cả đuôi thì không khớp `a_proxy.mp4` — test bắt được ngay khi viết.
+- **"Quét ngay" chạy sớm một lượt quét là nút chết.** Một lượt tick không bao giờ đẩy được file nào vì file phải ổn định qua 2 lượt — nút bấm vào không có gì xảy ra. Đổi hẳn ngữ nghĩa thành "Đối chiếu" mới có tác dụng thật.
 - **Plugin ack chứ không để bridge tự đánh dấu xong.** File chỉ coi là đã import khi `importFiles()` thành công thật; Premiere từ chối codec hay panel reload giữa chừng thì file quay lại hàng đợi, retry 3 lần rồi mới bỏ.
 - **Dùng lại `ppGetOrCreateBin`/`ppMoveToBin` của main.js.** `importFiles()` không nhận bin đích và không trả về ProjectItem; phần cast `FolderItem` + transaction đã được giải quyết ở `autoImportVoice`, viết lại chỉ để dính lại đúng những cái bẫy cũ.
 - **Watch lưu theo từng `.prproj`.** Bin đích của project này không tồn tại ở project khác, nên config toàn cục sẽ hỏng ngay khi mở project thứ hai.
