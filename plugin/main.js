@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.6.5';  // Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.7.0';  // Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -8004,6 +8004,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.importStatus.textContent = '';
       els.importStatus.className = 'ac-manualStatus';
       setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+      // Chỉ TTS single-speaker: SFX/Music không có voice, còn multi-speaker đã
+      // return sớm ở trên (generateMultiSpeaker) nên không bao giờ tới đây.
+      if (currentMode === 'tts') {
+        vgHistPush(body.voiceId, vgVoiceName(body.voiceId), body.text);
+      }
     } catch(e) {
       setStatus('✗ ' + e.message, false);
     } finally {
@@ -8030,6 +8035,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (footRow) footRow.style.display = isCreate ? 'none' : '';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     vgRenderBinNames();   // Settings hiển thị bin của mode đang mở
+    vgRenderHistory();    // section nằm ngoài .vg-modeContent nên phải tự ẩn khi rời TTS
     // Giữ audio vừa gen theo TỪNG mode: quay lại mode đã gen → hiện lại kết quả;
     // sang mode khác → ẩn (không xoá lastVariations nên quay lại vẫn còn).
     if (els.resultSection) {
@@ -8476,6 +8482,144 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     r.unshift(dir);
     if (r.length > 5) r = r.slice(0, 5);
     vgSetNameList('vg_recent_folders', r);
+  }
+
+  // ── History voice đã dùng ─────────────────────────────────────
+  // Lưu voiceLabel kèm voiceId chứ không chỉ id: danh sách voice phụ thuộc API
+  // key, nên khi đổi profile hoặc key hết hạn thì VG_VOICES_DATA không còn voice
+  // đó — vẫn phải hiện được tên người đọc hiểu được thay vì một chuỗi id.
+  var VG_HIST_KEY  = 'vg_voice_history';
+  var VG_HIST_CAP  = 20;   // số mục lưu tối đa
+  var VG_HIST_SHOW = 3;    // số mục hiện khi chưa bấm "Xem thêm"
+  var VG_HIST_SNIP = 200;  // độ dài script lưu lại (đủ nhận ra, không phình localStorage)
+
+  function vgHistGet() {
+    try {
+      var a = JSON.parse(localStorage.getItem(VG_HIST_KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+
+  function vgHistPush(voiceId, voiceLabel, script) {
+    if (!voiceId) return;
+    var snip = String(script || '').trim().slice(0, VG_HIST_SNIP);
+    // Trùng CẢ voice lẫn script → gộp lên đầu thay vì sinh mục trùng.
+    var list = vgHistGet().filter(function (h) {
+      return !(h.voiceId === voiceId && h.script === snip);
+    });
+    list.unshift({ voiceId: voiceId, voiceLabel: voiceLabel || voiceId, script: snip, ts: Date.now() });
+    if (list.length > VG_HIST_CAP) list = list.slice(0, VG_HIST_CAP);
+    try { localStorage.setItem(VG_HIST_KEY, JSON.stringify(list)); } catch (e) {}
+    if (typeof vgRenderHistory === 'function') vgRenderHistory();
+  }
+
+  var vgHistExpanded = false;
+
+  // Dựng bằng DOM API (không innerHTML cho từng mục) — cùng lối với renderVoiceDrop.
+  // KHÔNG dùng attribute title="" làm tooltip: UXP không hỗ trợ.
+  function vgRenderHistory() {
+    var sec  = $('vgHistSection');
+    var list = $('vgHistList');
+    var more = $('vgHistMore');
+    if (!sec || !list || !more) return;
+
+    var hist = vgHistGet();
+    if (!hist.length || currentMode !== 'tts') { sec.hidden = true; return; }
+    sec.hidden = false;
+
+    var shown = vgHistExpanded ? hist.length : Math.min(VG_HIST_SHOW, hist.length);
+    list.innerHTML = '';
+
+    hist.slice(0, shown).forEach(function (h) {
+      // Cha là div TRƠN — khớp mẫu .vg-dropItem trong renderVoiceDrop. Đặt
+      // role="button" lên cả hàng cha lẫn nút con là interactive lồng nhau,
+      // UXP nuốt sự kiện của cái bên trong.
+      var item = document.createElement('div');
+      item.className = 'vg-histItem';
+
+      var textCol = document.createElement('div');
+      textCol.className = 'vg-histText';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'vg-histName';
+      nameEl.textContent = h.voiceLabel || h.voiceId;
+      textCol.appendChild(nameEl);
+
+      var scriptEl = document.createElement('div');
+      scriptEl.className = 'vg-histScript';
+      scriptEl.textContent = h.script || '(không có script)';
+      textCol.appendChild(scriptEl);
+
+      item.appendChild(textCol);
+
+      var reload = document.createElement('div');
+      reload.className = 'vg-histReload';
+      reload.setAttribute('role', 'button');
+      piMakeButton(reload);
+      reload.textContent = 'Nạp script';
+      item.appendChild(reload);
+
+      // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
+      // hiện có đều chạy. Script đang gõ không bị đụng tới.
+      textCol.addEventListener('click', function () {
+        vgSetVoice(h.voiceId);
+        var evt = document.createEvent('Event');
+        evt.initEvent('change', true, true);
+        if (els.voiceSelect) els.voiceSelect.dispatchEvent(evt);
+      });
+
+      // "Nạp script" = đè script đang soạn. Thao tác phá huỷ nên phải hỏi, nhưng
+      // KHÔNG dùng confirm() native: cả plugin chỉ có đúng một chỗ dùng nó và nằm
+      // ở đường ít đi qua, chưa có gì bảo đảm UXP chạy đúng. Thay bằng xác nhận
+      // hai bước ngay trên nút — chỉ đổi textContent + class, toàn thứ đã chứng
+      // minh chạy được. Ô trống hoặc đã đúng script đó thì nạp luôn, không hỏi.
+      var histArmed = false, histArmTimer = null;
+      function histDisarm() {
+        histArmed = false;
+        if (histArmTimer) { clearTimeout(histArmTimer); histArmTimer = null; }
+        reload.classList.remove('is-armed');
+        reload.textContent = 'Nạp script';
+      }
+      reload.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!els.script) return;
+        var cur  = els.script.value == null ? '' : String(els.script.value);
+        var next = h.script || '';
+        if (!histArmed && cur.trim() && cur.trim() !== next.trim()) {
+          histArmed = true;
+          reload.classList.add('is-armed');
+          reload.textContent = 'Ghi đè?';
+          histArmTimer = setTimeout(histDisarm, 4000);
+          return;
+        }
+        histDisarm();
+        els.script.value = next;
+        updateCharCount();
+        vgAutoResize(els.script);
+        vgReflowSoon(els.script);
+        setStatus('Đã nạp script của "' + (h.voiceLabel || h.voiceId) + '"', true);
+      });
+
+      list.appendChild(item);
+    });
+
+    if (hist.length > VG_HIST_SHOW) {
+      more.hidden = false;
+      more.textContent = vgHistExpanded ? 'Thu gọn' : ('Xem thêm (' + (hist.length - VG_HIST_SHOW) + ')');
+    } else {
+      more.hidden = true;
+    }
+  }
+
+  // Listener gắn NGOÀI hàm render: vgRenderHistory chạy lại mỗi lần gen, gắn bên
+  // trong sẽ chồng listener và một cú bấm toggle nhiều lần.
+  var vgHistMoreBtn = $('vgHistMore');
+  if (vgHistMoreBtn) {
+    piMakeButton(vgHistMoreBtn);
+    vgHistMoreBtn.addEventListener('click', function () {
+      vgHistExpanded = !vgHistExpanded;
+      vgRenderHistory();
+    });
   }
 
   // Custom save modal: lets the user type a filename while showing (and remembering)
@@ -10147,6 +10291,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   vgRenderProfiles();
+  vgRenderHistory();
 
   // Auto-refresh when key changes (called from Settings save handler)
   window.VoiceGenOnKeyChange = function() {

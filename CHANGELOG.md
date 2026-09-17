@@ -3,6 +3,27 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.7.0 / bridge app 3.10 (server 1.15.0) — 2026-09-17
+
+> Voice Gen nhớ những giọng đã dùng gần đây. **Không cần bridge mới** — thuần plugin.
+
+### ✨ Mới
+- **Section "Gần đây" trên sidebar phải** (ngay dưới Profile, chỉ hiện ở mode TTS): 3 lần gen gần nhất, mỗi mục là tên voice + đoạn đầu script để nhận ra "lần đó là bài nào". Nút **"Xem thêm"** giãn tại chỗ tối đa 20 mục.
+- **Click vào dòng = đổi lại voice đó.** Script đang soạn không bị đụng tới.
+- **Nút "Nạp script"** nạp lại script của lần gen đó. Ô đang có bài khác thì phải bấm hai lần (lần một nút đổi thành **"Ghi đè?"**, có 4 giây để bấm tiếp) — tránh đè mất bài đang viết.
+- **Nhãn Profile nằm cùng hàng với chip đổi profile**, tiết kiệm một dòng trên sidebar vốn đã hẹp.
+
+### 🔧 Kỹ thuật
+- Lưu ở `localStorage` key `vg_voice_history`: mảng `{voiceId, voiceLabel, script, ts}`, mới nhất đầu, cap 20, script cắt còn 200 ký tự. Trùng **cả** voiceId lẫn script thì gộp lên đầu thay vì sinh mục trùng. Ghi ở nhánh thành công của `generate()` khi `currentMode === 'tts'`, đọc `body.voiceId`/`body.text` (chính payload vừa gửi bridge) nên chắc chắn khớp audio vừa tạo.
+- **Lưu `voiceLabel` kèm `voiceId`, không chỉ id:** danh sách voice phụ thuộc API key, đổi profile hoặc key hết hạn thì `VG_VOICES_DATA` không còn voice đó — vẫn phải hiện tên đọc được thay vì một chuỗi id.
+- Multi-speaker **không** ghi history: một lần gen sẽ đẩy 3–4 mục, lấp sạch 3 slot hiển thị.
+
+### 🪤 Bẫy UXP gặp phải (nút "Nạp script" ban đầu bấm không ăn)
+- **Nút trong hàng phải có hộp kích thước tường minh.** Chỉ `flex: 0 0 auto` với nội dung là `<span>` inline bọc SVG thì UXP co nút lại gần 0 → gần như không có vùng bấm. Mẫu đúng là `.vg-dropItemPrev` (`width/height` + `display:inline-flex`).
+- **Không lồng `role="button"` trong `role="button"`.** Đặt lên cả hàng cha lẫn nút con thì sự kiện của cái bên trong bị nuốt. Mẫu `.vg-dropItem` để cha là div trơn.
+- **Không dùng `confirm()` native** — cả plugin chỉ có đúng 1 chỗ dùng và nằm ở đường ít đi qua, độ tin cậy trong UXP chưa rõ. Dùng xác nhận 2 bước `is-armed` như `elvArmed` (xoá voice) và `stDisarmClear` (xoá session) đã làm.
+- Biến CSS `--text-muted` được dùng 6 chỗ trong `styles.css` nhưng **chưa bao giờ được định nghĩa** (`.vg-dropItemPrev` là một trong số đó) — code mới tránh dùng; lỗi cũ chưa sửa.
+
 ## v5.6.5 / bridge app 3.10 (server 1.15.0) — 2026-09-15
 
 > Sửa 4 lỗi làm tính năng đính voice trong Autocut chết hẳn, trong đó có 1 lỗi khiến Bridge app treo cứng.
