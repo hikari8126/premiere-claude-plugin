@@ -207,13 +207,15 @@ echo "  📦 Bundling Claude Bridge.app inside installer..."
 CCX_TMP_FILE="plugin.ccx"
 [ -f "$CCX_TMP_FILE" ] && rm "$CCX_TMP_FILE"
 
+# Liệt kê từng file .js là cách watch.js bị bỏ quên khỏi CCX v5.8.0 (tab Watch
+# chết im trong bản phát hành) — đúng vết xe của autoset-names.js ở bridge 3.9.
+# Dùng glob plugin/*.js: thêm file mới không phải nhớ sửa chỗ này.
 # Build CCX first so we can embed it
 zip -j "$CCX_TMP_FILE" \
   plugin/manifest.json \
   plugin/index.html \
-  plugin/main.js \
   plugin/styles.css \
-  plugin/premiere-api.js \
+  plugin/*.js \
   -x "*.DS_Store" > /dev/null
 
 cp -r "${APP_DIR}"     "${INSTALLER_DIR}/Contents/Resources/Claude Bridge.app"
@@ -236,10 +238,20 @@ CCX_FILE="claude-ai-assistant-v${VERSION}.ccx"
 zip -j "$CCX_FILE" \
   plugin/manifest.json \
   plugin/index.html \
-  plugin/main.js \
   plugin/styles.css \
-  plugin/premiere-api.js \
+  plugin/*.js \
   -x "*.DS_Store"
+
+# Chốt chặn: mọi plugin/*.js phải nằm trong CCX. Thiếu một file là tính năng
+# tương ứng chết im trong bản phát hành mà build vẫn báo thành công.
+for f in plugin/*.js; do
+  base=$(basename "$f")
+  if ! unzip -l "$CCX_FILE" | grep -q " ${base}$"; then
+    echo "  ❌ CCX thiếu ${base} — dừng build"
+    exit 1
+  fi
+done
+echo "  ✅ CCX đủ $(ls plugin/*.js | wc -l | tr -d ' ') file .js của plugin"
 
 CCX_SIZE=$(du -sh "$CCX_FILE" | cut -f1)
 echo "  ✅ CCX: ${CCX_FILE}  (${CCX_SIZE})"
@@ -265,8 +277,8 @@ zip -r "$MANUAL_ZIP" \
   "$CCX_FILE" \
   plugin/manifest.json \
   plugin/index.html \
-  plugin/main.js \
   plugin/styles.css \
+  plugin/*.js \
   CLAUDE.md \
   README.md \
   -x "*.DS_Store" -x "__MACOSX/*"
