@@ -4412,3 +4412,60 @@ div[role="button"].vg-histReload.is-armed {
 .sac-autoTab.is-locked { opacity: 0.5; cursor: default; }
 .sac-autoTab.is-locked.is-running { opacity: 1; }
 /* ── /AUTO PAGE ── */
+
+/* ── Tab Watch Folder ───────────────────────────────────────────────────── */
+/* UXP: không position:fixed, không z-index, không display:grid.
+   Vùng cuộn phải là inner child (.wf-list) với flex:1 1 0 + min-height:0. */
+
+.wf-root { display: flex; flex-direction: column; height: 100%; }
+
+.wf-status { padding: 10px 12px; border-bottom: 1px solid #2a2438; flex: 0 0 auto; }
+.wf-status-line { display: flex; align-items: center; gap: 8px; }
+.wf-status-sub { margin-top: 4px; font-size: 11px; color: #8b8299; }
+.wf-spacer { flex: 1 1 auto; }
+
+.wf-dot { width: 8px; height: 8px; border-radius: 4px; background: #6b6478; flex: 0 0 auto; }
+.wf-dot.ok    { background: #4ade80; }
+.wf-dot.pause { background: #fbbf24; }
+.wf-dot.err   { background: #f87171; }
+
+.wf-list { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 8px 12px; }
+
+.wf-card { border: 1px solid #2a2438; border-radius: 6px; margin-bottom: 8px; background: #1a1626; }
+.wf-card.unavailable { border-color: #b4791f; }
+.wf-card.invalid     { border-color: #f87171; }
+.wf-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.wf-card-title { font-weight: 600; }
+.wf-card-path { font-size: 11px; color: #8b8299; padding: 0 10px 8px 10px; }
+.wf-card-body { padding: 8px 10px; border-top: 1px solid #2a2438; }
+.wf-card-body[hidden] { display: none; }
+
+.wf-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.wf-row label { flex: 0 0 96px; font-size: 11px; color: #a79ebb; }
+.wf-row input[type="text"], .wf-row input[type="number"] { flex: 1 1 auto; }
+
+.wf-btn { padding: 4px 10px; border-radius: 4px; background: #2a2438; cursor: pointer;
+          display: inline-block; font-size: 12px; }
+.wf-btn:hover { background: #362e4a; }
+.wf-btn-primary { background: #6d3ce0; }
+.wf-btn-primary:hover { background: #7f52e8; }
+.wf-btn-sm { font-size: 11px; padding: 2px 8px; }
+.wf-actions { flex: 0 0 auto; padding: 8px 12px; }
+
+/* Cây bin */
+.wf-tree { max-height: 180px; overflow-y: auto; border: 1px solid #2a2438;
+           border-radius: 4px; padding: 6px; margin-bottom: 8px; }
+.wf-tree-row { padding: 2px 4px; cursor: pointer; border-radius: 3px; font-size: 12px; }
+.wf-tree-row:hover { background: #2a2438; }
+.wf-tree-row.selected { background: #6d3ce0; }
+.wf-tree-new { color: #a78bfa; }
+.wf-bin-hint { font-size: 11px; color: #8b8299; }
+
+/* Nhật ký */
+.wf-log-wrap { flex: 0 0 auto; border-top: 1px solid #2a2438; }
+.wf-log-head { padding: 6px 12px; cursor: pointer; font-size: 12px; color: #a79ebb; }
+.wf-log-count { color: #8b8299; }
+.wf-log { max-height: 160px; overflow-y: auto; padding: 4px 12px 8px 12px;
+          font-size: 11px; font-family: monospace; }
+.wf-log-line { padding: 1px 0; color: #b9b1c8; }
+.wf-log-line.err { color: #f87171; }

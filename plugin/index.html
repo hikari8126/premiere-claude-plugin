@@ -34,6 +34,7 @@
   <div class="tab-btn active" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
   <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
   <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
+  <div class="tab-btn" role="button" data-tab="watch"><span data-ic="folder" data-ic-size="14"></span> WATCH</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -1564,6 +1565,42 @@
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- Single non-module script -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: WATCH FOLDER                                      -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-watch">
+  <div class="wf-root">
+
+    <!-- Thanh trạng thái -->
+    <div class="wf-status">
+      <div class="wf-status-line">
+        <span class="wf-dot" id="wfDot"></span>
+        <span id="wfStatusText">Chưa kết nối</span>
+        <span class="wf-spacer"></span>
+        <div class="wf-btn wf-btn-sm" id="wfPauseAll" role="button">Tạm dừng tất cả</div>
+      </div>
+      <div class="wf-status-sub" id="wfStatusSub"></div>
+    </div>
+
+    <!-- Danh sách watch: ĐÂY là vùng cuộn (inner child, không phải .wf-root) -->
+    <div class="wf-list" id="wfList"></div>
+
+    <div class="wf-actions">
+      <div class="wf-btn wf-btn-primary" id="wfAdd" role="button">+ Thêm thư mục theo dõi</div>
+    </div>
+
+    <!-- Nhật ký, mặc định gập -->
+    <div class="wf-log-wrap">
+      <div class="wf-log-head" id="wfLogHead" role="button">
+        <span id="wfLogCaret">▸</span> Nhật ký <span class="wf-log-count" id="wfLogCount"></span>
+      </div>
+      <div class="wf-log" id="wfLog" hidden></div>
+    </div>
+
+  </div>
+</div>
+
 <script src="main.js"></script>
+<script src="watch.js"></script>
 </body>
 </html>
