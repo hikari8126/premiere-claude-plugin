@@ -61,7 +61,8 @@ thành công thật. Premiere từ chối codec, panel reload giữa chừng →
 
 ### File trạng thái
 
-Cạnh `server.js`, cùng chỗ `hotkeys.json`:
+Trong `~/Library/Application Support/ClaudeBridge/` — cùng chỗ `hotkeys.json`, không
+nằm trong repo nên không bị mất khi cập nhật bridge:
 
 - `watchfolder-config.json` — `{ projectPath → [watch, ...] }`
 - `watchfolder-state.json` — snapshot mỗi watch + queue tồn + số lần retry
