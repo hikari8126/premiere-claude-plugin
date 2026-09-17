@@ -8507,6 +8507,97 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (typeof vgRenderHistory === 'function') vgRenderHistory();
   }
 
+  var vgHistExpanded = false;
+
+  // Dựng bằng DOM API (không innerHTML cho từng mục) — cùng lối với renderVoiceDrop.
+  // KHÔNG dùng attribute title="" làm tooltip: UXP không hỗ trợ.
+  function vgRenderHistory() {
+    var sec  = $('vgHistSection');
+    var list = $('vgHistList');
+    var more = $('vgHistMore');
+    if (!sec || !list || !more) return;
+
+    var hist = vgHistGet();
+    if (!hist.length || currentMode !== 'tts') { sec.hidden = true; return; }
+    sec.hidden = false;
+
+    var shown = vgHistExpanded ? hist.length : Math.min(VG_HIST_SHOW, hist.length);
+    list.innerHTML = '';
+
+    hist.slice(0, shown).forEach(function (h) {
+      var item = document.createElement('div');
+      item.className = 'vg-histItem';
+      item.setAttribute('role', 'button');
+      piMakeButton(item);
+
+      var textCol = document.createElement('div');
+      textCol.className = 'vg-histText';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'vg-histName';
+      nameEl.textContent = h.voiceLabel || h.voiceId;
+      textCol.appendChild(nameEl);
+
+      var scriptEl = document.createElement('div');
+      scriptEl.className = 'vg-histScript';
+      scriptEl.textContent = h.script || '(không có script)';
+      textCol.appendChild(scriptEl);
+
+      item.appendChild(textCol);
+
+      var reload = document.createElement('div');
+      reload.className = 'vg-histReload';
+      reload.setAttribute('role', 'button');
+      piMakeButton(reload);
+      piSetBtn(reload, 'rotate_left', null, null, 11);
+      item.appendChild(reload);
+
+      // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
+      // hiện có đều chạy. Script đang gõ không bị đụng tới.
+      textCol.addEventListener('click', function () {
+        vgSetVoice(h.voiceId);
+        var evt = document.createEvent('Event');
+        evt.initEvent('change', true, true);
+        if (els.voiceSelect) els.voiceSelect.dispatchEvent(evt);
+      });
+
+      // Nút ↺ = nạp lại script. Thao tác phá huỷ → hỏi trước khi đè bài đang soạn.
+      reload.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!els.script) return;
+        var cur = els.script.value == null ? '' : String(els.script.value);
+        var next = h.script || '';
+        if (cur.trim() && cur.trim() !== next.trim()) {
+          if (!confirm('Thay script đang soạn bằng script của lần gen này?')) return;
+        }
+        els.script.value = next;
+        updateCharCount();
+        vgAutoResize(els.script);
+        vgReflowSoon(els.script);
+      });
+
+      list.appendChild(item);
+    });
+
+    if (hist.length > VG_HIST_SHOW) {
+      more.hidden = false;
+      more.textContent = vgHistExpanded ? 'Thu gọn' : ('Xem thêm (' + (hist.length - VG_HIST_SHOW) + ')');
+    } else {
+      more.hidden = true;
+    }
+  }
+
+  // Listener gắn NGOÀI hàm render: vgRenderHistory chạy lại mỗi lần gen, gắn bên
+  // trong sẽ chồng listener và một cú bấm toggle nhiều lần.
+  var vgHistMoreBtn = $('vgHistMore');
+  if (vgHistMoreBtn) {
+    piMakeButton(vgHistMoreBtn);
+    vgHistMoreBtn.addEventListener('click', function () {
+      vgHistExpanded = !vgHistExpanded;
+      vgRenderHistory();
+    });
+  }
+
   // Custom save modal: lets the user type a filename while showing (and remembering)
   // the destination folder. Resolves to { dir, name } or null if cancelled.
   // Needed because UXP's native getFileForSaving cannot open at a remembered folder.
