@@ -20,6 +20,7 @@
     pollTimer: null,
     importing: false,
     sessionImported: 0,
+    perWatch: {},        // watchId → số file đã import phiên này (hiện trên badge)
     log: [],
     started: false,
   };
@@ -44,12 +45,12 @@
   }
 
   // ── Nhật ký ─────────────────────────────────────────────────────────────
-  function wfLog(text, isErr) {
+  function wfLog(text, isErr, dim) {
     var t = new Date();
     function p2(n) { return String(n).padStart(2, '0'); }
     wfState.log.unshift({
       time: p2(t.getHours()) + ':' + p2(t.getMinutes()) + ':' + p2(t.getSeconds()),
-      text: text, err: !!isErr,
+      text: text, err: !!isErr, dim: !!dim,
     });
     if (wfState.log.length > 200) wfState.log.length = 200;
     renderLog();
@@ -63,8 +64,11 @@
     box.innerHTML = '';
     wfState.log.forEach(function (l) {
       var d = document.createElement('div');
-      d.className = 'wf-log-line' + (l.err ? ' err' : '');
-      d.textContent = l.time + '  ' + l.text;
+      d.className = 'wf-log-line' + (l.err ? ' err' : (l.dim ? ' dim' : ''));
+      var t = document.createElement('span');
+      t.className = 'wf-log-time'; t.textContent = l.time;
+      d.appendChild(t);
+      d.appendChild(document.createTextNode(l.text));
       box.appendChild(d);
     });
   }
@@ -158,6 +162,7 @@
             skipped += 1;   // không spam nhật ký: đối chiếu có thể bỏ qua hàng trăm file
           } else {
             wfState.sessionImported += 1;
+            wfState.perWatch[it.watchId] = (wfState.perWatch[it.watchId] || 0) + 1;
             wfLog('✓ ' + baseName(it.filePath) + ' → ' + it.binPath);
           }
         } catch (e) {
@@ -170,7 +175,8 @@
     }
 
     await api('POST', '/watch/ack', { done: done, failed: failed });
-    if (skipped > 0) wfLog('· bỏ qua ' + skipped + ' file project đã có');
+    if (done.length - skipped > 0) renderWatches();   // badge số file trên thẻ
+    if (skipped > 0) wfLog('bỏ qua ' + skipped + ' file project đã có', false, true);
     if (done.length - skipped > 0) {
       api('POST', '/notify', {
         title: 'Watch Folder',
@@ -289,10 +295,12 @@
 
     dirs.forEach(function (d) {
       if (q && d.name.toLowerCase().indexOf(q) < 0) return;
+      // KHÔNG đặt role="button": styles.css có luật chung
+      // div[role="button"] { display: inline-flex } → mọi dòng chạy inline và
+      // dính thành một khối chữ.
       var row = document.createElement('div');
       row.className = 'sac-bind-row';
       row.style.paddingLeft = '8px';
-      row.setAttribute('role', 'button');
 
       var caret = document.createElement('span');
       caret.className = 'sac-bind-caret';
@@ -417,14 +425,42 @@
     var list = document.getElementById('wfList');
     if (!list) return;
     list.innerHTML = '';
+    if (!wfState.watches.length) {
+      var e = document.createElement('div');
+      e.className = 'wf-empty';
+      var t = document.createElement('div');
+      t.className = 'wf-empty-title';
+      t.textContent = 'Chưa theo dõi thư mục nào';
+      e.appendChild(t);
+      e.appendChild(document.createTextNode(
+        'Thêm một thư mục để file mới render xong tự vào bin. '
+        + 'File có sẵn từ trước không bị đụng tới — dùng nút Đối chiếu khi cần kéo lại.'));
+      list.appendChild(e);
+      return;
+    }
     wfState.watches.forEach(function (w) { list.appendChild(renderCard(w)); });
   }
 
-  function mkBtn(text, cls) {
+  function mkBtn(text, cls, icon) {
     var b = document.createElement('div');
     b.className = 'wf-btn ' + (cls || '');
     b.setAttribute('role', 'button');
-    b.textContent = text;
+    if (window.piMakeButton) window.piMakeButton(b);
+    if (icon && window.piSetBtn) window.piSetBtn(b, icon, text, null, 11);
+    else b.textContent = text;
+    return b;
+  }
+
+  // Nút chọn thư mục/bin: rộng hết hàng, canh trái, hiện mờ khi chưa chọn.
+  function mkPick(value, placeholder) {
+    var b = document.createElement('div');
+    b.className = 'wf-pick' + (value ? '' : ' is-empty');
+    b.setAttribute('role', 'button');
+    b.textContent = value || placeholder;
+    b.setPick = function (v) {
+      b.textContent = v || placeholder;
+      b.className = 'wf-pick' + (v ? '' : ' is-empty');
+    };
     return b;
   }
 
@@ -447,7 +483,7 @@
 
   function renderCard(w) {
     var card = document.createElement('div');
-    card.className = 'wf-card';
+    card.className = 'wf-card' + (w.enabled === false ? ' is-off' : '');
     card.setAttribute('data-id', w.id);
 
     var head = document.createElement('div');
@@ -455,16 +491,27 @@
 
     var chk = document.createElement('input');
     chk.type = 'checkbox'; chk.checked = w.enabled !== false;
-    chk.addEventListener('change', function () { w.enabled = chk.checked; saveConfig(); });
+    chk.addEventListener('change', function () {
+      w.enabled = chk.checked; saveConfig(); renderWatches();
+    });
 
     var title = document.createElement('div');
     title.className = 'wf-card-title'; title.textContent = w.label || 'Watch';
 
-    var spacer = document.createElement('div'); spacer.className = 'wf-spacer';
+    // Badge nói ngay tình trạng: chưa cấu hình xong / đang tắt / số file đã import.
+    var badge = document.createElement('div');
+    if (!w.folder || !w.binPath) {
+      badge.className = 'wf-badge warn'; badge.textContent = 'chưa xong';
+    } else if (w.enabled === false) {
+      badge.className = 'wf-badge'; badge.textContent = 'tắt';
+    } else {
+      badge.className = 'wf-badge';
+      badge.textContent = (wfState.perWatch[w.id] || 0) + ' file';
+    }
 
     // "Đối chiếu" chứ không phải "Quét ngay": nó so thư mục với project và import
     // những file còn thiếu, kể cả file đã nằm sẵn từ trước khi tạo watch.
-    var scanNow = mkBtn('Đối chiếu', 'wf-btn-sm');
+    var scanNow = mkBtn('Đối chiếu', 'wf-btn-sm', 'rotate_right');
     scanNow.addEventListener('click', async function () {
       scanNow.textContent = 'Đang đối chiếu…';
       var r = await api('POST', '/watch/scan-now', { watchId: w.id });
@@ -474,20 +521,26 @@
         + ' file cần kiểm tra, import cái nào project còn thiếu');
     });
 
-    var edit = mkBtn('Sửa', 'wf-btn-sm');
-    var del  = mkBtn('Xoá', 'wf-btn-sm');
+    var edit = mkBtn('Sửa', 'wf-btn-sm', 'gear');
+    var del  = mkBtn('', 'wf-btn-sm wf-btn-danger', 'trash');
     del.addEventListener('click', function () {
       wfState.watches = wfState.watches.filter(function (x) { return x.id !== w.id; });
       saveConfig(); renderWatches();
     });
 
-    head.appendChild(chk); head.appendChild(title); head.appendChild(spacer);
+    head.appendChild(chk); head.appendChild(title); head.appendChild(badge);
     head.appendChild(scanNow); head.appendChild(edit); head.appendChild(del);
 
     var pathLine = document.createElement('div');
     pathLine.className = 'wf-card-path';
-    pathLine.textContent = (w.folder || '(chưa chọn thư mục)')
-      + '  →  ' + (w.binPath || '(chưa chọn bin)');
+    pathLine.appendChild(document.createTextNode(w.folder || '(chưa chọn thư mục)'));
+    var arrow = document.createElement('span');
+    arrow.className = 'wf-arrow'; arrow.textContent = '→';
+    pathLine.appendChild(arrow);
+    var binSpan = document.createElement('span');
+    binSpan.className = 'wf-bin';
+    binSpan.textContent = w.binPath ? toBinName(w.binPath) : '(chưa chọn bin)';
+    pathLine.appendChild(binSpan);
 
     var body = renderForm(w);
     body.hidden = !!(w.folder && w.binPath);   // watch chưa xong thì mở sẵn form
@@ -511,7 +564,7 @@
     body.appendChild(row('Tên', nameIn));
 
     // Thư mục
-    var pickFolder = mkBtn(w.folder || 'Chọn thư mục…');
+    var pickFolder = mkPick(w.folder, 'Chọn thư mục…');
     pickFolder.addEventListener('click', function () {
       wfPickFolder({
         start: w.folder || null,          // sửa watch cũ thì mở lại đúng chỗ đang trỏ
@@ -527,7 +580,7 @@
     // Bin đích — mượn modal chọn bin của Voice Gen (window.vgPickBin): nó đã có
     // cây gập/mở, sort tự nhiên (1x < 2x < 10x), tạo bin con và ô lọc. Tự vẽ lại
     // chỉ để có một cây kém hơn và lệch hành vi với phần còn lại của plugin.
-    var binLine = mkBtn(w.binPath ? toBinName(w.binPath) : 'Chọn bin…');
+    var binLine = mkPick(w.binPath ? toBinName(w.binPath) : '', 'Chọn bin…');
     var hint = document.createElement('div');
     hint.className = 'wf-bin-hint';
 
@@ -543,7 +596,7 @@
           // Modal trả full path phân tách ' / '; watch lưu bằng '/'.
           w.binPath = String(full).split(' / ').map(function (x) { return x.trim(); })
             .filter(Boolean).join('/');
-          binLine.textContent = toBinName(w.binPath);
+          binLine.setPick(toBinName(w.binPath));
           hint.textContent = '';
           saveConfig(); renderWatches();
         },
@@ -631,6 +684,7 @@
 
   // ── Gắn sự kiện ─────────────────────────────────────────────────────────
   var addBtn = document.getElementById('wfAdd');
+  if (addBtn && window.piSetBtn) window.piSetBtn(addBtn, 'plus', 'Thêm thư mục theo dõi', null, 12);
   if (addBtn) addBtn.addEventListener('click', function () {
     wfState.watches.push(newWatch());
     renderWatches();
