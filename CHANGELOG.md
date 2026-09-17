@@ -3,9 +3,11 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.8.0 / bridge server 1.16.0 — 2026-09-17
+## v5.8.0-beta.1 / bridge server 1.16.0-beta.1 — 2026-09-17
 
 > Tab **Watch**: theo dõi thư mục, tự import file mới vào bin. **Cần bridge ≥1.16.0.**
+> **CHƯA RELEASE** — bản beta, phần plugin chưa chạy thử trong Premiere.
+> `manifest.json` cố tình giữ `5.8.0` không hậu tố: Adobe CC báo error -4 khi cài `.ccx` có pre-release suffix (xem commit 60bdac4).
 
 ### ✨ Mới
 - **Tab Watch Folder.** Nhiều thư mục cùng lúc, mỗi thư mục có bin đích riêng, lọc theo loại file + regex, mirror subfolder thành bin con tương ứng.
