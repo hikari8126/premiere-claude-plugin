@@ -8,7 +8,7 @@ const os   = require('os');
 const autosubLog = require('./autosub-log');   // ghi report mỗi lần auto sub
 
 const app  = express();
-const PORT = 3030;
+const PORT = Number(process.env.PORT) || 3030;
 
 app.use(cors({
   origin: ['http://localhost:3030', 'http://127.0.0.1:3030', 'null', '*'],
@@ -2960,7 +2960,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.15.0';  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.16.0';  // Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -3299,6 +3299,88 @@ app.get('/unnest/premiere-shortcuts', (_req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message, shortcuts: [] }); }
 });
 
+// ── Watch folder: tự động import file mới vào bin ───────────────────────────
+// Engine không biết gì về Premiere; nó chỉ sinh hàng đợi đường dẫn file, plugin
+// poll về rồi gọi project.importFiles().
+// Thiết kế: docs/superpowers/specs/2026-09-17-watch-folder-auto-import-design.md
+const wfStore  = require('./watchfolder-store.js');
+const wfRules  = require('./watchfolder-rules.js');
+const { createEngine } = require('./watchfolder.js');
+
+if (process.env.WATCHFOLDER_DIR) wfStore.setDir(process.env.WATCHFOLDER_DIR);
+
+const watchEngine = createEngine({});
+let watchTimer = null;
+
+function watchLoop() {
+  clearTimeout(watchTimer);
+  watchEngine.tick();
+  watchTimer = setTimeout(watchLoop, watchEngine.nextDelay());
+}
+
+app.post('/watch/session/start', (req, res) => {
+  try {
+    const p = (req.body && req.body.projectPath) || '';
+    if (!p) return res.status(400).json({ ok: false, error: 'thiếu projectPath' });
+    const info = watchEngine.start(p);
+    clearTimeout(watchTimer);
+    watchTimer = setTimeout(watchLoop, watchEngine.nextDelay());
+    res.json({ ok: true, watches: info.watches, queued: info.queued });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/watch/session/stop', (_req, res) => {
+  try {
+    clearTimeout(watchTimer); watchTimer = null;
+    watchEngine.stop();
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/watch/poll', (_req, res) => {
+  try {
+    const out = watchEngine.poll(20);
+    res.json({ ok: true, items: out.items, stats: out.stats });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/watch/ack', (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(Object.assign({ ok: true }, watchEngine.ack(b.done || [], b.failed || [])));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get('/watch/config', (req, res) => {
+  try {
+    const p = req.query.projectPath || '';
+    if (!p) return res.status(400).json({ ok: false, error: 'thiếu projectPath' });
+    res.json({ ok: true, watches: wfStore.readConfig(p) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/watch/config', (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.projectPath) return res.status(400).json({ ok: false, error: 'thiếu projectPath' });
+    const list = Array.isArray(b.watches) ? b.watches : [];
+    // Validate trước khi ghi: regex sai mà lọt vào file thì watch im lặng
+    // import nhầm hoặc ném mỗi lượt quét.
+    for (const w of list) {
+      const v = wfRules.validateWatch(w);
+      if (!v.ok) return res.json({ ok: false, error: (w.label || w.id || '?') + ': ' + v.error });
+    }
+    wfStore.writeConfig(b.projectPath, list);
+    res.json({ ok: true, watches: list });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/watch/scan-now', (req, res) => {
+  try {
+    res.json(watchEngine.scanNow((req.body && req.body.watchId) || ''));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────
 if (require.main === module) {
   app.listen(PORT, '127.0.0.1', () => {
@@ -3306,4 +3388,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = Object.assign(module.exports || {}, { buildMultipartBody, buildNotifyScript });
+module.exports = Object.assign(module.exports || {}, { buildMultipartBody, buildNotifyScript, app, watchEngine });
