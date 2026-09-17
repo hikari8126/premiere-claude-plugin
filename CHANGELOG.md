@@ -39,6 +39,7 @@
 ### ✨ Mới
 - **History theo lần gen.** Trước đây một mục = một cặp voice+script và bị gộp trùng, nên gen lại cùng script là mất đường vào output cũ — dù file mp3 vẫn nằm nguyên trên đĩa, chỉ là `lastVariations` bị ghi đè.
 - **Mỗi mục có 4 nút**: ▶ nghe ngay trong sidebar, **Import** vào project, **Mở lại** đưa nguyên lần gen lên khu kết quả (đủ Import / Timeline / Autocut), **Nạp script** như cũ.
+- **History lưu TRỌN script.** v5.7.0 cắt còn 200 ký tự vì script khi đó chỉ dùng để nhận ra mục; từ khi có nút "Nạp script" thì cắt = nạp thiếu chữ. Giờ lưu đủ (trần 20k ký tự), chỉ cắt khi hiển thị. Mục tạo trước bản này đã mất phần đuôi, không khôi phục được. Kèm theo: hết quota localStorage thì bỏ bớt mục cũ rồi thử lại, và báo lên status nếu vẫn không lưu được — trước đây lỗi bị nuốt nên history âm thầm ngừng lưu.
 - **Đánh số lượt.** Trùng cả voice lẫn script thì hiện `Adam · lần 3` thay vì gộp làm một.
 - **Thanh điều hướng `◀ Lần gen 3/12 ▶`** ở khu kết quả, lật qua lại giữa các lần gen của mode đang mở.
 - **Multi-speaker và Voice Changer cũng vào history** — cả hai đều ghi đè `lastVariations` nên trước đây cũng mất output y hệt.

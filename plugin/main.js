@@ -8508,7 +8508,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var VG_HIST_KEY  = 'vg_voice_history';
   var VG_HIST_CAP  = 20;   // số mục lưu tối đa
   var VG_HIST_SHOW = 3;    // số mục hiện khi chưa bấm "Xem thêm"
-  var VG_HIST_SNIP = 200;  // độ dài script lưu lại (đủ nhận ra, không phình localStorage)
+  // Lưu TRỌN script, không cắt. Bản 5.7.0 cắt còn 200 ký tự vì script chỉ dùng để
+  // nhận ra mục; từ khi có nút "Nạp script" thì cắt = nạp thiếu chữ. Trần 20k ký
+  // tự chỉ để chặn trường hợp bệnh lý — ElevenLabs cũng không nhận quá dài.
+  var VG_HIST_SNIP = 20000;
 
   function vgHistGet() {
     try {
@@ -8548,7 +8551,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       seen[k] = (seen[k] || 0) + 1;
       return seen[k] <= VG_HIST_CAP;
     });
-    try { localStorage.setItem(VG_HIST_KEY, JSON.stringify(list)); } catch (e) {}
+    // Script đầy đủ nặng hơn hẳn bản cắt 200 ký tự, nên phải lường quota.
+    // Nuốt lỗi như trước là history im lặng ngừng lưu, không ai biết.
+    try {
+      localStorage.setItem(VG_HIST_KEY, JSON.stringify(list));
+    } catch (e) {
+      var trimmed = list.slice(0, Math.max(3, Math.floor(list.length / 2)));
+      try {
+        localStorage.setItem(VG_HIST_KEY, JSON.stringify(trimmed));
+        list = trimmed;
+      } catch (e2) {
+        if (typeof setStatus === 'function') {
+          setStatus('⚠ History đầy bộ nhớ, không lưu được lần gen này', false);
+        }
+      }
+    }
     if (typeof vgRenderHistory === 'function') vgRenderHistory();
   }
 
@@ -8682,7 +8699,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       var scriptEl = document.createElement('div');
       scriptEl.className = 'vg-histScript';
-      scriptEl.textContent = h.script || '(không có script)';
+      // Chỉ CẮT KHI HIỂN THỊ. Dữ liệu vẫn giữ nguyên để "Nạp script" nạp đủ.
+      var sTxt = h.script || '';
+      scriptEl.textContent = sTxt ? sTxt.slice(0, 160) : '(không có script)';
       textCol.appendChild(scriptEl);
 
       topRow.appendChild(textCol);
