@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "for f in test/*.test.js; do echo \"→ $f\"; node \"$f\" || exit 1; done; echo 'ALL TESTS PASSED'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
