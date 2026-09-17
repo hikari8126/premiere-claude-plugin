@@ -99,7 +99,8 @@ Chạy theo thứ tự, dừng ở lần loại đầu tiên:
    `.proxy`.
 2. **Preset đuôi file**, chọn nhiều: `video` (mp4 mov mxf mkv avi r3d braw),
    `audio` (wav mp3 aac aiff flac), `image` (jpg png tif psd exr dng), `all`.
-3. **includeRegex** — khớp trên tên file, không phải full path.
+3. **includeRegex** — khớp trên tên file **không kèm đuôi**, không phải full path.
+   (`_proxy$` khớp `a_proxy.mp4`; nếu soi cả đuôi thì luật quen thuộc này lại trượt.)
 4. **excludeRegex** — loại.
 5. **Kiểm tra ổn định** — `size` và `mtime` không đổi qua `stableChecks` lượt quét
    liên tiếp. File 0 byte luôn bị hoãn.

@@ -231,10 +231,12 @@ function matchFile(w, relPath) {
     if (!hit) return false;
   }
 
-  // 3 + 4. Regex chỉ soi TÊN FILE. Soi cả path sẽ khiến tên thư mục cha
-  // vô tình khớp và lọc sai hàng loạt.
-  if (w.includeRegex && !new RegExp(w.includeRegex).test(name)) return false;
-  if (w.excludeRegex && new RegExp(w.excludeRegex).test(name)) return false;
+  // 3 + 4. Regex soi TÊN FILE KHÔNG KÈM ĐUÔI. Soi cả path thì tên thư mục cha
+  // vô tình khớp và lọc sai hàng loạt; soi cả đuôi thì luật quen thuộc nhất
+  // ('_proxy$') lại không khớp 'a_proxy.mp4'.
+  const stem = ext ? name.slice(0, -ext.length) : name;
+  if (w.includeRegex && !new RegExp(w.includeRegex).test(stem)) return false;
+  if (w.excludeRegex && new RegExp(w.excludeRegex).test(stem)) return false;
 
   return true;
 }
