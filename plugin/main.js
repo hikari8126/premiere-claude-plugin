@@ -10717,7 +10717,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Own clones only: exclude premade AND library/shared voices (they carry a
       // `sharing` object and don't occupy your clone slots).
       elvVoices = voices.filter(function (v) { return v.category !== 'premade' && !v.sharing; })
-        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
+        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '', created: (typeof v.created_at_unix === 'number' ? v.created_at_unix : null) }; });
       elvSelected = {};
     } catch (e) {
       if (slot) { slot.textContent = 'Lỗi tải voices: ' + (e && e.message ? e.message : String(e)); slot.className = 'elv-slot elv-err'; }
@@ -10750,7 +10750,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     else { btn.textContent = 'Xoá đã chọn (' + n + ')'; btn.classList.remove('is-armed'); }
   }
   // Rebuilt only on fetch/delete (never on keystroke) — search uses elvFilterRows.
+  function elvSortMode() {
+    var m = localStorage.getItem('elv_sort_mode');
+    return (m === 'oldest' || m === 'name_az' || m === 'name_za') ? m : 'newest';
+  }
+  function elvSortVoices() {
+    var cmp = (typeof window !== 'undefined' && window.elvSortComparator) ? window.elvSortComparator : elvSortComparator;
+    elvVoices.sort(cmp(elvSortMode()));
+  }
   function elvRenderList() {
+    elvSortVoices();
     var list = $('elvVoiceList'); if (!list) return;
     list.innerHTML = '';
     if (!elvVoices.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có voice clone)</div>'; elvUpdateDeleteBtn(); return; }
@@ -10821,6 +10830,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       es.addEventListener('compositionstart', function () { composing = true; });
       es.addEventListener('compositionend', function () { composing = false; elvFilterRows(es.value); });
       es.addEventListener('input', function () { if (!composing) elvFilterRows(es.value); });
+    }
+    var ss = $('elvSortSel');
+    if (ss) {
+      ss.value = elvSortMode();
+      ss.addEventListener('change', function () {
+        localStorage.setItem('elv_sort_mode', ss.value);
+        elvRenderList();
+      });
     }
     document.querySelectorAll('.settings-tab').forEach(function (t) {
       if (t.getAttribute('data-stab') === 'voicegen') t.addEventListener('click', function () { elvFetchState(); });
