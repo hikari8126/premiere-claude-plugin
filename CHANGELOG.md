@@ -42,6 +42,18 @@ bàn phím.
 ### 🔧 Kỹ thuật
 - Parser thuần tách ra `plugin/csv-parse.js` (`csvParse` + `csvRowsToSac`), có **node test** `bridge/test/csv-import.test.js` (dấu phẩy/xuống dòng/`""` trong ô, ghép time, thiếu cột). Tái dùng `window.AutocutPushRows()` + `expandRows` sẵn có.
 - **Không đụng** `parseTSV`/paste Google Sheet.
+## v5.9.1 — 2026-09-24
+
+> Chỉ sửa plugin. **Không cần bridge mới.**
+
+**Voice Gen: sắp xếp list voice clone (Settings).**
+
+### ✅ Thêm mới
+- **Hàng 2 nút icon** sắp xếp list voice clone (thay dropdown): icon **thời gian tạo** (🕐) và **tên** (A→Z). Bấm nút chiều khác → chuyển sang; bấm nút đang active → đảo chiều (↓ mới/A→Z ↔ ↑ cũ/Z→A). 4 chế độ: Mới nhất (mặc định) / Cũ nhất (theo `created_at_unix`) / Tên A→Z / Z→A; nhớ qua `localStorage['elv_sort_mode']`.
+- Voice API không trả thời gian tạo → xếp cuối; sort theo tên vẫn chạy. Xoá/search giữ nguyên.
+
+### 🔧 Kỹ thuật
+- Hàm so sánh thuần `plugin/elv-sort.js` (`elvSortComparator`) + node test `bridge/test/elv-sort.test.js`. `elvFetchState` giữ thêm `created`; `elvRenderList` sort trước khi dựng rows.
 
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 

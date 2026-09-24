@@ -15,6 +15,8 @@ try { ppro = require('premierepro'); } catch(e) { console.warn('premierepro not 
 // each <path fill>. Put <i data-ic="NAME"> in HTML (optionally data-ic-size /
 // data-ic-color); pluginRenderIcons() fills them. For JS use pluginIconSVG().
 var PI_ICONS = {
+    clock: { vb: '0 0 512 512', d: 'M256 0a256 256 0 1 1 0 512A256 256 0 1 1 256 0zM232 120l0 136c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2 280 120c0-13.3-10.7-24-24-24s-24 10.7-24 24z', c: '#c9c4d6' },
+    arrow_down_a_z: { vb: '0 0 576 512', d: 'M183.6 469.6C177.5 476.2 168.9 480 160 480s-17.5-3.8-23.6-10.4l-88-96c-11.9-13-11.1-33.3 2-45.2s33.3-11.1 45.2 2L128 365.7 128 64c0-17.7 14.3-32 32-32s32 14.3 32 32l0 301.7 32.4-35.4c11.9-13 32.2-13.9 45.2-2s13.9 32.2 2 45.2l-88 96zM320 64l128 0c13.3 0 25.1 8.2 29.8 20.6s1.4 26.5-8.4 35.4L396.9 192l51.1 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-128 0c-13.3 0-25.1-8.2-29.8-20.6s-1.4-26.5 8.4-35.4L371.1 128 320 128c-17.7 0-32-14.3-32-32s14.3-32 32-32zM416 288l32 0c12.1 0 23.2 6.8 28.6 17.7l64 128c7.9 15.8 1.5 35-14.3 42.9s-35 1.5-42.9-14.3l-1.2-2.4-76.5 0-1.2 2.4c-7.9 15.8-27.1 22.2-42.9 14.3s-22.2-27.1-14.3-42.9l64-128c5.4-10.8 16.5-17.7 28.6-17.7zM416 375.4L406.3 400l19.4 0L416 375.4z', c: '#c9c4d6' },
     arrow_right: { vb: '0 0 448 512', d: 'M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z', c: '#cbd5e1' },
     audio: { vb: '0 0 512 512', d: 'M499.1 6.3c8.1 6 12.9 15.6 12.9 25.7v72V368c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V147L192 223.8V432c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V200 128c0-14.1 9.3-26.6 22.8-30.7l320-96c9.7-2.9 20.2-1.1 28.3 5z', c: '#a855f7' },
     bolt: { vb: '0 0 448 512', d: 'M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288l111.5 0L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7l-111.5 0L349.4 44.6z', c: '#c084fc' },
@@ -10768,7 +10770,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Own clones only: exclude premade AND library/shared voices (they carry a
       // `sharing` object and don't occupy your clone slots).
       elvVoices = voices.filter(function (v) { return v.category !== 'premade' && !v.sharing; })
-        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
+        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '', created: (typeof v.created_at_unix === 'number' ? v.created_at_unix : null) }; });
       elvSelected = {};
     } catch (e) {
       if (slot) { slot.textContent = 'Lỗi tải voices: ' + (e && e.message ? e.message : String(e)); slot.className = 'elv-slot elv-err'; }
@@ -10801,7 +10803,42 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     else { btn.textContent = 'Xoá đã chọn (' + n + ')'; btn.classList.remove('is-armed'); }
   }
   // Rebuilt only on fetch/delete (never on keystroke) — search uses elvFilterRows.
+  function elvSortMode() {
+    var m = localStorage.getItem('elv_sort_mode');
+    return (m === 'oldest' || m === 'name_az' || m === 'name_za') ? m : 'newest';
+  }
+  function elvSortVoices() {
+    var cmp = (typeof window !== 'undefined' && window.elvSortComparator) ? window.elvSortComparator : elvSortComparator;
+    elvVoices.sort(cmp(elvSortMode()));
+  }
+  // Cập nhật 2 nút icon sort: nút của chiều đang active sáng lên + hiện mũi tên (↓ mới/A→Z,
+  // ↑ cũ/Z→A); nút kia mờ. Chiều suy ra từ elvSortMode().
+  function elvRenderSortBtns() {
+    var mode = elvSortMode();
+    var timeActive = (mode === 'newest' || mode === 'oldest');
+    var nameActive = (mode === 'name_az' || mode === 'name_za');
+    function setBtn(btn, active, arrow, tip) {
+      if (!btn) return;
+      btn.classList.toggle('is-active', active);
+      var d = btn.querySelector('.elv-sortDir');
+      if (d) d.textContent = active ? arrow : '';
+      btn.setAttribute('title', tip);
+    }
+    setBtn($('elvSortTime'), timeActive, (mode === 'oldest' ? '↑' : '↓'),
+      timeActive ? (mode === 'oldest' ? 'Thời gian tạo: cũ nhất trước (bấm để đảo)'
+                                      : 'Thời gian tạo: mới nhất trước (bấm để đảo)')
+                 : 'Sắp theo thời gian tạo');
+    setBtn($('elvSortName'), nameActive, (mode === 'name_za' ? '↑' : '↓'),
+      nameActive ? (mode === 'name_za' ? 'Tên: Z→A (bấm để đảo)' : 'Tên: A→Z (bấm để đảo)')
+                 : 'Sắp theo tên');
+  }
+  function elvSetSort(mode) {
+    localStorage.setItem('elv_sort_mode', mode);
+    elvRenderList();
+    elvRenderSortBtns();
+  }
   function elvRenderList() {
+    elvSortVoices();
     var list = $('elvVoiceList'); if (!list) return;
     list.innerHTML = '';
     if (!elvVoices.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có voice clone)</div>'; elvUpdateDeleteBtn(); return; }
@@ -10893,6 +10930,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       es.addEventListener('compositionend', function () { composing = false; elvScheduleFilter(); });
       es.addEventListener('input', function () { if (!composing) elvScheduleFilter(); });
     }
+    // 2 nút icon sort thay dropdown. Bấm nút chiều KHÁC → chuyển sang chiều đó (mặc định
+    // thời gian=mới nhất, tên=A→Z); bấm nút chiều ĐANG active → đảo chiều.
+    var tsb = $('elvSortTime');
+    if (tsb) tsb.addEventListener('click', function () {
+      var m = elvSortMode();
+      elvSetSort(m === 'newest' ? 'oldest' : (m === 'oldest' ? 'newest' : 'newest'));
+    });
+    var nsb = $('elvSortName');
+    if (nsb) nsb.addEventListener('click', function () {
+      var m = elvSortMode();
+      elvSetSort(m === 'name_az' ? 'name_za' : (m === 'name_za' ? 'name_az' : 'name_az'));
+    });
+    elvRenderSortBtns();
     document.querySelectorAll('.settings-tab').forEach(function (t) {
       if (t.getAttribute('data-stab') === 'voicegen') t.addEventListener('click', function () { elvFetchState(); });
     });
