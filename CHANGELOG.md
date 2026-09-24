@@ -3,6 +3,19 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.9.1 — 2026-09-24
+
+> Chỉ sửa plugin. **Không cần bridge mới.**
+
+**Voice Gen: sắp xếp list voice clone (Settings).**
+
+### ✅ Thêm mới
+- `<select>` sắp xếp list voice clone: **Mới nhất** (mặc định) / Cũ nhất (theo thời gian tạo `created_at_unix`) / Tên A→Z / Z→A. Nhớ lựa chọn qua `localStorage['elv_sort_mode']`.
+- Voice API không trả thời gian tạo → xếp cuối; sort theo tên vẫn chạy. Xoá/search giữ nguyên.
+
+### 🔧 Kỹ thuật
+- Hàm so sánh thuần `plugin/elv-sort.js` (`elvSortComparator`) + node test `bridge/test/elv-sort.test.js`. `elvFetchState` giữ thêm `created`; `elvRenderList` sort trước khi dựng rows.
+
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 
 ### 🐛 Sửa — "AI không ghép được (model không trả về JSON array)"
