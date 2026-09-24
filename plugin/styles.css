@@ -1057,6 +1057,14 @@ div[role="button"] > .p-ic:only-child { margin-right: 0; }
 }
 .sac-scriptClearBtn:hover { background: rgba(239,68,68,0.22); color: #fff; }
 
+.sac-csvBtn {
+  margin-left: auto; margin-right: 6px; flex: 0 0 auto;
+  background: rgba(168,85,247,0.14); border: 1px solid rgba(168,85,247,0.45);
+  color: #c4b5fd; border-radius: 5px; padding: 2px 8px; font-size: 10px; cursor: pointer;
+}
+.sac-csvBtn:hover { background: rgba(168,85,247,0.26); color: #fff; }
+.sac-csvBtn.is-armed { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.6); color: #fff; }
+
 /* Validate → gen-voice confirm popup */
 .sac-confirm-modal {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;

@@ -27,6 +27,21 @@ keyboard trước đều regress.
 Debug tạm (log `keydown/input/selection`) cho thấy: focus luôn ở ô, keystroke `isTrusted`; khi
 **tắt lọc** thì `in:` tăng đều không nuốt → khoanh vùng đúng thủ phạm là reflow do lọc, không phải
 bàn phím.
+## v5.9.0 — 2026-09-24
+
+> Chỉ sửa plugin. **Không cần bridge mới.**
+
+**Autocut: nạp script từ file CSV (nút ＋CSV).** Bổ sung cạnh cách paste Google Sheet (giữ nguyên).
+
+### ✅ Thêm mới
+- Nút **＋CSV** trong header Script của Autocut → chọn file `.csv` → nạp thẳng vào bảng.
+- Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (**bỏ đuôi video** .mp4/.mov/.m4v… ở cuối, giữ nguyên `[id]`).
+- text_overlay nhiều dòng → gộp 1 dòng; ghi đè bảng dùng **arm 2 bước** (bấm lại trong 4s).
+- Thiếu cột bắt buộc (`text_overlay`/`footage_name`/`shot_start`) → báo lỗi, không nạp.
+
+### 🔧 Kỹ thuật
+- Parser thuần tách ra `plugin/csv-parse.js` (`csvParse` + `csvRowsToSac`), có **node test** `bridge/test/csv-import.test.js` (dấu phẩy/xuống dòng/`""` trong ô, ghép time, thiếu cột). Tái dùng `window.AutocutPushRows()` + `expandRows` sẵn có.
+- **Không đụng** `parseTSV`/paste Google Sheet.
 
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 

@@ -7469,6 +7469,57 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
   });
 
+  // ── Autocut: nạp script từ CSV (không đụng logic paste Google Sheet) ──────
+  var sacCsvArmed = false, sacCsvArmTimer = null;
+  function sacBoardHasData() {
+    var body = $('sacBody'); if (!body) return false;
+    var fields = body.querySelectorAll('textarea, input');
+    for (var i = 0; i < fields.length; i++) {
+      if ((fields[i].value || '').trim()) return true;
+    }
+    return false;
+  }
+  function sacDisarmCsv() {
+    sacCsvArmed = false;
+    if (sacCsvArmTimer) { clearTimeout(sacCsvArmTimer); sacCsvArmTimer = null; }
+    var b = $('sacCsvImport');
+    if (b) { b.classList.remove('is-armed'); b.textContent = '＋ CSV'; }
+  }
+  async function sacDoImportCsv() {
+    var st = $('sacStatus');
+    function say(msg) { if (st) { st.textContent = msg; st.style.display = 'block'; } }
+    try {
+      var uxp = require('uxp');
+      var file = await uxp.storage.localFileSystem.getFileForOpening({ types: ['csv'] });
+      if (!file) return; // user huỷ
+      var text = await file.read();
+      var parse = (typeof window !== 'undefined' && window.csvParse) ? window.csvParse : csvParse;
+      var toSac = (typeof window !== 'undefined' && window.csvRowsToSac) ? window.csvRowsToSac : csvRowsToSac;
+      var res = toSac(parse(text));
+      if (res.error) { say('⚠ ' + res.error); return; }
+      if (!res.rows.length) { say('⚠ CSV không có dòng dữ liệu nào.'); return; }
+      if (typeof window.AutocutPushRows === 'function') window.AutocutPushRows(res.rows);
+      say('✓ Đã nạp ' + res.rows.length + ' scene từ CSV.');
+    } catch (err) {
+      say('❌ Lỗi đọc CSV: ' + (err && err.message ? err.message : err));
+    }
+  }
+  function sacOnCsvClick(e) {
+    if (e) e.stopPropagation(); // đừng toggle collapse
+    // Ghi đè bảng đang có dữ liệu → arm 2 bước
+    if (sacBoardHasData() && !sacCsvArmed) {
+      sacCsvArmed = true;
+      var b = $('sacCsvImport');
+      if (b) { b.textContent = 'Ghi đè? bấm lại'; b.classList.add('is-armed'); }
+      sacCsvArmTimer = setTimeout(sacDisarmCsv, 4000);
+      return;
+    }
+    sacDisarmCsv();
+    sacDoImportCsv();
+  }
+  var sacCsvBtnEl = $('sacCsvImport');
+  if (sacCsvBtnEl) sacCsvBtnEl.addEventListener('click', sacOnCsvClick);
+
   // ── Init: 3 empty rows ───────────────────────────────────────────────────
   createRow(); createRow(); createRow();
 
