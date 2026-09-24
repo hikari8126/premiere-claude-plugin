@@ -10,7 +10,7 @@
 **Voice Gen: sắp xếp list voice clone (Settings).**
 
 ### ✅ Thêm mới
-- `<select>` sắp xếp list voice clone: **Mới nhất** (mặc định) / Cũ nhất (theo thời gian tạo `created_at_unix`) / Tên A→Z / Z→A. Nhớ lựa chọn qua `localStorage['elv_sort_mode']`.
+- **Hàng 2 nút icon** sắp xếp list voice clone (thay dropdown): icon **thời gian tạo** (🕐) và **tên** (A→Z). Bấm nút chiều khác → chuyển sang; bấm nút đang active → đảo chiều (↓ mới/A→Z ↔ ↑ cũ/Z→A). 4 chế độ: Mới nhất (mặc định) / Cũ nhất (theo `created_at_unix`) / Tên A→Z / Z→A; nhớ qua `localStorage['elv_sort_mode']`.
 - Voice API không trả thời gian tạo → xếp cuối; sort theo tên vẫn chạy. Xoá/search giữ nguyên.
 
 ### 🔧 Kỹ thuật
