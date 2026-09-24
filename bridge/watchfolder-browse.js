@@ -61,4 +61,30 @@ function listDirs(dirPath) {
   return { ok: true, path: p, parent: path.dirname(p), dirs };
 }
 
-module.exports = { productRoot, listDirs, natCmp };
+// Đoán bin đích cho một thư mục trên đĩa CHỈ theo tên, không cần model.
+// rel: đường dẫn thư mục tương đối ('Sources/Higg'); bins: ['A/B', ...].
+//  1. Có bin mà tên LÁ trùng tên thư mục ("Higg")  → dùng luôn.
+//  2. Có bin mà tên lá trùng thư mục CHA ("Sources") → dùng, plugin tự tạo bin
+//     con "Higg" bên trong (source kiểu "Higg 33" cần bin lá mang tên đó).
+// Không chắc thì trả null để model / người dùng quyết.
+function guessBin(rel, bins) {
+  const n = s => String(s || '').normalize('NFC').toLowerCase().replace(/[-_.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const parts = String(rel || '').split(/[\\/]/).filter(Boolean);
+  if (!parts.length) return null;
+  const leafOf = b => n(String(b).split('/').pop());
+  const pick = want => {
+    const hits = (bins || []).filter(b => leafOf(b) === want);
+    // Nhiều bin cùng tên lá → chọn bin nông nhất (ít cấp nhất) cho dễ đoán.
+    return hits.sort((a, b) => a.split('/').length - b.split('/').length)[0] || null;
+  };
+  const dir = n(parts[parts.length - 1]);
+  let hit = pick(dir);
+  if (hit) return { binPath: hit, reason: 'Bin "' + hit + '" trùng tên thư mục (ghép theo tên, không cần AI).' };
+  if (parts.length > 1) {
+    hit = pick(n(parts[parts.length - 2]));
+    if (hit) return { binPath: hit, reason: 'Bin "' + hit + '" trùng thư mục cha (ghép theo tên, không cần AI).' };
+  }
+  return null;
+}
+
+module.exports = { productRoot, listDirs, natCmp, guessBin };

@@ -2807,6 +2807,15 @@ async function callLLM(prompt, opts) {
   claudeEnv.PATH = ((claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + claudeEnv.PATH;
   const result = spawnSync('claude', ['--print'], { input: prompt, encoding: 'utf8', timeout: 90000, env: claudeEnv });
   if (result.error) throw result.error;
+  // CLI lỗi (vd "Failed to authenticate: OAuth session expired") in lỗi ra STDOUT
+  // rồi exit ≠ 0. Không chặn ở đây thì câu lỗi bị trả về như câu trả lời của
+  // model, bên gọi chỉ thấy "không parse được" mà không biết vì sao.
+  if (result.status !== 0) {
+    const msg = ((result.stdout || '') + ' ' + (result.stderr || '')).trim() || ('exit ' + result.status);
+    const e = new Error('Claude CLI lỗi: ' + msg.slice(0, 300));
+    e.cliAuth = /authenticat|oauth|login|log in/i.test(msg);
+    throw e;
+  }
   return (result.stdout || '').trim();
 }
 
@@ -2960,13 +2969,25 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.18.0';  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.18.1';  // GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+// Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
+// động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
+function cliEnv() {
+  const e = cleanEnv();
+  e.PATH = ((e.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + e.PATH;
+  return e;
+}
+
 app.get('/health', (_req, res) => {
+  // Chỉ có nghĩa ở chế độ CLI; API key không có "phiên" để hết hạn.
+  const cli = API_KEY ? null : require('./cli-auth.js').cachedStatus(cliEnv());
   res.json({
     status:  'ok',
     version: BRIDGE_VERSION,
     mode:    API_KEY ? 'api-key' : 'cli-oauth',
     model:   DEFAULT_MODEL,
+    // null = chưa kiểm tra xong / không đọc được — plugin không cảnh báo khi null.
+    cliLoggedIn: cli ? cli.loggedIn : null,
     capabilities: {
       cutlist:     true,    // Recognizes cutlist action format
       multimodal:  true,    // Accepts array content with images
@@ -2980,6 +3001,27 @@ app.get('/health', (_req, res) => {
       lang:  WHISPER_LANG,
       ok:    fs.existsSync(WHISPER_BIN),
     },
+  });
+});
+
+// ── GET /auth/status · POST /auth/login ───────────────────────────────────
+// Phiên OAuth của Claude CLI hết hạn giữa chừng mà Bridge app chỉ kiểm tra lúc
+// khởi động. Plugin dùng hai endpoint này để hiện nút "Đăng nhập Claude" và tự
+// nhận khi người dùng đăng nhập xong trong trình duyệt.
+app.get('/auth/status', (_req, res) => {
+  if (API_KEY) return res.json({ ok: true, mode: 'api-key', loggedIn: true });
+  const st = require('./cli-auth.js').status(cliEnv(), { fresh: true });
+  res.json({ ok: true, mode: 'cli-oauth', loggedIn: st.loggedIn,
+             authMethod: st.authMethod, error: st.error || null });
+});
+
+app.post('/auth/login', (_req, res) => {
+  if (process.platform !== 'darwin') {
+    return res.json({ ok: false, error: 'chỉ hỗ trợ macOS — chạy "claude auth login" trong terminal' });
+  }
+  require('./cli-auth.js').openLogin(err => {
+    if (err) return res.json({ ok: false, error: 'không mở được Terminal: ' + err.message });
+    res.json({ ok: true });
   });
 });
 
@@ -3433,7 +3475,20 @@ app.post('/watch/suggest-bins', async (req, res) => {
   if (!folders.length) return res.json({ ok: true, suggestions: [] });
   if (!bins.length) return res.json({ ok: false, error: 'project chưa có bin nào để ghép' });
 
-  const folderBlock = folders.map((f, i) =>
+  // Ghép theo TÊN trước — trường hợp rõ ràng ("Sources/Higg" ↔ bin "Higg", hay
+  // bin "Sources" để plugin tạo bin con "Higg") không cần tới model, nên CLI hết
+  // phiên đăng nhập hay model trả lời lạc đề cũng không làm hỏng chúng.
+  const wfBrowse = require('./watchfolder-browse.js');
+  const byName = {};
+  for (const f of folders) {
+    const g = wfBrowse.guessBin(f.rel || f.folder, bins);
+    if (g) byName[f.folder] = g;
+  }
+  const todo = folders.filter(f => !byName[f.folder]);
+  const named = f => Object.assign({ folder: f.folder, rel: f.rel || f.folder }, byName[f.folder]);
+  if (!todo.length) return res.json({ ok: true, suggestions: folders.map(named) });
+
+  const folderBlock = todo.map((f, i) =>
     (i + 1) + '. "' + (f.rel || f.folder) + '"\n'
     + '   source đang thiếu khớp ở đây: ' + (f.names || []).slice(0, 12).join(', ') + '\n'
     + '   vài tên file: ' + (f.fileNames || []).slice(0, 8).join(', ')
@@ -3475,6 +3530,7 @@ Chỉ trả về JSON array, không markdown, không giải thích thêm:
     // về đúng chuỗi bin có thật, sai hẳn thì bỏ binPath chứ không tin bừa.
     const byNorm = new Map(bins.map(x => [String(x).toLowerCase().replace(/\s+/g, ''), x]));
     const suggestions = folders.map(f => {
+      if (byName[f.folder]) return named(f);
       const key = f.rel || f.folder;
       const hit = raw.find(x => x && (x.folder === key || x.folder === f.folder)) || {};
       const exact = bins.indexOf(hit.binPath) >= 0
@@ -3487,7 +3543,12 @@ Chỉ trả về JSON array, không markdown, không giải thích thêm:
     });
     res.json({ ok: true, suggestions });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    // Model hỏng thì vẫn trả phần đã ghép theo tên — plugin chỉ phải chọn tay
+    // những thư mục còn lại.
+    res.json({
+      ok: false, error: e.message, cliAuth: !!e.cliAuth,
+      suggestions: folders.filter(f => byName[f.folder]).map(named),
+    });
   }
 });
 

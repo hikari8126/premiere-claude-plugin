@@ -370,8 +370,7 @@
 
       byBin[bin].forEach(function (r) {
         var row = document.createElement('div');
-        row.className = 'sac-bind-row';
-        row.style.paddingLeft = '8px';
+        row.className = 'sac-bind-row sac-checkRow';
 
         var box = document.createElement('input');
         box.type = 'checkbox'; box.checked = true;

@@ -3,6 +3,25 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
+
+### 🐛 Sửa — "AI không ghép được (model không trả về JSON array)"
+- **Nguyên nhân:** phiên OAuth của Claude CLI hết hạn. CLI in `Failed to authenticate: OAuth session expired…` ra STDOUT rồi exit 1, `callLLM` trả nguyên câu đó như câu trả lời của model → mọi chỗ gọi chỉ thấy "không parse được".
+- **Fix:** `callLLM` ném lỗi khi CLI exit ≠ 0, kèm cờ `cliAuth` nếu là lỗi đăng nhập. Áp dụng cho **mọi** tính năng AI qua CLI, không riêng ghép bin.
+
+### ✨ Ghép bin theo tên trước, AI sau
+- `suggest-bins` đoán bin theo tên thư mục trước khi hỏi model (`guessBin`): bin trùng tên thư mục (`Higg`), không có thì bin trùng thư mục cha (`Sources` → plugin tạo `Sources/Higg`). Trường hợp rõ ràng không còn phụ thuộc CLI/model.
+- Model hỏng vẫn trả phần đã ghép theo tên; chỉ thư mục còn lại mới phải chọn tay.
+
+### ✨ Đăng nhập Claude CLI từ plugin
+- `GET /auth/status` (đọc `claude auth status`, JSON `loggedIn`) và `POST /auth/login` (mở Terminal chạy `claude auth login`, giống `promptLogin` của Bridge app). `/health` trả thêm `cliLoggedIn` (cache 60s, làm mới ngầm, không chặn request).
+- Thanh trạng thái cảnh báo "Claude CLI hết phiên đăng nhập — bấm vào đây"; bảng tìm source có nút "Đăng nhập Claude". Plugin poll `/auth/status` mỗi 3s (tối đa 5 phút), đăng nhập xong tự chạy lại.
+- **Vì sao cần:** Bridge app chỉ kiểm tra đăng nhập lúc khởi động — app chạy qua đêm, phiên hết hạn giữa chừng là AI hỏng im lặng.
+- Không đăng nhập ngầm được: OAuth bắt buộc bấm trong trình duyệt. Muốn không bao giờ hết phiên thì dùng `ANTHROPIC_API_KEY` trong `bridge/.env`.
+
+### 🔧 UI
+- Checkbox cùng dòng với tên file (bảng tìm source + bảng Đối chiếu). UXP vẽ checkbox thành khối riêng nên phải ép flex.
+
 ## v5.8.1 / bridge app 3.12 (server 1.18.0) — 2026-09-24
 
 > **Cần Bridge app 3.12 (server ≥1.18.0)** cho cả hai tính năng Watch/Autocut dưới đây.

@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.8.1';  // Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.8.2';  // Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -907,6 +907,62 @@ function compareVersions(a, b) {
 }
 var bridgeHealth = null;
 
+// ── Đăng nhập Claude CLI từ plugin ─────────────────────────────────────────
+// Bridge mở Terminal chạy `claude auth login` → trình duyệt bật lên → người dùng
+// tự bấm đăng nhập (OAuth, không làm ngầm được). Plugin poll /auth/status tới khi
+// loggedIn = true thì gọi onDone. Dùng chung cho thanh trạng thái và mọi chỗ
+// gặp lỗi cliAuth (Autocut tìm source…).
+var cliNeedsLogin = false;
+var cliLoginBusy = false;
+
+function cliLoginFlow(onStatus, onDone) {
+  if (cliLoginBusy) { if (onStatus) onStatus('⏳ Đang chờ đăng nhập trong trình duyệt…'); return; }
+  cliLoginBusy = true;
+  var say = onStatus || function() {};
+  var getJson = function(method, url) {
+    return fetch(BRIDGE_URL + url, { method: method, headers: { 'Content-Type': 'application/json' } })
+      .then(function(r) { return r.text(); })
+      .then(function(t) { try { return JSON.parse(t); } catch (e) { return { ok: false, old: true }; } })
+      .catch(function(e) { return { ok: false, error: e.message }; });
+  };
+  getJson('POST', '/auth/login').then(function(r) {
+    if (!r.ok) {
+      cliLoginBusy = false;
+      say(r.old ? '⚠ Bridge cũ chưa hỗ trợ — chạy "claude auth login" trong Terminal'
+                : ('⚠ ' + (r.error || 'không mở được Terminal')));
+      return;
+    }
+    say('⏳ Terminal + trình duyệt đã mở — đăng nhập Claude.ai rồi quay lại đây');
+    var t0 = Date.now();
+    var timer = setInterval(function() {
+      getJson('GET', '/auth/status').then(function(st) {
+        if (st && st.loggedIn === true) {
+          clearInterval(timer);
+          cliLoginBusy = false;
+          cliNeedsLogin = false;
+          say('✅ Đã đăng nhập Claude');
+          checkBridge();
+          if (onDone) onDone();
+        } else if (Date.now() - t0 > 5 * 60 * 1000) {
+          clearInterval(timer);
+          cliLoginBusy = false;
+          say('⚠ Hết 5 phút chờ — bấm đăng nhập lại');
+        }
+      });
+    }, 3000);
+  });
+}
+window.cliLoginFlow = cliLoginFlow;
+
+(function() {
+  var bar = document.getElementById('status-bar');
+  if (!bar) return;
+  bar.addEventListener('click', function() {
+    if (!cliNeedsLogin) return;
+    cliLoginFlow(function(t) { setStatus('warn', t); });
+  });
+})();
+
 function checkBridge() {
   setStatus('connecting', 'Connecting to bridge...');
   var xhr = new XMLHttpRequest();
@@ -931,6 +987,15 @@ function checkBridge() {
           setStatus('warn', 'Bridge v' + bVer + ' too old — update Bridge app (need ≥' + REQUIRED_BRIDGE + ')');
           return;
         }
+        // Phiên OAuth của CLI hết hạn giữa chừng → mọi tính năng AI hỏng. Báo sớm
+        // trên thanh trạng thái, bấm vào là mở luồng đăng nhập. null = bridge
+        // chưa kiểm tra xong / bridge cũ → im lặng, đừng cảnh báo nhầm.
+        if (bridgeHealth.mode === 'cli-oauth' && bridgeHealth.cliLoggedIn === false) {
+          cliNeedsLogin = true;
+          setStatus('warn', 'Claude CLI hết phiên đăng nhập — bấm vào đây để đăng nhập');
+          return;
+        }
+        cliNeedsLogin = false;
         setStatus('connected', 'Bridge v' + bVer +
           ' · ' + (bridgeHealth.mode === 'api-key' ? 'API' : 'CLI'));
       } catch(e) {
@@ -4965,6 +5030,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (c) c.addEventListener('click', sacFindClose);
     var go = $('sacFindGo');
     if (go) go.addEventListener('click', sacFindApply);
+    // Đăng nhập xong thì quét + ghép lại từ đầu — bin người dùng đã chọn tay trong
+    // bảng này mất, nhưng bảng mới có AI ghép sẵn nên ít việc hơn.
+    var lg = $('sacFindLogin');
+    if (lg) lg.addEventListener('click', function() {
+      cliLoginFlow(function(t) { sacFindStatus(t, /^⚠/.test(t) ? 'is-warn' : ''); },
+        function() { sacFindClose(); sacFindScan(); });
+    });
   }
 
   // Danh sách bin CÓ THẬT, lấy từ lần quét bin của validate. Model chỉ được chọn
@@ -5045,8 +5117,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         }),
         bins: bins,
       });
+      // Kể cả khi model hỏng, bridge vẫn trả phần đã ghép được theo tên thư mục.
       var byFolder = {};
-      if (sug.ok) (sug.suggestions || []).forEach(function(x) { byFolder[x.folder] = x; });
+      (sug.suggestions || []).forEach(function(x) { byFolder[x.folder] = x; });
+      var aiErr = sug.ok ? '' : (sug.cliAuth
+        ? 'Claude CLI hết phiên đăng nhập'
+        : ('AI không ghép được (' + sug.error + ')'));
+      // Chỉ hiện nút đăng nhập khi có thư mục THẬT SỰ còn thiếu bin — thư mục đã
+      // ghép theo tên thì không cần AI nữa.
+      sacFind.needLogin = !!sug.cliAuth && found.folders.some(function(f) {
+        return !(byFolder[f.folder] && byFolder[f.folder].binPath);
+      });
 
       sacFind.rows = found.folders.map(function(f) {
         var g = byFolder[f.folder] || {};
@@ -5054,7 +5135,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           folder: f.folder, rel: f.rel, dirName: f.dirName,
           hint: sacFindHintOf(f),
           binPath: g.binPath || '',
-          reason: sug.ok ? (g.reason || '') : ('AI không ghép được (' + sug.error + ') — chọn bin tay'),
+          reason: g.binPath ? (g.reason || '') : (aiErr ? aiErr + ' — chọn bin tay' : (g.reason || '')),
           files: f.matches.map(function(m) {
             // Khớp gần đúng KHÔNG tick sẵn: import nhầm clip vào timeline còn
             // tệ hơn là thiếu, vì nó lọt qua validate và chỉ lộ ra lúc xem lại.
@@ -5064,7 +5145,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         };
       });
       sacFindRender(found);
-      sacFindStatus('', '');
+      sacFindStatus(sacFind.needLogin
+        ? 'Claude CLI hết phiên đăng nhập — bấm "Đăng nhập Claude" để AI ghép nốt các thư mục còn trống.'
+        : '', sacFind.needLogin ? 'is-warn' : '');
+      var lg = $('sacFindLogin');
+      if (lg) lg.style.display = sacFind.needLogin ? '' : 'none';
       sacFindOpen();
     } catch (e) {
       fail(e.message);
@@ -5186,8 +5271,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       r.files.forEach(function(f) {
         var row = document.createElement('div');
-        row.className = 'sac-bind-row';
-        row.style.paddingLeft = '8px';
+        row.className = 'sac-bind-row sac-checkRow';
 
         var box = document.createElement('input');
         box.type = 'checkbox'; box.checked = f.checked;

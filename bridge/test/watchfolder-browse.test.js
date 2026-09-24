@@ -50,3 +50,18 @@ assert.strictEqual(listDirs('').ok, false, 'path rỗng bị từ chối');
 
 fs.rmSync(base, { recursive: true, force: true });
 console.log('watchfolder-browse: OK');
+
+// guessBin: ghép thư mục ↔ bin theo tên, không cần model.
+{
+  const { guessBin } = require('../watchfolder-browse.js');
+  const bins = ['Sources', 'Sources/Borrow', 'Voice Over/1x', 'Old/Higg', 'Footage/Higg'];
+  // 1. Trùng tên lá → bin nông nhất trong số trùng tên
+  assert.strictEqual(guessBin('Sources/Higg', bins).binPath, 'Old/Higg');
+  // 2. Không có bin tên "Higg" → rơi về bin trùng thư mục cha
+  assert.strictEqual(guessBin('Sources/Higg', ['Sources', 'Voice Over']).binPath, 'Sources');
+  // 3. Không chắc → null, để model / người dùng quyết
+  assert.strictEqual(guessBin('Random/Stuff', ['Sources', 'Voice Over']), null);
+  // 4. Không phân biệt hoa thường / gạch dưới
+  assert.strictEqual(guessBin('Voice_Over', ['voice over']).binPath, 'voice over');
+  console.log('watchfolder-browse guessBin: OK');
+}

@@ -4602,3 +4602,10 @@ div[role="button"].vg-histHead:hover { color: rgba(255,255,255,0.7); }
 .sac-findBinRow .vg-select { flex: 1 1 0; min-width: 0; }
 .sac-findReason { font-size: 11px; color: var(--text-dim); margin-bottom: 4px;
                   font-style: italic; }
+
+/* Dòng file có checkbox (bảng Đối chiếu + bảng tìm source). UXP vẽ <input
+   type=checkbox> như khối riêng nên nếu không ép flex, ô tick nằm một dòng,
+   tên file rơi xuống dòng dưới. */
+.sac-checkRow { display: flex; align-items: center; gap: 8px; padding-left: 8px; }
+.sac-checkRow input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.sac-checkRow > span { flex: 0 1 auto; min-width: 0; }
