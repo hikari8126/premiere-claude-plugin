@@ -3,57 +3,23 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.8.3 — 2026-09-24
-
-> Chỉ sửa plugin. **Không cần bridge mới.**
-
-**Fix DỨT ĐIỂM: ô tìm voice clone (Settings ▸ Voice Gen) nuốt chữ khi gõ.** Lỗi tái đi tái lại nhiều bản trước vì luôn bị chẩn đoán nhầm là do keyboard-focus.
-
-### 🐛 Nguyên nhân gốc (xác định bằng instrumentation)
-`elvFilterRows()` được gọi **đồng bộ ngay trong sự kiện `input`**: mỗi phím gõ toggle `display`
-trên ~158 dòng của `.elv-list`. Vì `.elv-list` dùng `max-height` nên khi lọc bớt dòng, container
-**co lại → reflow layout ngoài** → UXP **reset selection của ô input về select-all** (phím kế đè cả
-đoạn) hoặc **rớt keystroke** khi gõ nhanh. Không liên quan `setKeyboardFocus` — nên mọi fix
-keyboard trước đều regress.
-
-### 🔧 Cách xử lý (4 lớp, gộp)
-- **`.elv-list` dùng `height` cố định** thay `max-height` → lọc ẩn/hiện dòng **không co giãn
-  container** → hết reflow layout ngoài (lớp chính).
-- **Debounce 160ms**: gõ liên tục không lọc từng phím → không reflow giữa các phím.
-- **Chỉ ghi `style.display` khi thực sự đổi** → giảm tối đa mutation/reflow.
-- **Khôi phục caret** (sync + tick kế) sau khi lọc, phòng khi UXP vẫn select-all.
-
-### 🧪 Ghi chú điều tra
-Debug tạm (log `keydown/input/selection`) cho thấy: focus luôn ở ô, keystroke `isTrusted`; khi
-**tắt lọc** thì `in:` tăng đều không nuốt → khoanh vùng đúng thủ phạm là reflow do lọc, không phải
-bàn phím.
 ## v5.9.0 — 2026-09-24
 
-> Chỉ sửa plugin. **Không cần bridge mới.**
+> Gộp 3 tính năng/fix. Chỉ sửa plugin. **Không cần bridge mới.**
 
-**Autocut: nạp script từ file CSV (nút ＋CSV).** Bổ sung cạnh cách paste Google Sheet (giữ nguyên).
+### 🐛 Fix DỨT ĐIỂM: ô tìm voice clone (Settings ▸ Voice Gen) nuốt chữ khi gõ
+- **Nguyên nhân gốc (xác định bằng instrumentation):** `elvFilterRows()` chạy **đồng bộ trong sự kiện `input`** — mỗi phím toggle `display` ~158 dòng `.elv-list`; do `.elv-list` dùng `max-height` nên lọc bớt dòng làm container co lại → reflow layout ngoài → UXP reset selection ô về select-all / rớt keystroke. Không liên quan keyboard-focus (nên các fix trước regress).
+- **Cách xử lý (4 lớp):** `.elv-list` **height cố định** (hết reflow ngoài) + **debounce 160ms** + chỉ ghi `display` khi đổi + **khôi phục caret** sau lọc.
 
-### ✅ Thêm mới
-- Nút **＋CSV** trong header Script của Autocut → chọn file `.csv` → nạp thẳng vào bảng.
-- Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (**bỏ đuôi video** .mp4/.mov/.m4v… ở cuối, giữ nguyên `[id]`).
-- text_overlay nhiều dòng → gộp 1 dòng; ghi đè bảng dùng **arm 2 bước** (bấm lại trong 4s).
-- Thiếu cột bắt buộc (`text_overlay`/`footage_name`/`shot_start`) → báo lỗi, không nạp.
+### ✅ Autocut: nạp script từ file CSV (nút ＋CSV)
+- Bổ sung cạnh cách paste Google Sheet (**giữ nguyên** `parseTSV`/paste).
+- Nút **＋CSV** trong header Script → chọn `.csv` → nạp thẳng vào bảng. Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (**bỏ đuôi video** .mp4/.mov/.m4v… ở cuối, giữ `[id]`).
+- text_overlay nhiều dòng → gộp 1 dòng; ghi đè bảng dùng **arm 2 bước**; thiếu cột bắt buộc → báo lỗi, không nạp.
+- Parser thuần `plugin/csv-parse.js` (`csvParse`+`csvRowsToSac`) + node test `bridge/test/csv-import.test.js`; tái dùng `window.AutocutPushRows()`+`expandRows`.
 
-### 🔧 Kỹ thuật
-- Parser thuần tách ra `plugin/csv-parse.js` (`csvParse` + `csvRowsToSac`), có **node test** `bridge/test/csv-import.test.js` (dấu phẩy/xuống dòng/`""` trong ô, ghép time, thiếu cột). Tái dùng `window.AutocutPushRows()` + `expandRows` sẵn có.
-- **Không đụng** `parseTSV`/paste Google Sheet.
-## v5.9.1 — 2026-09-24
-
-> Chỉ sửa plugin. **Không cần bridge mới.**
-
-**Voice Gen: sắp xếp list voice clone (Settings).**
-
-### ✅ Thêm mới
-- **Hàng 2 nút icon** sắp xếp list voice clone (thay dropdown): icon **thời gian tạo** (🕐) và **tên** (A→Z). Bấm nút chiều khác → chuyển sang; bấm nút đang active → đảo chiều (↓ mới/A→Z ↔ ↑ cũ/Z→A). 4 chế độ: Mới nhất (mặc định) / Cũ nhất (theo `created_at_unix`) / Tên A→Z / Z→A; nhớ qua `localStorage['elv_sort_mode']`.
-- Voice API không trả thời gian tạo → xếp cuối; sort theo tên vẫn chạy. Xoá/search giữ nguyên.
-
-### 🔧 Kỹ thuật
-- Hàm so sánh thuần `plugin/elv-sort.js` (`elvSortComparator`) + node test `bridge/test/elv-sort.test.js`. `elvFetchState` giữ thêm `created`; `elvRenderList` sort trước khi dựng rows.
+### ✅ Voice Gen: sắp xếp list voice clone (Settings)
+- **Hàng 2 nút icon** (thay dropdown): 🕐 **thời gian tạo** + 🔤 **tên**. Bấm nút chiều khác → chuyển sang; bấm nút đang active → đảo chiều (↓ mới/A→Z ↔ ↑ cũ/Z→A). 4 chế độ: Mới nhất (mặc định) / Cũ nhất (theo `created_at_unix`) / Tên A→Z / Z→A; nhớ qua `localStorage['elv_sort_mode']`. Voice thiếu thời gian tạo → xếp cuối. Xoá/search giữ nguyên.
+- Hàm so sánh thuần `plugin/elv-sort.js` (`elvSortComparator`) + node test `bridge/test/elv-sort.test.js`; thêm 2 icon SVG (`clock`, `arrow_down_a_z`).
 
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 
