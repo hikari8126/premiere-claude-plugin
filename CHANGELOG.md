@@ -11,7 +11,7 @@
 
 ### ✅ Thêm mới
 - Nút **＋CSV** trong header Script của Autocut → chọn file `.csv` → nạp thẳng vào bảng.
-- Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (giữ nguyên cả `.mp4`/`[id]`).
+- Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (**bỏ đuôi video** .mp4/.mov/.m4v… ở cuối, giữ nguyên `[id]`).
 - text_overlay nhiều dòng → gộp 1 dòng; ghi đè bảng dùng **arm 2 bước** (bấm lại trong 4s).
 - Thiếu cột bắt buộc (`text_overlay`/`footage_name`/`shot_start`) → báo lỗi, không nạp.
 

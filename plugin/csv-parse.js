@@ -29,6 +29,13 @@ function csvParse(text) {
   return rows;
 }
 
+// Bỏ đuôi video phổ biến ở CUỐI tên (giữ nguyên phần còn lại kể cả "[id]"):
+// "K18-1 [mudsnhw5].mp4" → "K18-1 [mudsnhw5]". Chỉ cắt đuôi ở cuối chuỗi.
+var VIDEO_EXT_RE = /\.(mp4|mov|m4v|avi|mkv|webm|mxf|wmv|flv|mpg|mpeg|m2ts|mts|ts|3gp|ogv)$/i;
+function stripVideoExt(name) {
+  return String(name == null ? '' : name).replace(VIDEO_EXT_RE, '').trim();
+}
+
 function csvRowsToSac(rows) {
   if (!rows || !rows.length) return { rows: [], error: 'CSV rỗng' };
   var header = rows[0].map(function (h) { return String(h == null ? '' : h).trim().toLowerCase(); });
@@ -50,7 +57,7 @@ function csvRowsToSac(rows) {
     var start = String(rw[iStart] != null ? rw[iStart] : '').trim();
     var end   = iEnd >= 0 ? String(rw[iEnd] != null ? rw[iEnd] : '').trim() : '';
     var time  = (start && end) ? (start + '-' + end) : (start || '');
-    var src   = String(rw[iFoot] != null ? rw[iFoot] : '').trim();
+    var src   = stripVideoExt(String(rw[iFoot] != null ? rw[iFoot] : '').trim());
     if (!text && !src) continue; // dòng trắng
     out.push({ text: text, time: time, src: src });
   }

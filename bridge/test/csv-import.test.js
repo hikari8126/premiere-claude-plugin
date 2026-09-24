@@ -22,7 +22,7 @@ assert.strictEqual(map.error, null, 'không lỗi');
 assert.strictEqual(map.rows.length, 3, '3 scene');
 assert.strictEqual(map.rows[0].text, 'Mom, look what I\'ve got! Oh wow… Let me see', 'text gộp 1 dòng');
 assert.strictEqual(map.rows[0].time, '0:00-0:04', 'time ghép start-end');
-assert.strictEqual(map.rows[0].src, 'K18-1 [mudsnhw5].mp4', 'source giữ nguyên');
+assert.strictEqual(map.rows[0].src, 'K18-1 [mudsnhw5]', 'source bỏ đuôi .mp4, giữ [id]');
 assert.ok(map.rows[2].text.indexOf('"instant-snatch"') !== -1, '"" -> " literal');
 
 // thiếu cột bắt buộc footage_name -> lỗi
@@ -34,5 +34,16 @@ assert.strictEqual(bad.rows.length, 0, 'lỗi thì không nạp dòng nào');
 const noEnd = csvRowsToSac(csvParse('text_overlay,footage_name,shot_start\nhi,a.mp4,0:03'));
 assert.strictEqual(noEnd.error, null);
 assert.strictEqual(noEnd.rows[0].time, '0:03', 'không có shot_end -> chỉ start');
+
+// bỏ đuôi video phổ biến, giữ [id]; tên không có đuôi thì giữ nguyên
+const ext = csvRowsToSac(csvParse(
+  'text_overlay,footage_name,shot_start\n' +
+  'a,K18 [x].mov,0:00\n' +
+  'b,ZoeShape V21.0 [muex9xq5].mp4,0:01\n' +
+  'c,NoExt Clip [y],0:02'
+));
+assert.strictEqual(ext.rows[0].src, 'K18 [x]', 'bỏ .mov');
+assert.strictEqual(ext.rows[1].src, 'ZoeShape V21.0 [muex9xq5]', 'giữ "V21.0" giữa tên, chỉ bỏ .mp4 cuối');
+assert.strictEqual(ext.rows[2].src, 'NoExt Clip [y]', 'không có đuôi -> giữ nguyên');
 
 console.log('csv-import tests passed');
