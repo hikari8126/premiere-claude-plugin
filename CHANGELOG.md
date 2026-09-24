@@ -3,6 +3,31 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.8.3 — 2026-09-24
+
+> Chỉ sửa plugin. **Không cần bridge mới.**
+
+**Fix DỨT ĐIỂM: ô tìm voice clone (Settings ▸ Voice Gen) nuốt chữ khi gõ.** Lỗi tái đi tái lại nhiều bản trước vì luôn bị chẩn đoán nhầm là do keyboard-focus.
+
+### 🐛 Nguyên nhân gốc (xác định bằng instrumentation)
+`elvFilterRows()` được gọi **đồng bộ ngay trong sự kiện `input`**: mỗi phím gõ toggle `display`
+trên ~158 dòng của `.elv-list`. Vì `.elv-list` dùng `max-height` nên khi lọc bớt dòng, container
+**co lại → reflow layout ngoài** → UXP **reset selection của ô input về select-all** (phím kế đè cả
+đoạn) hoặc **rớt keystroke** khi gõ nhanh. Không liên quan `setKeyboardFocus` — nên mọi fix
+keyboard trước đều regress.
+
+### 🔧 Cách xử lý (4 lớp, gộp)
+- **`.elv-list` dùng `height` cố định** thay `max-height` → lọc ẩn/hiện dòng **không co giãn
+  container** → hết reflow layout ngoài (lớp chính).
+- **Debounce 160ms**: gõ liên tục không lọc từng phím → không reflow giữa các phím.
+- **Chỉ ghi `style.display` khi thực sự đổi** → giảm tối đa mutation/reflow.
+- **Khôi phục caret** (sync + tick kế) sau khi lọc, phòng khi UXP vẫn select-all.
+
+### 🧪 Ghi chú điều tra
+Debug tạm (log `keydown/input/selection`) cho thấy: focus luôn ở ô, keystroke `isTrusted`; khi
+**tắt lọc** thì `in:` tăng đều không nuốt → khoanh vùng đúng thủ phạm là reflow do lọc, không phải
+bàn phím.
+
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 
 ### 🐛 Sửa — "AI không ghép được (model không trả về JSON array)"
