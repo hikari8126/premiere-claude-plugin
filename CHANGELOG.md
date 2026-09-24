@@ -3,6 +3,24 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.9.0 — 2026-09-24
+
+> Gộp 3 tính năng/fix. Chỉ sửa plugin. **Không cần bridge mới.**
+
+### 🐛 Fix DỨT ĐIỂM: ô tìm voice clone (Settings ▸ Voice Gen) nuốt chữ khi gõ
+- **Nguyên nhân gốc (xác định bằng instrumentation):** `elvFilterRows()` chạy **đồng bộ trong sự kiện `input`** — mỗi phím toggle `display` ~158 dòng `.elv-list`; do `.elv-list` dùng `max-height` nên lọc bớt dòng làm container co lại → reflow layout ngoài → UXP reset selection ô về select-all / rớt keystroke. Không liên quan keyboard-focus (nên các fix trước regress).
+- **Cách xử lý (4 lớp):** `.elv-list` **height cố định** (hết reflow ngoài) + **debounce 160ms** + chỉ ghi `display` khi đổi + **khôi phục caret** sau lọc.
+
+### ✅ Autocut: nạp script từ file CSV (nút ＋CSV)
+- Bổ sung cạnh cách paste Google Sheet (**giữ nguyên** `parseTSV`/paste).
+- Nút **＋CSV** trong header Script → chọn `.csv` → nạp thẳng vào bảng. Map theo tên header: `text_overlay → script`, `shot_start + "-" + shot_end → time (in→out)`, `footage_name → source` (**bỏ đuôi video** .mp4/.mov/.m4v… ở cuối, giữ `[id]`).
+- text_overlay nhiều dòng → gộp 1 dòng; ghi đè bảng dùng **arm 2 bước**; thiếu cột bắt buộc → báo lỗi, không nạp.
+- Parser thuần `plugin/csv-parse.js` (`csvParse`+`csvRowsToSac`) + node test `bridge/test/csv-import.test.js`; tái dùng `window.AutocutPushRows()`+`expandRows`.
+
+### ✅ Voice Gen: sắp xếp list voice clone (Settings)
+- **Hàng 2 nút icon** (thay dropdown): 🕐 **thời gian tạo** + 🔤 **tên**. Bấm nút chiều khác → chuyển sang; bấm nút đang active → đảo chiều (↓ mới/A→Z ↔ ↑ cũ/Z→A). 4 chế độ: Mới nhất (mặc định) / Cũ nhất (theo `created_at_unix`) / Tên A→Z / Z→A; nhớ qua `localStorage['elv_sort_mode']`. Voice thiếu thời gian tạo → xếp cuối. Xoá/search giữ nguyên.
+- Hàm so sánh thuần `plugin/elv-sort.js` (`elvSortComparator`) + node test `bridge/test/elv-sort.test.js`; thêm 2 icon SVG (`clock`, `arrow_down_a_z`).
+
 ## v5.8.2 / bridge app 3.13 (server 1.18.1) — 2026-09-24
 
 ### 🐛 Sửa — "AI không ghép được (model không trả về JSON array)"

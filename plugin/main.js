@@ -15,6 +15,8 @@ try { ppro = require('premierepro'); } catch(e) { console.warn('premierepro not 
 // each <path fill>. Put <i data-ic="NAME"> in HTML (optionally data-ic-size /
 // data-ic-color); pluginRenderIcons() fills them. For JS use pluginIconSVG().
 var PI_ICONS = {
+    clock: { vb: '0 0 512 512', d: 'M256 0a256 256 0 1 1 0 512A256 256 0 1 1 256 0zM232 120l0 136c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2 280 120c0-13.3-10.7-24-24-24s-24 10.7-24 24z', c: '#c9c4d6' },
+    arrow_down_a_z: { vb: '0 0 576 512', d: 'M183.6 469.6C177.5 476.2 168.9 480 160 480s-17.5-3.8-23.6-10.4l-88-96c-11.9-13-11.1-33.3 2-45.2s33.3-11.1 45.2 2L128 365.7 128 64c0-17.7 14.3-32 32-32s32 14.3 32 32l0 301.7 32.4-35.4c11.9-13 32.2-13.9 45.2-2s13.9 32.2 2 45.2l-88 96zM320 64l128 0c13.3 0 25.1 8.2 29.8 20.6s1.4 26.5-8.4 35.4L396.9 192l51.1 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-128 0c-13.3 0-25.1-8.2-29.8-20.6s-1.4-26.5 8.4-35.4L371.1 128 320 128c-17.7 0-32-14.3-32-32s14.3-32 32-32zM416 288l32 0c12.1 0 23.2 6.8 28.6 17.7l64 128c7.9 15.8 1.5 35-14.3 42.9s-35 1.5-42.9-14.3l-1.2-2.4-76.5 0-1.2 2.4c-7.9 15.8-27.1 22.2-42.9 14.3s-22.2-27.1-14.3-42.9l64-128c5.4-10.8 16.5-17.7 28.6-17.7zM416 375.4L406.3 400l19.4 0L416 375.4z', c: '#c9c4d6' },
     arrow_right: { vb: '0 0 448 512', d: 'M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z', c: '#cbd5e1' },
     audio: { vb: '0 0 512 512', d: 'M499.1 6.3c8.1 6 12.9 15.6 12.9 25.7v72V368c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V147L192 223.8V432c0 44.2-43 80-96 80s-96-35.8-96-80s43-80 96-80c11.2 0 22 1.6 32 4.6V200 128c0-14.1 9.3-26.6 22.8-30.7l320-96c9.7-2.9 20.2-1.1 28.3 5z', c: '#a855f7' },
     bolt: { vb: '0 0 448 512', d: 'M349.4 44.6c5.9-13.7 1.5-29.7-10.6-38.5s-28.6-8-39.9 1.8l-256 224c-10 8.8-13.6 22.9-8.9 35.3S50.7 288 64 288l111.5 0L98.6 467.4c-5.9 13.7-1.5 29.7 10.6 38.5s28.6 8 39.9-1.8l256-224c10-8.8 13.6-22.9 8.9-35.3s-16.6-20.7-30-20.7l-111.5 0L349.4 44.6z', c: '#c084fc' },
@@ -791,7 +793,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.8.2';  // Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.9.0';  // Gộp 3: (1) Fix DỨT ĐIỂM ô tìm voice clone nuốt chữ — .elv-list height cố định + debounce lọc + khôi phục caret (gốc là reflow do lọc, không phải keyboard). (2) Autocut nút ＋CSV nạp script từ file CSV (map text_overlay→script, shot_start-shot_end→time, footage_name→source bỏ đuôi video; parser plugin/csv-parse.js + test; giữ nguyên paste Google Sheet). (3) Voice Gen: 2 nút icon sắp xếp list voice clone (thời gian tạo / tên, bấm đảo chiều; localStorage elv_sort_mode; elv-sort.js + test). KHÔNG cần bridge mới. v5.8.2 — Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -7469,6 +7471,57 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
   });
 
+  // ── Autocut: nạp script từ CSV (không đụng logic paste Google Sheet) ──────
+  var sacCsvArmed = false, sacCsvArmTimer = null;
+  function sacBoardHasData() {
+    var body = $('sacBody'); if (!body) return false;
+    var fields = body.querySelectorAll('textarea, input');
+    for (var i = 0; i < fields.length; i++) {
+      if ((fields[i].value || '').trim()) return true;
+    }
+    return false;
+  }
+  function sacDisarmCsv() {
+    sacCsvArmed = false;
+    if (sacCsvArmTimer) { clearTimeout(sacCsvArmTimer); sacCsvArmTimer = null; }
+    var b = $('sacCsvImport');
+    if (b) { b.classList.remove('is-armed'); b.textContent = '＋ CSV'; }
+  }
+  async function sacDoImportCsv() {
+    var st = $('sacStatus');
+    function say(msg) { if (st) { st.textContent = msg; st.style.display = 'block'; } }
+    try {
+      var uxp = require('uxp');
+      var file = await uxp.storage.localFileSystem.getFileForOpening({ types: ['csv'] });
+      if (!file) return; // user huỷ
+      var text = await file.read();
+      var parse = (typeof window !== 'undefined' && window.csvParse) ? window.csvParse : csvParse;
+      var toSac = (typeof window !== 'undefined' && window.csvRowsToSac) ? window.csvRowsToSac : csvRowsToSac;
+      var res = toSac(parse(text));
+      if (res.error) { say('⚠ ' + res.error); return; }
+      if (!res.rows.length) { say('⚠ CSV không có dòng dữ liệu nào.'); return; }
+      if (typeof window.AutocutPushRows === 'function') window.AutocutPushRows(res.rows);
+      say('✓ Đã nạp ' + res.rows.length + ' scene từ CSV.');
+    } catch (err) {
+      say('❌ Lỗi đọc CSV: ' + (err && err.message ? err.message : err));
+    }
+  }
+  function sacOnCsvClick(e) {
+    if (e) e.stopPropagation(); // đừng toggle collapse
+    // Ghi đè bảng đang có dữ liệu → arm 2 bước
+    if (sacBoardHasData() && !sacCsvArmed) {
+      sacCsvArmed = true;
+      var b = $('sacCsvImport');
+      if (b) { b.textContent = 'Ghi đè? bấm lại'; b.classList.add('is-armed'); }
+      sacCsvArmTimer = setTimeout(sacDisarmCsv, 4000);
+      return;
+    }
+    sacDisarmCsv();
+    sacDoImportCsv();
+  }
+  var sacCsvBtnEl = $('sacCsvImport');
+  if (sacCsvBtnEl) sacCsvBtnEl.addEventListener('click', sacOnCsvClick);
+
   // ── Init: 3 empty rows ───────────────────────────────────────────────────
   createRow(); createRow(); createRow();
 
@@ -10717,7 +10770,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Own clones only: exclude premade AND library/shared voices (they carry a
       // `sharing` object and don't occupy your clone slots).
       elvVoices = voices.filter(function (v) { return v.category !== 'premade' && !v.sharing; })
-        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '' }; });
+        .map(function (v) { return { id: v.voice_id, name: v.name || '(no name)', category: v.category || '', created: (typeof v.created_at_unix === 'number' ? v.created_at_unix : null) }; });
       elvSelected = {};
     } catch (e) {
       if (slot) { slot.textContent = 'Lỗi tải voices: ' + (e && e.message ? e.message : String(e)); slot.className = 'elv-slot elv-err'; }
@@ -10750,7 +10803,42 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     else { btn.textContent = 'Xoá đã chọn (' + n + ')'; btn.classList.remove('is-armed'); }
   }
   // Rebuilt only on fetch/delete (never on keystroke) — search uses elvFilterRows.
+  function elvSortMode() {
+    var m = localStorage.getItem('elv_sort_mode');
+    return (m === 'oldest' || m === 'name_az' || m === 'name_za') ? m : 'newest';
+  }
+  function elvSortVoices() {
+    var cmp = (typeof window !== 'undefined' && window.elvSortComparator) ? window.elvSortComparator : elvSortComparator;
+    elvVoices.sort(cmp(elvSortMode()));
+  }
+  // Cập nhật 2 nút icon sort: nút của chiều đang active sáng lên + hiện mũi tên (↓ mới/A→Z,
+  // ↑ cũ/Z→A); nút kia mờ. Chiều suy ra từ elvSortMode().
+  function elvRenderSortBtns() {
+    var mode = elvSortMode();
+    var timeActive = (mode === 'newest' || mode === 'oldest');
+    var nameActive = (mode === 'name_az' || mode === 'name_za');
+    function setBtn(btn, active, arrow, tip) {
+      if (!btn) return;
+      btn.classList.toggle('is-active', active);
+      var d = btn.querySelector('.elv-sortDir');
+      if (d) d.textContent = active ? arrow : '';
+      btn.setAttribute('title', tip);
+    }
+    setBtn($('elvSortTime'), timeActive, (mode === 'oldest' ? '↑' : '↓'),
+      timeActive ? (mode === 'oldest' ? 'Thời gian tạo: cũ nhất trước (bấm để đảo)'
+                                      : 'Thời gian tạo: mới nhất trước (bấm để đảo)')
+                 : 'Sắp theo thời gian tạo');
+    setBtn($('elvSortName'), nameActive, (mode === 'name_za' ? '↑' : '↓'),
+      nameActive ? (mode === 'name_za' ? 'Tên: Z→A (bấm để đảo)' : 'Tên: A→Z (bấm để đảo)')
+                 : 'Sắp theo tên');
+  }
+  function elvSetSort(mode) {
+    localStorage.setItem('elv_sort_mode', mode);
+    elvRenderList();
+    elvRenderSortBtns();
+  }
   function elvRenderList() {
+    elvSortVoices();
     var list = $('elvVoiceList'); if (!list) return;
     list.innerHTML = '';
     if (!elvVoices.length) { list.innerHTML = '<div class="vg-nameRow vg-nameRow--empty">(không có voice clone)</div>'; elvUpdateDeleteBtn(); return; }
@@ -10773,7 +10861,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var rows = list.querySelectorAll('.elv-row');
     for (var i = 0; i < rows.length; i++) {
       var nm = rows[i].getAttribute('data-name') || '';
-      rows[i].style.display = (!q || nm.indexOf(q) !== -1) ? '' : 'none';
+      var target = (!q || nm.indexOf(q) !== -1) ? '' : 'none';
+      // Chỉ ghi khi THỰC SỰ đổi → giảm mutation/reflow tối đa (ô input đỡ bị disturb).
+      if (rows[i].style.display !== target) rows[i].style.display = target;
     }
   }
   async function elvDoDelete() {
@@ -10818,10 +10908,41 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       es.addEventListener('mousedown', function () { if (window.claimKeyboard) window.claimKeyboard(); });
       es.addEventListener('blur',  function () { if (window.releaseKeyboard) window.releaseKeyboard(); });
       var composing = false;
+      // GỐC LỖI "nuốt chữ": gọi elvFilterRows() ĐỒNG BỘ trong 'input' → mỗi phím gõ toggle
+      // display trên ~158 dòng list → UXP reset selection của ô về SELECT-ALL → phím kế đè
+      // cả đoạn. Fix: DEBOUNCE (không lọc khi đang gõ liên tục) + KHÔI PHỤC CARET sau khi
+      // lọc (phòng khi reflow vẫn select-all). Debounce là phòng tuyến chính: gõ liên tục
+      // thì không lọc → không reflow → không nuốt (giống hệt thí nghiệm tắt lọc: gõ mượt).
+      var _elvFilterT = null;
+      function elvScheduleFilter() {
+        if (_elvFilterT) { clearTimeout(_elvFilterT); }
+        _elvFilterT = setTimeout(function () {
+          _elvFilterT = null;
+          var caret = null; try { caret = es.selectionStart; } catch (e) {}
+          elvFilterRows(es.value);
+          // Trả caret về đúng vị trí (sync + tick kế) để select-all do reflow không "ăn" phím.
+          function _restore() { if (caret != null) { try { es.selectionStart = es.selectionEnd = caret; } catch (e) {} } }
+          _restore();
+          setTimeout(_restore, 0);
+        }, 160);
+      }
       es.addEventListener('compositionstart', function () { composing = true; });
-      es.addEventListener('compositionend', function () { composing = false; elvFilterRows(es.value); });
-      es.addEventListener('input', function () { if (!composing) elvFilterRows(es.value); });
+      es.addEventListener('compositionend', function () { composing = false; elvScheduleFilter(); });
+      es.addEventListener('input', function () { if (!composing) elvScheduleFilter(); });
     }
+    // 2 nút icon sort thay dropdown. Bấm nút chiều KHÁC → chuyển sang chiều đó (mặc định
+    // thời gian=mới nhất, tên=A→Z); bấm nút chiều ĐANG active → đảo chiều.
+    var tsb = $('elvSortTime');
+    if (tsb) tsb.addEventListener('click', function () {
+      var m = elvSortMode();
+      elvSetSort(m === 'newest' ? 'oldest' : (m === 'oldest' ? 'newest' : 'newest'));
+    });
+    var nsb = $('elvSortName');
+    if (nsb) nsb.addEventListener('click', function () {
+      var m = elvSortMode();
+      elvSetSort(m === 'name_az' ? 'name_za' : (m === 'name_za' ? 'name_az' : 'name_az'));
+    });
+    elvRenderSortBtns();
     document.querySelectorAll('.settings-tab').forEach(function (t) {
       if (t.getAttribute('data-stab') === 'voicegen') t.addEventListener('click', function () { elvFetchState(); });
     });
