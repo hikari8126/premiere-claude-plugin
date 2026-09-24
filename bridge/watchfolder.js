@@ -162,7 +162,11 @@ function createEngine(deps) {
   //
   // File chưa từng thấy thì KHÔNG đẩy — có thể đang render dở; cứ để nó đi qua
   // đường ổn định như thường.
-  function scanNow(watchId) {
+  //
+  // opts.preview = chỉ LIỆT KÊ, không đẩy vào hàng đợi. Plugin cần vậy để so với
+  // project rồi hỏi người dùng trước khi import — đẩy thẳng vào hàng đợi thì vòng
+  // poll import ngay, không còn chỗ nào để xem lại.
+  function scanNow(watchId, opts) {
     const w = watches.find(x => x.id === watchId);
     if (!w) return { ok: false, error: 'không tìm thấy watch' };
     if (w.enabled === false) return { ok: false, error: 'watch đang tắt' };
@@ -174,12 +178,22 @@ function createEngine(deps) {
       return { ok: false, error: 'không đọc được thư mục' };
     }
 
+    const preview = !!(opts && opts.preview);
     const known = s.snapshot || {};
+    const files = [];
     for (const rel of Object.keys(known)) {
       if (!matchFile(w, rel)) continue;
       if (known[rel] && known[rel][0] === 0) continue;   // file rỗng thì không import
-      enqueue(w, rel);
+      if (preview) {
+        files.push({
+          filePath: path.join(w.folder, rel.split('/').join(path.sep)),
+          binPath: binPathFor(w, rel),
+        });
+      } else {
+        enqueue(w, rel);
+      }
     }
+    if (preview) return { ok: true, preview: true, files, total: files.length };
     flush(true);
     return { ok: true, queued: queue.length - before, total: queue.length };
   }

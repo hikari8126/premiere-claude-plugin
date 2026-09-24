@@ -791,7 +791,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.8.0';  // Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.8.1';  // Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -4802,6 +4802,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var d = await resp.json();
       if (myVTok !== sacValidateToken) return; // cancelled mid-flight
 
+      sacSetMissingNames(srcResult.missing || []);
       if (!d.ok) {
         status.textContent = '❌ ' + (d.errors ? d.errors.join(' | ') : d.error);
         sacValidatePassed = false;
@@ -4902,6 +4903,369 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (parseBlocks().length === 0) return;
     sacValidateAll({ skipVoiceAsk: true }); // re-check sources only — don't re-ask voice
   });
+
+  // ── Tìm source thiếu trong Watch Folder ─────────────────────────────────
+  // Validate báo "thiếu source trong bin" = file có thể vẫn nằm trên đĩa, chỉ
+  // chưa import. Plugin không đọc được đĩa nên bridge đi tìm (/watch/find-sources),
+  // rồi model ghép thư mục tìm được với bin CÓ THẬT trong project
+  // (/watch/suggest-bins) — vì cùng một thư mục "B Roll" có thể thuộc bin khác
+  // nhau tuỳ cách người dùng tổ chức project. Người dùng duyệt bảng, sửa bin nếu
+  // model đoán sai, rồi mới tạo watch + import.
+  var sacMissingNames = [];
+  var sacFind = { rows: [], bins: [], hidden: [], wired: false, busy: false };
+
+  function sacSetMissingNames(names) {
+    sacMissingNames = names || [];
+    var wrap = $('sacFindWrap');
+    if (wrap) wrap.style.display = sacMissingNames.length ? 'flex' : 'none';
+    if (!sacMissingNames.length) return;
+    var title = $('sacFindCardTitle');
+    if (title) {
+      title.textContent = 'Thiếu ' + sacMissingNames.length + ' source trong project';
+    }
+    var names1 = $('sacFindCardNames');
+    if (names1) {
+      // Liệt kê tối đa 6 tên — dài hơn thì thẻ đẩy hết panel xuống.
+      var show = sacMissingNames.slice(0, 6).join(' · ');
+      names1.textContent = sacMissingNames.length > 6
+        ? (show + ' · +' + (sacMissingNames.length - 6) + ' nữa')
+        : show;
+    }
+  }
+
+  function sacFindStatus(msg, cls) {
+    var el = $('sacFindStatus');
+    if (!el) return;
+    el.hidden = !msg;
+    el.textContent = msg || '';
+    el.className = 'vgm-status' + (cls ? ' ' + cls : '');
+  }
+
+  function sacFindClose() {
+    if (sacFind.busy) return;
+    var m = $('sacFindModal');
+    if (m) m.hidden = true;
+    sacFind.hidden.forEach(function(el) { el.style.display = ''; });
+    sacFind.hidden = [];
+    sacFind.rows = [];
+  }
+
+  function sacFindOpen() {
+    sacFind.hidden = [];
+    var activePanel = document.querySelector('.tab-panel.active');
+    if (activePanel) { activePanel.style.display = 'none'; sacFind.hidden.push(activePanel); }
+    var m = $('sacFindModal');
+    if (m) m.hidden = false;
+  }
+
+  function sacFindWire() {
+    if (sacFind.wired) return;
+    sacFind.wired = true;
+    var c = $('sacFindClose');
+    if (c) c.addEventListener('click', sacFindClose);
+    var go = $('sacFindGo');
+    if (go) go.addEventListener('click', sacFindApply);
+  }
+
+  // Danh sách bin CÓ THẬT, lấy từ lần quét bin của validate. Model chỉ được chọn
+  // trong đây; bin bịa ra sẽ đẻ folder rỗng trong project.
+  // Dạng 'A/B/C' (dấu '/') — đúng định dạng binPath của watch; toBinName() bên
+  // watch.js mới đổi sang ' / ' cho ppMoveToBin. KHÔNG dùng b.parent: đó chỉ là
+  // tên thư mục LÁ, ghép vào sẽ ra đường dẫn cụt.
+  function sacFindBinList() {
+    return (sacBinItems || []).filter(function(b) { return b.isFolder; })
+      .map(function(b) {
+        var parts = b.path ? b.path.split(' / ') : [];
+        parts.push(b.name);
+        return parts.join('/');
+      })
+      .filter(function(v, i, a) { return a.indexOf(v) === i; })
+      .sort();
+  }
+
+  var sacFindBtn = $('sacFindBtn');
+  if (sacFindBtn) sacFindBtn.addEventListener('click', function() { sacFindScan(); });
+
+  async function sacFindScan() {
+    if (sacFind.busy) return;
+    if (!sacMissingNames.length) return;
+    if (!window.wfApi) { $('sacStatus').textContent = '⚠ Tab Watch chưa nạp được.'; return; }
+    sacFindWire();
+
+    var btn = $('sacFindBtn');
+    var hint = $('sacFindCardHint');
+    // keepMsg: lỗi phải ở lại trên thẻ. `finally` chạy cả khi return sớm, nên
+    // nếu cứ reset vô điều kiện thì thông báo lỗi biến mất ngay lập tức.
+    var keepMsg = false;
+    function busy(t) {
+      if (btn) btn.classList.toggle('is-busy', !!t);
+      if (hint) {
+        hint.textContent = t
+          || 'Quét thư mục sản phẩm, ghép bin bằng AI, bạn duyệt trước khi import.';
+      }
+    }
+    function fail(t) { keepMsg = true; busy('⚠ ' + t); }
+    busy('⏳ Đang tìm trên đĩa…');
+    try {
+      var projectPath = await window.wfApi.ensureSession();
+      if (!projectPath) {
+        fail('Project chưa lưu — lưu .prproj rồi thử lại.');
+        return;
+      }
+
+      var found = await sacFindPost('/watch/find-sources', {
+        projectPath: projectPath, names: sacMissingNames,
+        extraRoots: window.wfApi.getWatches()
+          .map(function(w) { return w.folder; }).filter(Boolean),
+      });
+      if (!found.ok) { fail(found.error); return; }
+      if (!found.folders.length) {
+        // Nói rõ ĐÃ quét bao nhiêu — báo "không thấy" trống trơn thì trông như
+        // chưa tìm gì đã trả lời.
+        fail('Đã quét ' + (found.scannedFiles || 0) + ' file media trong '
+          + (found.roots || [found.root]).length + ' thư mục gốc — không file nào khớp '
+          + sacMissingNames.length + ' source. Gốc: ' + found.root);
+        return;
+      }
+
+      var bins = sacFindBinList();
+      sacFind.bins = bins;
+
+      // Model ghép thư mục ↔ bin. Hỏng (bridge cũ, không có key, model lỗi) thì
+      // vẫn mở bảng với bin trống để chọn tay — không chặn cả luồng vì AI.
+      busy('⏳ Đang ghép thư mục với bin…');
+      var sug = await sacFindPost('/watch/suggest-bins', {
+        folders: found.folders.map(function(f) {
+          return {
+            folder: f.folder, rel: f.rel, dirName: f.dirName,
+            needsFolderBin: !!f.needsFolderBin,
+            names: f.matches.map(function(m) { return m.name; }),
+            fileNames: f.matches.map(function(m) { return m.fileName; }),
+          };
+        }),
+        bins: bins,
+      });
+      var byFolder = {};
+      if (sug.ok) (sug.suggestions || []).forEach(function(x) { byFolder[x.folder] = x; });
+
+      sacFind.rows = found.folders.map(function(f) {
+        var g = byFolder[f.folder] || {};
+        return {
+          folder: f.folder, rel: f.rel, dirName: f.dirName,
+          hint: sacFindHintOf(f),
+          binPath: g.binPath || '',
+          reason: sug.ok ? (g.reason || '') : ('AI không ghép được (' + sug.error + ') — chọn bin tay'),
+          files: f.matches.map(function(m) {
+            // Khớp gần đúng KHÔNG tick sẵn: import nhầm clip vào timeline còn
+            // tệ hơn là thiếu, vì nó lọt qua validate và chỉ lộ ra lúc xem lại.
+            return { filePath: m.filePath, fileName: m.fileName, name: m.name,
+                     exact: m.exact, dist: m.dist, checked: !!m.exact, box: null };
+          }),
+        };
+      });
+      sacFindRender(found);
+      sacFindStatus('', '');
+      sacFindOpen();
+    } catch (e) {
+      fail(e.message);
+    } finally {
+      if (!keepMsg) busy('');
+    }
+  }
+
+  // Source dạng "Higg 33" chỉ khớp được clip "33" nếu bin LÁ chứa nó có tên
+  // chứa "higg" (lượt 3 của sacMatchBinItem). Nên nếu bin người dùng chọn không
+  // mang tên đó, phải import vào bin con đặt theo tên thư mục trên đĩa — không
+  // thì import xong validate vẫn báo thiếu y như cũ.
+  function sacFindHintOf(f) {
+    for (var i = 0; i < f.matches.length; i++) {
+      if (f.matches[i].hintFolder) return f.matches[i].hintFolder;
+    }
+    return null;
+  }
+
+  function sacFindEffectiveBin(r) {
+    if (!r.binPath) return '';
+    if (!r.hint) return r.binPath;
+    var leaf = r.binPath.split('/').pop();
+    if (sacNorm(leaf).indexOf(r.hint) !== -1) return r.binPath;
+    return r.binPath + '/' + r.dirName;
+  }
+
+  // Endpoint chưa tồn tại (bridge cũ) thì Express trả trang HTML 404 → r.json()
+  // ném "Unexpected token '<'", vô nghĩa với người dùng. Đọc text rồi tự parse
+  // để nói đúng bệnh: cần cập nhật/khởi động lại Bridge.
+  function sacFindPost(url, body) {
+    return fetch(BRIDGE_URL + url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(function(r) {
+      return r.text().then(function(t) {
+        try { return JSON.parse(t); }
+        catch (e) {
+          return { ok: false, needsBridge: true,
+                   error: 'Bridge chưa có ' + url + ' — cần Bridge ≥1.18.0, '
+                        + 'khởi động lại Bridge app rồi thử lại.' };
+        }
+      });
+    }).catch(function(e) {
+      return { ok: false, error: 'Bridge offline: ' + e.message };
+    });
+  }
+
+  function sacFindCount() {
+    var n = 0;
+    sacFind.rows.forEach(function(r) {
+      if (!r.binPath) return;      // chưa chọn bin thì không import được
+      r.files.forEach(function(f) { if (f.checked) n += 1; });
+    });
+    var t = $('sacFindGoText');
+    if (t) t.textContent = n ? ('Tạo watch + Import ' + n + ' file') : 'Tạo watch + Import';
+    return n;
+  }
+
+  function sacFindRender(found) {
+    var sum = $('sacFindSummary');
+    if (sum) {
+      sum.textContent = 'Thiếu ' + sacMissingNames.length + ' source · quét '
+        + (found.scannedFiles || 0) + ' file · tìm thấy ở '
+        + sacFind.rows.length + ' thư mục dưới ' + found.root
+        + (found.unmatched.length ? ' · không thấy: ' + found.unmatched.join(', ') : '');
+    }
+    var host = $('sacFindList');
+    if (!host) return;
+    host.innerHTML = '';
+
+    sacFind.rows.forEach(function(r) {
+      var head = document.createElement('div');
+      head.className = 'sac-findFolder';
+      head.textContent = r.rel;
+      host.appendChild(head);
+
+      var binRow = document.createElement('div');
+      binRow.className = 'sac-findBinRow';
+      var lbl = document.createElement('span');
+      lbl.className = 'sac-findBinLabel';
+      lbl.textContent = 'Bin:';
+      binRow.appendChild(lbl);
+
+      var sel = document.createElement('select');
+      sel.className = 'vg-select';
+      var none = document.createElement('option');
+      none.value = ''; none.textContent = '(chọn bin…)';
+      sel.appendChild(none);
+      sacFind.bins.forEach(function(b) {
+        var o = document.createElement('option');
+        o.value = b; o.textContent = b;
+        sel.appendChild(o);
+      });
+      sel.value = r.binPath || '';
+      binRow.appendChild(sel);
+      host.appendChild(binRow);
+
+      var dest = document.createElement('div');
+      dest.className = 'sac-findReason';
+      function paintDest() {
+        var eff = sacFindEffectiveBin(r);
+        dest.style.display = (eff && eff !== r.binPath) ? '' : 'none';
+        dest.textContent = '→ import vào bin con "' + r.dirName + '" (' + eff
+          + ') để validate nhận ra tên kiểu "' + r.hint + ' …"';
+      }
+      paintDest();
+      host.appendChild(dest);
+      sel.addEventListener('change', function() {
+        r.binPath = sel.value; paintDest(); sacFindCount();
+      });
+
+      if (r.reason) {
+        var why = document.createElement('div');
+        why.className = 'sac-findReason';
+        why.textContent = r.reason;
+        host.appendChild(why);
+      }
+
+      r.files.forEach(function(f) {
+        var row = document.createElement('div');
+        row.className = 'sac-bind-row';
+        row.style.paddingLeft = '8px';
+
+        var box = document.createElement('input');
+        box.type = 'checkbox'; box.checked = f.checked;
+        box.addEventListener('change', function() { f.checked = box.checked; sacFindCount(); });
+        f.box = box;
+        row.appendChild(box);
+
+        var nm = document.createElement('span');
+        nm.textContent = f.fileName;
+        row.appendChild(nm);
+
+        var tag = document.createElement('span');
+        tag.className = 'wf-dir-row-sub';
+        tag.textContent = f.exact ? ('← ' + f.name)
+                                  : ('⚠ gần đúng (lệch ' + f.dist + ') ← ' + f.name);
+        row.appendChild(tag);
+
+        host.appendChild(row);
+      });
+    });
+    sacFindCount();
+  }
+
+  async function sacFindApply() {
+    if (sacFind.busy) return;
+    if (!sacFindCount()) {
+      sacFindStatus('Chưa có file nào chọn được (thiếu bin hoặc chưa tick).', 'is-warn');
+      return;
+    }
+    sacFind.busy = true;
+    try {
+      var existing = window.wfApi.getWatches();
+      var newWatches = [], picked = [];
+
+      sacFind.rows.forEach(function(r) {
+        if (!r.binPath) return;
+        var files = r.files.filter(function(f) { return f.checked; });
+        if (!files.length) return;
+        var eff = sacFindEffectiveBin(r);
+        files.forEach(function(f) {
+          picked.push({ filePath: f.filePath, binPath: eff });
+        });
+        // Thư mục đã có watch rồi thì đừng tạo watch thứ hai trỏ cùng chỗ.
+        var dup = existing.concat(newWatches).some(function(w) { return w.folder === r.folder; });
+        if (dup) return;
+        var w = window.wfApi.newWatch();
+        w.label = r.rel;
+        w.folder = r.folder;
+        w.binPath = eff;              // cùng bin với lần import này, file mới vào đúng chỗ
+        w.mirrorSubfolders = false;   // file nằm ngay trong thư mục này
+        w.include = ['video', 'audio', 'image'];
+        newWatches.push(w);
+      });
+
+      if (newWatches.length) {
+        sacFindStatus('⏳ Đang tạo ' + newWatches.length + ' watch…', '');
+        await window.wfApi.addWatches(newWatches);
+      }
+
+      var res = await window.wfApi.importPicked(picked, function(t) { sacFindStatus(t, ''); });
+      if (res.error) { sacFindStatus('⚠ ' + res.error, 'is-warn'); return; }
+
+      sacFind.busy = false;
+      sacFindClose();
+      var st = $('sacStatus');
+      if (st) {
+        st.textContent = '✅ Đã import ' + res.ok + ' file'
+          + (res.fail ? ', lỗi ' + res.fail : '')
+          + (newWatches.length ? ' · tạo ' + newWatches.length + ' watch' : '')
+          + ' — đang validate lại…';
+        st.style.display = 'block';
+      }
+      // Import xong phải validate lại, nếu không gate Run vẫn đóng.
+      if (parseBlocks().length) sacValidateAll({ skipVoiceAsk: true });
+    } finally {
+      sacFind.busy = false;
+    }
+  }
 
   // ── Cut panel buttons ───────────────────────────────────────────────────
 
@@ -8543,6 +8907,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       mode: o.mode || 'tts', take: take, multi: !!o.multi,
       outputs: Array.isArray(o.outputs) ? o.outputs : [],
     });
+    vgHistSession[list[0].id] = true;   // thanh điều hướng chỉ đếm phiên này
     // Cap TỪNG profile chứ không cap cả list: một profile gen nhiều sẽ đẩy bay
     // sạch history của profile khác nếu dùng chung một hạn mức.
     var seen = {};
@@ -8597,12 +8962,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // Dựng bằng DOM API (không innerHTML cho từng mục) — cùng lối với renderVoiceDrop.
   // KHÔNG dùng attribute title="" làm tooltip: UXP không hỗ trợ.
   // ── Điều hướng giữa các lần gen ─────────────────────────────────────────
-  // Danh sách = history của mode đang mở và có file output. Index 0 = mới nhất.
+  // Danh sách = các lần gen CỦA PHIÊN NÀY, mode đang mở, có file output.
+  // Index 0 = mới nhất. Bộ đếm "Lần gen 2/5" nói về việc vừa làm trong phiên,
+  // nên đóng Premiere rồi mở lại là về 0 — history "Gần đây" (localStorage) vẫn
+  // giữ nguyên, muốn xem lần gen cũ thì vào đó.
   var vgHistNavIdx = 0;
+  var vgHistSession = {};   // id lần gen → true, chỉ sống trong phiên này
 
   function vgHistNavList() {
     return vgHistGet().filter(function (h) {
-      return h.outputs && h.outputs.length && (h.mode || 'tts') === currentMode && vgHistUsable(h);
+      return vgHistSession[h.id]
+        && h.outputs && h.outputs.length && (h.mode || 'tts') === currentMode && vgHistUsable(h);
     });
   }
 
@@ -8642,6 +9012,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     renderVariations();
     if (els.resultSection) els.resultSection.hidden = false;
     if (!fromNav) {
+      // Mở lại một mục history cũ (phiên trước) cũng là việc của phiên này —
+      // cho nó vào danh sách điều hướng, nếu không thanh đếm sẽ trỏ nhầm mục.
+      vgHistSession[h.id] = true;
       var list = vgHistNavList();
       for (var i = 0; i < list.length; i++) if (list[i].id === h.id) { vgHistNavIdx = i; break; }
     }

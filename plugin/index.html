@@ -1057,6 +1057,21 @@
       </div>
 
       <div id="sacStatus" class="sac-statusMsg" style="display:none"></div>
+      <!-- Hiện khi validate báo thiếu source: đi tìm file trên đĩa qua bridge,
+           nhờ model ghép thư mục với bin, rồi tạo watch + import. Là một thẻ đủ
+           bề ngang chứ không phải nút lẻ — nút lẻ ở góc thì lọt thỏm, không ai
+           hiểu nó liên quan gì tới dòng "thiếu source" phía trên. -->
+      <div id="sacFindWrap" class="sac-findCard" style="display:none">
+        <div class="sac-findCardHead">
+          <span class="sac-findCardIcon">⚠</span>
+          <span id="sacFindCardTitle" class="sac-findCardTitle"></span>
+        </div>
+        <div id="sacFindCardNames" class="sac-findCardNames"></div>
+        <div id="sacFindBtn" class="sac-findCardBtn" role="button">
+          <span data-ic="magnifying_glass" data-ic-size="12"></span> Tìm trong Watch Folder
+        </div>
+        <div id="sacFindCardHint" class="sac-findCardHint">Quét thư mục sản phẩm, ghép bin bằng AI, bạn duyệt trước khi import.</div>
+      </div>
 
     </div>
 
@@ -1637,6 +1652,44 @@
       <div id="wfDirNative" class="wf-btn wf-btn-sm" role="button">Duyệt thủ công…</div>
       <div class="wf-spacer"></div>
       <div id="wfDirSave" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bảng xem lại kết quả Đối chiếu (tab Watch). Nằm NGOÀI .tab-panel như #wfDirModal
+     vì UXP không có z-index — input native của tab đang mở sẽ vẽ đè lên modal. -->
+<div id="wfCmpModal" class="sac-bind-modal" hidden>
+  <div class="sac-bind-box">
+    <div class="sac-bind-head">
+      <span id="wfCmpTitle" class="sac-bind-title">Đối chiếu footage</span>
+      <div id="wfCmpClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+    </div>
+    <div id="wfCmpSummary" class="wf-dir-crumb"></div>
+    <div id="wfCmpList" class="sac-bind-list"></div>
+    <div id="wfCmpStatus" class="vgm-status" hidden></div>
+    <div class="vg-binFoot">
+      <div id="wfCmpAll" class="wf-btn wf-btn-sm" role="button">Chọn tất cả</div>
+      <div id="wfCmpNone" class="wf-btn wf-btn-sm" role="button">Bỏ chọn</div>
+      <div class="wf-spacer"></div>
+      <div id="wfCmpGo" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> <span id="wfCmpGoText">Import</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Bảng "Tìm source thiếu trong Watch Folder" (tab Autocut). Ngoài .tab-panel
+     vì UXP không có z-index — input native của tab sẽ vẽ đè lên modal. -->
+<div id="sacFindModal" class="sac-bind-modal" hidden>
+  <div class="sac-bind-box">
+    <div class="sac-bind-head">
+      <span class="sac-bind-title">Source thiếu — tìm thấy trên đĩa</span>
+      <div id="sacFindClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+    </div>
+    <div id="sacFindSummary" class="wf-dir-crumb"></div>
+    <div id="sacFindList" class="sac-bind-list"></div>
+    <div id="sacFindStatus" class="vgm-status" hidden></div>
+    <div class="vg-binFoot">
+      <div class="wf-spacer"></div>
+      <div id="sacFindGo" class="btn-primary vg-binSaveBtn" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> <span id="sacFindGoText">Tạo watch + Import</span></div>
     </div>
   </div>
 </div>

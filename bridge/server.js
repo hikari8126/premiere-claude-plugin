@@ -2960,7 +2960,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.16.0';  // Watch folder: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.18.0';  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 app.get('/health', (_req, res) => {
   res.json({
     status:  'ok',
@@ -3393,8 +3393,102 @@ app.get('/watch/browse', (req, res) => {
 
 app.post('/watch/scan-now', (req, res) => {
   try {
-    res.json(watchEngine.scanNow((req.body && req.body.watchId) || ''));
+    res.json(watchEngine.scanNow((req.body && req.body.watchId) || '',
+      { preview: !!(req.body && req.body.preview) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /watch/find-sources ───────────────────────────────────────────────
+// Autocut validate báo thiếu source → tìm file tương ứng trên đĩa, gom theo
+// thư mục để bước sau đề xuất watch. Chỉ ĐỌC, không import, không tạo watch.
+// Input:  { projectPath, names: [...], root?, maxDepth?, extraRoots? }
+// Output: { ok, root, folders: [{folder, rel, matches, exactCount}], unmatched }
+app.post('/watch/find-sources', (req, res) => {
+  try {
+    const wfBrowse = require('./watchfolder-browse.js');
+    const wfFind   = require('./watchfolder-find.js');
+    const b = req.body || {};
+    const root = b.root || (b.projectPath ? wfBrowse.productRoot(b.projectPath) : '');
+    if (!root) return res.status(400).json({ ok: false, error: 'thiếu projectPath/root' });
+    res.json(wfFind.findSources(root, b.names || [], {
+      maxDepth: b.maxDepth,
+      // Thư mục các watch đang có — có thể nằm ngoài cây sản phẩm (ổ ngoài, NAS).
+      extraRoots: Array.isArray(b.extraRoots) ? b.extraRoots : [],
+    }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /watch/suggest-bins ───────────────────────────────────────────────
+// Ghép thư mục (do find-sources trả về) với bin trong project, nhờ model quyết
+// định. Chỉ ĐỀ XUẤT — plugin hiện bảng cho người dùng duyệt rồi mới tạo watch.
+//
+// Không tự chế bin mới: model phải chọn trong danh sách bin CÓ THẬT, nếu không
+// thì ppGetOrCreateBin sẽ đẻ ra bin rỗng tên bịa.
+// Input:  { folders: [{folder, rel, fileNames[], names[]}], bins: [binPath...] }
+// Output: { ok, suggestions: [{folder, binPath, reason}] }
+app.post('/watch/suggest-bins', async (req, res) => {
+  const b = req.body || {};
+  const folders = Array.isArray(b.folders) ? b.folders : [];
+  const bins = (Array.isArray(b.bins) ? b.bins : []).filter(Boolean);
+  if (!folders.length) return res.json({ ok: true, suggestions: [] });
+  if (!bins.length) return res.json({ ok: false, error: 'project chưa có bin nào để ghép' });
+
+  const folderBlock = folders.map((f, i) =>
+    (i + 1) + '. "' + (f.rel || f.folder) + '"\n'
+    + '   source đang thiếu khớp ở đây: ' + (f.names || []).slice(0, 12).join(', ') + '\n'
+    + '   vài tên file: ' + (f.fileNames || []).slice(0, 8).join(', ')
+    + (f.needsFolderBin
+      ? '\n   LƯU Ý: source đặt tên kiểu "<thư mục> <số clip>" → ưu tiên bin có tên chứa "'
+        + (f.dirName || '') + '"; không có thì chọn bin cha hợp lý (plugin tự tạo bin con "'
+        + (f.dirName || '') + '").'
+      : '')
+  ).join('\n');
+
+  const prompt = `Tôi đang dựng video trong Adobe Premiere Pro.
+Một số clip có trong thư mục trên đĩa nhưng CHƯA được import vào project.
+Hãy ghép mỗi thư mục dưới đây với MỘT bin có sẵn trong project để import vào.
+
+THƯ MỤC TRÊN ĐĨA:
+${folderBlock}
+
+BIN CÓ SẴN TRONG PROJECT (chỉ được chọn trong danh sách này, chép lại y nguyên):
+${bins.map(x => '- ' + x).join('\n')}
+
+Quy tắc:
+- Mỗi thư mục chọn đúng 1 bin trong danh sách trên. Không được bịa bin mới.
+- Ưu tiên bin mà loại nội dung khớp nhau (footage/A roll/B roll/voice over/nhạc/ảnh).
+- Nếu không có bin nào hợp lý, đặt "binPath": "" và nói lý do.
+- "reason": một câu ngắn bằng tiếng Việt.
+
+Chỉ trả về JSON array, không markdown, không giải thích thêm:
+[{"folder":"<chép y nguyên tên thư mục ở trên>","binPath":"<bin đã chọn>","reason":"..."}]`;
+
+  try {
+    const out = await callLLM(prompt, {
+      provider: b.provider, model: b.model, apiKey: b.apiKey, maxTokens: 1500,
+    });
+    const m = String(out || '').match(/\[[\s\S]*\]/);
+    if (!m) throw new Error('model không trả về JSON array');
+    const raw = JSON.parse(m[0]);
+
+    // Model hay trả bin gần đúng (sai hoa thường, thêm/thiếu khoảng trắng). Ép
+    // về đúng chuỗi bin có thật, sai hẳn thì bỏ binPath chứ không tin bừa.
+    const byNorm = new Map(bins.map(x => [String(x).toLowerCase().replace(/\s+/g, ''), x]));
+    const suggestions = folders.map(f => {
+      const key = f.rel || f.folder;
+      const hit = raw.find(x => x && (x.folder === key || x.folder === f.folder)) || {};
+      const exact = bins.indexOf(hit.binPath) >= 0
+        ? hit.binPath
+        : byNorm.get(String(hit.binPath || '').toLowerCase().replace(/\s+/g, '')) || '';
+      return {
+        folder: f.folder, rel: f.rel || f.folder, binPath: exact,
+        reason: exact ? (hit.reason || '') : (hit.reason || 'không ghép được bin — chọn tay'),
+      };
+    });
+    res.json({ ok: true, suggestions });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────

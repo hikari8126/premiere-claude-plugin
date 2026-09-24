@@ -55,6 +55,18 @@ engine.tick(); engine.tick();
 assert.ok(engine.poll(20).items.some(i => /dang-ghi/.test(i.filePath)),
   'ổn định rồi thì vào hàng đợi');
 
+// 4b. preview: chỉ liệt kê, KHÔNG đụng vào hàng đợi — plugin cần vậy để hỏi
+//     người dùng trước khi import.
+const before = engine.poll(50).items.length;
+const pv = engine.scanNow('w_1', { preview: true });
+assert.strictEqual(pv.ok, true);
+assert.strictEqual(pv.preview, true, 'đánh dấu là preview để plugin biết bridge đủ mới');
+assert.ok(pv.files.length >= 1, 'liệt kê file khớp lọc: ' + JSON.stringify(pv.files));
+assert.ok(pv.files.every(f => /\.mp4$/.test(f.filePath)), 'wav bị preset loại');
+assert.ok(pv.files.every(f => typeof f.binPath === 'string' && f.binPath),
+  'mỗi file kèm bin đích');
+assert.strictEqual(engine.poll(50).items.length, before, 'preview không đẩy vào hàng đợi');
+
 // 5. Quét ngay với watch tắt → không làm gì, không ném
 store.writeConfig(PROJ, [{ ...W, enabled: false }]);
 const e2 = createEngine({ scan, now: () => clock, store });

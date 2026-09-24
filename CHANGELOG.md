@@ -3,6 +3,33 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.8.1 / bridge app 3.12 (server 1.18.0) — 2026-09-24
+
+> **Cần Bridge app 3.12 (server ≥1.18.0)** cho cả hai tính năng Watch/Autocut dưới đây.
+> Bridge cũ vẫn chạy: Đối chiếu ghi nhật ký là không có bước xem lại; nút tìm source
+> báo "cần Bridge ≥1.18.0" thay vì lỗi `Unexpected token '<'`.
+
+### ✨ Mới — Autocut: tìm source thiếu trong Watch Folder
+- Validate báo thiếu source → hiện **thẻ cảnh báo** (số source thiếu, tên, nút "Tìm trong Watch Folder", dòng tiến trình/lỗi). Bản nháp đầu là một nút lẻ ở góc phải — lọt thỏm, không ai biết nó liên quan tới dòng "thiếu source".
+- `POST /watch/find-sources`: bridge quét thư mục sản phẩm (cấp cha của thư mục chứa `.prproj`, sâu 6 cấp) **và thư mục các watch đang có** (có thể ở ổ ngoài), gom kết quả theo thư mục, trả kèm số file đã quét.
+- `POST /watch/suggest-bins`: model (`callLLM` — API key hoặc Claude CLI) ghép mỗi thư mục với **một bin có thật** trong project. Bin model trả về bị ép khớp lại với chuỗi thật; sai hẳn thì để trống cho người dùng chọn tay, không tin bừa (bin bịa sẽ đẻ folder rỗng).
+- Bảng duyệt: đổi được bin, tick từng file. Khớp gõ-sai không tick sẵn — import nhầm clip lọt qua validate, tệ hơn thiếu. Xác nhận → tạo watch (lưu vào config như watch thường), import theo mẻ, validate lại.
+
+### 🐛 Sửa — khớp tên phải giống hệt validate
+- **Triệu chứng:** "Higg 30…36" báo *không thấy file nào khớp* dù `Sources/Higg/30.mp4…36.mp4` nằm ngay đó — trông như chưa tìm đã trả lời.
+- **Nguyên nhân:** bản đầu chỉ so tên file. Cutsheet dùng quy ước `<thư mục> <số clip>` mà `sacMatchBinItem` hiểu ở lượt 3.
+- **Fix:** bridge chép lại **đủ 4 lượt** của `sacMatchBinItem` (trùng tên → tiền tố + ranh giới → thư mục + clip → gõ sai với dãy số phải khớp tuyệt đối). Lệch nhau là hỏng cả tính năng: bridge "thấy" mà import xong validate vẫn báo thiếu.
+- Clip khớp kiểu thư mục + số phải nằm trong bin **lá** có tên chứa phần thư mục, nên nếu bin được chọn không mang tên đó thì import vào bin con đặt theo tên thư mục (`Sources` → `Sources/Higg`). Model được dặn ưu tiên bin đã mang tên thư mục.
+- Danh sách bin gửi cho model/dropdown dùng đường dẫn đầy đủ — bản đầu ghép `parent` (chỉ là tên lá) nên ra đường dẫn cụt.
+
+### 🐛 Sửa — Watch: Đối chiếu import thẳng, từng file một
+- **Triệu chứng:** bấm Đối chiếu là import luôn không hỏi; Premiere nhảy dialog liên tục, chiếm màn hình, chậm.
+- **Nguyên nhân:** `scan-now` đẩy cả thư mục vào hàng đợi, vòng poll `importFiles([1 file])` lặp lại.
+- **Fix:** `scan-now` nhận `{preview:true}` — chỉ liệt kê, không đụng hàng đợi. Plugin so với project, mở bảng tick chọn file còn thiếu (nhóm theo bin), rồi import **một `importFiles` cho mỗi bin đích**. Phần import tách thành `wfImportPicked()` dùng chung cho Autocut.
+
+### 🔧 Voice Gen
+- Thanh "Lần gen i/N" ở khu kết quả chỉ đếm các lần gen **trong phiên** (tắt/mở Premiere về 0). History "Gần đây" không đổi; mở lại một mục cũ thì mục đó nhập vào danh sách điều hướng của phiên để chỉ số không trỏ nhầm.
+
 ## v5.8.0 / bridge app 3.11 (server 1.16.0) — 2026-09-17
 
 > Hai mảng lớn trong một bản: **tab Watch** (theo dõi thư mục, tự import vào bin)

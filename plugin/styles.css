@@ -4565,3 +4565,40 @@ div[role="button"].vg-histHead {
 div[role="button"].vg-histHead:hover { color: rgba(255,255,255,0.7); }
 .vg-histCaret { display: inline-block; width: 12px; font-size: 9px;
                 color: rgba(255,255,255,0.45); }
+
+/* ── Autocut: tìm source thiếu trong Watch Folder ───────────────────────── */
+/* Thẻ cảnh báo đủ bề ngang, nối tiếp dòng trạng thái validate. */
+.sac-findCard {
+  flex: 0 0 auto;
+  margin: 2px 10px 8px;
+  padding: 9px 11px 10px;
+  border: 1px solid rgba(234,179,8,0.35); border-radius: var(--radius);
+  background: rgba(234,179,8,0.07);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sac-findCardHead { display: flex; align-items: center; gap: 6px; }
+.sac-findCardIcon { font-size: 12px; color: #eab308; }
+.sac-findCardTitle { font-size: 11.5px; font-weight: 600; color: var(--text); }
+.sac-findCardNames {
+  font-size: 10.5px; color: var(--text-dim); line-height: 1.45;
+  word-break: break-word;
+}
+.sac-findCardBtn {
+  align-self: stretch; text-align: center;
+  padding: 6px 12px;
+  border: 1px solid var(--accent-a40); border-radius: 6px;
+  background: var(--accent-a15); color: var(--accent-light);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; outline: none; white-space: nowrap;
+}
+.sac-findCardBtn:hover { background: var(--accent-a28); color: #fff; }
+.sac-findCardBtn.is-busy { opacity: 0.6; }
+.sac-findCardHint { font-size: 10px; color: var(--text-dim); text-align: center; }
+/* Tên thư mục là tiêu đề nhóm trong bảng: đậm hơn các dòng file bên dưới. */
+.sac-findFolder { font-size: 12px; font-weight: 600; color: var(--text);
+                  margin: 10px 0 2px; word-break: break-all; }
+.sac-findBinRow { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.sac-findBinLabel { font-size: 11px; color: var(--text-dim); }
+.sac-findBinRow .vg-select { flex: 1 1 0; min-width: 0; }
+.sac-findReason { font-size: 11px; color: var(--text-dim); margin-bottom: 4px;
+                  font-style: italic; }
