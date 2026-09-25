@@ -3,6 +3,17 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.9.1 / bridge app 3.14 (server 1.18.2) — 2026-09-25
+
+> **Cần Bridge app 3.14** — sửa nằm chủ yếu ở bridge.
+
+### 🐛 Sửa — "Tìm trong Watch Folder" chạy mãi không xong, bridge treo
+- **Triệu chứng:** thẻ đứng ở "⏳ Đang tìm trên đĩa…" rất lâu; trong lúc đó plugin có thể báo bridge offline.
+- **Nguyên nhân:** `find-sources` dùng `scanFolder()` **đồng bộ** (`readdirSync` + `statSync` từng file, tuần tự từng thư mục). Google Drive lần đầu liệt kê thư mục phải hỏi server — đo thật trên ZoeShape: 130 thư mục / 550 file mất **65 giây** (lần sau có cache: 0.03s). Suốt lúc đó event loop bị chặn → `/health`, watch poll đều không trả lời. Plugin lại không có timeout.
+- **Fix bridge:** bộ duyệt riêng `walkAsync()` — `fs.promises.readdir` song song 8 thư mục, **không stat** (tìm theo tên không cần size/mtime), hạn **45s** rồi trả phần đã quét kèm `timedOut`. Đo: `/health` trả lời trong 10ms giữa lúc quét. Watch engine vẫn dùng `scanFolder()` (cần size/mtime để chờ file ghi xong).
+- **Fix plugin:** đếm giây lúc chờ (từ 8s ghi thêm "Google Drive lần đầu có thể mất tới ~1 phút"), timeout 90s, báo rõ khi chưa quét hết.
+- Bỏ qua thêm thư mục `Adobe Premiere Pro Captured and Generated` (tên mới của thư mục captured ở Premiere 25+).
+
 ## v5.9.0 — 2026-09-24
 
 > Gộp 3 tính năng/fix. Chỉ sửa plugin. **Không cần bridge mới.**

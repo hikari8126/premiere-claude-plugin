@@ -2969,7 +2969,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.18.1';  // GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.18.2';  // find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {
@@ -3445,15 +3445,16 @@ app.post('/watch/scan-now', (req, res) => {
 // thư mục để bước sau đề xuất watch. Chỉ ĐỌC, không import, không tạo watch.
 // Input:  { projectPath, names: [...], root?, maxDepth?, extraRoots? }
 // Output: { ok, root, folders: [{folder, rel, matches, exactCount}], unmatched }
-app.post('/watch/find-sources', (req, res) => {
+app.post('/watch/find-sources', async (req, res) => {
   try {
     const wfBrowse = require('./watchfolder-browse.js');
     const wfFind   = require('./watchfolder-find.js');
     const b = req.body || {};
     const root = b.root || (b.projectPath ? wfBrowse.productRoot(b.projectPath) : '');
     if (!root) return res.status(400).json({ ok: false, error: 'thiếu projectPath/root' });
-    res.json(wfFind.findSources(root, b.names || [], {
+    res.json(await wfFind.findSources(root, b.names || [], {
       maxDepth: b.maxDepth,
+      budgetMs: 45000,
       // Thư mục các watch đang có — có thể nằm ngoài cây sản phẩm (ổ ngoài, NAS).
       extraRoots: Array.isArray(b.extraRoots) ? b.extraRoots : [],
     }));

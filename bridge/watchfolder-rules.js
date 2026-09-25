@@ -13,6 +13,7 @@ const IGNORE_DIRS = [
   'adobe premiere pro auto-save',
   'adobe premiere pro preview files',
   'adobe premiere pro captured video',
+  'adobe premiere pro captured and generated',   // Premiere 25+ đổi tên thư mục captured
   '.proxy',
 ];
 

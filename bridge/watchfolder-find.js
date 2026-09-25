@@ -8,8 +8,8 @@
 // "khớp" ở đây lại "không khớp" lúc validate lại — người dùng thấy import xong
 // mà vẫn báo thiếu.
 
+const fs   = require('fs');
 const path = require('path');
-const { scanFolder } = require('./watchfolder-scan.js');
 const { PRESETS, IGNORE_DIRS, IGNORE_EXT } = require('./watchfolder-rules.js');
 
 const MEDIA_EXT = [].concat(PRESETS.video, PRESETS.audio, PRESETS.image);
@@ -62,6 +62,63 @@ function isMedia(rel) {
   const ext = extOf(name);
   if (IGNORE_EXT.indexOf(ext) >= 0) return false;
   return MEDIA_EXT.indexOf(ext) >= 0;
+}
+
+// Duyệt thư mục BẤT ĐỒNG BỘ, nhiều thư mục song song, KHÔNG stat từng file.
+//
+// Vì sao không dùng scanFolder() như watch engine: nó là code đồng bộ
+// (readdirSync + statSync từng file). Trên Google Drive, lần liệt kê đầu mỗi thư
+// mục phải hỏi server — đo thật: 130 thư mục / 550 file mất 65 giây — và suốt
+// lúc đó cả bridge đứng hình (/health, watch poll đều không trả lời được).
+// Tìm theo TÊN thì không cần size/mtime, nên bỏ hẳn stat; readdir song song thì
+// độ trễ của Drive chồng lên nhau thay vì cộng dồn.
+//
+// budgetMs: quá hạn thì dừng và trả những gì đã quét (timedOut = true) — thà trả
+// một phần kèm lời giải thích còn hơn để plugin chờ vô hạn.
+async function walkAsync(root, opts) {
+  const o = opts || {};
+  const maxDepth = Math.max(1, Number(o.maxDepth) || 6);
+  const maxFiles = Number(o.maxFiles) || 20000;
+  const concurrency = Math.max(1, Number(o.concurrency) || 8);
+  const deadline = Date.now() + (Number(o.budgetMs) || 45000);
+
+  const files = [];      // rel paths, '/'
+  let dirs = 0, truncated = false, timedOut = false, rootError = null;
+  const queue = [{ abs: root, rel: '', depth: 1 }];
+  let active = 0;
+
+  await new Promise(resolve => {
+    function pump() {
+      if (Date.now() > deadline && (queue.length || active)) timedOut = true;
+      if (timedOut || truncated) queue.length = 0;
+      if (!queue.length && !active) return resolve();
+      while (active < concurrency && queue.length) {
+        const job = queue.shift();
+        active++;
+        fs.promises.readdir(job.abs, { withFileTypes: true }).then(entries => {
+          dirs++;
+          for (const ent of entries) {
+            if (ent.name.startsWith('.')) continue;
+            const rel = job.rel ? job.rel + '/' + ent.name : ent.name;
+            if (ent.isDirectory()) {
+              if (job.depth < maxDepth
+                  && IGNORE_DIRS.indexOf(ent.name.toLowerCase()) < 0) {
+                queue.push({ abs: path.join(job.abs, ent.name), rel, depth: job.depth + 1 });
+              }
+            } else if (ent.isFile()) {
+              files.push(rel);
+              if (files.length >= maxFiles) { truncated = true; break; }
+            }
+          }
+        }, err => {
+          if (job.depth === 1) rootError = err.code || err.message;   // lỗi ở gốc mới là lỗi thật
+        }).then(() => { active--; pump(); });
+      }
+    }
+    pump();
+  });
+
+  return { ok: !rootError, error: rootError, files, dirs, truncated, timedOut };
 }
 
 // Khớp một source với danh sách file trên đĩa — CHÉP LẠI 4 lượt của
@@ -127,7 +184,7 @@ function matchOne(target, files) {
 // names     — tên source Autocut báo thiếu
 // trả về    — { ok, root, roots, scannedFiles, folders: [{folder, rel, matches}], unmatched }
 //             matches: { filePath, fileName, name, exact, pass, dist, hintFolder }
-function findSources(root, names, opts) {
+async function findSources(root, names, opts) {
   const o = opts || {};
   const wanted = (names || []).filter(Boolean);
   if (!root) return { ok: false, error: 'thiếu thư mục gốc' };
@@ -141,19 +198,22 @@ function findSources(root, names, opts) {
   }
 
   const files = [];
-  let truncated = false;
-  for (const r of roots) {
-    const res = scanFolder(r, {
-      recursive: true,
-      maxDepth: Math.max(1, Number(o.maxDepth) || 6),
-      maxFiles: Number(o.maxFiles) || 20000,
-    });
+  let truncated = false, timedOut = false, dirs = 0;
+  const t0 = Date.now();
+  // Quét các gốc song song, chung một hạn thời gian.
+  const results = await Promise.all(roots.map(r => walkAsync(r, {
+    maxDepth: o.maxDepth, maxFiles: o.maxFiles,
+    concurrency: o.concurrency, budgetMs: o.budgetMs,
+  }).then(res => ({ r, res }))));
+  for (const { r, res } of results) {
     if (!res.ok) {
       if (r === root) return { ok: false, error: res.error, root };
       continue;   // một thư mục watch hỏng (ổ ngoài rút ra) không chặn cả lượt
     }
     if (res.truncated) truncated = true;
-    for (const rel of Object.keys(res.files)) {
+    if (res.timedOut) timedOut = true;
+    dirs += res.dirs;
+    for (const rel of res.files) {
       if (!isMedia(rel)) continue;
       const parts = rel.split('/');
       const fileName = parts[parts.length - 1];
@@ -200,11 +260,12 @@ function findSources(root, names, opts) {
   }).sort((a, b) => b.exactCount - a.exactCount || b.matches.length - a.matches.length);
 
   return {
-    ok: true, root, roots, truncated,
-    scannedFiles: files.length,
+    ok: true, root, roots, truncated, timedOut,
+    scannedFiles: files.length, scannedDirs: dirs,
+    elapsedMs: Date.now() - t0,
     folders,
     unmatched: wanted.filter(n => !hit.has(n)),
   };
 }
 
-module.exports = { findSources, matchOne, norm, lev };
+module.exports = { findSources, walkAsync, matchOne, norm, lev };
