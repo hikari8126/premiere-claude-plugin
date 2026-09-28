@@ -58,6 +58,18 @@ premiere-Codex-plugin/
 
 ## SETUP — Hướng dẫn cài đặt đầy đủ
 
+### Cách nhanh nhất — một lệnh (khuyến nghị cho member)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikari8126/premiere-claude-plugin-releases/main/install.sh | bash
+```
+
+Cài Homebrew, Node.js, Claude CLI (+ đăng nhập), ffmpeg, Whisper, `Claude Bridge.app` và plugin `.ccx`
+bản mới nhất, rồi khởi động Bridge. Thứ gì đã có thì bỏ qua — chạy lại cùng lệnh để cập nhật.
+Thêm `bash -s -- --no-whisper` để bỏ Whisper, `--dry-run` để chỉ kiểm tra.
+Người dùng chỉ phải nhập mật khẩu máy (khi cài Homebrew) và đăng nhập Claude trên trình duyệt.
+Nguồn: `install.sh` ở repo này. Các bước dưới đây là cách cài thủ công từ source.
+
 ### Bước 0 — Kiểm tra hệ thống
 
 ```bash
@@ -361,6 +373,10 @@ gh release create vX.Y.Z-bridge{BRIDGE} --title "..." --notes "..." \
 # 5. Trỏ Gist version manifest sang release mới → team nhận thông báo update
 bash update-gist.sh
 ```
+
+> **Link cài một lệnh** (`install.sh`) luôn lấy release mới nhất nên **không cần** đụng tới khi ship.
+> Chỉ khi sửa `install.sh` (ở repo build) mới đẩy bản copy sang repo releases:
+> `bash publish-install.sh "install.sh: mô tả"` — rồi thử lại bằng `curl ... | bash -s -- --dry-run`.
 
 **Kiểm tra trước khi báo team:**
 ```bash

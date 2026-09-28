@@ -58,6 +58,18 @@ premiere-claude-plugin/
 
 ## SETUP — Hướng dẫn cài đặt đầy đủ
 
+### Cách nhanh nhất — một lệnh (khuyến nghị cho member)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hikari8126/premiere-claude-plugin-releases/main/install.sh | bash
+```
+
+Cài Homebrew, Node.js, Claude CLI (+ đăng nhập), ffmpeg, Whisper, `Claude Bridge.app` và plugin `.ccx`
+bản mới nhất, rồi khởi động Bridge. Thứ gì đã có thì bỏ qua — chạy lại cùng lệnh để cập nhật.
+Thêm `bash -s -- --no-whisper` để bỏ Whisper, `--dry-run` để chỉ kiểm tra.
+Người dùng chỉ phải nhập mật khẩu máy (khi cài Homebrew) và đăng nhập Claude trên trình duyệt.
+Nguồn: `install.sh` ở repo này. Các bước dưới đây là cách cài thủ công từ source.
+
 ### Bước 0 — Kiểm tra hệ thống
 
 ```bash
