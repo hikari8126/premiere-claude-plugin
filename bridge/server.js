@@ -6,6 +6,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const autosubLog = require('./autosub-log');   // ghi report mỗi lần auto sub
+const elevenV4 = require('./eleven-v4.js');      // Eleven v4: TTS hoặc Text to Dialogue
 
 const app  = express();
 const PORT = Number(process.env.PORT) || 3030;
@@ -1106,6 +1107,28 @@ app.post('/tts/generate', async (req, res) => {
     const baseFilename = (filename && typeof filename === 'string') ? filename.replace(/\.mp3$/i, '') : ('voice-' + Date.now());
     const numVariations = (variations === 2 || variations === '2') ? 2 : 1;
     const isV3 = modelId === 'eleven_v3';
+
+    // Eleven v4: tự chọn text-to-speech hay Text to Dialogue (xem eleven-v4.js).
+    if (elevenV4.isV4(modelId)) {
+      console.log('[tts/generate] v4', text.length, 'chars, voice:', voiceId, 'model:', modelId, '| variations:', numVariations);
+      const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim()) ? outputDir.trim() : getTempDir();
+      ensureDir(saveDir);
+      const request = (m, u, b, bin) => elevenLabsRequest(apiKey, m, u, b, bin);
+      const results = [];
+      let via = null;
+      for (let v = 1; v <= numVariations; v++) {
+        const r = await elevenV4.generateV4(request, { voiceId, modelId, text, settings, languageCode,
+          outputFormat, seed: Math.floor(Math.random() * 1e9) });
+        via = r.via;
+        const fname = numVariations === 1 ? baseFilename + '.mp3' : baseFilename + '-v' + v + '.mp3';
+        const fpath = path.join(saveDir, fname);
+        fs.writeFileSync(fpath, r.buffer);
+        console.log('[tts/v4] v' + v + ' via ' + r.via + (r.chunks > 1 ? ' (' + r.chunks + ' đoạn)' : '') + ' →', fpath);
+        results.push({ audioPath: fpath, previewUrl: '/tts/audio/' + encodeURIComponent(fname),
+          sizeBytes: r.buffer.length, filename: fname });
+      }
+      return res.json({ ok: true, variations: results, saveDir, via });
+    }
 
     let urlPath = '/v1/text-to-speech/' + voiceId;
     if (outputFormat) urlPath += '?output_format=' + encodeURIComponent(outputFormat);
@@ -2984,7 +3007,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.19.0';  // /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.20.0-beta.1';  // Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {

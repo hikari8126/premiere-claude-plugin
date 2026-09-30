@@ -254,13 +254,32 @@
           </select>
         </div>
 
-        <!-- Model + Language (TTS only) — hidden; single fixed model (eleven_v3), no lang override -->
+        <!-- Model (TTS only): v4 mặc định, v3 để quay lại khi cần. Language override vẫn ẩn. -->
         <div class="vg-modeContent" data-mode="tts">
-          <div class="vg-sg" style="display:none">
+          <div class="vg-sg">
             <div class="vg-sl">Model</div>
             <select id="vgModelSelect" class="vg-select">
-              <option value="eleven_v3" selected>&#9655; v3 · most expressive</option>
+              <option value="eleven_v4" selected>&#9655; v4 · mới nhất</option>
+              <option value="eleven_v3">v3 · bản trước</option>
             </select>
+            <!-- v4 chỉ có 2 thông số: Stability + Similarity (không style/speed) -->
+            <div id="vgV4Settings">
+              <div class="st-slideRow">
+                <span class="st-slideLbl">Stability</span>
+                <div class="st-cslider" id="vgV4StabilityC" data-min="0" data-max="1" data-step="0.05">
+                  <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                </div>
+                <input type="number" id="vgV4Stability" class="st-num" min="0" max="1" step="0.05" value="0.5" />
+              </div>
+              <div class="st-slideRow">
+                <span class="st-slideLbl">Similarity</span>
+                <div class="st-cslider" id="vgV4SimilarityC" data-min="0" data-max="1" data-step="0.05">
+                  <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                </div>
+                <input type="number" id="vgV4Similarity" class="st-num" min="0" max="1" step="0.05" value="0.75" />
+              </div>
+              <div class="vg-v4Hint">Voice clone tạo trước 28/09/2026 nên retrain với v4 trên ElevenLabs để giọng chuẩn.</div>
+            </div>
           </div>
           <div class="vg-sg" style="display:none">
             <div class="vg-toggleRow">
