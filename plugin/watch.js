@@ -23,6 +23,7 @@
     perWatch: {},        // watchId → số file đã import phiên này (hiện trên badge)
     log: [],
     started: false,
+    seen: {},            // id hàng đợi đã đưa vào bảng duyệt (đóng bảng = để sau, không mở lại)
   };
 
   // ── HTTP ────────────────────────────────────────────────────────────────
@@ -146,70 +147,54 @@
     updateStatsUI(r.stats);
     if (!r.items || r.items.length === 0) return;
 
+    // KHÔNG tự import nữa: trước đây vòng poll import từng file một, không hỏi.
+    // Giờ file project đã có thì ack luôn; file thiếu gom vào bảng xem lại
+    // (dùng chung modal Đối chiếu), người dùng bấm Import thì import theo MẺ.
+    var fresh = r.items.filter(function (it) { return !wfState.seen[it.id]; });
+    if (!fresh.length) return;
+    if (wfCmp.busy || (wfCmp.mode === 'compare' && wfCmp.rows.length)) return;
+
     wfState.importing = true;
-    var done = [], failed = [], skipped = 0;
+    var have = [], missing = [];
     try {
-      // Quét project MỘT lần cho cả mẻ. Đối chiếu có thể đẩy về hàng trăm file đã
-      // có sẵn trong project; quét lại toàn bộ cây cho từng file là không dùng được.
       var proj0 = await getActiveProject();
-      var cache = proj0 ? { proj: proj0, items: await collectAll(proj0) } : null;
-      for (var i = 0; i < r.items.length; i++) {
-        var it = r.items[i];
-        try {
-          var outcome = await importOne(it, cache);
-          done.push(it.id);
-          if (outcome === 'skipped') {
-            skipped += 1;   // không spam nhật ký: đối chiếu có thể bỏ qua hàng trăm file
-          } else {
-            wfState.sessionImported += 1;
-            wfState.perWatch[it.watchId] = (wfState.perWatch[it.watchId] || 0) + 1;
-            wfLog('✓ ' + baseName(it.filePath) + ' → ' + it.binPath);
-          }
-        } catch (e) {
-          failed.push({ id: it.id, reason: e.message });
-          wfLog('✗ ' + baseName(it.filePath) + ' — ' + e.message, true);
-        }
+      var all = proj0 ? await collectAll(proj0) : [];
+      // Có file mới thì đưa cả những file từng đóng "để sau" vào bảng lần nữa.
+      var inRows = {};
+      wfCmp.rows.forEach(function (x) { inRows[x.id] = true; });
+      var batch = r.items.filter(function (it) { return !inRows[it.id]; });
+      for (var i = 0; i < batch.length; i++) {
+        var it = batch[i];
+        wfState.seen[it.id] = true;
+        if (proj0 && await findByMediaPath(all, it.filePath)) have.push(it.id);
+        else missing.push(it);
       }
     } finally {
       wfState.importing = false;
     }
 
-    await api('POST', '/watch/ack', { done: done, failed: failed });
-    if (done.length - skipped > 0) renderWatches();   // badge số file trên thẻ
-    if (skipped > 0) wfLog('bỏ qua ' + skipped + ' file project đã có', false, true);
-    if (done.length - skipped > 0) {
+    if (have.length) {
+      await api('POST', '/watch/ack', { done: have, failed: [] });
+      wfLog('bỏ qua ' + have.length + ' file project đã có', false, true);
+    }
+    if (!missing.length) return;
+
+    wfCmpWire();
+    var isOpen = wfCmp.mode === 'queue' && wfCmp.rows.length;
+    if (!isOpen) { wfCmp.mode = 'queue'; wfCmp.watch = null; wfCmp.rows = []; }
+    missing.forEach(function (it) {
+      wfCmp.rows.push({ id: it.id, watchId: it.watchId, filePath: it.filePath,
+        binPath: it.binPath, checked: true, box: null });
+    });
+    wfCmpRender('File mới trong watch', wfCmp.rows.length);
+    if (!isOpen) {
+      wfCmpStatus('', '');
+      wfCmpOpen();
       api('POST', '/notify', {
         title: 'Watch Folder',
-        body: 'Đã import ' + (done.length - skipped) + ' file',
+        body: missing.length + ' file mới — mở plugin để duyệt import',
       });
     }
-  }
-
-  // ── Import một file vào đúng bin ────────────────────────────────────────
-  // importFiles() KHÔNG trả về ProjectItem (main.js:2488), nên phải import rồi
-  // tìm lại clip theo tên và chuyển bin bằng ppMoveToBin — đúng cách autoImportVoice
-  // đang làm, thay vì tự viết lại phần cast FolderItem/transaction đầy bẫy.
-  async function importOne(item, cache) {
-    var proj = (cache && cache.proj) || await getActiveProject();
-    if (!proj) throw new Error('không có project đang mở');
-
-    var all = (cache && cache.items) || await collectAll(proj);
-    if (await findByMediaPath(all, item.filePath)) return 'skipped';   // project đã có
-
-    if (typeof proj.importFiles !== 'function') throw new Error('không có API importFiles');
-    await proj.importFiles([item.filePath]);
-
-    var name = baseName(item.filePath);
-    var after = await collectAll(proj);
-    if (cache) cache.items = after;         // mẻ sau dùng lại, khỏi quét thêm lần nữa
-    var hit = (await findByMediaPath(after, item.filePath))
-           || after.filter(function (x) { return !x.isFolder && x.name === name; })[0];
-    if (!hit) throw new Error('import xong nhưng không thấy "' + name + '" trong project');
-
-    // Thứ tự tham số (item, proj, binName) — sai thứ tự fail ÂM THẦM.
-    var mv = await ppMoveToBin(hit.item, proj, toBinName(item.binPath));
-    if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển vào bin thất bại');
-    return 'imported';
   }
 
   async function collectAll(proj) {
@@ -251,7 +236,7 @@
   // file một — Premiere nhảy dialog liên tục và chậm. Giờ: bridge chỉ LIỆT KÊ
   // (preview), plugin so với project, hiện bảng tick chọn, rồi import theo MẺ
   // (một importFiles cho mỗi bin đích) thay vì từng file.
-  var wfCmp = { rows: [], watch: null, hidden: [], wired: false, busy: false };
+  var wfCmp = { rows: [], watch: null, hidden: [], wired: false, busy: false, mode: null };
 
   function wfCmpStatus(msg, cls) {
     var el = document.getElementById('wfCmpStatus');
@@ -269,6 +254,7 @@
     wfCmp.hidden = [];
     wfCmp.rows = [];
     wfCmp.watch = null;
+    wfCmp.mode = null;
   }
 
   function wfCmpOpen() {
@@ -307,7 +293,7 @@
   }
 
   async function wfCompare(w, btn) {
-    if (wfCmp.busy || wfState.importing) return;
+    if (wfCmp.busy || wfState.importing || wfCmp.mode === 'queue') return;
     wfCmpWire();
     var label = w.label || w.id;
     btn.textContent = 'Đang đối chiếu…';
@@ -336,6 +322,7 @@
       return;
     }
 
+    wfCmp.mode = 'compare';
     wfCmp.watch = w;
     wfCmp.rows = missing.map(function (f) {
       return { filePath: f.filePath, binPath: f.binPath, checked: true, box: null };
@@ -392,7 +379,7 @@
 
   // Import theo mẻ: một lần importFiles cho mỗi bin, rồi quét project MỘT lần
   // cho mẻ đó và chuyển từng clip vào bin. importFiles không trả ProjectItem nên
-  // vẫn phải tìm lại theo media path (như importOne).
+  // vẫn phải tìm lại theo media path (importFiles không trả ProjectItem).
   //
   // Dùng chung cho bảng Đối chiếu và cho Autocut (tìm source thiếu), nên nhận
   // danh sách phẳng [{filePath, binPath}] chứ không đọc state của bảng.
@@ -427,6 +414,7 @@
           await proj.importFiles(paths);
         } catch (e) {
           out.fail += group.length;
+          group.forEach(function (g) { g.result = { ok: false, reason: e.message }; });
           wfLog('✗ import mẻ ' + toBinName(bin) + ' — ' + e.message, true);
           continue;
         }
@@ -442,9 +430,12 @@
             var mv = await ppMoveToBin(hit.item, proj, toBinName(bin));
             if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển vào bin thất bại');
             out.ok += 1;
-            if (watchId) wfState.perWatch[watchId] = (wfState.perWatch[watchId] || 0) + 1;
+            group[i].result = { ok: true };
+            var wid = group[i].watchId || watchId;
+            if (wid) wfState.perWatch[wid] = (wfState.perWatch[wid] || 0) + 1;
           } catch (e2) {
             out.fail += 1;
+            group[i].result = { ok: false, reason: e2.message };
             wfLog('✗ ' + name + ' — ' + e2.message, true);
           }
         }
@@ -469,10 +460,31 @@
     if (res.error) { wfCmpStatus('⚠ ' + res.error, 'is-warn'); return; }
     var okCount = res.ok, failCount = res.fail;
 
+    if (wfCmp.mode === 'queue') {
+      // File bỏ tick = người dùng không muốn kéo về → ack luôn để không hỏi lại.
+      var done = [], failed = [];
+      wfCmp.rows.forEach(function (r) {
+        if (!r.checked || (r.result && r.result.ok)) done.push(r.id);
+        else {
+          failed.push({ id: r.id, reason: (r.result && r.result.reason) || 'không rõ' });
+          delete wfState.seen[r.id];   // còn trong hàng đợi → lượt sau hỏi lại
+        }
+      });
+      await api('POST', '/watch/ack', { done: done, failed: failed });
+      wfLog('Watch: import ' + okCount + ' file' + (failCount ? ', lỗi ' + failCount : ''),
+        !!failCount && !okCount);
+      renderWatches();
+      wfCmpClose();
+      if (okCount) api('POST', '/notify', { title: 'Watch Folder', body: 'Đã import ' + okCount + ' file' });
+      if (okCount && window.sacRevalidateSources) window.sacRevalidateSources();
+      return;
+    }
+
     wfLog('Đối chiếu "' + ((w && (w.label || w.id)) || '?') + '": import ' + okCount
       + ' file' + (failCount ? ', lỗi ' + failCount : ''), !!failCount && !okCount);
     renderWatches();
     wfCmpClose();
+    if (okCount && window.sacRevalidateSources) window.sacRevalidateSources();
     if (okCount) {
       api('POST', '/notify', {
         title: 'Watch Folder',

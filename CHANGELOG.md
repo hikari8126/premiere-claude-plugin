@@ -3,6 +3,21 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.10.0 / bridge app 3.15 (server 1.19.0) — 2026-09-30
+
+> **Cần Bridge app 3.15** cho phần Tạo Sub giữ đúng dòng (`keepLines`).
+
+### 🐛 Watch Folder — tự import không hỏi, import từng file
+- **Nguyên nhân:** vòng poll gọi `importFiles([1 file])` cho từng file trong hàng đợi.
+- **Fix:** poll chỉ so với project (có rồi → ack), file thiếu gom vào bảng duyệt (modal Đối chiếu, mode `queue`); bấm Import → `wfImportPicked` theo mẻ mỗi bin. Bỏ tick = ack bỏ qua; lỗi = ack failed, lượt sau hỏi lại. Đóng bảng = để sau, mở lại khi có file mới. Gỡ `importOne`.
+
+### ✨ Tạo Sub — tách bước AI ngắt câu
+- Nút nhỏ **AI ngắt câu**: gọi `/superautocut/subtext-segment` (chỉ script, không Whisper), đổ dòng vào ô để sửa.
+- Nút chính **Tạo Sub**: chưa ngắt → full pipeline (Whisper + AI ngắt + tạo SRT, bỏ đếm ngược); đã ngắt → chỉ Whisper canh giờ với `keepLines` (bridge `subtextByLine`: 1 dòng = 1 cue, không cắt theo max words/chars/dur hay dấu câu).
+
+### 🐛 Autocut — thẻ "Thiếu N source" không tắt
+- Clear script ẩn thẻ; Watch import xong gọi `window.sacRevalidateSources()` (validate lại, không hỏi voice).
+
 ## v5.9.1 / bridge app 3.14 (server 1.18.2) — 2026-09-25
 
 > **Cần Bridge app 3.14** — sửa nằm chủ yếu ở bridge.

@@ -2127,6 +2127,20 @@ function subtextChunk(sw, opts) {
   return subtextFinalize(cues);
 }
 
+// keepLines: người dùng đã tự chia dòng trong ô script → 1 dòng = 1 cue, không cắt
+// theo maxWords/maxChars/maxDur hay dấu câu. Timing lấy từ từ đầu/cuối của dòng.
+function subtextByLine(sw) {
+  const cues = [];
+  let cur = null;
+  for (const s of sw) {
+    if (!cur || s.line !== cur.line) {
+      cur = { words: [s], line: s.line, start: s.start, end: s.end };
+      cues.push(cur);
+    } else { cur.words.push(s); if (s.end != null) cur.end = s.end; }
+  }
+  return subtextFinalize(cues);
+}
+
 function subtextTextOf(c) { return c.words.map(w => w.raw).join(' '); }
 
 // Prompt ngắt câu phụ đề — dùng chung cho: (1) ngắt trên transcript đã canh giờ
@@ -2509,7 +2523,7 @@ function ffprobeDuration(audioPath) {
 app.post('/superautocut/subtext', async (req, res) => {
   try {
     let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur,
-          useAI, provider, model, apiKey, previewOnly } = req.body || {};
+          useAI, provider, model, apiKey, previewOnly, keepLines } = req.body || {};
     // Source audio: a direct path OR a list of timeline clips → timeline-accurate render.
     let offset = 0, clipMap = null, overlaps = 0;
     if (Array.isArray(clips) && clips.length) {
@@ -2540,6 +2554,7 @@ app.post('/superautocut/subtext', async (req, res) => {
       cues = await subtextSegmentAI(sw, { maxChars }, { provider, model, apiKey });
       console.log(cues ? `[subtext] AI segmentation → ${cues.length} cues` : '[subtext] AI segmentation failed → rule chunker');
     }
+    if (!cues && keepLines && cleanScript.length) cues = subtextByLine(sw);
     if (!cues) cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
     // Extend the LAST cue to the true audio end — whisper's last word usually ends
     // before the audio actually does, leaving total subtitle span < voice length.
@@ -2969,7 +2984,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.18.2';  // find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.19.0';  // /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {

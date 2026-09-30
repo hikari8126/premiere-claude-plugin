@@ -3696,6 +3696,9 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 .st-sub { font-size: 11px; color: rgba(255,255,255,0.45); }
 .st-section { display: flex; flex-direction: column; margin-bottom: 24px; }
 .st-section:last-child { margin-bottom: 0; }
+.st-manualRow { display: flex; justify-content: flex-end; margin-top: 6px; }
+.st-manualBtn { display: flex; align-items: center; font-size: 10.5px; color: rgba(255,255,255,0.55); padding: 3px 8px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; }
+.st-manualBtn:hover { color: #fff; border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.12); }
 .st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 11px; }
 /* 2 columns (UXP ignores flex `gap` → use width calc + space-between) */
 .st-trackList { display: flex; flex-wrap: wrap; justify-content: space-between; }

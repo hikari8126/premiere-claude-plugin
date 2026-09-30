@@ -110,7 +110,7 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
   <key>CFBundleVersion</key>
     <string>3.6</string>
   <key>CFBundleShortVersionString</key>
-    <string>3.14</string>
+    <string>3.15</string>
   <key>PluginVersion</key>
     <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>
