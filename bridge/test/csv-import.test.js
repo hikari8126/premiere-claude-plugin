@@ -1,6 +1,6 @@
 // bridge/test/csv-import.test.js
 const assert = require('assert');
-const { csvParse, csvRowsToSac } = require('../../plugin/csv-parse.js');
+const { csvParse, csvRowsToSac, csvDetectSac } = require('../../plugin/csv-parse.js');
 
 // CSV mẫu: ô có dấu phẩy trong ngoặc (scene2), xuống dòng trong ngoặc (scene1),
 // "" -> " (scene4), và 1 dòng trắng cuối.
@@ -45,5 +45,11 @@ const ext = csvRowsToSac(csvParse(
 assert.strictEqual(ext.rows[0].src, 'K18 [x]', 'bỏ .mov');
 assert.strictEqual(ext.rows[1].src, 'ZoeShape V21.0 [muex9xq5]', 'giữ "V21.0" giữa tên, chỉ bỏ .mp4 cuối');
 assert.strictEqual(ext.rows[2].src, 'NoExt Clip [y]', 'không có đuôi -> giữ nguyên');
+
+// Paste: CSV giống hệt file; TSV từ Google Sheet cho cùng kết quả; không header → null.
+assert.deepStrictEqual(csvDetectSac(csv), csvRowsToSac(csvParse(csv)));
+const tsv = 'text_overlay\tfootage_name\tshot_start\tshot_end\n"Mom, look\nOh wow"\tK18-1.mp4\t0:00\t0:04\n';
+assert.deepStrictEqual(csvDetectSac(tsv).rows, [{ text: 'Mom, look Oh wow', time: '0:00-0:04', src: 'K18-1' }]);
+assert.strictEqual(csvDetectSac('Mom\t0:00\tK18-1\nHi\t0:04\tK18-2'), null);
 
 console.log('csv-import tests passed');

@@ -3,7 +3,9 @@
 // export cho node để test. KHÔNG đụng DOM. Thiết kế:
 // docs/superpowers/specs/2026-09-24-autocut-csv-import-design.md
 
-function csvParse(text) {
+// delim: ',' (file .csv) hoặc '\t' (copy từ Google Sheet — cùng luật ngoặc kép "").
+function csvParse(text, delim) {
+  delim = delim || ',';
   text = String(text == null ? '' : text).replace(/^﻿/, ''); // strip BOM
   var rows = [], row = [], cell = '', inQ = false, i = 0, ch, nx;
   while (i < text.length) {
@@ -14,7 +16,7 @@ function csvParse(text) {
       else                          { cell += ch; i++; }        // gồm cả \n trong ô
     } else {
       if      (ch === '"')                 { inQ = true; i++; }
-      else if (ch === ',')                 { row.push(cell); cell = ''; i++; }
+      else if (ch === delim)               { row.push(cell); cell = ''; i++; }
       else if (ch === '\n' || ch === '\r') {
         row.push(cell); cell = '';
         if (row.some(function (c) { return c !== ''; })) rows.push(row);
@@ -64,9 +66,21 @@ function csvRowsToSac(rows) {
   return { rows: out, error: null };
 }
 
+// Paste vào bảng Autocut: nếu dòng đầu là header CSV (có text_overlay, footage_name,
+// shot_start) thì đọc y như nút ＋ CSV. Trả null khi không phải → paste thường.
+// Tự chọn delimiter: dòng header có tab → TSV (Google Sheet), không thì CSV.
+function csvDetectSac(text) {
+  text = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+  var first = text.split(/\r?\n/)[0] || '';
+  var delim = first.indexOf('\t') !== -1 ? '\t' : ',';
+  var head = first.split(delim).map(function (h) { return h.trim().replace(/^"|"$/g, '').toLowerCase(); });
+  if (head.indexOf('text_overlay') < 0 || head.indexOf('footage_name') < 0 || head.indexOf('shot_start') < 0) return null;
+  return csvRowsToSac(csvParse(text, delim));
+}
+
 (function (root) {
-  if (root) { root.csvParse = csvParse; root.csvRowsToSac = csvRowsToSac; }
+  if (root) { root.csvParse = csvParse; root.csvRowsToSac = csvRowsToSac; root.csvDetectSac = csvDetectSac; }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { csvParse: csvParse, csvRowsToSac: csvRowsToSac };
+    module.exports = { csvParse: csvParse, csvRowsToSac: csvRowsToSac, csvDetectSac: csvDetectSac };
   }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

@@ -3,6 +3,14 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.10.1 / bridge app 3.15 (server 1.19.0) — 2026-09-30
+
+> Chỉ sửa plugin. **Không cần bridge mới.**
+
+### ✨ Autocut — paste CSV
+- Paste nội dung CSV **kèm header** vào bất kỳ ô nào của bảng → đọc y như nút ＋ CSV (`csvRowsToSac`), ghi đè bảng.
+- `csvDetectSac(raw)`: dòng đầu có `text_overlay` + `footage_name` + `shot_start` mới nhận; header có tab → TSV (Google Sheet), không thì CSV. `csvParse(text, delim)` thêm tham số delimiter. Không phải header CSV → paste cutsheet như cũ.
+
 ## v5.10.0 / bridge app 3.15 (server 1.19.0) — 2026-09-30
 
 > **Cần Bridge app 3.15** cho phần Tạo Sub giữ đúng dòng (`keepLines`).
