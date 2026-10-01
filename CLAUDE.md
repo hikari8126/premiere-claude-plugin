@@ -348,3 +348,16 @@ cd bridge && node server.js 2>&1 | tee bridge.log
 # Reload plugin trong UXP Developer Tool
 # → Click "Reload" trong UXP Dev Tool (không cần restart Premiere)
 ```
+
+### Bản DEV chạy song song bản đang cài
+
+```bash
+bash dev.sh          # dựng .dev/plugin (id …-dev, panel "Claude AI DEV"), bridge repo ở :3035, load/reload vào Premiere
+bash dev.sh stop     # gỡ bản DEV khỏi Premiere + tắt bridge dev
+bash dev.sh log      # tail log bridge dev
+bash dev.sh eval f.js  # chạy biểu thức JS trong panel DEV, in kết quả (dò API Premiere)
+```
+
+Bản cài (Claude AI + Claude Bridge.app ở :3030) không bị đụng; bản DEV có localStorage và hàng đợi
+Watch folder riêng. Cần Premiere đang mở + app **Adobe UXP Developer Tools** đang chạy, Node ≥ 22.
+Mỗi lần sửa code chạy lại `bash dev.sh` (dựng lại + khởi động lại bridge + reload panel).
