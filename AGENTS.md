@@ -325,6 +325,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/tts/music` | POST | ElevenLabs Music |
 | `/transcribe` | POST | Whisper hoặc Premiere transcript |
 | `/align` | POST | Align script lines với word timestamps |
+| `/rawcut/*` | GET/POST | Tab RAW (Raw-cutter): status, scan, export (SSE), dest, render-cache, render-preset, presets, stat/unlink, open — xem CLAUDE.md |
 
 ### Lệnh dev thường dùng
 
