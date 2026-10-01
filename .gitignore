@@ -34,3 +34,6 @@ bridge/bridge.log
 *.swp
 .superpowers/
 bridge/sac-debug.log
+
+# Bản DEV dựng bởi dev.sh
+.dev/
