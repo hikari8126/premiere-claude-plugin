@@ -35,6 +35,7 @@
   <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
   <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
   <div class="tab-btn" role="button" data-tab="watch"><span data-ic="folder" data-ic-size="14"></span> WATCH</div>
+  <div class="tab-btn" role="button" data-tab="resize"><span data-ic="layer_group" data-ic-size="14"></span> RESIZE</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -122,6 +123,7 @@
         <div class="settings-tab" role="button" data-stab="voicegen">Voice Gen</div>
         <div class="settings-tab" role="button" data-stab="unnest">Un-nest</div>
         <div class="settings-tab" role="button" data-stab="autocut">Autocut</div>
+        <div class="settings-tab" role="button" data-stab="resize">Resize</div>
       </div>
 
       <!-- ── GENERAL tab ── -->
@@ -418,6 +420,43 @@
           <span style="color:#e8e8e8">Nới đầu voice block thêm 0.2s (đuôi đã +0.2s sẵn)</span>
         </label>
       </div><!-- /settings-tabPanel autocut -->
+
+      <!-- ── RESIZE tab (resize.js) — lưu ngay khi đổi ── -->
+      <div class="settings-tabPanel" data-stab="resize" hidden>
+        <div class="un-settingsHint">
+          Tuỳ chọn cho tab Resize. Lưu ngay khi đổi, dùng cho mọi project.
+        </div>
+
+        <div class="rsz-set-row">
+          <div class="rsz-set-text">
+            <div class="rsz-set-title">Track nền</div>
+            <div class="rsz-set-sub">Track video nền — giữ nguyên scale, không canh.</div>
+          </div>
+          <div class="rsz-stepper">
+            <div class="rsz-step" id="rszBgMinus" role="button">−</div>
+            <span class="rsz-step-val" id="rszBgVal">V1</span>
+            <div class="rsz-step" id="rszBgPlus" role="button">+</div>
+          </div>
+        </div>
+
+        <div class="rsz-set-block">
+          <div class="rsz-set-head">
+            <div class="rsz-set-title">Vị trí dọc của text</div>
+            <div class="rsz-link" id="rszGuideReset" role="button">Về giữa</div>
+          </div>
+          <div class="rsz-set-sub">Kéo đường guide trong từng khung. Scale và vị trí ngang giữ nguyên; logo (tên chứa "logo"/"fav") không bị canh.</div>
+          <div class="rsz-guides" id="rszGuides"></div>
+        </div>
+
+        <div class="rsz-set-block">
+          <div class="rsz-link" id="rszDiagToggle" role="button">▸ Dò lỗi</div>
+          <div id="rszDiagBody" style="display:none">
+            <div class="rsz-set-sub">In cấu trúc clip của sequence đang chọn — gửi cho dev khi Resize chạy sai.</div>
+            <div class="wf-btn wf-btn-sm" id="rszDiagBtn" role="button">Chẩn đoán sequence đang chọn</div>
+            <textarea id="rszDiagOut" class="rsz-diag-out" readonly style="display:none"></textarea>
+          </div>
+        </div>
+      </div><!-- /settings-tabPanel resize -->
 
       <div class="settings-actions">
         <button class="btn-secondary" id="close-settings">Cancel</button>
@@ -1708,9 +1747,57 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: RESIZE (port từ 1-Click Resizer — xem resize.js)   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-resize">
+  <div class="rsz-root">
+    <!-- Vùng cuộn: inner child, không phải .rsz-root -->
+    <div class="rsz-scroll">
+
+      <div class="rsz-src">
+        <div class="rsz-src-line">
+          <span class="wf-dot err" id="rszDot"></span>
+          <span id="rszState" class="rsz-state">CHƯA CHỌN SEQUENCE</span>
+          <span class="wf-spacer"></span>
+          <div class="wf-btn wf-btn-sm" id="rszRefresh" role="button">⟳ Làm mới</div>
+          <div class="rsz-auto" id="rszAuto" role="button">AUTO</div>
+        </div>
+        <div class="rsz-src-name is-empty" id="rszSrcName">Chọn sequence ở Project panel (chọn nhiều cũng được)</div>
+        <div class="rsz-src-meta">
+          <span class="rsz-box is-empty" id="rszBox"></span>
+          <div class="rsz-src-dims"><b id="rszRatio">—</b><span id="rszSize"></span></div>
+        </div>
+      </div>
+
+      <div class="rsz-modes" id="rszModes">
+        <div class="rsz-seg active" role="button" data-mode="GG">GG · Google</div>
+        <div class="rsz-seg" role="button" data-mode="FB">FB · Facebook</div>
+        <div class="rsz-seg" role="button" data-mode="PIN">PIN · Pinterest</div>
+      </div>
+      <div class="rsz-chips" id="rszChips"></div>
+
+      <div class="rsz-go" id="rszGo" role="button">
+        <span id="rszGoLabel" class="rsz-go-label">RESIZE</span>
+        <span id="rszGoSub" class="rsz-go-sub">Google · 9:16 / 4:5 / 1:1</span>
+      </div>
+      <div class="rsz-foot">
+        <div class="rsz-hint">Bản gốc, audio, nền và logo giữ nguyên — text canh theo guide từng ratio.</div>
+        <div class="rsz-link" id="rszOpenSettings" role="button"><span data-ic="gear" data-ic-size="11"></span> Guide</div>
+      </div>
+
+      <div id="rszStatus" class="rsz-status"></div>
+      <div class="rsz-outs" id="rszOuts"></div>
+
+    </div>
+  </div>
+</div>
+
 <script src="csv-parse.js"></script>
 <script src="elv-sort.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
+<script src="resize-core.js"></script>
+<script src="resize.js"></script>
 </body>
 </html>

@@ -3,6 +3,29 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.12.0-beta.1 / bridge 1.21.0-beta.1 — chưa phát hành (nhánh `feat/resizer`)
+
+> Beta để test nội bộ. Tab Resize không cần bridge mới; nhạc lưu vào BGM/AI cần **bridge ≥1.21.0** (bridge cũ → hộp thoại lưu như trước).
+
+### 🐛 Voice Gen / Autocut — đặt nhầm clip cũ trùng tên lên timeline
+- **Nguyên nhân:** `importToTimeline` (và `sacFindOrImportFile` của Autocut) kiểm "đã có trong project chưa" bằng **tên** clip. Project có sẵn clip trùng tên (file cũ ở thư mục khác) → bỏ qua import, đặt clip cũ lên timeline. `ppPickImportedItem` cũng rơi về clip cùng tên đầu tiên khi không thấy đếm tăng; `autoImportVoice` lấy luôn clip cùng tên đầu tiên.
+- **Fix:** so theo **đường dẫn file** (`ClipProjectItem.getMediaFilePath`, chuẩn hoá NFC): `ppFindItemByPath` (đã import đúng file chưa) + `ppPickImportedByPath` (clip vừa import). Đọc được path mà không khớp → chỉ nhận clip mới theo đếm, không lấy bừa clip trùng tên. Áp cho Voice Gen Import / Timeline, Autocut, trang Auto.
+
+### ✨ Voice Gen — nhạc lưu vào BGM/AI của thư mục sản phẩm
+- Mode Music: hộp thoại "Lưu audio" chọn sẵn `<thư mục sản phẩm>/BGM/AI` (sửa được tên/thư mục). Trùng tên → bridge tự đánh số ` (1)`. Thư mục voice quen dùng không bị đổi.
+- Bridge `POST /bgm/dir` (`bgm-dir.js`): thư mục sản phẩm = cấp cha thư mục chứa .prproj; tìm BGM theo alias (BGM, BGMs, Music, Nhạc nền… — không phân biệt hoa thường/dấu tách, cả cấp 2 kiểu `Audio/BGM`), trong đó tìm AI (AI, AI BGM, AI Music…). Chưa có → `BGM/AI`, `/tts/move` tự tạo khi lưu thật.
+
+### ✨ Tab RESIZE — port từ 1-Click Resizer
+- Port panel CEP [1-Click Resizer](https://github.com/tungnguyen1202/1-click-resizer) v1.10.3 sang UXP. Logic thuần (`resize-core.jsx`) giữ nguyên văn thành `plugin/resize-core.js` + test Node (`bridge/test/resize-core.test.js`); lớp Premiere (`premiere.jsx`) viết lại bằng UXP API trong `plugin/resize.js`.
+- Chọn một/nhiều sequence ở Project panel (`ProjectUtils.getSelection` → `ClipProjectItem.isSequence`), không chọn thì dùng sequence đang mở. GG = 9:16 / 4:5 / 1:1, FB = 9:16 ⇄ 4:5, PIN = 2:3; chip tick size.
+- Mỗi bản: `Sequence.createCloneAction` (không trả về sequence → so `guid` trước/sau) → đổi tên (`createSetNameAction`, thay nhãn ratio cuối) → frame size (`setVideoFrameRect` + `createSetSettingsAction`, đọc lại để xác nhận) → về bin nguồn (`getParentBin` + `FolderItem.createMoveItemAction`) → text/graphic/MOGRT đặt Motion > Position Y theo guide (`createKeyframe(PointF)` + `createSetValueAction`). Nền (track nền), logo (tên chứa `logo`/`fav`), audio giữ nguyên; Position có keyframe thì để nguyên.
+- Đơn vị Position UXP chưa rõ (chuẩn hoá hay pixel) → `RSZ.positionY` tự nhận: |giá trị| > 2 coi là pixel. Chỉ canh clip có **chữ** (`RSZ.isTextClip`): text Type tool (component `AE.ADBE Text`), hoặc MOGRT (`AE.ADBE Capsule`) có param tên kiểu Text / Title / Caption / Headline / Subtitle / Chữ / Tiêu đề. MOGRT không chữ (Generated Light Leak — chỉ có Position/Scale/Color) giữ nguyên. Không dựa vào kiểu `MogrtText` vì Premiere 25.x trả `getStartValue()` = null cho param chữ của MOGRT.
+- Cài đặt nằm trong **Settings dùng chung → tab Resize** (⚙ ở tab RESIZE mở thẳng tab này, hoặc link "Guide" dưới nút RESIZE), lưu ngay khi đổi: track nền bằng nút −/+, guide text 4 khung 9:16 / 4:5 / 1:1 / 2:3 xếp ngang (kéo trong khung hoặc −/+ 1%), nút "Về giữa". Không dùng `<input type=number>` vì UXP vẽ thành khung đen.
+- **Dò lỗi → Chẩn đoán** (cuối tab Resize trong Settings): in API có sẵn, nguồn, component + giá trị Position từng clip — để dò khi test trên Premiere thật.
+- PIN bỏ qua nguồn đã là 2:3 (`RSZ.matchesRatio`) thay vì tạo thêm bản trùng.
+- Gốc project nhận bằng id của `project.getRootItem()` (Premiere không có `Constants.ProjectItemType`).
+- Tab bar: 5 tab nên chữ gọn lại (10px, `flex: 1 1 auto`) cho nhãn không xuống dòng ở 360px; thanh tab Settings cũng gọn padding + `nowrap`.
+
 ## v5.10.1 / bridge app 3.15 (server 1.19.0) — 2026-09-30
 
 > Chỉ sửa plugin. **Không cần bridge mới.**

@@ -95,7 +95,7 @@ body {
 }
 
 .tab-btn {
-  flex: 1;
+  flex: 1 1 auto;   /* chia theo độ dài nhãn — "VOICE GEN" cần rộng hơn "WATCH" */
   position: relative;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid transparent;
@@ -103,14 +103,16 @@ body {
   border-radius: 8px 8px 0 0;
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 10px 8px;
+  letter-spacing: 0.02em;   /* 5 tab (thêm RESIZE): chữ gọn lại cho nhãn khỏi xuống dòng */
+  padding: 10px 3px;
+  white-space: nowrap;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
   text-align: center;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.18s ease;
-  margin: 0 2px;
+  margin: 0 1px;
   bottom: -1px;
 }
 .tab-btn:hover:not(.active) {
@@ -707,7 +709,8 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .settings-tab {
-  padding: 6px 12px;
+  padding: 6px 8px;     /* 5 tab (thêm Resize) — gọn lại cho khỏi xuống dòng */
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1027,7 +1030,7 @@ div[role="button"] {
 div[role="button"].is-disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 div[role="button"] > .p-ic { margin-right: 5px; }
 div[role="button"] > .p-ic:only-child { margin-right: 0; }
-.tab-btn .p-ic { margin-right: 6px; vertical-align: 0; }
+.tab-btn .p-ic { margin-right: 4px; vertical-align: 0; }
 .sac-bind-fLbl { display: inline-flex; align-items: center; }
 /* Source media-type filter chips */
 .sac-bind-typeChips { flex: 0 0 auto; display: flex; flex-wrap: wrap; padding: 5px 6px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -4632,3 +4635,121 @@ div[role="button"].vg-histHead:hover { color: rgba(255,255,255,0.7); }
 .sac-checkRow { display: flex; align-items: center; gap: 8px; padding-left: 8px; }
 .sac-checkRow input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
 .sac-checkRow > span { flex: 0 1 auto; min-width: 0; }
+
+/* ══════════════════════════════════════════════════════
+   TAB: RESIZE (port từ 1-Click Resizer — resize.js)
+   ══════════════════════════════════════════════════════ */
+.rsz-root { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+/* Cuộn ở inner child (UXP), không phải flex container */
+.rsz-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin;
+              padding: 10px 12px 14px; }
+
+.rsz-src { border: 1px solid var(--border); border-radius: var(--radius);
+           background: var(--surface); padding: 9px 10px 10px; margin-bottom: 10px; }
+.rsz-src-line { display: flex; align-items: center; }
+.rsz-src-line > * { margin-right: 7px; }
+.rsz-src-line > *:last-child { margin-right: 0; }
+.rsz-state { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--text); }
+.rsz-auto { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 3px 7px;
+            border-radius: 9px; cursor: pointer; flex: 0 0 auto;
+            background: var(--accent-a15); color: var(--accent-light);
+            border: 1px solid var(--accent-a40); }
+.rsz-auto.is-off { background: transparent; color: var(--text-dim); border-color: var(--border); }
+.rsz-src-name { margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text);
+                line-height: 1.4; word-break: break-word; }
+.rsz-src-name.is-empty { color: var(--text-dim); font-weight: 400; font-style: italic; }
+.rsz-src-meta { display: flex; align-items: center; margin-top: 8px; }
+.rsz-box { display: block; flex: 0 0 auto; width: 20px; height: 34px; margin-right: 10px;
+           border: 2px solid var(--accent); border-radius: 4px; background: var(--accent-a15); }
+.rsz-box.is-empty { border-color: var(--border); background: transparent; border-style: dashed; }
+.rsz-src-dims { display: flex; flex-direction: column; }
+.rsz-src-dims b { font-size: 15px; color: var(--text); }
+.rsz-src-dims span { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+.rsz-modes { display: flex; margin-bottom: 8px; }
+.rsz-seg { flex: 1 1 0; text-align: center; font-size: 11px; padding: 7px 4px; cursor: pointer;
+           border: 1px solid var(--border); border-radius: 14px; margin-right: 6px;
+           color: var(--text-dim); background: var(--surface); white-space: nowrap; }
+.rsz-seg:last-child { margin-right: 0; }
+.rsz-seg:hover { color: var(--text); border-color: var(--accent-a40); }
+.rsz-seg.active { color: var(--accent-light); background: var(--accent-a15); border-color: var(--accent); }
+
+.rsz-chips { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+.rsz-chip { font-size: 11px; padding: 4px 11px; border-radius: 12px; cursor: pointer;
+            margin: 0 6px 4px 0; border: 1px solid var(--border); color: var(--text-dim);
+            background: transparent; }
+.rsz-chip.on { color: var(--accent-light); background: var(--accent-a15); border-color: var(--accent-a40); }
+
+/* div[role=button] chung là inline-flex — nâng specificity để nút trải hết hàng */
+div.rsz-go[role="button"] { display: flex; width: 100%; }
+.rsz-go { display: flex; flex-direction: column; align-items: center; cursor: pointer;
+          padding: 11px 8px 10px; border-radius: var(--radius); background: var(--accent);
+          border: 1px solid var(--accent); }
+.rsz-go:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.rsz-go.is-busy { opacity: 0.6; cursor: default; }
+.rsz-go-label { font-size: 14px; font-weight: 700; letter-spacing: 0.18em; color: var(--accent-fg); }
+.rsz-go-sub { font-size: 10px; margin-top: 3px; color: var(--accent-fg); opacity: 0.8; }
+.rsz-foot { display: flex; align-items: flex-start; margin: 7px 2px 0; }
+.rsz-hint { flex: 1 1 auto; min-width: 0; font-size: 10px; color: var(--text-dim); line-height: 1.5; }
+.rsz-link { flex: 0 0 auto; font-size: 10px; font-weight: 600; color: var(--accent-light);
+            cursor: pointer; padding: 1px 6px; border-radius: 4px; margin-left: 8px; }
+.rsz-link:hover { background: var(--accent-a15); }
+.rsz-link [data-ic] { margin-right: 4px; }
+
+/* ── Settings › Resize ───────────────────────────────── */
+.rsz-set-row { display: flex; align-items: center; padding: 10px 12px; margin-bottom: 10px;
+               border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.rsz-set-text { flex: 1 1 auto; min-width: 0; margin-right: 10px; }
+.rsz-set-title { font-size: 11px; font-weight: 600; color: var(--text); }
+.rsz-set-sub { font-size: 10px; color: var(--text-dim); line-height: 1.45; margin-top: 3px; }
+.rsz-set-block { padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border);
+                 border-radius: var(--radius); background: var(--bg); }
+.rsz-set-head { display: flex; align-items: center; justify-content: space-between; }
+.rsz-set-head .rsz-link { margin-left: 0; }
+.rsz-set-block > .rsz-link { margin-left: 0; padding-left: 0; display: inline-flex; }
+.rsz-set-block > .rsz-link:hover { background: none; color: var(--text); }
+#rszDiagBody { margin-top: 6px; }
+#rszDiagBody .wf-btn { margin-top: 8px; }
+
+/* Nút −/+ (thay ô nhập số native — UXP vẽ nó thành khung đen) */
+.rsz-stepper { display: flex; align-items: center; flex: 0 0 auto; border: 1px solid var(--border);
+               border-radius: 6px; background: var(--surface2); }
+div.rsz-step[role="button"] { width: 26px; height: 26px; font-size: 14px; color: var(--text-dim); }
+div.rsz-step[role="button"]:hover { color: var(--accent-light); background: var(--accent-a15); }
+.rsz-step-val { min-width: 34px; text-align: center; font-size: 12px; font-weight: 700; color: var(--text); }
+
+/* 4 khung guide xếp ngang, cùng cao, rộng theo ratio */
+.rsz-guides { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px; }
+.rsz-gcard { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; min-width: 58px; }
+.rsz-gframe { position: relative; border: 1px solid var(--border); border-radius: 4px;
+              background: var(--surface2); cursor: row-resize; overflow: hidden; }
+.rsz-gframe:hover { border-color: var(--accent-a40); }
+.rsz-gline { position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px;
+             background: var(--accent); }
+/* Thanh mờ giả dòng chữ nằm trên guide */
+.rsz-gtext { position: absolute; left: 22%; right: 22%; top: -4px; height: 10px; border-radius: 3px;
+             background: var(--accent-a40); }
+.rsz-glabel { font-size: 10px; font-weight: 700; color: var(--text); margin-top: 6px; }
+.rsz-gstep { display: flex; align-items: center; margin-top: 3px; }
+div.rsz-step-sm[role="button"] { width: 16px; height: 18px; font-size: 12px; border-radius: 4px; }
+.rsz-gval { min-width: 28px; text-align: center; font-size: 10px; color: var(--text-dim); }
+.rsz-status { font-size: 11px; color: var(--text); margin: 10px 2px 0; }
+.rsz-status:empty { display: none; }
+
+.rsz-outs { margin-top: 8px; }
+.rsz-row { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+           padding: 7px 9px; margin-bottom: 6px; }
+.rsz-row-head { display: flex; align-items: center; }
+.rsz-row-title { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--text);
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+.rsz-row-badge { flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+                 padding: 1px 6px; border-radius: 8px; color: var(--success);
+                 background: rgba(34,197,94,0.14); }
+.rsz-row-sub { font-size: 10px; color: var(--text-dim); margin-top: 3px; line-height: 1.45; }
+.rsz-row.is-err { border-color: rgba(239,68,68,0.5); }
+.rsz-row.is-err .rsz-row-badge { color: #fca5a5; background: rgba(239,68,68,0.16); }
+.rsz-row.is-skip .rsz-row-badge { color: #e0a33c; background: rgba(180,121,31,0.18); }
+
+.rsz-diag-out { width: 100%; height: 160px; margin-top: 6px; font-size: 10px; font-family: Menlo, monospace;
+                background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+                border-radius: 5px; padding: 6px; }
