@@ -3625,6 +3625,7 @@ const RC_SCAN_KEYS   = ['videoTrack', 'crf', 'fps', 'scale', 'vcodec', 'audioPer
 const RC_EXPORT_KEYS = RC_SCAN_KEYS.concat(['ext', 'resume']);
 
 let rcPyCache = null;
+let rcScanSeq = 0;
 function rcPython() {
   if (!rcPyCache || !rcPyCache.ok) rcPyCache = rcPy.findPython();
   return rcPyCache;
@@ -3668,8 +3669,9 @@ app.post('/rawcut/scan', async (req, res) => {
       ? { json: b.read.json, xml: (b.read.xml && fs.existsSync(b.read.xml)) ? b.read.xml : null }
       : rcReads.saveRead({ projectPath: b.projectPath, sequenceName: b.sequenceName, dump: b.dump, xmlPath: b.xmlPath || null });
     const half = b.half === 'render' ? 'render' : 'source';
-    const dir = path.join(RC_TMP, half === 'render' ? 'scan-edited' : 'scan');
-    fs.rmSync(dir, { recursive: true, force: true }); // engine từ chối --manifest-only vào thư mục đã có export
+    // Mỗi lần scan một thư mục mới: engine từ chối --manifest-only vào thư mục đã có export,
+    // và engine vừa bị Dừng có thể còn ghi vào thư mục cũ thêm ~1.5s.
+    const dir = path.join(RC_TMP, (half === 'render' ? 'scan-edited-' : 'scan-') + Date.now() + '-' + (++rcScanSeq));
     fs.mkdirSync(dir, { recursive: true });
     const args = rcArgs.buildArgs(Object.assign(rcPick(b.options, RC_SCAN_KEYS), {
       script: RC_ENGINE, xml: read.xml, sequenceName: b.sequenceName, dump: read.json, out: dir,
@@ -3692,6 +3694,7 @@ app.post('/rawcut/scan', async (req, res) => {
       return res.status(500).json({ ok: false, error: 'Engine lỗi khi đọc (mã ' + r.code + '): ' + (r.spawnError || st.tail), read });
     }
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    fs.rmSync(dir, { recursive: true, force: true });
     res.json({ ok: true, read, half, manifest, notes, warnings });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });

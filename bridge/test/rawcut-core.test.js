@@ -115,8 +115,16 @@ const done = { counts: { ok: 3, failed: 1, no_render: 1 }, clips: [
   { cut_id: 'aaa', status: 'ok', track_type: 'video', track_index: 1 },
   { cut_id: 'bbb', status: 'failed', track_type: 'video', track_index: 1 },
   { cut_id: 'ddd', status: 'no_render', track_type: 'video', track_index: 1 }] };
-assert.deepStrictEqual(RCC.summarize(done), { ok: 3, failed: 1, skipped: 0, missing: 0, unsupported: 0, noRender: 1, mismatch: 0 });
+assert.deepStrictEqual(RCC.summarize(done), { ok: 3, failed: 1, skipped: 0, missing: 0, unsupported: 0, noRender: 1, mismatch: 0, missingPicked: 0 });
 assert.deepStrictEqual(RCC.failedKeys(done), { bbb: 'failed', ddd: 'no_render' });
+// mất nguồn = lỗi (Retry được); render ngắn → render_short để Retry render lại
+const done2 = { counts: {}, clips: [
+  { cut_id: 'm1', status: 'missing_source', track_type: 'video', track_index: 1 },
+  { cut_id: 'r1', status: 'failed', error: 'the RENDER came up short — ffmpeg read 20 frame(s)', track_type: 'video', track_index: 1 }] };
+assert.strictEqual(RCC.summarize(done2).missingPicked, 1);
+assert.deepStrictEqual(RCC.failedKeys(done2), { m1: 'missing_source', r1: 'render_short' });
+const again = RCC.renderRanges([{ key: 'r1', trackType: 'video', trackIndex: 1, tlIn: 0, tlOut: 25 }], 1, { r1: 'render_short' }, { 'video-1-0-25': true });
+assert.strictEqual(again.ranges.length, 1, 'render ngắn không được dùng lại bản cũ');
 assert.strictEqual(RCC.failedKeys({ clips: [{ cut_id: 'x', status: 'ok' }] }), null);
 
 // 8. dump dựng ra chạy được qua engine thật

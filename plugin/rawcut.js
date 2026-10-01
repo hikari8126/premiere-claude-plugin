@@ -94,6 +94,7 @@
     return new Promise(function (resolve) {
       var xhr = new XMLHttpRequest(), last = 0, buf = '', end = null, done = false;
       st.xhr = xhr;
+      xhr.__rcAborted = false;
       function pump() {
         var text = xhr.responseText || '';
         buf += text.slice(last); last = text.length;
@@ -113,6 +114,9 @@
       xhr.onreadystatechange = function () {
         if (xhr.readyState === 3 || xhr.readyState === 4) pump();
         if (xhr.readyState === 4) {
+          // abort()/mất mạng cũng đi qua readyState 4 (status 0) TRƯỚC onabort/onerror.
+          if (!end && (xhr.__rcAborted || st.stop)) { finish({ aborted: true }); return; }
+          if (!end && !xhr.status) { finish({ error: 'Mất kết nối Bridge giữa chừng' }); return; }
           if (!end && xhr.status && xhr.status !== 200) {
             var err = '';
             try { err = JSON.parse(xhr.responseText).error; } catch (e) { err = 'Bridge lỗi ' + xhr.status; }
@@ -461,6 +465,7 @@
 
   async function onMaster() {
     var v = Number($('rcMaster').value || 0);
+    if (st.running || st.busy) { $('rcMaster').value = String(st.read ? st.read.master : ''); return; }
     if (!st.read || !v || v === st.read.master) return;
     st.read.master = v;
     st.prefs.master[st.read.seqId] = v; savePrefs();
@@ -538,6 +543,7 @@
     if (!name || !st.presets[name]) { setStatus('Gõ đúng tên preset cần xoá.', 'warn'); return; }
     var r = await api('POST', '/rawcut/presets', { action: 'delete', name: name });
     if (r.ok) { st.presets = r.presets || {}; setStatus('✓ Đã xoá preset "' + name + '"'); }
+    else setStatus('❌ ' + (r.error || 'Không xoá được preset'), 'err');
     paintQuality();
   }
 
@@ -632,20 +638,25 @@
   }
 
   async function onGo(retry) {
-    if (st.busy || st.running) return;
+    if (st.busy || st.running || st.confirmResolve) return;
     if (!st.read) { setStatus('Bấm Đọc timeline trước.', 'warn'); return; }
     var halves = retry ? Object.keys(retry) : halvesOfMode();
     var picked = {};
     halves.forEach(function (h) { picked[h] = pickedFor(h); });
     if (!halves.some(function (h) { return picked[h].length; })) { setStatus('Chưa chọn clip nào.', 'warn'); return; }
-    st.dest = await resolveDest();   // hỏi đĩa lại: có thể vừa có người xuất cùng version
-    paintDest();
-    if (!st.dest || !st.dest.ok) { setStatus('⛔ ' + ((st.dest && (st.dest.why || st.dest.error)) || 'Chưa có thư mục xuất'), 'err'); return; }
-    var needRender = halves.indexOf('render') !== -1;
-    var g = await guardSequence(needRender);
-    if (!g.ok) { setStatus('⛔ ' + g.why, 'err'); return; }
-
+    // Khoá NGAY (trước mọi await): bấm Xuất 2 lần không được chạy 2 lượt song song —
+    // hai lượt render đan nhau sẽ ghi nhận sai mute/in-out ban đầu và để timeline hỏng.
     st.running = true; st.stop = false;
+    paintGo();
+    var g;
+    try {
+      st.dest = await resolveDest();   // hỏi đĩa lại: có thể vừa có người xuất cùng version
+      paintDest();
+      if (!st.dest || !st.dest.ok) { setStatus('⛔ ' + ((st.dest && (st.dest.why || st.dest.error)) || 'Chưa có thư mục xuất'), 'err'); st.running = false; paintGo(); return; }
+      g = await guardSequence(halves.indexOf('render') !== -1);
+    } catch (e) { g = { ok: false, why: (e && e.message) || String(e) }; }
+    if (!g.ok) { setStatus('⛔ ' + g.why, 'err'); st.running = false; paintGo(); return; }
+
     hideReport();
     paintGo();
     var results = [];
@@ -661,7 +672,7 @@
         results.push(res);
       }
     } catch (e) {
-      results.push({ half: '?', error: (e && e.message) || String(e) });
+      results.push({ half: '?', error: (e && e.message) || String(e), errors: [] });
     } finally {
       st.running = false;
       showProgress(false);
@@ -677,6 +688,7 @@
   async function exportHalf(half, outDir, picked, renderDir, prefix, isRetry) {
     var res = { half: half, dir: outDir, ok: 0, failed: 0, total: picked.length, errors: [] };
     if (!picked.length) { res.skipped = true; return res; }
+    if (st.stop) { res.cancelled = true; res.error = 'Đã dừng — chưa cắt gì.'; return res; }
     var opts = exportOptions(half);
     if (isRetry) opts.resume = true;
     var body = {
@@ -693,8 +705,10 @@
       else if (e.type === 'done') {
         done = e.n;
         // SKIP/SLNT/DRY = dòng không cắt được, đã có trong tóm tắt — chỉ liệt kê lỗi thật.
-        if (!e.ok && REAL_FAIL[e.flag]) res.errors.push(e.flag + ' ' + e.file);
-        lastFail = !e.ok && !!REAL_FAIL[e.flag];
+        // MISS của dòng không chọn (gửi kèm để giữ cảnh báo) không phải lỗi lượt này — chỉ FAIL/BAD/NORE
+        // luôn là lỗi; MISS chỉ tính khi đã có trong tóm tắt clip chọn (xem dưới).
+        lastFail = !e.ok && !!REAL_FAIL[e.flag] && e.flag !== 'MISS';
+        if (lastFail) res.errors.push(e.flag + ' ' + e.file);
         showProgress(true, prefix + ' · ' + e.n + '/' + e.total + ' · ' + e.file, e.total ? e.n / e.total : 0);
         return;
       } else if (e.type === 'reason') { if (lastFail && res.errors.length) res.errors[res.errors.length - 1] += ' — ' + e.text; return; }
@@ -710,8 +724,21 @@
     res.manifest = end.manifest;
     if (end.manifest) {
       var s = RCC.summarize(end.manifest);
-      res.ok = s.ok + s.skipped; res.failed = s.failed + s.noRender + s.mismatch; res.summary = s;
-      res.failedKeys = RCC.failedKeys(end.manifest);
+      // Chỉ tính lỗi trên clip ĐÃ CHỌN — dòng không cắt được gửi kèm --pick (để manifest giữ cảnh
+      // báo) cũng ra missing_source/unsupported nhưng không phải lỗi của lượt này.
+      var mine = {};
+      picked.forEach(function (r) { mine[r.key] = true; });
+      var fk = RCC.failedKeys(end.manifest) || {}, mineFk = null, nMissing = 0;
+      Object.keys(fk).forEach(function (k) {
+        if (!mine[k]) return;
+        (mineFk = mineFk || {})[k] = fk[k];
+        if (fk[k] === 'missing_source') nMissing++;
+      });
+      res.ok = s.ok + s.skipped; res.failed = s.failed + s.noRender + s.mismatch + nMissing; res.summary = s;
+      res.failedKeys = mineFk;
+      if (nMissing) RCC.rowsFromManifest(end.manifest, half).forEach(function (r) {
+        if (mineFk && mineFk[r.key] === 'missing_source') res.errors.push('MISS ' + (r.outputFile || r.clip) + ' — không thấy file nguồn: ' + r.source);
+      });
     }
     if (end.code !== 0 && !res.failed) res.error = 'Engine thoát mã ' + end.code + (end.tail ? ': ' + end.tail : '');
     return res;
@@ -742,9 +769,10 @@
       });
       res.render = rend;
       (rend.warnings || []).forEach(function (x) { res.errors.push('⚠ ' + x); });
-      if (rend.refused || rend.error) { res.error = rend.error; return res; }
-      if (rend.stopped) { res.cancelled = true; res.error = 'Đã dừng sau ' + rend.written + '/' + rr.ranges.length + ' bản render — chưa cắt gì vào edited/.'; return res; }
       rend.renders.filter(function (x) { return !x.ok; }).forEach(function (x) { res.errors.push('Render lỗi ' + x.label + ': ' + x.error); });
+      if (rend.stopped) { res.cancelled = true; res.error = 'Đã dừng sau ' + rend.written + '/' + rr.ranges.length + ' bản render — chưa cắt gì vào edited/.'; return res; }
+      // Hỏng giữa chừng (in/out không vào, không render được cut nào) → không cắt edited/ dở dang.
+      if (rend.refused || rend.error || !rend.ok) { res.error = (rend.error || 'Premiere không render được cut nào') + ' — chưa cắt gì vào edited/.'; return res; }
     }
     var out = await exportHalf('render', outDir, picked, cache.dir, prefix, !!retryKeys);
     out.errors = res.errors.concat(out.errors);
@@ -759,7 +787,8 @@
     if (st.scanAbort) { try { st.scanAbort.abort(); } catch (e) {} setStatus('⏳ Đang dừng đọc…'); return; }
     if (!st.running) return;
     st.stop = true;
-    if (st.xhr) { try { st.xhr.abort(); } catch (e) {} }
+    if (st.confirmResolve) answerConfirm(false);
+    if (st.xhr) { try { st.xhr.__rcAborted = true; st.xhr.abort(); } catch (e) {} }
     setStatus('⏳ Đang dừng…');
   }
 
@@ -786,10 +815,11 @@
       var lines = [];
       if (r.error) lines.push(r.error);
       if (r.summary) {
-        var s = r.summary, bits = [];
+        var s = r.summary, bits = [], tl = [];
         if (s.skipped) bits.push(s.skipped + ' giữ nguyên');
-        if (s.missing) bits.push(s.missing + ' thiếu file nguồn');
-        if (s.unsupported) bits.push(s.unsupported + ' không cắt được');
+        if (s.missing) tl.push(s.missing + ' thiếu file nguồn');
+        if (s.unsupported) tl.push(s.unsupported + ' không cắt được');
+        if (tl.length) bits.push('trên timeline: ' + tl.join(', '));
         if (s.noRender) bits.push(s.noRender + ' thiếu bản render');
         if (s.mismatch) bits.push(s.mismatch + ' render lệch độ dài');
         if (bits.length) lines.push(bits.join(' · '));

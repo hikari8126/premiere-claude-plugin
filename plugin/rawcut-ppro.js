@@ -40,10 +40,13 @@ var RCP = (function () {
   function hostVersion() {
     try { var h = require('uxp').host; return String((h && h.version) || ''); } catch (e) { return ''; }
   }
+  // Không bao giờ ném: bridge restart giữa lượt render không được làm vỡ vòng render.
   async function bridgePost(url, body) {
-    var r = await fetch(BRIDGE_URL + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-    var t = await r.text();
-    try { return JSON.parse(t); } catch (e) { return { ok: false, error: 'Bridge trả về không phải JSON (bridge cũ?)' }; }
+    try {
+      var r = await fetch(BRIDGE_URL + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+      var t = await r.text();
+      try { return JSON.parse(t); } catch (e) { return { ok: false, error: 'Bridge trả về không phải JSON (bridge cũ?)' }; }
+    } catch (e) { return { ok: false, error: 'Không kết nối được Bridge' }; }
   }
 
   // Bắt lỗi BÊN TRONG lockedAccess — throw lọt ra ngoài lock có thể làm treo Premiere.
@@ -248,6 +251,10 @@ var RCP = (function () {
   // o = {ranges:[{label,inF,outF}], dir, preset, stockPreset, keepVideo:[n], keepAudio:[n]|null,
   //      offeredAudio:[n], expect:{id, fp}, onProgress(done,total,label), shouldStop()}
   async function renderRanges(o) {
+    try { return await renderRangesInner(o); }
+    catch (e) { return { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', error: 'Render lỗi: ' + ((e && e.message) || e) }; }
+  }
+  async function renderRangesInner(o) {
     var res = { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', presetFallback: false };
     if (!ppro.EncoderManager || !ppro.EncoderManager.getManager) { res.error = 'Premiere bản này không có EncoderManager (cần ≥ 25.6)'; return res; }
     var project = await getActiveProject();
@@ -281,11 +288,17 @@ var RCP = (function () {
       var back = await call(track, 'isMuted', null);
       return back === want;
     }
+    var ioChanged = false;
+    var curOut = ticksOf(origOut);
     async function setIO(a, b) {
+      // In mới vượt out hiện tại → đặt out trước, khỏi có lúc in > out.
+      var aT = Number(ticksOf(a)), outFirst = curOut !== null && Number(curOut) >= 0 && aT >= Number(curOut);
       await commit(project, function (ca) {
-        ca.addAction(seq.createSetInPointAction(a));
-        ca.addAction(seq.createSetOutPointAction(b));
+        if (outFirst) { ca.addAction(seq.createSetOutPointAction(b)); ca.addAction(seq.createSetInPointAction(a)); }
+        else { ca.addAction(seq.createSetInPointAction(a)); ca.addAction(seq.createSetOutPointAction(b)); }
       }, 'Raw-cutter in/out');
+      ioChanged = true;
+      curOut = ticksOf(b);
     }
     try {
       // Hình: chỉ track được chọn hiện trong bản render.
@@ -316,25 +329,26 @@ var RCP = (function () {
         var item = { label: rg.label, ok: false, ms: 0 };
         // Đặt in/out đúng frame, đọc lại kiểm.
         try { await setIO(mk(rg.inF), mk(rg.outF)); }
-        catch (e) { item.error = 'Không đặt được in/out: ' + ((e && e.message) || e); item.noRange = true; res.renders.push(item); res.failed++; break; }
+        catch (e) { item.error = 'Không đặt được in/out: ' + ((e && e.message) || e); item.noRange = true; res.renders.push(item); res.failed++; res.error = rg.label + ': ' + item.error; break; }
         var gi = ticksOf(await call(seq, 'getInPoint', null)), go = ticksOf(await call(seq, 'getOutPoint', null));
         var wi = String(Math.round(rg.inF * tb)), wo = String(Math.round(rg.outF * tb));
         if (gi !== wi || go !== wo) {
           var tol = tb / 2;
           if (Math.abs(Number(gi) - Number(wi)) > tol || Math.abs(Number(go) - Number(wo)) > tol) {
-            item.error = 'In/out không vào đúng frame (' + gi + '/' + go + ')'; item.noRange = true; res.renders.push(item); res.failed++; break;
+            item.error = 'In/out không vào đúng frame (' + gi + '/' + go + ')'; item.noRange = true; res.renders.push(item); res.failed++; res.error = rg.label + ': ' + item.error; break;
           }
           res.warnings.push(rg.label + ': in/out lệch dưới nửa frame');
         }
         var file = String(o.dir).replace(/\/$/, '') + '/' + rg.label + '.' + ext;
         await bridgePost('/rawcut/unlink', { path: file });
         var t0 = Date.now();
-        var got = await exportOne(em, seq, ET, file, preset);
+        var secs = (rg.outF - rg.inF) * tb / TPS;
+        var got = await exportOne(em, seq, ET, file, preset, secs);
         if (!got.ok && r === 0 && o.stockPreset && preset !== o.stockPreset) {
           // Cut đầu lỗi với preset tự ghi → thử lại bằng preset gốc, dùng luôn cho cả lượt.
           preset = o.stockPreset; res.presetFallback = true;
           res.warnings.push('Preset bitrate tự ghi không render được — chuyển sang preset gốc.');
-          got = await exportOne(em, seq, ET, file, preset);
+          got = await exportOne(em, seq, ET, file, preset, secs);
         }
         item.ms = Date.now() - t0;
         item.ok = got.ok; item.file = file; item.bytes = got.size;
@@ -343,7 +357,9 @@ var RCP = (function () {
       }
       if (o.onProgress) o.onProgress(res.renders.length, total, '');
     } finally {
-      try { if (origIn && origOut) await setIO(origIn, origOut); } catch (e) { res.warnings.push('Không trả lại in/out cũ: ' + ((e && e.message) || e)); }
+      // Chỉ trả in/out khi đã đổi (không thêm bước undo thừa). Cách trả giống Voice Changer
+      // (vcxRenderSelection) — kể cả khi sequence chưa đặt in/out (giá trị âm của Premiere).
+      if (ioChanged) { try { if (origIn && origOut) await setIO(origIn, origOut); } catch (e) { res.warnings.push('Không trả lại in/out cũ: ' + ((e && e.message) || e)); } }
       for (var m = changed.length - 1; m >= 0; m--) {
         // Trạng thái cũ không rõ → trả về hiện (bản gốc để ẩn luôn là lỗi).
         var want = changed[m].was === null ? false : changed[m].was;
@@ -351,23 +367,28 @@ var RCP = (function () {
       }
     }
     res.ok = res.stopped || (res.written > 0 && !res.renders.some(function (x) { return x.noRange; }));
+    if (!res.ok && !res.stopped && !res.error) res.error = 'Premiere không render được cut nào';
     return res;
   }
 
-  // exportSequence rồi chờ file có thật trên đĩa (Premiere có thể trả về khi chưa ghi xong).
-  async function exportOne(em, seq, ET, file, preset) {
+  // exportSequence rồi chờ file có thật trên đĩa. IMMEDIATELY thường chỉ trả về khi đã ghi
+  // xong (Voice Changer dựa vào đó) — vẫn chờ size đứng yên, hạn chờ theo độ dài cut.
+  async function exportOne(em, seq, ET, file, preset, secs) {
     var ret;
     try { ret = await un(em.exportSequence(seq, ET, file, preset, false)); }
     catch (e) { return { ok: false, error: 'exportSequence lỗi: ' + ((e && (e.message || e.code)) || e) }; }
-    var last = -1;
-    for (var i = 0; i < 120; i++) {
-      var st = await bridgePost('/rawcut/stat', { path: file });
-      if (st && st.exists && st.size > 0) {
-        if (st.size === last) return { ok: true, size: st.size };
-        last = st.size;
+    var limit = Date.now() + (ret === false ? 2000 : Math.max(60000, (secs || 0) * 10000));
+    var last = -1, stable = 0;
+    while (Date.now() < limit) {
+      var stt = await bridgePost('/rawcut/stat', { path: file });
+      if (stt && stt.exists && stt.size > 0) {
+        if (stt.size === last) { if (++stable >= 2) return { ok: true, size: stt.size }; }
+        else stable = 0;
+        last = stt.size;
       }
-      await sleep(i < 10 ? 150 : 500);
+      await sleep(last > 0 ? 300 : 200);
     }
+    if (last > 0) return { ok: true, size: last };
     return { ok: false, error: ret === false ? 'Premiere từ chối export (preset?)' : 'Premiere không ghi ra file render' };
   }
 

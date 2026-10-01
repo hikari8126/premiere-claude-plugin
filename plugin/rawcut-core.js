@@ -18,7 +18,7 @@ var RCC = (function () {
   var BPP_INTER = [[6, 0.759], [14, 0.290], [18, 0.144], [23, 0.066], [28, 0.032]];
   var RENDER_HEADROOM = 2;
   // Trạng thái clip coi là lỗi để Retry.
-  var FAILED_STATUS = { failed: 1, no_render: 1, render_mismatch: 1 };
+  var FAILED_STATUS = { failed: 1, no_render: 1, render_mismatch: 1, missing_source: 1 };
   // Lỗi do bản render → Retry phải render lại, không dùng render cũ.
   var RENDER_FAULTS = { no_render: 1, render_mismatch: 1, render_short: 1 };
 
@@ -298,7 +298,9 @@ var RCC = (function () {
     return {
       ok: Number(c.ok || 0), failed: Number(c.failed || 0), skipped: Number(c.skipped_existing || 0),
       missing: Number(c.missing_sources || 0), unsupported: Number(c.unsupported || 0),
-      noRender: Number(c.no_render || 0), mismatch: Number(c.render_mismatch || 0)
+      noRender: Number(c.no_render || 0), mismatch: Number(c.render_mismatch || 0),
+      // Mất nguồn ĐẾM THEO CLIP đã xuất (counts.missing_sources gồm cả dòng không chọn và .aep).
+      missingPicked: ((manifest && manifest.clips) || []).filter(function (k) { return k.status === 'missing_source'; }).length
     };
   }
   // {key: status} của clip lỗi trong manifest (cho Retry).
@@ -306,7 +308,11 @@ var RCC = (function () {
     var out = {}, any = false;
     var rows = rowsFromManifest(manifest, '');
     for (var i = 0; i < rows.length; i++) {
-      if (FAILED_STATUS[rows[i].engineStatus]) { out[rows[i].key] = rows[i].engineStatus; any = true; }
+      var stt = rows[i].engineStatus;
+      if (!FAILED_STATUS[stt]) continue;
+      // Render ngắn hơn cut → phải render lại, không dùng bản cũ trong cache (main.js:10248 bản gốc).
+      if (stt === 'failed' && /the RENDER came up short/i.test(rows[i].error)) stt = 'render_short';
+      out[rows[i].key] = stt; any = true;
     }
     return any ? out : null;
   }

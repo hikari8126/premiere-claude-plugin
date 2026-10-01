@@ -195,7 +195,16 @@ Câu hỏi phải trả lời: (6) `exportSequence` có đợi file ghi xong m�
 
 ### Kết quả spike
 
-_(điền sau khi chạy — Plan 2 viết dựa trên mục này)_
+Chạy 2026-10-01 trên Premiere **25.6.5** của máy dev, qua UXP Developer Tool (CDP), **chỉ đọc** (Task 0.2 render chưa chạy — project đang mở là project thật):
+1. `getSpeed()` = hệ số (1.5927 = 159%), `isSpeedReversed()` trả số 0/1, `isDisabled()`, `getIsSelected()`, `isAdjustmentLayer()` có.
+2. `ClipProjectItem.getFootageInterpretation().getFrameRate()` có (29.97, 59.94…); `getRemovePullDown` (chữ D hoa).
+3. Component chain chỉ có Opacity/Motion/effect — **không thấy Time Remapping** → `has_keyframed_remap` luôn false.
+4. `TickTime.createWithTicks` có. Sequence chưa đặt in/out → `getInPoint()` = −400000 s.
+5. `ClipProjectItem.getSequence()` có (đi vào nest cho fingerprint); `ProjectItem.id` là uuid.
+6–10 (render): **chưa chạy** — cần chạy Task 0.2 trên project test khi review.
+- `ProjectConverter` **không có** trên 25.6 → chế độ dump-only (nest bị bỏ qua).
+- in/out của track item là **đơn vị timeline** (out−in = độ dài trên timeline) — đúng schema dump; engine đọc dump thật ra `01_(00.00-01.90)_Sandy_72.mp4` cho clip 1.2 s @159%.
+- Đọc 101 clip mất 54 ms. Luồng Đọc + Xuất Source 2 clip chạy được trong plugin bản dev.
 
 ---
 
