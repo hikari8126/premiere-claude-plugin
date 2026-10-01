@@ -4632,3 +4632,6 @@ div[role="button"].vg-histHead:hover { color: rgba(255,255,255,0.7); }
 .sac-checkRow { display: flex; align-items: center; gap: 8px; padding-left: 8px; }
 .sac-checkRow input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
 .sac-checkRow > span { flex: 0 1 auto; min-width: 0; }
+
+/* Voice Gen — gợi ý retrain clone khi dùng v4 */
+.vg-v4Hint { font-size: 10.5px; line-height: 1.4; color: rgba(255,255,255,0.5); margin-top: 6px; }
