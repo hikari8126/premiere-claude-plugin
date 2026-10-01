@@ -144,6 +144,13 @@ ensure_media_tools() {
   step "ffmpeg"
   brew_install ffmpeg ffmpeg
 
+  step "Python 3 (engine Raw-cutter)"
+  if have python3 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' 2>/dev/null; then
+    ok "đã có ($(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'))"
+  else
+    brew_install python3 python3
+  fi
+
   step "Whisper (nhận diện giọng nói cho Autocut)"
   if [ "$WITH_WHISPER" = 0 ]; then warn "bỏ qua (--no-whisper)"; return; fi
   if find_whisper; then ok "đã có"; return; fi
