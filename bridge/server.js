@@ -3617,6 +3617,7 @@ const rcReads  = require('./rawcut-reads.js');
 const rcCache  = require('./rawcut-cache.js');
 const rcEpr    = require('./rawcut-epr.js');
 const rcPy     = require('./rawcut-python.js');
+const rcDest   = require('./rawcut-dest.js');
 const RC_ENGINE = path.join(__dirname, 'rawcut-engine', 'xmlcut.py');
 const RC_TMP    = path.join(os.tmpdir(), 'xmlcut-panel');
 const RC_CACHE  = process.env.RAWCUT_CACHE || rcCache.DEFAULT_ROOT;
@@ -3784,6 +3785,25 @@ app.post('/rawcut/render-preset', (req, res) => {
   const w = rcEpr.writeRenderPreset({ destDir: b.dir, mbps: Number(b.mbps), basePath: stock.found });
   if (!w.ok) return res.json({ ok: true, path: stock.found, stockPath: stock.found, stock: true, warning: w.error });
   res.json({ ok: true, path: w.path, stockPath: stock.found, stock: false, bitrate: { target: w.target, max: w.max, min: w.min, pass: w.pass, capped: w.capped } });
+});
+
+// ── POST /rawcut/dest ── {projectPath, sequenceName, sequenceId?, mode?:'source'|'render'|'both',
+//    chosen?: thư mục user chọn cho project này, productPick?: sản phẩm chọn từ menu cho project này}
+//    → {ok:true, version, said, route:'samx'|'matched'|'picked'|'chosen-product'|'free', product, act,
+//       dirs:{raw, edited}, versionDir, samx, products, notes} | {ok:false, why, version, samx, products, needPick?, taken?}
+//    Từ chối là câu trả lời bình thường (HTTP 200); 400 chỉ khi thiếu projectPath/sequenceName.
+app.post('/rawcut/dest', (req, res) => {
+  const b = req.body || {};
+  if (!b.projectPath || !b.sequenceName) return res.status(400).json({ ok: false, error: 'Thiếu projectPath hoặc sequenceName' });
+  try {
+    const r = rcDest.resolveDest({
+      projectPath: String(b.projectPath), sequenceName: String(b.sequenceName), sequenceId: b.sequenceId ? String(b.sequenceId) : '',
+      mode: b.mode, chosen: b.chosen ? String(b.chosen) : '', productPick: b.productPick ? String(b.productPick) : '', walk: !!b.walk,
+    });
+    res.json(Object.assign({}, r));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
