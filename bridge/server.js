@@ -3787,6 +3787,57 @@ app.post('/rawcut/render-preset', (req, res) => {
   res.json({ ok: true, path: w.path, stockPath: stock.found, stock: false, bitrate: { target: w.target, max: w.max, min: w.min, pass: w.pass, capped: w.capped } });
 });
 
+// ── POST /rawcut/presets ── {action:'list'|'save'|'delete', name?, crf?, fps?, scale?}
+//    → {ok, presets:{name:{crf,fps,scale,...}}, path?} — engine giữ presets.json ở
+//    ~/Library/Application Support/Raw-cutter/ (chung với bản CEP nếu máy từng cài).
+app.post('/rawcut/presets', async (req, res) => {
+  const b = req.body || {};
+  const py = rcPython();
+  if (!py.ok) return res.status(500).json({ ok: false, error: 'Không tìm thấy python3 ≥3.8' });
+  const name = String(b.name || '').trim();
+  let extra;
+  if (b.action === 'save') {
+    if (!name) return res.status(400).json({ ok: false, error: 'Thiếu tên preset' });
+    extra = ['--save-preset', name, '--presets-only'];
+    if (b.crf != null) extra.push('--crf', String(b.crf));
+    if (b.fps) extra.push('--fps', String(b.fps));
+    if (b.scale != null) extra.push('--scale', String(b.scale));
+  } else if (b.action === 'delete') {
+    if (!name) return res.status(400).json({ ok: false, error: 'Thiếu tên preset' });
+    extra = ['--delete-preset', name, '--presets-only'];
+  } else {
+    extra = ['--list-presets-json'];
+  }
+  try {
+    const r = await rcRunner.runEngine({ bin: py.bin, args: [RC_ENGINE].concat(extra), cwd: path.dirname(RC_ENGINE) }).done;
+    const lines = String(r.stdout || '').split('\n').map(x => x.trim()).filter(Boolean);
+    let out = null;
+    for (let i = lines.length - 1; i >= 0 && !out; i--) { try { out = JSON.parse(lines[i]); } catch (e) {} }
+    if (!out) return res.status(500).json({ ok: false, error: 'Engine không trả preset: ' + rcProto.parseStderr(r.stderr).tail });
+    if (out.ok === undefined) out.ok = !out.error;
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /rawcut/stat ── {path} (trong cache render) → {ok, exists, size}
+//    Plugin không stat được đường dẫn ngoài sandbox UXP — hỏi bridge file render đã ghi chưa.
+app.post('/rawcut/stat', (req, res) => {
+  const p = (req.body || {}).path;
+  if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ hỏi được file trong cache render' });
+  try { const st = fs.statSync(p); res.json({ ok: true, exists: true, size: st.size }); }
+  catch (e) { res.json({ ok: true, exists: false, size: 0 }); }
+});
+
+// ── POST /rawcut/open ── {dir} → mở thư mục trong Finder
+app.post('/rawcut/open', (req, res) => {
+  const dir = (req.body || {}).dir;
+  if (!rcAbs(dir) || !fs.existsSync(dir)) return res.status(400).json({ ok: false, error: 'Thư mục không tồn tại' });
+  try { spawn('open', [dir], { detached: true, stdio: 'ignore' }).unref(); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── POST /rawcut/dest ── {projectPath, sequenceName, sequenceId?, mode?:'source'|'render'|'both',
 //    chosen?: thư mục user chọn cho project này, productPick?: sản phẩm chọn từ menu cho project này}
 //    → {ok:true, version, said, route:'samx'|'matched'|'picked'|'chosen-product'|'free', product, act,
