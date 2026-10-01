@@ -31,11 +31,12 @@
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
   <!-- Claude chat tab temporarily hidden (kept in DOM below for later) -->
-  <div class="tab-btn active" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="14"></span> AUTOCUT</div>
-  <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="14"></span> VOICE GEN</div>
-  <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="14"></span> TẠO SUB</div>
-  <div class="tab-btn" role="button" data-tab="watch"><span data-ic="folder" data-ic-size="14"></span> WATCH</div>
-  <div class="tab-btn" role="button" data-tab="resize"><span data-ic="layer_group" data-ic-size="14"></span> RESIZE</div>
+  <div class="tab-btn active" role="button" data-tab="autocut"><span data-ic="scissors" data-ic-size="12"></span> AUTOCUT</div>
+  <div class="tab-btn" role="button" data-tab="voicegen"><span data-ic="microphone" data-ic-size="12"></span> VOICE GEN</div>
+  <div class="tab-btn" role="button" data-tab="subtext"><span data-ic="closed_captioning" data-ic-size="12"></span> TẠO SUB</div>
+  <div class="tab-btn" role="button" data-tab="watch"><span data-ic="folder" data-ic-size="12"></span> WATCH</div>
+  <div class="tab-btn" role="button" data-tab="resize"><span data-ic="layer_group" data-ic-size="12"></span> RESIZE</div>
+  <div class="tab-btn" role="button" data-tab="rawcut"><span data-ic="video" data-ic-size="12"></span> RAW</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -1812,11 +1813,156 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB: RAW CUT (port từ Raw-cutter 3.93 — xem rawcut.js)  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-rawcut">
+  <div class="rsz-root">
+    <div class="rsz-scroll">
+
+      <div class="rsz-src">
+        <div class="rsz-src-line">
+          <span class="wf-dot err" id="rcDot"></span>
+          <span id="rcState" class="rsz-state">CHƯA ĐỌC TIMELINE</span>
+          <span class="wf-spacer"></span>
+          <div class="wf-btn wf-btn-sm" id="rcRead" role="button">⟳ Đọc timeline</div>
+        </div>
+        <div class="rsz-src-name is-empty" id="rcSeqName">Mở sequence cần cắt rồi bấm Đọc timeline</div>
+        <div class="rc-meta" id="rcSeqMeta"></div>
+        <div class="rc-env" id="rcEnv"></div>
+        <div class="rc-notes" id="rcNotes"></div>
+      </div>
+
+      <div class="rsz-modes" id="rcModes">
+        <div class="rsz-seg" role="button" data-mode="source">Source</div>
+        <div class="rsz-seg" role="button" data-mode="render">Timeline</div>
+        <div class="rsz-seg active" role="button" data-mode="both">Both</div>
+      </div>
+
+      <div class="rc-card" id="rcDestCard" style="display:none">
+        <div class="rc-card-head">
+          <span class="rc-card-title">THƯ MỤC XUẤT</span>
+          <span class="wf-spacer"></span>
+          <div class="rsz-link" id="rcResetFolder" role="button" style="display:none">Về mặc định</div>
+          <div class="rsz-link" id="rcChooseFolder" role="button"><span data-ic="folder" data-ic-size="11"></span> Đổi thư mục</div>
+        </div>
+        <div id="rcDestLine" class="rc-dest"></div>
+        <select id="rcProduct" class="vg-select rc-select" style="display:none"></select>
+      </div>
+
+      <div class="rc-card" id="rcClipsCard" style="display:none">
+        <div class="rc-card-head">
+          <span class="rc-card-title">CLIP</span>
+          <span class="rc-count" id="rcClipCount"></span>
+          <span class="wf-spacer"></span>
+          <div class="rsz-link" id="rcAllToggle" role="button">Bỏ chọn hết</div>
+        </div>
+        <div class="rsz-modes rc-viewtabs" id="rcViewTabs"></div>
+        <div class="rsz-chips" id="rcTypes"></div>
+        <div class="rc-list" id="rcList"></div>
+        <div class="rsz-link rc-showdead" id="rcShowDead" role="button" style="display:none"></div>
+      </div>
+
+      <div class="rc-card" id="rcRenderCard" style="display:none">
+        <div class="rc-card-head"><span class="rc-card-title">TIMELINE RENDER</span></div>
+        <div class="rc-field">
+          <span class="rc-label">Master track</span>
+          <select id="rcMaster" class="vg-select rc-select"></select>
+        </div>
+        <div class="rc-sub">Track hình có trong bản render</div>
+        <div class="rsz-chips" id="rcVTracks"></div>
+      </div>
+
+      <div class="rc-card" id="rcAudioCard" style="display:none">
+        <div class="rc-card-head"><span class="rc-card-title">AUDIO</span></div>
+        <div class="rc-toggle" id="rcAudioMix" role="button"><span class="rc-tick"></span>MP3 voice-over dài bằng sequence</div>
+        <div class="rc-sub">File MP3 riêng cho từng track</div>
+        <div class="rsz-chips" id="rcAudioPer"></div>
+        <div id="rcHearWrap">
+          <div class="rc-sub">Tiếng giữ trong clip edited/</div>
+          <div class="rsz-chips" id="rcAudioHear"></div>
+        </div>
+      </div>
+
+      <div class="rc-card" id="rcQualCard">
+        <div class="rc-card-head"><span class="rc-card-title">CHẤT LƯỢNG</span></div>
+        <div class="rc-field">
+          <span class="rc-label">CRF (1 = gần như gốc)</span>
+          <div class="rsz-stepper">
+            <div class="rsz-step" id="rcCrfMinus" role="button">−</div>
+            <span class="rsz-step-val" id="rcCrfVal">1</span>
+            <div class="rsz-step" id="rcCrfPlus" role="button">+</div>
+          </div>
+        </div>
+        <div class="rc-field">
+          <span class="rc-label">Độ phân giải</span>
+          <select id="rcScale" class="vg-select rc-select rc-select-sm"></select>
+        </div>
+        <div class="rc-field">
+          <span class="rc-label">Frame rate</span>
+          <select id="rcFps" class="vg-select rc-select rc-select-sm"></select>
+        </div>
+        <div class="rc-warn" id="rcFpsNote"></div>
+        <div class="rc-toggle" id="rcTrans" role="button"><span class="rc-tick"></span>Tách cross-dissolve thành 2 clip (Timeline Render)</div>
+        <div class="rc-toggle" id="rcResume" role="button"><span class="rc-tick"></span>Bỏ qua clip đã có sẵn trong thư mục</div>
+        <div class="rc-field rc-presets">
+          <select id="rcPreset" class="vg-select rc-select"></select>
+        </div>
+        <div class="rc-field rc-presets">
+          <input type="text" id="rcPresetName" class="vg-select rc-input" placeholder="Tên preset" />
+          <div class="wf-btn wf-btn-sm" id="rcPresetSave" role="button">Lưu</div>
+          <div class="wf-btn wf-btn-sm wf-btn-danger" id="rcPresetDel" role="button">Xoá</div>
+        </div>
+      </div>
+
+      <div class="rc-confirm" id="rcConfirm" style="display:none">
+        <div class="rc-confirm-msg" id="rcConfirmMsg"></div>
+        <div class="rc-confirm-acts">
+          <div class="wf-btn wf-btn-sm wf-btn-primary" id="rcConfirmYes" role="button">Vẫn xuất</div>
+          <div class="wf-btn wf-btn-sm" id="rcConfirmNo" role="button">Huỷ</div>
+        </div>
+      </div>
+
+      <div class="rsz-go" id="rcGo" role="button">
+        <span id="rcGoLabel" class="rsz-go-label">CHƯA ĐỌC TIMELINE</span>
+        <span id="rcGoSub" class="rsz-go-sub">Both · raw/ rồi edited/</span>
+      </div>
+      <div class="rc-cancel-wrap"><div class="wf-btn wf-btn-sm wf-btn-danger" id="rcCancel" role="button" style="display:none">■ Dừng</div></div>
+
+      <div class="rc-progress" id="rcProgress" style="display:none">
+        <div class="rc-bar"><div class="rc-bar-fill" id="rcBarFill"></div></div>
+        <div class="rc-prog-text" id="rcProgText"></div>
+      </div>
+
+      <div id="rcStatus" class="rsz-status"></div>
+      <div class="rsz-outs" id="rcReport"></div>
+      <div class="rc-actions" id="rcActions" style="display:none">
+        <div class="wf-btn wf-btn-sm" id="rcOpenRaw" role="button"><span data-ic="folder_open" data-ic-size="11"></span> raw/</div>
+        <div class="wf-btn wf-btn-sm" id="rcOpenEdited" role="button"><span data-ic="folder_open" data-ic-size="11"></span> edited/</div>
+        <div class="wf-btn wf-btn-sm wf-btn-primary" id="rcRetry" role="button">↻ Thử lại clip lỗi</div>
+      </div>
+
+      <div class="rc-diag">
+        <div class="rsz-link" id="rcDiagToggle" role="button">▸ Dò lỗi</div>
+        <div id="rcDiagBody" style="display:none">
+          <div class="rc-sub">Đọc thử API Premiere trên sequence đang mở (không sửa gì) — gửi kết quả cho dev khi tab chạy sai.</div>
+          <div class="wf-btn wf-btn-sm" id="rcDiagBtn" role="button">Chạy dò</div>
+          <textarea id="rcDiagOut" class="rsz-diag-out" readonly></textarea>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script src="csv-parse.js"></script>
 <script src="elv-sort.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
 <script src="resize-core.js"></script>
 <script src="resize.js"></script>
+<script src="rawcut-core.js"></script>
+<script src="rawcut-ppro.js"></script>
+<script src="rawcut.js"></script>
 </body>
 </html>

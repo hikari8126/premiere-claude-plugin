@@ -31,6 +31,7 @@ function buildArgs(o) {
     .sort((x, y) => String(y[0]).length - String(x[0]).length)
     .forEach(p => a.push('--remap', p[0] + '=' + p[1]));
   if (o.sizeProbe) a.push('--size-probe');
+  if (o.noProbe) a.push('--no-probe');
   if (o.manifestOnly) a.push('--manifest-only');
   if (o.renderPlanned) a.push('--render-planned');
   if (o.renderDir) a.push('--render-dir', o.renderDir);

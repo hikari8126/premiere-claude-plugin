@@ -23,6 +23,8 @@ assert.deepStrictEqual(a, ['s', 'd', '-o', 'o', '--ext', 'mp4,mov', '--video-tra
   '--render-audio', '--transitions', 'split', '--remap', '/a/b=/y', '--remap', '/a=/x', '--render-dir', '/c',
   '--resume', '--pick', '/p.txt']);
 
+assert.deepStrictEqual(buildArgs({ script: 's', dump: 'd', out: 'o', manifestOnly: true, noProbe: true }), ['s', 'd', '-o', 'o', '--no-probe', '--manifest-only']);
+
 // 5. ràng buộc
 assert.throws(() => buildArgs({ script: 's', dump: 'd', out: 'o', renderPlanned: true }), /manifest-only/);
 assert.throws(() => buildArgs({ script: 's', dump: 'd', out: 'o', manifestOnly: true, renderPlanned: true, renderDir: '/c' }), /render-dir/);

@@ -34,6 +34,9 @@ const server = app.listen(3034, async () => {
     fs.writeFileSync(f, 'abc');
     assert.deepStrictEqual(await post('/rawcut/stat', { path: f }), { ok: true, exists: true, size: 3 });
     assert.strictEqual((await post('/rawcut/stat', { path: '/etc/hosts' })).ok, false);
+    assert.strictEqual((await post('/rawcut/unlink', { path: f })).ok, true);
+    assert.ok(!fs.existsSync(f));
+    assert.strictEqual((await post('/rawcut/unlink', { path: '/etc/hosts' })).ok, false);
     console.log('✓ rawcut-extra');
   } catch (e) { console.error(e); process.exitCode = 1; }
   finally { server.close(); setTimeout(() => process.exit(process.exitCode || 0), 100); }

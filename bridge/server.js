@@ -3621,7 +3621,7 @@ const rcDest   = require('./rawcut-dest.js');
 const RC_ENGINE = path.join(__dirname, 'rawcut-engine', 'xmlcut.py');
 const RC_TMP    = path.join(os.tmpdir(), 'xmlcut-panel');
 const RC_CACHE  = process.env.RAWCUT_CACHE || rcCache.DEFAULT_ROOT;
-const RC_SCAN_KEYS   = ['videoTrack', 'crf', 'fps', 'scale', 'vcodec', 'audioPerTrack', 'audio', 'audioTracks', 'renderAudio', 'transitions', 'remap', 'sizeProbe'];
+const RC_SCAN_KEYS   = ['videoTrack', 'crf', 'fps', 'scale', 'vcodec', 'audioPerTrack', 'audio', 'audioTracks', 'renderAudio', 'transitions', 'remap', 'sizeProbe', 'noProbe'];
 const RC_EXPORT_KEYS = RC_SCAN_KEYS.concat(['ext', 'resume']);
 
 let rcPyCache = null;
@@ -3676,10 +3676,16 @@ app.post('/rawcut/scan', async (req, res) => {
       manifestOnly: true, renderPlanned: half === 'render',
     }));
     const notes = [], warnings = [];
-    const r = await rcRunner.runEngine({
+    const job = rcRunner.runEngine({
       bin: py.bin, args, cwd: path.dirname(RC_ENGINE),
       onEvent: ev => { if (ev.type === 'note') notes.push(ev.text); else if (ev.type === 'warn') warnings.push(ev.text); },
-    }).done;
+    });
+    // Plugin bấm Dừng (đóng request) → giết engine + ffprobe (file Drive chưa tải có thể treo lâu).
+    let finished = false;
+    res.on('close', () => { if (!finished) job.cancel(); });
+    const r = await job.done;
+    finished = true;
+    if (r.cancelled) return;
     if (r.code !== 0) {
       const st = rcProto.parseStderr(r.stderr);
       if (st.noCuts) return res.json({ ok: true, noCuts: true, read, half, notes, warnings });
@@ -3828,6 +3834,15 @@ app.post('/rawcut/stat', (req, res) => {
   if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ hỏi được file trong cache render' });
   try { const st = fs.statSync(p); res.json({ ok: true, exists: true, size: st.size }); }
   catch (e) { res.json({ ok: true, exists: false, size: 0 }); }
+});
+
+// ── POST /rawcut/unlink ── {path} (trong cache render) → {ok} — xoá render cũ trước khi
+//    Premiere ghi lại cùng tên (tránh Premiere tự đổi tên / đọc nhầm file cũ).
+app.post('/rawcut/unlink', (req, res) => {
+  const p = (req.body || {}).path;
+  if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được file trong cache render' });
+  try { fs.rmSync(p, { force: true }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ── POST /rawcut/open ── {dir} → mở thư mục trong Finder
