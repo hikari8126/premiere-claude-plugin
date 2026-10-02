@@ -12918,7 +12918,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // → chỉ ra tên file để mở xem, tìm hướng cải thiện.
     if (diag.reportPath) text += '\n📄 Log: ' + String(diag.reportPath).split('/').pop() +
       ' (Documents ▸ Claude Bridge Logs ▸ autosub)';
-    return { text: text, warn: warn, report: diag.reportPath || '' };
+    return { text: text, warn: warn, wrongScript: wrongScript, report: diag.reportPath || '' };
   }
 
   // ── Cảnh báo bridge cũ ────────────────────────────────────────────────────
@@ -13236,6 +13236,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (d.diag) { try { console.log('[Sub][diag]', JSON.stringify(d.diag)); } catch (e) {} }
       stLastPath = d.path;
       var ar = $('stAfterRow'); if (ar) ar.style.display = 'flex';
+      // Luồng "AI ngắt câu → Tạo Sub" (Whisper canh giờ theo dòng) cũng phải soi độ
+      // khớp như stOrganize: script của video khác (<40%) → không import, báo đỏ (ST2).
+      var dgF = (url === '/superautocut/subtext' && d.diag) ? stDiagText(d.diag) : null;
+      if (dgF && dgF.wrongScript) {
+        stStatus('⛔ SCRIPT KHÔNG KHỚP — đã ghi "' + d.path.split('/').pop() + '" nhưng KHÔNG import vào project.\n'
+          + dgF.text + '\nKiểm tra script trong ô có đúng của video này không, rồi bấm Tạo Sub lại.');
+        stSplitReady = false;
+        stResetOrganize();
+        return;
+      }
       stStatus('⏳ Import .srt vào project...');
       var imported = true;
       try { await stImportFile(d.path); } catch (e) { imported = false; }
@@ -13248,7 +13258,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         : '';
       stStatus('✅ ' + d.cues.length + ' dòng phụ đề → "' + d.path.split('/').pop() + '"' +
         (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
-                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + seqHint + logHint);
+                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + seqHint
+        + (dgF && dgF.warn ? '\n⚠ Timing có thể LỆCH — ' + dgF.text : logHint));
       stSplitReady = false;
       stResetOrganize(); // xong → về trạng thái đầu cho lần sau
     } catch (e) {
