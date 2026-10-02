@@ -171,9 +171,9 @@ var RCP = (function () {
   }
 
   // Đọc sequence đang mở → {seq, project, info, dump, fp, warnings}.
-  async function readSequence() {
+  async function readSequence(seqOpt) {
     var project = await getActiveProject();
-    var seq = await getActiveSequence();
+    var seq = seqOpt || await getActiveSequence();
     var tb = String((await call(seq, 'getTimebase', '')) || '');
     var size = await frameSize(seq);
     var info = {
@@ -504,6 +504,42 @@ var RCP = (function () {
     return { ok: false, error: ret === false ? 'Premiere từ chối export (preset?)' : 'Premiere không ghi ra file render' };
   }
 
+  // ── Hàng loạt ──────────────────────────────────────────────────────────
+  // Sequence đang chọn ở Project panel (cách tab RESIZE dùng), theo thứ tự chọn, bỏ trùng.
+  async function selectedSequences() {
+    var out = [], seen = {};
+    try {
+      if (!ppro.ProjectUtils || !has(ppro.ProjectUtils, 'getSelection')) return out;
+      var project = await getActiveProject();
+      var sel = await un(ppro.ProjectUtils.getSelection(project));
+      var items = sel && has(sel, 'getItems') ? await un(sel.getItems()) : [];
+      items = items ? Array.prototype.slice.call(items) : [];
+      for (var i = 0; i < items.length; i++) {
+        var cp = null;
+        try { cp = ppro.ClipProjectItem.cast(items[i]); } catch (e) {}
+        if (!cp || !(await call(cp, 'isSequence', false)) || !has(cp, 'getSequence')) continue;
+        var sq = null;
+        try { sq = await un(cp.getSequence()); } catch (e) {}
+        var g = guidOf(sq);
+        if (!sq || !g || seen[g]) continue;
+        seen[g] = true;
+        out.push(sq);
+      }
+    } catch (e) {}
+    return out;
+  }
+  // Mở sequence lên timeline (để render đúng sequence) — chờ tới khi nó thành sequence đang mở.
+  async function activate(seq) {
+    if (!seq) return false;
+    var project = await getActiveProject(), id = guidOf(seq);
+    var isActive = async function () { try { return guidOf(await getActiveSequence()) === id; } catch (e) { return false; } };
+    if (await isActive()) return true;
+    try { if (has(project, 'openSequence')) await un(project.openSequence(seq)); } catch (e) {}
+    try { if (!(await isActive()) && has(project, 'setActiveSequence')) await un(project.setActiveSequence(seq)); } catch (e) {}
+    for (var i = 0; i < 20; i++) { if (await isActive()) return true; await sleep(150); }
+    return false;
+  }
+
   // ── Chẩn đoán (đọc, không sửa) ─────────────────────────────────────────
   async function diag() {
     var L = [];
@@ -530,5 +566,6 @@ var RCP = (function () {
   }
 
   return { readSequence: readSequence, exportXml: exportXml, stamp: stamp, renderRanges: renderRanges, diag: diag,
+           selectedSequences: selectedSequences, activate: activate, guidOf: guidOf,
            _text: { collect: collectText, setDisabled: setItemsDisabled } };   // _text: cho dev.sh eval kiểm tra
 })();

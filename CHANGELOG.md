@@ -3,6 +3,14 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.13.0 / bridge app 3.17 (server 1.21.0) — 2026-10-02
+
+> Không cần Bridge mới (vẫn Bridge app 3.17).
+
+### ✨ Tab RAW — xuất hàng loạt
+- Chọn ≥ 2 sequence ở Project panel (`ProjectUtils.getSelection` → `ClipProjectItem.getSequence`) → chế độ hàng loạt: đọc lần lượt từng sequence; mục Thư mục xuất liệt kê từng sequence (tick chọn, version, thư mục hoặc lý do không xuất được); thanh tab version (`v14.1`…) để xem / chỉnh chi tiết Clip · Timeline Render · Audio của từng sequence.
+- **XUẤT N SEQUENCE:** lần lượt đọc lại bản mới nhất (giữ clip đã bỏ tick) rồi xuất; có Timeline Render thì mở sequence lên timeline trước (`Project.openSequence` / `setActiveSequence`, chờ tới khi đúng là sequence đang mở), xong mở lại sequence ban đầu. Lỗi ở một sequence không dừng các sequence sau; Dừng dừng cả hàng đợi. Báo cáo theo sequence, **Thử lại** chỉ chạy lại các sequence lỗi (`--resume`).
+
 ## v5.12.0 / bridge app 3.17 (server 1.21.0) — 2026-10-02
 
 > **Cần Bridge app 3.17** (python3 ≥ 3.8 + ffmpeg) cho tab RAW. Các tab khác không cần bridge mới.
