@@ -4510,9 +4510,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // validate gate so the Run button appears (skipped sources → 1s gap in assembly).
   function sacCheckSkipGate() {
     if (!parsedBlocks.length) return;
+    // Source ⚠ trùng tên chưa bind vẫn có item (clip trùng tên đầu tiên) trong
+    // sacSourceMap → không được tính là resolved, khớp với sacValidateAll (F1).
+    var ambig = {};
+    document.querySelectorAll('#sacBlockList .sac-blockSrc').forEach(function(el) {
+      if (el.dataset.srcBaseKind === 'ambiguous') ambig[el.dataset.srcName] = true;
+    });
     var allResolved = parsedBlocks.every(function(block) {
       return (block.sources || []).every(function(src) {
-        return !!(sacSourceMap[src.name]) || !!src.skipped;
+        return (!!(sacSourceMap[src.name]) && !ambig[src.name]) || !!src.skipped;
       });
     });
     if (allResolved) {
