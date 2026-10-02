@@ -6519,6 +6519,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   function autoStatus(msg) { var el = $('sacAutoStatus'); if (el) el.textContent = msg; }
 
+  // Lỗi từng video (A7): trước đây tổng kết chỉ đếm "2/3 xong", lỗi của video hỏng
+  // không hiện ở đâu. Trả các dòng "✗ .1: …" để nối vào status + đánh dấu tab đỏ.
+  function autoErrLines(jobs) {
+    var lines = [];
+    (jobs || []).forEach(function (j) {
+      var t = document.querySelector('.sac-autoTab[data-job="' + j.idx + '"]');
+      var bad = j.state === 'error' || j.state === 'warn';
+      if (t) t.classList.toggle('is-err', bad);
+      if (j.error) lines.push((bad ? '✗ .' : '⚠ .') + j.idx + ': ' + j.error);
+    });
+    return lines.length ? '\n' + lines.join('\n') : '';
+  }
+  function autoClearErrMarks() {
+    document.querySelectorAll('.sac-autoTab.is-err').forEach(function (t) { t.classList.remove('is-err'); });
+  }
+
   // Chặng 1: dựng rows + validate từng job. Job lỗi bị đánh dấu, KHÔNG chặn job khác.
   // Trong lúc pipeline chạy, bảng + Blocks thuộc về video pipeline ĐANG xử lý,
   // không phải tab bạn đang đứng. Nếu tab vẫn chỉ .0 mà Blocks đã là của .2 thì
@@ -6551,6 +6567,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   async function autoStage1(jobs) {
+    autoClearErrMarks();
+    autoUpdateOpenSubBtn(false);
     for (var i = 0; i < jobs.length; i++) {
       if (autoStopHere('validate')) break;
       var job = jobs[i];
@@ -6705,7 +6723,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var ok = jobs.filter(function (j) { return j.state === 'voiced'; });
     // Đã huỷ thì giữ nguyên thông báo của autoStopHere, đừng ghi đè bằng tổng kết.
     if (!autoCancelRequested) {
-      autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong');
+      autoStatus('✓ Voice ' + ok.length + '/' + jobs.length + ' xong' + autoErrLines(jobs));
       autoNotify('Voice xong', ok.length + '/' + jobs.length + ' bản — chờ duyệt');
     }
     return ok;
@@ -6848,6 +6866,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       autoSubStatus('✗ Video .' + autoSubActiveJob + ' chưa dựng được timeline — không có gì để làm phụ đề.');
       return;
     }
+    if (job.state !== 'built') {
+      if (title) title.textContent = 'Auto Sub — ' + (job.seqName || ('.' + job.idx));
+      autoSubStatus('✗ Video .' + job.idx + ' chưa dựng xong' + (job.error ? ': ' + job.error : '') + ' — không làm phụ đề cho video này.');
+      return;
+    }
     if (title) title.textContent = 'Auto Sub — ' + job.seqName;
     autoSubFillScript(job);
     autoSubStatus('⏳ Đang mở sequence ' + job.seqName + '…');
@@ -6855,7 +6878,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       await autoActivateSeqForJob(job);
       // Quét track SAU khi đã đổi sequence — stScanTracks() đọc active sequence.
       if (typeof window.SubtextScanTracks === 'function') await window.SubtextScanTracks();
-      autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu" (tuỳ chọn) rồi "Tạo Sub".');
+      autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu" (tuỳ chọn) rồi "Tạo Sub".'
+        + (job.error ? '\n⚠ ' + job.error : ''));
     } catch (e) {
       autoSubStatus('✗ ' + bridgeErrText(e));
     }
@@ -6877,7 +6901,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     autoReturnSub();
     $('sacPanelAutoSub').style.display = 'none';
     $('sacPanelAuto').style.display = 'flex';
+    autoUpdateOpenSubBtn(true);
   }
+  // Rời trang Auto Sub rồi vẫn quay lại được (A10): nút hiện khi bộ vừa chạy có
+  // timeline dựng xong.
+  function autoUpdateOpenSubBtn(allow) {
+    var b = $('sacAutoOpenSub');
+    if (!b) return;
+    var any = allow && autoSubJobs.some(function (j) { return j && j.state === 'built'; });
+    b.style.display = any ? '' : 'none';
+  }
+  var sacAutoOpenSubBtn = $('sacAutoOpenSub');
+  if (sacAutoOpenSubBtn) sacAutoOpenSubBtn.addEventListener('click', function () {
+    if (autoRunning) return;
+    autoOpenSub(autoSubJobs);
+  });
 
   document.querySelectorAll('.sac-autoSubTab').forEach(function (t) {
     t.addEventListener('click', function () {
@@ -6932,8 +6970,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var ok = jobs.filter(function (j) { return j.state === 'built'; });
     var msg = 'Bộ ' + autoSet.setNumber + ': ' + ok.length + '/' + jobs.length + ' timeline xong'
             + (autoCancelRequested ? ' (đã dừng theo yêu cầu)' : '');
-    autoStatus((autoCancelRequested ? '⏹ ' : '✓ ') + msg);
-    autoNotify(autoCancelRequested ? 'Autocut — đã dừng' : 'Autocut xong', msg);
+    var errs = autoErrLines(jobs);
+    autoStatus((autoCancelRequested ? '⏹ ' : '✓ ') + msg + errs);
+    autoNotify(autoCancelRequested ? 'Autocut — đã dừng' : 'Autocut xong', msg + (errs ? ' — có video lỗi' : ''));
     // Dựng xong thì đi thẳng sang làm phụ đề — script đã có sẵn trong job.
     // Không timeline nào dựng được thì ở lại trang Auto để còn đọc lỗi.
     if (ok.length) autoOpenSub(jobs);

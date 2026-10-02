@@ -4396,7 +4396,7 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 .sac-autoManualSlot .sac-panel { padding: 0; }
 .sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
 .sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
-.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); min-height: 16px; }
+.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); min-height: 16px; white-space: pre-wrap; }
 .sac-autoRun {
   flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px;
   background: var(--accent); color: var(--accent-fg); font-size: 12px; cursor: pointer;
@@ -4448,6 +4448,10 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 }
 /* Khoá khi đang chạy: bấm vào bị chặn nên phải cho thấy là không bấm được. */
 .sac-autoTab.is-locked { opacity: 0.5; cursor: default; }
+/* Video lỗi ở lượt vừa chạy (A7) */
+.sac-autoTab.is-err { border-color: rgba(239,68,68,0.8); color: #fca5a5; }
+.sac-autoTab.is-err.is-active { color: var(--accent-fg); }
+.sac-autoOpenSub { flex: 0 0 auto; margin-top: 6px; text-align: center; }
 .sac-autoTab.is-locked.is-running { opacity: 1; }
 /* ── /AUTO PAGE ── */
 
