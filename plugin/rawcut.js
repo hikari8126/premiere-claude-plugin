@@ -44,6 +44,13 @@
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  // UXP không hỗ trợ CSS :empty → ô trống phải ẩn bằng JS, không thì hiện thành thanh rỗng.
+  function setText(e, txt) {
+    if (typeof e === 'string') e = $(e);
+    if (!e) return;
+    e.textContent = txt || '';
+    e.style.display = txt ? '' : 'none';
+  }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function base(p) { var s = String(p || ''); return s.substring(s.lastIndexOf('/') + 1); }
   function shortDir(p) { var parts = String(p || '').split('/').filter(Boolean); return parts.length > 4 ? '…/' + parts.slice(-4).join('/') : String(p || ''); }
@@ -151,12 +158,12 @@
     var m = String(msg || '').replace(/^[✓✅❌⛔⚠⏳]\uFE0F?\s*/, '');
     var s = $('rcStatus');
     if (kind === 'err' || kind === 'warn') {
-      s.textContent = m;
       s.className = 'rc-status' + (kind === 'err' ? ' rc-err' : '');
+      setText(s, m);
       return;
     }
-    s.textContent = '';
     s.className = 'rc-status';
+    setText(s, '');
     if (m && (st.busy || st.running)) liveText(m);
   }
   function liveText(m) {
@@ -248,11 +255,11 @@
     try {
       var s = await RCP.stamp(true);
       if (!s.ok) {
-        $('rcState').textContent = st.read ? 'Không có sequence nào đang mở — đang giữ lần đọc trước' : '';
+        setText('rcState', st.read ? 'Không có sequence nào đang mở — đang giữ lần đọc trước' : '');
         if (!st.read) paintGo();
         return;
       }
-      if ($('rcState').textContent) $('rcState').textContent = '';
+      if ($('rcState').textContent) setText('rcState', '');
       var key = s.id + '|' + (s.fp || '') + '|' + s.name;
       var have = st.read ? st.read.seqId + '|' + st.read.fp + '|' + st.read.seqName : '';
       if (key === have || key === w.failKey) { w.pendingKey = ''; return; }
@@ -332,7 +339,7 @@
   }
   function paintEnv(env) {
     var e = $('rcEnv');
-    e.textContent = env && env.ok ? '' : envProblem(env || {});
+    setText(e, env && env.ok ? '' : envProblem(env || {}));
   }
 
   // ── Thư mục xuất ────────────────────────────────────────────────────────
@@ -637,7 +644,7 @@
     $('rcTrans').classList.toggle('on', st.prefs.transitions);
     $('rcResume').classList.toggle('on', st.prefs.resume);
     var fpsNote = $('rcFpsNote');
-    fpsNote.textContent = st.prefs.fps ? 'Ép frame rate làm clip KHÔNG còn đúng từng frame của timeline.' : '';
+    setText(fpsNote, st.prefs.fps ? 'Ép frame rate làm clip KHÔNG còn đúng từng frame của timeline.' : '');
     var names = Object.keys(st.presets).sort();
     chipRow($('rcPreset'), names.map(function (n) { return { n: n, label: n }; }), function () { return false; },
       function (it) { onPresetPick(it.n); });
@@ -707,10 +714,11 @@
     name.classList.toggle('is-empty', !r);
     $('rcDetailToggle').style.display = r ? '' : 'none';
     var meta = $('rcSeqMeta');
-    meta.textContent = r ? [(r.width || r.info.width) + '×' + (r.height || r.info.height), (r.fps ? r.fps.toFixed(3).replace(/\.?0+$/, '') : '?') + ' fps', r.read && r.read.xml ? 'XML ✓' : 'không có XML'].join(' · ') : '';
+    setText(meta, r ? [(r.width || r.info.width) + '×' + (r.height || r.info.height), (r.fps ? r.fps.toFixed(3).replace(/\.?0+$/, '') : '?') + ' fps', r.read && r.read.xml ? 'XML ✓' : 'không có XML'].join(' · ') : '');
     var notes = $('rcNotes');
     notes.innerHTML = '';
     if (r) (r.warnings.concat(r.notes)).slice(0, 6).forEach(function (n) { notes.appendChild(el('div', 'rc-note', '• ' + n)); });
+    notes.style.display = notes.children.length ? '' : 'none';
   }
 
   function paintAll() {

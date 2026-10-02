@@ -1827,12 +1827,12 @@
           <div class="rc-seq-name is-empty" id="rcSeqName">Mở một sequence trong Premiere</div>
           <div class="rc-icon-btn" id="rcRead" role="button"><span data-ic="rotate_right" data-ic-size="12"></span></div>
         </div>
-        <div class="rc-seq-sub" id="rcState"></div>
-        <div class="rc-env" id="rcEnv"></div>
+        <div class="rc-seq-sub" id="rcState" style="display:none"></div>
+        <div class="rc-env" id="rcEnv" style="display:none"></div>
         <div class="rsz-link rc-more" id="rcDetailToggle" role="button" style="display:none">▸ Chi tiết</div>
         <div class="rc-detail" id="rcDetail" style="display:none">
-          <div class="rc-meta" id="rcSeqMeta"></div>
-          <div class="rc-notes" id="rcNotes"></div>
+          <div class="rc-meta" id="rcSeqMeta" style="display:none"></div>
+          <div class="rc-notes" id="rcNotes" style="display:none"></div>
         </div>
       </div>
 
@@ -1925,7 +1925,7 @@
             <span class="rc-label">Frame rate</span>
             <select id="rcFps" class="vg-select rc-select rc-select-sm"></select>
           </div>
-          <div class="rc-warn" id="rcFpsNote"></div>
+          <div class="rc-warn" id="rcFpsNote" style="display:none"></div>
           <div class="rc-toggle" id="rcTrans" role="button"><span class="rc-tick"></span>Tách cross-dissolve thành 2 clip (Timeline Render)</div>
           <div class="rc-toggle" id="rcResume" role="button"><span class="rc-tick"></span>Bỏ qua clip đã có sẵn trong thư mục</div>
           <div class="rc-sub">Preset (bấm để áp)</div>
@@ -1973,7 +1973,7 @@
           <div class="rc-prog-text" id="rcProgText"></div>
         </div>
       </div>
-      <div id="rcStatus" class="rc-status"></div>
+      <div id="rcStatus" class="rc-status" style="display:none"></div>
       <div class="rc-foot-row">
         <div class="rsz-go" id="rcGo" role="button">
           <span id="rcGoLabel" class="rsz-go-label">ĐANG ĐỌC…</span>
