@@ -154,7 +154,33 @@ test("{num} re-run on already renamed files is a no-op", () => {
   assert.ok(p.every(function (r) { return r.same; }));
 });
 
-test("{num} duplicates (same kept number twice) are flagged", () => {
-  var p = RNC.buildPreview(rowsOf("S", ["41.mov", "S 41.mov"]), "{bin}_{num}", 1);
-  assert.ok(p[0].error && p[1].error);
+test("numberInfo recognises copies of a numbered name", () => {
+  assert.deepStrictEqual(RNC.numberInfo("41", "S"), { num: "41", copy: false });
+  assert.deepStrictEqual(RNC.numberInfo("Copy of 1", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 copy", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 copy 2", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 (2)", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("Senyue 41 copy", "Senyue"), { num: "41", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("Copy of IMG_4821", "S"), { num: null, copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("IMG_4821", "S"), { num: null, copy: false });
+});
+
+test("{num}: a copy keeps its number when free, otherwise takes a new one", () => {
+  var p = RNC.buildPreview(rowsOf("OUTPUT", ["Copy of 1.mp4", "Copy of 2.mp4", "Copy of 10.mp4"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["OUTPUT_01.mp4", "OUTPUT_02.mp4", "OUTPUT_10.mp4"]);
+  assert.deepStrictEqual(p.map(function (r) { return r.numKind; }), ["keep", "keep", "keep"]);
+  assert.strictEqual(p[0].numCopyOf, "1");
+  // Bản gốc còn trong lượt → bản copy lấy số mới, kể cả khi bản copy đứng trước.
+  var q = RNC.buildPreview(rowsOf("S", ["Copy of 1.mp4", "1.mp4", "2.mp4"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(q.map(function (r) { return r.newName; }), ["S_03.mp4", "S_01.mp4", "S_02.mp4"]);
+  assert.strictEqual(q[0].numKind, "new");
+  assert.strictEqual(q[0].numCopyOf, "1");
+  assert.ok(q.every(function (r) { return !r.error; }));
+});
+
+test("{num}: two genuine names with one number — first keeps, the rest get new numbers", () => {
+  var p = RNC.buildPreview(rowsOf("S", ["41.mov", "S 41.mov", "IMG.mov"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["S_41.mov", "S_42.mov", "S_43.mov"]);
+  assert.strictEqual(p[1].numDupOf, "41");
+  assert.ok(p.every(function (r) { return !r.error; }));
 });

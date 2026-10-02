@@ -4995,3 +4995,7 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .rn-start label { font-size: 11px; color: var(--text-dim); margin-right: 6px; }
 .rn-start input { width: 60px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
   color: var(--text); font-size: 11px; padding: 3px 6px; }
+
+.rn-chk { flex: 0 0 auto; margin: 2px 6px 0 0; }
+.rn-row.is-off .rn-old, .rn-row.is-off .rn-new { color: var(--text-dim); }
+.rn-row.is-off .rn-new { font-style: italic; }

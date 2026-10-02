@@ -268,19 +268,30 @@
 
   // Nút kiểu tên: sáng nút đang chọn, ví dụ lấy từ clip đầu tiên; ô mẫu chỉ hiện khi
   // "Tự đặt", ô Bắt đầu từ chỉ hiện khi có {n} (với {num} nó gần như không dùng tới).
+  // Dòng được tick (bỏ tick = coi như không có trong lượt: giữ tên, không chiếm số).
+  function active() { return rn.rows.filter(function (r) { return r.checked !== false; }); }
+
+  // rn.preview chỉ gồm dòng được tick; rn.pidx[i] = vị trí của rn.rows[i] trong preview (-1 nếu bỏ tick).
+  function computePreview() {
+    var j = 0;
+    rn.pidx = rn.rows.map(function (r) { return r.checked !== false ? j++ : -1; });
+    rn.preview = RNC.buildPreview(active(), currentTpl(), startNum());
+  }
+
   function renderModes() {
+    var act = active();
     var ex = function (tpl) {
-      var p = RNC.buildPreview(rn.rows.slice(0, 1), tpl, startNum())[0];
+      var p = RNC.buildPreview(act.slice(0, 1), tpl, startNum())[0];
       return p ? p.newName : '';
     };
     // Ví dụ "Giữ số gốc" nên là dòng có số giữ được, không thì dòng đầu.
     var keepRow = null;
-    for (var i = 0; i < rn.rows.length && !keepRow; i++) {
-      if (RNC.keptNumber(RNC.splitExt(rn.rows[i].oldName).base, rn.rows[i].bin) !== null) keepRow = rn.rows[i];
+    for (var i = 0; i < act.length && !keepRow; i++) {
+      if (RNC.keptNumber(RNC.splitExt(act[i].oldName).base, act[i].bin) !== null) keepRow = act[i];
     }
     var exNum = keepRow ? RNC.buildPreview([keepRow], MODE_TPL.num, startNum())[0].newName : ex(MODE_TPL.num);
     $('rnExNum').textContent = exNum ? (keepRow ? keepRow.oldName + ' → ' : '') + exNum : '';
-    $('rnExN').textContent = rn.rows.length ? rn.rows[0].oldName + ' → ' + ex(MODE_TPL.n) : '';
+    $('rnExN').textContent = act.length ? act[0].oldName + ' → ' + ex(MODE_TPL.n) : '';
     Array.prototype.forEach.call(document.querySelectorAll('.rn-mode'), function (b) {
       if (b.getAttribute('data-mode') === prefs.mode) b.classList.add('is-active'); else b.classList.remove('is-active');
     });
@@ -321,13 +332,31 @@
     if (ready) go.classList.remove('is-disabled'); else go.classList.add('is-disabled');
   }
 
+  function numTag(p) {
+    if (p.numKind === 'keep') return p.numCopyOf ? 'bản copy của ' + p.numCopyOf + ' · giữ số' : 'giữ số gốc';
+    if (p.numKind !== 'new') return '';
+    if (p.numDupOf) return 'trùng số ' + p.numDupOf + ' · số mới';
+    if (p.numCopyOf) return 'bản copy của ' + p.numCopyOf + ' (số đã có file giữ) · số mới';
+    return 'số mới';
+  }
+
   function renderList() {
     var host = $('rnList');
     host.innerHTML = '';
-    rn.preview.forEach(function (p, i) {
-      var err = rowError(i);
+    rn.rows.forEach(function (r, i) {
+      var pi = rn.pidx ? rn.pidx[i] : i;
+      var p = pi >= 0 ? rn.preview[pi] : null;
+      var err = p ? rowError(pi) : '';
       var row = document.createElement('div');
-      row.className = 'rn-row' + (err ? ' is-err' : (p.same ? ' is-same' : ''));
+      row.className = 'rn-row' + (!p ? ' is-off' : (err ? ' is-err' : (p.same ? ' is-same' : '')));
+      var box = document.createElement('input'); box.type = 'checkbox'; box.className = 'rn-chk';
+      box.checked = !!p; box.disabled = rn.busy || rn.done;
+      box.addEventListener('change', function () {
+        if (rn.busy || rn.done) { box.checked = !!p; return; }
+        r.checked = box.checked;
+        refresh();
+      });
+      row.appendChild(box);
       var mv = document.createElement('div'); mv.className = 'rn-move';
       [['↑', -1], ['↓', 1]].forEach(function (b) {
         var bt = document.createElement('div');
@@ -342,14 +371,15 @@
       row.appendChild(mv);
       var txt = document.createElement('div'); txt.className = 'rn-txt';
       var names = document.createElement('div'); names.className = 'rn-names';
-      var o = document.createElement('span'); o.className = 'rn-old'; o.textContent = p.oldName;
+      var o = document.createElement('span'); o.className = 'rn-old'; o.textContent = r.oldName;
       var a = document.createElement('span'); a.className = 'rn-arrow'; a.textContent = '→';
-      var n = document.createElement('span'); n.className = 'rn-new'; n.textContent = p.same ? '(giữ nguyên)' : p.newName;
+      var n = document.createElement('span'); n.className = 'rn-new';
+      n.textContent = !p ? '(bỏ chọn — giữ nguyên)' : (p.same ? '(giữ nguyên)' : p.newName);
       names.appendChild(o); names.appendChild(a); names.appendChild(n);
       txt.appendChild(names);
-      var cnt = rn.rows[i] && rn.rows[i].items.length;
-      var tag = p.numKind === 'keep' ? 'giữ số gốc' : (p.numKind === 'new' ? 'số mới' : '');
-      if (err || cnt > 1 || tag) {
+      var cnt = r.items.length;
+      var tag = p ? numTag(p) : '';
+      if (p && (err || cnt > 1 || tag)) {
         var sub = document.createElement('div'); sub.className = 'rn-sub' + (!err && p.numKind === 'new' ? ' is-new' : '');
         sub.textContent = err || [tag, cnt > 1 ? cnt + ' clip trong project dùng file này' : '']
           .filter(Boolean).join(' · ');
@@ -366,7 +396,10 @@
       host.appendChild(row);
     });
     var c = counts();
-    $('rnSummary').textContent = rn.rows.length + ' file' + (rn.skipped.length ? ' · bỏ qua ' + rn.skipped.length : '')
+    var on = rn.preview.length;
+    $('rnAll').textContent = on === rn.rows.length ? 'Bỏ chọn hết' : 'Chọn hết';
+    $('rnSummary').textContent = (on === rn.rows.length ? rn.rows.length + ' file' : on + '/' + rn.rows.length + ' file được chọn')
+      + (rn.skipped.length ? ' · bỏ qua ' + rn.skipped.length : '')
       + (c.errs ? ' · ' + c.errs + ' lỗi' : '') + ' · số thứ tự theo thứ tự dưới đây, bấm ↑↓ để đổi';
     renderGo();
   }
@@ -402,7 +435,7 @@
   }
 
   function refresh() {
-    rn.preview = RNC.buildPreview(rn.rows, currentTpl(), startNum());
+    computePreview();
     renderModes();
     renderList();
     schedulePlan(false);
@@ -468,7 +501,7 @@
     $('rnStart').value = '1';
     status('', '');
     openModal();
-    rn.preview = RNC.buildPreview(rn.rows, currentTpl(), startNum());
+    computePreview();
     renderModes();
     renderList();
     renderAep();
@@ -640,6 +673,12 @@
     $('rnClose').addEventListener('click', closeModal);
     $('rnGo').addEventListener('click', run);
     $('rnRescan').addEventListener('click', function () { if (!rn.busy && !rn.done) schedulePlan(true); });
+    $('rnAll').addEventListener('click', function () {
+      if (rn.busy || rn.done) return;
+      var on = rn.preview.length !== rn.rows.length;
+      rn.rows.forEach(function (r) { r.checked = on; });
+      refresh();
+    });
     $('rnSort').addEventListener('click', function () { if (!rn.busy && !rn.done) { rn.rows = RNC.sortRows(rn.rows); refresh(); } });
     ['rnTpl', 'rnStart'].forEach(function (id) {
       var el = $(id);

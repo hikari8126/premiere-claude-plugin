@@ -119,23 +119,52 @@ var RNC = (function () {
 
   // rows (đã theo thứ tự) → [{path, oldName, newName, error, same}]. Trùng tên trong
   // CÙNG thư mục (không phân biệt hoa/thường — APFS mặc định vậy) báo lỗi mọi dòng dính.
-  // {num} theo từng bin: giữ số gốc (keptNumber); dòng không có số giữ được lấy số mới
-  // nối tiếp sau số lớn nhất được giữ của bin đó (không có thì từ ô "Bắt đầu từ", và
-  // không thấp hơn ô đó). Cả bin đệm 0 cùng độ dài. → [{num, kind:'keep'|'new'}]
+  // Bỏ phần "bản copy" Finder/Premiere hay thêm: "Copy of X", "X copy", "X copy 2", "X (2)".
+  var COPY_RES = [/^copy of\s+(.+)$/i, /^(.+?)\s+copy(?:\s+\d+)?$/i, /^(.+?)\s*\(\d+\)$/];
+  function stripCopy(base) {
+    var b = nfc(base).trim(), copy = false;
+    for (var guard = 0; guard < 5; guard++) {
+      var hit = false;
+      for (var i = 0; i < COPY_RES.length; i++) {
+        var m = COPY_RES[i].exec(b);
+        if (m) { b = m[1].trim(); copy = hit = true; break; }
+      }
+      if (!hit) break;
+    }
+    return { base: b, copy: copy };
+  }
+
+  // → {num: chuỗi số gốc | null, copy: là bản copy?}
+  function numberInfo(base, bin) {
+    var c = stripCopy(base);
+    return { num: keptNumber(c.base, bin), copy: c.copy };
+  }
+
+  // {num} theo từng bin. Thứ tự giành số: (1) tên "thật" có số (41, Senyue 41) — trùng số
+  // thì dòng đầu giữ; (2) bản copy (Copy of 1…) giữ số nếu chưa ai giữ. Còn lại lấy số
+  // mới nối tiếp sau số lớn nhất đã giữ của bin (không có thì từ ô "Bắt đầu từ", và
+  // không thấp hơn ô đó). Cả bin đệm 0 cùng độ dài.
+  // → [{num, kind:'keep'|'new', copyOf, dupOf}]
   function assignNums(rows, start) {
     var groups = {}, order = [];
     var info = rows.map(function (r, i) {
       var g = nfc(r.bin).toLowerCase();
-      if (!groups[g]) { groups[g] = { max: -1, len: 0, idx: [] }; order.push(g); }
-      var k = keptNumber(splitExt(r.oldName).base, r.bin);
+      if (!groups[g]) { groups[g] = { taken: {}, max: -1, len: 0, idx: [] }; order.push(g); }
       groups[g].idx.push(i);
-      if (k !== null) {
-        groups[g].max = Math.max(groups[g].max, parseInt(k, 10));
-        groups[g].len = Math.max(groups[g].len, k.length);
-        return { value: parseInt(k, 10), kind: 'keep' };
-      }
-      return { value: null, kind: 'new' };
+      var ni = numberInfo(splitExt(r.oldName).base, r.bin);
+      return { g: g, raw: ni.num, copy: ni.copy, value: null, kind: 'new', copyOf: ni.copy && ni.num !== null ? ni.num : '', dupOf: '' };
     });
+    function claim(x) {
+      var G = groups[x.g], v = parseInt(x.raw, 10);
+      if (G.taken[v]) return false;
+      G.taken[v] = true;
+      G.max = Math.max(G.max, v);
+      G.len = Math.max(G.len, x.raw.length);
+      x.value = v; x.kind = 'keep';
+      return true;
+    }
+    info.forEach(function (x) { if (x.raw !== null && !x.copy && !claim(x)) x.dupOf = x.raw; });
+    info.forEach(function (x) { if (x.raw !== null && x.copy) claim(x); });
     order.forEach(function (g) {
       var G = groups[g], next = Math.max(G.max + 1, start), last = G.max;
       G.idx.forEach(function (i) { if (info[i].value === null) { info[i].value = next++; last = Math.max(last, info[i].value); } });
@@ -157,7 +186,7 @@ var RNC = (function () {
       var base = renderName(tpl, { bin: r.bin, n: s + i, name: p.base, num: nums ? nums[i].num : '' }, w);
       var nn = base + p.ext;
       return { path: r.path, oldName: r.oldName, newName: nn, error: nameError(nn), same: nn === r.oldName,
-        numKind: nums ? nums[i].kind : '' };
+        numKind: nums ? nums[i].kind : '', numCopyOf: nums ? nums[i].copyOf : '', numDupOf: nums ? nums[i].dupOf : '' };
     });
     var seen = {};
     out.forEach(function (r, i) {
@@ -178,6 +207,7 @@ var RNC = (function () {
     padWidth: padWidth,
     renderName: renderName,
     keptNumber: keptNumber,
+    numberInfo: numberInfo,
     nameError: nameError,
     groupByPath: groupByPath,
     sortRows: sortRows,
