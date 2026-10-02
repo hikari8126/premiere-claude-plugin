@@ -1788,17 +1788,32 @@
       <div id="rnClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
     </div>
     <div class="rn-form">
-      <div class="wf-row"><label>Mẫu tên</label><input id="rnTpl" type="text" class="wf-field" placeholder="{bin}_{n}" /></div>
-      <div class="wf-row">
-        <label>Bắt đầu từ</label><input id="rnStart" type="number" value="1" min="0" />
+      <div class="rn-modes">
+        <div class="rn-mode" role="button" data-mode="num">
+          <div class="rn-mode-t">Giữ số gốc</div>
+          <div class="rn-mode-d">Tên số giữ nguyên số, tên khác lấy số nối tiếp</div>
+          <div class="rn-mode-ex" id="rnExNum"></div>
+        </div>
+        <div class="rn-mode" role="button" data-mode="n">
+          <div class="rn-mode-t">Đánh số lại</div>
+          <div class="rn-mode-d">Đánh lại từ đầu theo thứ tự bên dưới</div>
+          <div class="rn-mode-ex" id="rnExN"></div>
+        </div>
+      </div>
+      <div class="rn-opts">
+        <div class="rn-link" id="rnCustomToggle" role="button">Tự đặt mẫu…</div>
         <div class="wf-spacer"></div>
+        <div id="rnStartWrap" class="rn-start"><label>Bắt đầu từ</label><input id="rnStart" type="number" value="1" min="0" /></div>
         <div id="rnSort" class="wf-btn wf-btn-sm" role="button">Sắp A→Z</div>
       </div>
-      <div class="rn-hint">
-        <span class="rn-tok" role="button" data-tok="{bin}">{bin}</span> tên bin
-        <span class="rn-tok" role="button" data-tok="{num}">{num}</span> giữ số gốc (41.mov, Senyue 41), tên khác lấy số nối tiếp
-        <span class="rn-tok" role="button" data-tok="{n}">{n}</span> đánh số lại từ đầu
-        <span class="rn-tok" role="button" data-tok="{name}">{name}</span> tên cũ · đuôi file giữ nguyên
+      <div id="rnCustom" style="display:none">
+        <div class="wf-row"><label>Mẫu tên</label><input id="rnTpl" type="text" class="wf-field" placeholder="{bin}_{num}" /></div>
+        <div class="rn-hint">
+          <span class="rn-tok" role="button" data-tok="{bin}">{bin}</span> tên bin
+          <span class="rn-tok" role="button" data-tok="{num}">{num}</span> giữ số gốc
+          <span class="rn-tok" role="button" data-tok="{n}">{n}</span> đánh số lại
+          <span class="rn-tok" role="button" data-tok="{name}">{name}</span> tên cũ · đuôi file giữ nguyên
+        </div>
       </div>
     </div>
     <div id="rnSummary" class="wf-dir-crumb"></div>

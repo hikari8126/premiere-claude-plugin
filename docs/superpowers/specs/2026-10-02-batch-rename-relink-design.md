@@ -18,7 +18,9 @@ Mục gập/mở **"Đổi tên source hàng loạt"** dưới nút "Thêm thư 
 Nút **Lấy clip đang chọn** mở modal `#rnModal` (nằm ngoài mọi `.tab-panel`, cùng
 lý do với `#wfCmpModal`: UXP không có z-index):
 
-- **Mẫu tên** — mặc định `{bin}_{n}`. Token:
+- **Kiểu tên** — 2 nút lớn, mặc định **Giữ số gốc** (`{bin}_{num}`) / **Đánh số lại**
+  (`{bin}_{n}`), mỗi nút có ví dụ lấy từ clip đang chọn; **Tự đặt mẫu…** mới hiện ô gõ mẫu.
+  Ô Bắt đầu từ chỉ hiện khi mẫu có `{n}`. Token khi tự đặt:
   - `{bin}` — tên bin trực tiếp chứa clip
   - `{n}` — số thứ tự, tự đệm 0 theo số lớn nhất của lượt (≥2 chữ số: 01…09, 001…120)
   - `{name}` — tên file cũ bỏ đuôi

@@ -66,8 +66,11 @@
   function loadPrefs() {
     var s = {};
     try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) {}
-    return { tpl: typeof s.tpl === 'string' && s.tpl ? s.tpl : '{bin}_{n}', open: !!s.open };
+    var mode = (s.mode === 'n' || s.mode === 'custom') ? s.mode : 'num';
+    return { mode: mode, tpl: typeof s.tpl === 'string' && s.tpl ? s.tpl : '{bin}_{num}', open: !!s.open };
   }
+  // Hai kiểu bấm là chạy; "Tự đặt mẫu…" mới cần gõ (prefs.tpl).
+  var MODE_TPL = { num: '{bin}_{num}', n: '{bin}_{n}' };
   function savePrefs(p) { try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch (e) {} }
   var prefs = loadPrefs();
 
@@ -261,6 +264,37 @@
     rn.rows = []; rn.skipped = []; rn.preview = []; rn.server = null; rn.aep = []; rn.done = false;
   }
 
+  function currentTpl() { return prefs.mode === 'custom' ? $('rnTpl').value : MODE_TPL[prefs.mode]; }
+
+  // Nút kiểu tên: sáng nút đang chọn, ví dụ lấy từ clip đầu tiên; ô mẫu chỉ hiện khi
+  // "Tự đặt", ô Bắt đầu từ chỉ hiện khi có {n} (với {num} nó gần như không dùng tới).
+  function renderModes() {
+    var ex = function (tpl) {
+      var p = RNC.buildPreview(rn.rows.slice(0, 1), tpl, startNum())[0];
+      return p ? p.newName : '';
+    };
+    // Ví dụ "Giữ số gốc" nên là dòng có số giữ được, không thì dòng đầu.
+    var keepRow = null;
+    for (var i = 0; i < rn.rows.length && !keepRow; i++) {
+      if (RNC.keptNumber(RNC.splitExt(rn.rows[i].oldName).base, rn.rows[i].bin) !== null) keepRow = rn.rows[i];
+    }
+    var exNum = keepRow ? RNC.buildPreview([keepRow], MODE_TPL.num, startNum())[0].newName : ex(MODE_TPL.num);
+    $('rnExNum').textContent = exNum ? (keepRow ? keepRow.oldName + ' → ' : '') + exNum : '';
+    $('rnExN').textContent = rn.rows.length ? rn.rows[0].oldName + ' → ' + ex(MODE_TPL.n) : '';
+    Array.prototype.forEach.call(document.querySelectorAll('.rn-mode'), function (b) {
+      if (b.getAttribute('data-mode') === prefs.mode) b.classList.add('is-active'); else b.classList.remove('is-active');
+    });
+    $('rnCustom').style.display = prefs.mode === 'custom' ? '' : 'none';
+    $('rnCustomToggle').textContent = prefs.mode === 'custom' ? 'Dùng kiểu có sẵn' : 'Tự đặt mẫu…';
+    $('rnStartWrap').style.display = /\{n\}/.test(currentTpl()) ? '' : 'none';
+  }
+
+  function setMode(m) {
+    if (rn.busy || rn.done) return;
+    prefs.mode = m; savePrefs(prefs);
+    refresh();
+  }
+
   function startNum() { var n = parseInt($('rnStart').value, 10); return isNaN(n) || n < 0 ? 1 : n; }
 
   // Lỗi một dòng: ưu tiên kết quả bridge (biết đĩa) khi còn khớp tên mới.
@@ -368,7 +402,8 @@
   }
 
   function refresh() {
-    rn.preview = RNC.buildPreview(rn.rows, $('rnTpl').value, startNum());
+    rn.preview = RNC.buildPreview(rn.rows, currentTpl(), startNum());
+    renderModes();
     renderList();
     schedulePlan(false);
   }
@@ -433,7 +468,8 @@
     $('rnStart').value = '1';
     status('', '');
     openModal();
-    rn.preview = RNC.buildPreview(rn.rows, $('rnTpl').value, startNum());
+    rn.preview = RNC.buildPreview(rn.rows, currentTpl(), startNum());
+    renderModes();
     renderList();
     renderAep();
     schedulePlan(true);
@@ -444,7 +480,7 @@
     if ($('rnGo').classList.contains('is-disabled') || rn.busy) return;
     var proj = await getActiveProject();
     if (!proj) { status('✗ Không có project đang mở', 'is-err'); return; }
-    prefs.tpl = $('rnTpl').value; savePrefs(prefs);
+    if (prefs.mode === 'custom') { prefs.tpl = $('rnTpl').value; savePrefs(prefs); }
 
     rn.busy = true; renderGo(); renderAep();
     try {
@@ -610,6 +646,13 @@
       bindKeyboard(el);
       el.addEventListener('input', function () { if (!rn.busy && !rn.done) refresh(); });
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.rn-mode'), function (b) {
+      b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
+    });
+    $('rnCustomToggle').addEventListener('click', function () {
+      if (prefs.mode !== 'custom' && !$('rnTpl').value) $('rnTpl').value = prefs.tpl;
+      setMode(prefs.mode === 'custom' ? 'num' : 'custom');
+    });
     document.querySelectorAll('.rn-tok').forEach(function (t) {
       t.addEventListener('click', function () {
         if (rn.busy || rn.done) return;
@@ -646,5 +689,6 @@
       $('rnTpl').value = prefs.tpl; $('rnStart').value = '1';
       openModal(); refresh(); schedulePlan(true);
     },
+    setMode: setMode,
   };
 })();
