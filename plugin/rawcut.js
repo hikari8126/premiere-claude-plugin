@@ -58,6 +58,7 @@
       scale: SCALES.indexOf(Number(s.scale)) !== -1 ? Number(s.scale) : 100,
       fps: FPS_LIST.indexOf(String(s.fps || '')) !== -1 ? String(s.fps || '') : '',
       transitions: s.transitions !== false,
+      hideText: s.hideText !== false,
       resume: !!s.resume,
       audioMix: !!s.audioMix,
       audioPer: Array.isArray(s.audioPer) ? s.audioPer : [],
@@ -573,6 +574,7 @@
     chipRow($('rcMaster'), vt.map(function (t) { return { n: t.index, label: 'V' + t.index + ' · ' + t.items + ' clip' }; }),
       function (it) { return it.n === st.read.master; },
       function (it) { onMaster(it.n); });
+    $('rcHideText').classList.toggle('on', st.prefs.hideText);
     var inc = includeList();
     chipRow($('rcVTracks'), vt.map(function (t) { return { n: t.index, label: 'V' + t.index }; }),
       function (it) { return inc.indexOf(it.n) !== -1; },
@@ -891,6 +893,7 @@
       pixel('render');
       var rend = await RCP.renderRanges({
         ranges: rr.ranges, dir: cache.dir, preset: preset.path, stockPreset: preset.stockPath,
+        hideText: st.prefs.hideText, master: st.read.master,
         keepVideo: includeList(), keepAudio: hearList(), offeredAudio: st.read.audioTracks.map(function (t) { return t.index; }),
         expect: { id: st.read.seqId, fp: consentFp || st.read.fp },
         onProgress: function (d, t, label) { showProgress(true, prefix + ' · Premiere render ' + d + '/' + t + (label ? ' · ' + label : ''), t ? d / t : 0); },
@@ -899,12 +902,19 @@
       res.render = rend;
       (rend.warnings || []).forEach(function (x) { res.errors.push('⚠ ' + x); });
       rend.renders.filter(function (x) { return !x.ok; }).forEach(function (x) { res.errors.push('Render lỗi ' + x.label + ': ' + x.error); });
+      if (rend.textHidden) res.info = 'Đã ẩn ' + rend.textHidden + ' clip text/MOGRT trong lúc render (đã bật lại).';
+      if (rend.skipped && rend.skipped.length) {
+        // Cut là chính clip text trên master track: không render (khung đen), không cắt.
+        picked = picked.filter(function (r) { return rend.skipped.indexOf(RCC.renderLabel(r)) === -1; });
+        res.info = (res.info ? res.info + ' ' : '') + 'Bỏ qua ' + rend.skipped.length + ' cut là text trên master track.';
+      }
       if (rend.stopped) { res.cancelled = true; res.error = 'Đã dừng sau ' + rend.written + '/' + rr.ranges.length + ' bản render — chưa cắt gì vào edited/.'; return res; }
       // Hỏng giữa chừng (in/out không vào, không render được cut nào) → không cắt edited/ dở dang.
       if (rend.refused || rend.error || !rend.ok) { res.error = (rend.error || 'Premiere không render được cut nào') + ' — chưa cắt gì vào edited/.'; return res; }
     }
     var out = await exportHalf('render', outDir, picked, cache.dir, prefix, !!retryKeys);
     out.errors = res.errors.concat(out.errors);
+    out.info = res.info;
     out.render = res.render;
     out.renderDir = cache.dir;
     var clean = !out.error && !out.failed && out.manifest && Number((out.manifest.settings || {}).renders_missing || 0) === 0;
@@ -954,6 +964,7 @@
         if (s.mismatch) bits.push(s.mismatch + ' render lệch độ dài');
         if (bits.length) lines.push(bits.join(' · '));
       }
+      if (r.info) lines.push(r.info);
       if (r.dir) lines.push('→ ' + shortDir(r.dir));
       row.appendChild(el('div', 'rsz-row-sub', lines.join('\n')));
       r.errors.slice(0, 8).forEach(function (x) { row.appendChild(el('div', 'rc-row-err', x)); });
@@ -1021,6 +1032,7 @@
     $('rcFps').addEventListener('change', function () { st.prefs.fps = $('rcFps').value; savePrefs(); paintQuality(); });
     // <select> của UXP đổi giá trị khi lăn chuột ngang qua → chặn lăn trên ô fps.
     $('rcFps').addEventListener('wheel', function (e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
+    $('rcHideText').addEventListener('click', function () { if (st.running) return; st.prefs.hideText = !st.prefs.hideText; savePrefs(); paintRender(); });
     $('rcTrans').addEventListener('click', function () { st.prefs.transitions = !st.prefs.transitions; savePrefs(); paintQuality(); });
     $('rcResume').addEventListener('click', function () { st.prefs.resume = !st.prefs.resume; savePrefs(); paintQuality(); });
     $('rcPresetSave').addEventListener('click', onPresetSave);

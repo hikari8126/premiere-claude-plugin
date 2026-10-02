@@ -247,6 +247,75 @@ var RCP = (function () {
     return out;
   }
 
+  // ── Ẩn text khi render ─────────────────────────────────────────────────
+  // Clip text/title (AE.ADBE Text…) và MOGRT (AE.ADBE Capsule) có tham số chữ — cùng cách nhận
+  // diện với tab Un-nest (main.js UNNEST_TEXT_*). MOGRT có cả hình lẫn chữ cũng bị ẩn.
+  var TEXT_COMP_RE = /text|title|caption/i;
+  var TEXT_PARAM_RE = /\btext\b|main text|source text|font\s?size|\bfont\b|tracking|leading|paragraph|highlight text|text box/i;
+  async function isTextItem(it) {
+    try {
+      var ch = await un(it.getComponentChain());
+      var n = Number(await call(ch, 'getComponentCount', 0)) || 0;
+      for (var k = 0; k < n; k++) {
+        var co = await un(ch.getComponentAtIndex(k));
+        var mn = String((await call(co, 'getMatchName', '')) || '');
+        if (TEXT_COMP_RE.test(mn)) return true;
+        if (/capsule/i.test(mn)) {
+          var pc = Number(await call(co, 'getParamCount', 0)) || 0;
+          for (var j = 0; j < pc; j++) {
+            var pr = await un(co.getParam(j));
+            var dn = '';
+            try { dn = has(pr, 'getDisplayName') ? String(await un(pr.getDisplayName())) : String((pr && pr.displayName) || ''); } catch (e) {}
+            if (TEXT_PARAM_RE.test(dn)) return true;
+          }
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+  // Gom clip text ĐANG BẬT của sequence (+ nest ≤ 4 tầng). spans: [inF, outF] của text nằm trên
+  // master track ở tầng ngoài cùng — cut đó tắt đi sẽ render ra khung đen, nên bỏ không render.
+  async function collectText(seq, depth, seen, col, master, tb) {
+    var id = guidOf(seq);
+    if (depth > MAX_NEST_DEPTH || seen[id]) return;
+    seen[id] = true;
+    var list = await trackList(seq, 'v');
+    for (var i = 0; i < list.length; i++) {
+      var items = await itemsOf(list[i].track);
+      for (var j = 0; j < items.length; j++) {
+        var it = items[j];
+        if (await call(it, 'isDisabled', false)) continue;
+        var cpi = null, nested = null;
+        try { cpi = ppro.ClipProjectItem.cast(await un(it.getProjectItem())); } catch (e) {}
+        if (cpi && (await call(cpi, 'isSequence', false)) && has(cpi, 'getSequence')) {
+          try { nested = await un(cpi.getSequence()); } catch (e) {}
+          if (nested) { await collectText(nested, depth + 1, seen, col, 0, tb); continue; }
+        }
+        if (!(await isTextItem(it))) continue;
+        col.items.push(it);
+        if (depth === 0 && list[i].index === master && tb > 0) {
+          var a = ticksOf(await call(it, 'getStartTime', null)), b = ticksOf(await call(it, 'getEndTime', null));
+          if (a !== null && b !== null) col.spans.push([Math.round(Number(a) / tb), Math.round(Number(b) / tb)]);
+        }
+      }
+    }
+  }
+  async function setItemsDisabled(project, items, flag) {
+    try {
+      await commit(project, function (ca) {
+        items.forEach(function (it) { ca.addAction(it.createSetDisabledAction(flag)); });
+      }, flag ? 'Raw-cutter ẩn text' : 'Raw-cutter hiện lại text');
+      return items.length;
+    } catch (e) {
+      // Gộp chung lỗi (vd clip ở nest khác) → làm từng clip, đếm số làm được.
+      var ok = 0;
+      for (var i = 0; i < items.length; i++) {
+        try { await commit(project, function (ca) { ca.addAction(items[i].createSetDisabledAction(flag)); }, 'Raw-cutter text'); ok++; } catch (e2) {}
+      }
+      return ok;
+    }
+  }
+
   // ── Render từng cut ────────────────────────────────────────────────────
   // o = {ranges:[{label,inF,outF}], dir, preset, stockPreset, keepVideo:[n], keepAudio:[n]|null,
   //      offeredAudio:[n], expect:{id, fp}, onProgress(done,total,label), shouldStop()}
@@ -255,7 +324,8 @@ var RCP = (function () {
     catch (e) { return { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', error: 'Render lỗi: ' + ((e && e.message) || e) }; }
   }
   async function renderRangesInner(o) {
-    var res = { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', presetFallback: false };
+    var res = { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', presetFallback: false, textHidden: 0, skipped: [] };
+    var textItems = [];
     if (!ppro.EncoderManager || !ppro.EncoderManager.getManager) { res.error = 'Premiere bản này không có EncoderManager (cần ≥ 25.6)'; return res; }
     var project = await getActiveProject();
     var seq = await getActiveSequence();
@@ -331,6 +401,33 @@ var RCP = (function () {
           if (!(await setMute(ats[a].track, true))) res.warnings.push('Không tắt được A' + n + ' khi render.');
         }
       }
+      // Text / MOGRT có chữ: tắt tạm trong lúc render, xong bật lại đúng những clip đã tắt.
+      if (o.hideText) {
+        var col = { items: [], spans: [] };
+        await collectText(seq, 0, {}, col, Number(o.master) || 0, tb);
+        if (col.items.length) {
+          var nOff = await setItemsDisabled(project, col.items, true);
+          if (nOff === col.items.length) textItems = col.items;
+          else {
+            if (nOff) await setItemsDisabled(project, col.items, false);   // làm dở thì trả lại hết, render như cũ
+            res.warnings.push('Không tắt được clip text — render vẫn còn chữ.');
+          }
+        }
+        res.textHidden = textItems.length;
+        var nCap = Number(await call(seq, 'getCaptionTrackCount', 0)) || 0;
+        for (var ci = 0; ci < nCap; ci++) {
+          var ct = null;
+          try { ct = await un(seq.getCaptionTrack(ci)); } catch (e) {}
+          if (ct && has(ct, 'setMute')) await setMute(ct, true);
+        }
+        if (col.spans.length) {
+          o.ranges = o.ranges.filter(function (rg) {
+            var inside = col.spans.some(function (sp) { return rg.inF >= sp[0] && rg.outF <= sp[1]; });
+            if (inside) res.skipped.push(rg.label);
+            return !inside;
+          });
+        }
+      }
       try { if (has(em, 'launchEncoder')) await un(em.launchEncoder()); } catch (e) {}
 
       var total = o.ranges.length;
@@ -371,6 +468,9 @@ var RCP = (function () {
     } finally {
       // Chỉ trả in/out khi đã đổi (không thêm bước undo thừa). Cách trả giống Voice Changer
       // (vcxRenderSelection) — kể cả khi sequence chưa đặt in/out (giá trị âm của Premiere).
+      if (textItems.length && (await setItemsDisabled(project, textItems, false)) !== textItems.length) {
+        res.warnings.push('Có clip text chưa bật lại được — kiểm tra timeline (Clip → Enable).');
+      }
       if (ioChanged) { try { if (origIn && origOut) await setIO(origIn, origOut); } catch (e) { res.warnings.push('Không trả lại in/out cũ: ' + ((e && e.message) || e)); } }
       for (var m = changed.length - 1; m >= 0; m--) {
         // Trạng thái cũ không rõ → trả về hiện (bản gốc để ẩn luôn là lỗi).
@@ -378,7 +478,7 @@ var RCP = (function () {
         try { await un(changed[m].track.setMute(want)); } catch (e) { res.warnings.push('Không khôi phục được mute của một track.'); }
       }
     }
-    res.ok = res.stopped || (res.written > 0 && !res.renders.some(function (x) { return x.noRange; }));
+    res.ok = res.stopped || (!o.ranges.length && !res.error) || (res.written > 0 && !res.renders.some(function (x) { return x.noRange; }));
     if (!res.ok && !res.stopped && !res.error) res.error = 'Premiere không render được cut nào';
     return res;
   }
@@ -429,5 +529,6 @@ var RCP = (function () {
     return L.join('\n');
   }
 
-  return { readSequence: readSequence, exportXml: exportXml, stamp: stamp, renderRanges: renderRanges, diag: diag };
+  return { readSequence: readSequence, exportXml: exportXml, stamp: stamp, renderRanges: renderRanges, diag: diag,
+           _text: { collect: collectText, setDisabled: setItemsDisabled } };   // _text: cho dev.sh eval kiểm tra
 })();
