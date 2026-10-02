@@ -13727,16 +13727,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         try { id = await un(projItem.getId()); } catch (e) {}
         var startSec = await callSec(item, 'getStartTime');
         var key = id + '@' + (startSec == null ? '?' : startSec.toFixed(3));
-        if (seenIds[key]) continue;   // dedupe linked V/A items of same nest
-        seenIds[key] = true;
+        // dedupe linked V/A items of same nest — giữ lại item linked để chỉ tắt đúng nest đó (UN1)
+        if (seenIds[key]) { seenIds[key].linked.push(item); continue; }
 
         var name = '';
         try { name = await un(item.getName ? item.getName() : item.name); } catch (e) {}
         var nestedSeq = null;
         try { nestedSeq = await un(clipPI.getSequence()); } catch (e) {}
 
-        detected.push({
+        var entry = {
           item: item,
+          linked: [],
           name: name || ('Nested ' + (detected.length + 1)),
           projItem: projItem,
           nestedSeq: nestedSeq,
@@ -13744,7 +13745,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           nestIn:  await callSec(item, 'getInPoint'),
           nestOut: await callSec(item, 'getOutPoint'),
           ok: !!nestedSeq,
-        });
+        };
+        seenIds[key] = entry;
+        detected.push(entry);
       }
 
       renderList(nonNested);
@@ -14321,8 +14324,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var totalPlaced = 0;
     var MODE_LABEL = { video: 'chỉ video (bỏ text)', av: 'video + audio', avt: 'video + audio + text' };
 
-    // Snapshot the originals NOW — we're about to switch sequences around.
-    var origItems = rawSelected.slice();
+    // Chỉ tắt nest đã bung được (placed > 0) — clip không phải nested / bung lỗi giữ nguyên (UN1).
+    var origItems = [];
 
     try {
       var project = await getActiveProject();
@@ -14333,7 +14336,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       for (var i = 0; i < detected.length; i++) {
         try {
-          totalPlaced += await expandViaClone(project, parentSeq, detected[i], mode);
+          var placed = await expandViaClone(project, parentSeq, detected[i], mode);
+          totalPlaced += placed;
+          if (placed > 0) origItems = origItems.concat([detected[i].item], detected[i].linked || []);
         } catch (e) {
           logLine('✗ "' + detected[i].name + '": ' + (e.message || e), 'err');
         }
@@ -14344,26 +14349,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         await openAndActivate(project, parentSeq);
         await sleep(SETTLE_SHORT);
         var disabledCount = 0;
-        for (var k = 0; k < origItems.length; k++) {
-          var it = origItems[k];
-          if (it && typeof it.createSetDisabledAction === 'function') {
-            try {
-              await (function(node) {
-                return project.lockedAccess(function() {
-                  project.executeTransaction(function(action) {
-                    action.addAction(node.createSetDisabledAction(true));
-                  }, 'Un-nest: disable original');
-                });
-              })(it);
-              disabledCount++;
-            } catch (e) {}
-          }
+        var toDisable = origItems.filter(function (it) { return it && typeof it.createSetDisabledAction === 'function'; });
+        // Gộp vào MỘT transaction → một bước undo.
+        if (toDisable.length) {
+          try {
+            await project.lockedAccess(function() {
+              project.executeTransaction(function(action) {
+                toDisable.forEach(function (node) { action.addAction(node.createSetDisabledAction(true)); });
+              }, 'Un-nest: disable original');
+            });
+            disabledCount = toDisable.length;
+          } catch (e) { logLine('✗ không tắt được clip nested gốc: ' + (e.message || e), 'err'); }
         }
         if (disabledCount) logLine('✓ đã tắt ' + disabledCount + ' clip nested gốc', 'ok');
       }
 
       logLine('—');
-      logLine('HOÀN TẤT · tổng ' + totalPlaced + ' clip đã copy-paste. Kiểm tra timeline & Cmd+Z nếu cần.', 'ok');
+      if (totalPlaced > 0) logLine('HOÀN TẤT · tổng ' + totalPlaced + ' clip đã copy-paste. Kiểm tra timeline & Cmd+Z nếu cần.', 'ok');
+      else logLine('KHÔNG bung được clip nào — clip gốc giữ nguyên.', 'warn');
     } catch (e) {
       logLine('✗ LỖI: ' + (e.message || e), 'err');
       console.error('[Un-nest] run error:', e);
