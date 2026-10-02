@@ -6753,7 +6753,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
         $('sacNewSeqName').value  = job.seqName;
         $('sacNewSeqRatio').value = job.ratio;
-        await sacRunAutoCut('new');
+        var cut = await sacRunAutoCut('new');
+        if (!cut || !cut.ok) throw new Error((cut && cut.error) || 'dựng timeline lỗi');
 
         // GIỮ LẠI object sequence ngay đây. sacRunAutoCut('new') vừa tạo và kích
         // hoạt nó, nên active sequence lúc này CHÍNH LÀ timeline vừa dựng.
@@ -6764,7 +6765,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         try { job._seq = await getActiveSequence(); } catch (eSeq) { job._seq = null; }
 
         await autoMoveSeqToBin(job.seqName, job.seqBin);
-        job.state = 'built';
+        // Thiếu voice → không coi là xong (không sang trang Sub với timeline câm).
+        // Lỗi chèn vài clip vẫn tính xong nhưng ghi lại để còn soi.
+        if (!cut.voiceOk) {
+          job.state = 'warn';
+          job.error = 'timeline dựng xong nhưng THIẾU VOICE (import/chèn voice lỗi)';
+        } else {
+          job.state = 'built';
+          if (cut.failed) job.error = cut.failed + ' clip chèn lỗi (xem Console)';
+        }
       } catch (e) {
         job.state = 'error';
         job.error = e.message;
@@ -7416,8 +7425,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (sacRunBusy) {
       status.style.display = 'block';
       status.textContent = '⏳ Đang dựng… chờ lượt hiện tại xong.';
-      return;
+      return { ok: false, error: 'đang dựng lượt khác', placed: 0, failed: 0, voiceOk: false };
     }
+    // Kết quả cho bên gọi (trang Auto) — trước đây nuốt lỗi nên timeline hỏng /
+    // thiếu voice vẫn tính "built" (A2).
+    var sacRes = { ok: false, error: null, placed: 0, failed: 0, voiceOk: true };
     sacSetRunBusy(true);
     status.style.display = 'block';
     status.textContent = '⏳ Đang khởi động assembly...';
@@ -7549,6 +7561,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
             console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
           } catch(e) { console.warn('[SAC] Voice import failed:', e.message); }
         }
+        if (!voiceItem) sacRes.voiceOk = false;
       }
 
       // Pre-fetch real durations for full-clip sources (no timecode) so each is placed
@@ -7643,6 +7656,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           } catch (eClip) {
             // One bad clip must not abort the whole assembly (crash-hardening, #4).
             console.error('[SAC] insert failed for "' + src.name + '":', eClip && eClip.message);
+            sacRes.failed++;
           }
 
           srcTotal += clipDur;
@@ -7665,9 +7679,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
               if (vDur > srcTotal) cursor = blockStart + vDur;
             } catch (eVoice) {
               console.error('[SAC] voice insert failed @block ' + (i + 1) + ':', eVoice && eVoice.message);
+              sacRes.voiceOk = false;
             }
           } else {
             console.warn('[SAC] skip voice @block ' + (i + 1) + ' — bad times', vStart, vOut);
+            sacRes.voiceOk = false;
           }
         }
 
@@ -7699,13 +7715,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         $('sacPanelManual').style.display = 'none';
         $('sacSuccessPanel').style.display = 'flex';
       }
+      sacRes.ok = true;
+      sacRes.placed = placed;
 
     } catch(e) {
       status.textContent = '❌ ' + e.message;
       console.error('[SAC] sacRunAutoCut error:', e);
+      sacRes.error = e.message;
     } finally {
       sacSetRunBusy(false);
     }
+    return sacRes;
   }
 
   // ── Collapse/expand the script input section ─────────────────────────────
