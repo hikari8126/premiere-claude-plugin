@@ -13,6 +13,7 @@ Plugin tích hợp thẳng vào Adobe Premiere Pro:
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
+- **Đổi tên source hàng loạt** (tab Watch) — đổi tên file trên đĩa theo mẫu, relink clip Premiere + `.aep`, có hoàn tác
 
 **Version hiện tại:** 5.6.1  
 **Yêu cầu hệ điều hành:** macOS (Apple Silicon hoặc Intel)
@@ -347,6 +348,13 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/rawcut/presets` | POST | Liệt kê / lưu / xoá preset chất lượng |
 | `/rawcut/stat` · `/rawcut/unlink` | POST | Kiểm tra / xoá file render trong cache (chỉ trong cache) |
 | `/rawcut/open` | POST | Mở thư mục xuất trong Finder |
+| `/rename/plan` | POST | Đổi tên source: kiểm tra tên/trùng trên đĩa, quét `.aep` trong thư mục sản phẩm, cờ `aeRunning` |
+| `/rename/siblings` | POST | File media cùng thư mục với source mà project chưa import (đổi tên cho đủ bộ) |
+| `/rename/apply` | POST | Đổi tên file 2 pha (lỗi → tự đổi về), ghi nhật ký lượt, trả `batchId` |
+| `/rename/revert` | POST | Đổi riêng vài file của lượt về tên cũ (plugin relink lỗi) |
+| `/rename/note` | POST | Ghi clip đã chuyển bin trong lượt (Hoàn tác chuyển về bin cũ) |
+| `/rename/aep` | POST | Sửa `fullpath` trong các `.aep` đã tick theo lượt (backup 7 ngày) |
+| `/rename/journal` · `/rename/undo` | GET · POST | Lượt gần nhất của project / hoàn tác lượt đó (file + `.aep`) |
 
 ### Lệnh dev thường dùng
 

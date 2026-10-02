@@ -3021,7 +3021,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.21.0';  // Raw-cutter: /rawcut/status|scan|export(SSE)|render-cache|render-cache/clean|render-preset, engine xmlcut.py 3.93 vendored ở rawcut-engine/ (cần python3 ≥3.8 + ffmpeg). Prior 1.20.0: Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.22.0';  // Đổi tên source hàng loạt: /rename/plan|apply|revert|aep|journal|undo — rename-ops.js (đổi tên 2 pha + nhật ký ~/Library/Application Support/ClaudeBridge/rename) + aep-relink.js (sửa fullpath trong .aep RIFX, cả footage trong folder). Prior 1.21.0: Raw-cutter: /rawcut/status|scan|export(SSE)|render-cache|render-cache/clean|render-preset, engine xmlcut.py 3.93 vendored ở rawcut-engine/ (cần python3 ≥3.8 + ffmpeg). Prior 1.20.0: Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {
@@ -3873,6 +3873,145 @@ app.post('/rawcut/dest', (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Đổi tên source hàng loạt (tab Watch): bridge đổi tên file trên đĩa + relink .aep,
+// plugin relink clip Premiere. Chỉ giữ lượt gần nhất của mỗi project để hoàn tác.
+// Spec: docs/superpowers/specs/2026-10-02-batch-rename-relink-design.md
+// ═══════════════════════════════════════════════════════════════════════════
+const rnOps = require('./rename-ops.js');
+const rnAep = require('./aep-relink.js');
+const RN_BACKUP_MAX_AGE = 7 * 864e5;
+
+function rnRows(b) {
+  return (Array.isArray(b.rows) ? b.rows : []).map(r => ({ oldPath: String((r && r.oldPath) || ''), newName: String((r && r.newName) || '') }));
+}
+function rnJournal(b, res) {
+  if (!b.projectPath) { res.status(400).json({ ok: false, error: 'Thiếu projectPath' }); return null; }
+  const j = rnOps.loadJournal(String(b.projectPath));
+  if (!j || (b.batchId && j.batchId !== b.batchId)) { res.status(404).json({ ok: false, error: 'Không còn lượt đổi tên này trong nhật ký' }); return null; }
+  return j;
+}
+const rnSwap = p => ({ oldPath: p.newPath, newPath: p.oldPath });
+
+// ── POST /rename/plan ── {projectPath, rows:[{oldPath,newName}], scanAep?:bool}
+//    → {ok, rows:[{oldPath,newPath,newName,error,same}], aep?:[{path,name,count}], aepRoot, aepTimedOut, aeRunning}
+//    scanAep=false khi chỉ đổi mẫu tên: .aep khớp theo đường dẫn CŨ nên không cần quét lại.
+app.post('/rename/plan', async (req, res) => {
+  const b = req.body || {};
+  try {
+    const rows = rnOps.planRows(rnRows(b));
+    const out = { ok: true, rows, aeRunning: rnAep.isAeRunning() };
+    if (b.projectPath && b.scanAep !== false) {
+      const root = require('./watchfolder-browse.js').productRoot(String(b.projectPath));
+      const olds = rows.filter(r => !r.error && !r.same).map(r => r.oldPath);
+      const s = olds.length ? await rnAep.scanAep(root, olds, { timeoutMs: 30000 }) : { files: [], timedOut: false };
+      Object.assign(out, { aep: s.files, aepRoot: root, aepTimedOut: s.timedOut });
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rename/siblings ── {dirs:[thư mục], known:[đường dẫn project đã có]}
+//    → {ok, files:[{path, dir}]} — file media cùng thư mục mà chưa import, để đổi tên cho đủ bộ.
+app.post('/rename/siblings', (req, res) => {
+  const b = req.body || {};
+  const dirs = (Array.isArray(b.dirs) ? b.dirs : []).filter(d => typeof d === 'string' && path.isAbsolute(d));
+  try { res.json(Object.assign({ ok: true }, rnOps.siblings(dirs, Array.isArray(b.known) ? b.known : []))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rename/apply ── {projectPath, rows, aep:[đường dẫn .aep được tick]}
+//    → {ok, batchId, rows:[{oldPath,newPath}]} — kiểm tra lại toàn bộ; có lỗi thì không đụng file nào.
+app.post('/rename/apply', (req, res) => {
+  const b = req.body || {};
+  if (!b.projectPath) return res.status(400).json({ ok: false, error: 'Thiếu projectPath' });
+  const plan = rnOps.planRows(rnRows(b));
+  const bad = plan.filter(r => r.error);
+  if (bad.length) return res.status(400).json({ ok: false, error: bad.length + ' dòng lỗi: ' + bad[0].error, rows: plan });
+  const pairs = plan.filter(r => !r.same).map(r => ({ oldPath: r.oldPath, newPath: r.newPath }));
+  if (!pairs.length) return res.json({ ok: true, batchId: null, rows: [] });
+  const r = rnOps.applyRenames(pairs);
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  const batch = {
+    batchId: rnOps.newBatchId(), time: Date.now(), projectPath: String(b.projectPath), rows: pairs,
+    aepSelected: (Array.isArray(b.aep) ? b.aep : []).filter(p => typeof p === 'string' && path.isAbsolute(p) && /\.aep$/i.test(p)),
+    aep: [],
+  };
+  try { rnOps.saveJournal(batch.projectPath, batch); }
+  catch (e) { console.warn('[rename] không ghi được nhật ký:', e.message); }
+  rnOps.cleanupBackups(RN_BACKUP_MAX_AGE);
+  res.json({ ok: true, batchId: batch.batchId, rows: pairs });
+});
+
+// ── POST /rename/revert ── {projectPath, batchId, oldPaths:[...]} — plugin relink lỗi
+//    ở dòng nào thì đổi riêng file của dòng đó về tên cũ, bỏ khỏi lượt.
+app.post('/rename/revert', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  const want = new Set((b.oldPaths || []).map(String));
+  const sel = j.rows.filter(p => want.has(p.oldPath));
+  const r = rnOps.applyRenames(sel.map(rnSwap));
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  j.rows = j.rows.filter(p => !want.has(p.oldPath));
+  if (j.rows.length) rnOps.saveJournal(j.projectPath, j); else rnOps.clearJournal(j.projectPath);
+  res.json({ ok: true, reverted: sel.length });
+});
+
+// ── POST /rename/note ── {projectPath, batchId, moves:[{path, fromBin}]} — plugin ghi các clip
+//    đã chuyển bin (từ bin khác về bin của thư mục) để Hoàn tác chuyển lại.
+app.post('/rename/note', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  j.moves = (Array.isArray(b.moves) ? b.moves : [])
+    .filter(m => m && typeof m.path === 'string' && typeof m.fromBin === 'string')
+    .map(m => ({ path: m.path, fromBin: m.fromBin }));
+  rnOps.saveJournal(j.projectPath, j);
+  res.json({ ok: true, moves: j.moves.length });
+});
+
+// ── POST /rename/aep ── {projectPath, batchId} → {ok, files:[{path,name,ok,replaced,renamed,error}]}
+app.post('/rename/aep', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  if (!j.aepSelected.length || !j.rows.length) return res.json({ ok: true, files: [] });
+  if (rnAep.isAeRunning()) return res.status(409).json({ ok: false, aeRunning: true, error: 'After Effects đang mở — đóng AE rồi thử lại' });
+  const map = rnAep.buildMap(j.rows);
+  const dir = path.join(rnOps.backupRoot(), j.batchId);
+  const files = j.aepSelected.map(f => Object.assign({ path: f, name: path.basename(f) }, rnAep.relinkAepFile(f, map, dir)));
+  j.aep = files.filter(f => f.ok && f.replaced).map(f => ({ path: f.path, count: f.replaced }));
+  rnOps.saveJournal(j.projectPath, j);
+  res.json({ ok: true, files });
+});
+
+// ── GET /rename/journal?projectPath= → {ok, batch|null}
+app.get('/rename/journal', (req, res) => {
+  const p = req.query.projectPath;
+  if (!p) return res.status(400).json({ ok: false, error: 'Thiếu projectPath' });
+  res.json({ ok: true, batch: rnOps.loadJournal(String(p)) });
+});
+
+// ── POST /rename/undo ── {projectPath, batchId}
+//    → {ok, rows:[{oldPath,newPath}] (đã đổi về), skipped:[{oldPath,newPath,reason}], aep:[...]}
+//    .aep sửa theo ánh xạ ngược (không chép đè backup → giữ thay đổi làm sau trong AE).
+app.post('/rename/undo', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  if (j.aep.length && rnAep.isAeRunning()) return res.status(409).json({ ok: false, aeRunning: true, error: 'After Effects đang mở — đóng AE rồi hoàn tác' });
+  const ok = [], skipped = [];
+  j.rows.forEach(p => {
+    if (!fs.existsSync(p.newPath)) skipped.push(Object.assign({ reason: 'File mới không còn ở chỗ cũ' }, p));
+    else if (fs.existsSync(p.oldPath) && p.oldPath.toLowerCase() !== p.newPath.toLowerCase()) skipped.push(Object.assign({ reason: 'Tên cũ đã có file khác chiếm' }, p));
+    else ok.push(p);
+  });
+  const r = rnOps.applyRenames(ok.map(rnSwap));
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  const map = rnAep.buildMap(ok.map(rnSwap));
+  const dir = path.join(rnOps.backupRoot(), j.batchId + '-undo');
+  const aep = ok.length ? j.aep.map(a => Object.assign({ path: a.path, name: path.basename(a.path) }, rnAep.relinkAepFile(a.path, map, dir))) : [];
+  rnOps.clearJournal(j.projectPath);
+  res.json({ ok: true, rows: ok, skipped, aep, moves: j.moves || [] });
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────

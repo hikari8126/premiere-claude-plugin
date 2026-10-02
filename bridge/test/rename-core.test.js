@@ -1,0 +1,207 @@
+// bridge/test/rename-core.test.js — logic thuần của "Đổi tên source hàng loạt" (tab Watch).
+const test = require("node:test");
+const assert = require("node:assert");
+const RNC = require("../../plugin/rename-core.js");
+
+test("splitExt keeps the extension's case and handles odd names", () => {
+  assert.deepStrictEqual(RNC.splitExt("IMG_4821.MOV"), { base: "IMG_4821", ext: ".MOV" });
+  assert.deepStrictEqual(RNC.splitExt("a.b.mp4"), { base: "a.b", ext: ".mp4" });
+  assert.deepStrictEqual(RNC.splitExt("README"), { base: "README", ext: "" });
+  assert.deepStrictEqual(RNC.splitExt(".hidden"), { base: ".hidden", ext: "" });
+});
+
+test("natCmp sorts numbers naturally, case-insensitive", () => {
+  var a = ["IMG_10.mov", "img_2.mov", "IMG_1.mov"];
+  a.sort(RNC.natCmp);
+  assert.deepStrictEqual(a, ["IMG_1.mov", "img_2.mov", "IMG_10.mov"]);
+});
+
+test("padWidth is at least 2 and grows with the largest number", () => {
+  assert.strictEqual(RNC.padWidth(1, 5), 2);
+  assert.strictEqual(RNC.padWidth(1, 120), 3);
+  assert.strictEqual(RNC.padWidth(95, 10), 3);   // 95..104
+  assert.strictEqual(RNC.padWidth(1, 0), 2);
+});
+
+test("renderName fills tokens, pads n, trims, leaves unknown tokens", () => {
+  assert.strictEqual(RNC.renderName("{bin}_{n}", { bin: "Higg", n: 1, name: "IMG" }, 2), "Higg_01");
+  assert.strictEqual(RNC.renderName("{name} v2", { bin: "", n: 3, name: "clip a" }, 2), "clip a v2");
+  assert.strictEqual(RNC.renderName("  {n} {x} ", { bin: "", n: 7, name: "" }, 3), "007 {x}");
+  assert.strictEqual(RNC.renderName("{bin}{bin}", { bin: "A", n: 1, name: "" }, 2), "AA");
+});
+
+test("nameError rejects what macOS / Premiere cannot take", () => {
+  assert.strictEqual(RNC.nameError("Higg_01.mov"), "");
+  assert.strictEqual(RNC.nameError("Cảnh mở đầu 01.mov"), "");
+  assert.ok(RNC.nameError(""));
+  assert.ok(RNC.nameError(".mov"));
+  assert.ok(RNC.nameError("a/b.mov"));
+  assert.ok(RNC.nameError("a:b.mov"));
+  assert.ok(RNC.nameError("a\u0007b.mov"));
+  assert.ok(RNC.nameError(".hidden.mov"));
+  assert.ok(RNC.nameError("ệ".repeat(90) + ".mov"));   // 270 byte UTF-8
+});
+
+test("groupByPath merges project items pointing at one file, first-seen order", () => {
+  var rows = RNC.groupByPath([
+    { path: "/x/b.mov", bin: "B", item: 1, name: "b.mov" },
+    { path: "/x/a.mov", bin: "A", item: 2, name: "a.mov" },
+    { path: "/x/b.mov", bin: "C", item: 3, name: "b copy" },
+  ]);
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].path, "/x/b.mov");
+  assert.strictEqual(rows[0].oldName, "b.mov");
+  assert.strictEqual(rows[0].bin, "B");
+  assert.deepStrictEqual(rows[0].items, [1, 3]);
+  assert.deepStrictEqual(rows[1].items, [2]);
+});
+
+test("sortRows / moveRow return new arrays", () => {
+  var rows = [{ oldName: "IMG_10.mov" }, { oldName: "IMG_2.mov" }];
+  var s = RNC.sortRows(rows);
+  assert.strictEqual(s[0].oldName, "IMG_2.mov");
+  assert.strictEqual(rows[0].oldName, "IMG_10.mov");
+  var m = RNC.moveRow(s, 1, -1);
+  assert.strictEqual(m[0].oldName, "IMG_10.mov");
+  assert.strictEqual(RNC.moveRow(s, 0, -1)[0].oldName, "IMG_2.mov");   // out of range: unchanged
+});
+
+test("buildPreview numbers rows in order and keeps extensions", () => {
+  var rows = [
+    { path: "/f/IMG_1.MOV", oldName: "IMG_1.MOV", bin: "Higg" },
+    { path: "/f/IMG_2.mp4", oldName: "IMG_2.mp4", bin: "Higg" },
+  ];
+  var p = RNC.buildPreview(rows, "{bin}_{n}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["Higg_01.MOV", "Higg_02.mp4"]);
+  assert.ok(p.every(function (r) { return !r.error && !r.same; }));
+  var p5 = RNC.buildPreview(rows, "{bin}_{n}", 9);
+  assert.deepStrictEqual(p5.map(function (r) { return r.newName; }), ["Higg_09.MOV", "Higg_10.mp4"]);
+});
+
+test("buildPreview flags case-insensitive duplicates within the batch on every row", () => {
+  var rows = [
+    { path: "/f/a.mov", oldName: "a.mov", bin: "X" },
+    { path: "/f/b.MOV", oldName: "b.MOV", bin: "x" },
+  ];
+  var p = RNC.buildPreview(rows, "{bin}", 1);
+  assert.ok(p[0].error && p[1].error, "both rows flagged");
+});
+
+test("buildPreview: same folder only collides; different folders may share a name", () => {
+  var rows = [
+    { path: "/f1/a.mov", oldName: "a.mov", bin: "X" },
+    { path: "/f2/b.mov", oldName: "b.mov", bin: "X" },
+  ];
+  var p = RNC.buildPreview(rows, "{bin}", 1);
+  assert.ok(!p[0].error && !p[1].error);
+});
+
+test("buildPreview marks unchanged names as same and invalid ones as error", () => {
+  var rows = [
+    { path: "/f/Higg_01.mov", oldName: "Higg_01.mov", bin: "Higg" },
+    { path: "/f/q.mov", oldName: "q.mov", bin: "" },
+  ];
+  var p = RNC.buildPreview(rows, "{bin}_{n}", 1);
+  assert.strictEqual(p[0].same, true);
+  var p2 = RNC.buildPreview([rows[1]], "{bin}", 1);
+  assert.ok(p2[0].error, "empty name is an error");
+});
+
+// {num}: tên gốc là số (hoặc "<bin> số") → giữ số; tên khác (IMG_4821…) → số mới nối
+// tiếp sau số lớn nhất được giữ của CÙNG bin.
+function rowsOf(bin, names) {
+  return names.map(function (n) { return { path: "/f/" + bin + "/" + n, oldName: n, bin: bin }; });
+}
+
+test("keptNumber: only bare numbers or <bin> + number", () => {
+  assert.strictEqual(RNC.keptNumber("41", "Senyue"), "41");
+  assert.strictEqual(RNC.keptNumber("Senyue 41", "Senyue"), "41");
+  assert.strictEqual(RNC.keptNumber("senyue_041", "Senyue"), "041");
+  assert.strictEqual(RNC.keptNumber("Senyue-7", "Senyue"), "7");
+  assert.strictEqual(RNC.keptNumber("IMG_4821", "Senyue"), null);
+  assert.strictEqual(RNC.keptNumber("Higg 33", "Senyue"), null);
+  assert.strictEqual(RNC.keptNumber("intro", "Senyue"), null);
+  assert.strictEqual(RNC.keptNumber("Cảnh 3", "Cảnh".normalize("NFD")), "3");
+});
+
+test("{num} keeps original numbers and continues after the largest for the rest", () => {
+  var rows = rowsOf("Senyue", ["41.MOV", "IMG_4821.MOV", "53.mov", "DSC_0012.mov", "43.mov"]);
+  var p = RNC.buildPreview(rows, "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }),
+    ["Senyue_41.MOV", "Senyue_54.MOV", "Senyue_53.mov", "Senyue_55.mov", "Senyue_43.mov"]);
+  assert.deepStrictEqual(p.map(function (r) { return r.numKind; }), ["keep", "new", "keep", "new", "keep"]);
+});
+
+test("{num} with nothing to keep starts from the start field; each number at least 2 digits", () => {
+  var p = RNC.buildPreview(rowsOf("Higg", ["IMG_1.mov", "IMG_2.mov"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["Higg_01.mov", "Higg_02.mov"]);
+  // Không đệm cả bin theo số dài nhất — file đã đổi (Higg_05) không bị đổi lại thành Higg_005.
+  var q = RNC.buildPreview(rowsOf("Higg", ["5.mov", "120.mov", "IMG.mov"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(q.map(function (r) { return r.newName; }), ["Higg_05.mov", "Higg_120.mov", "Higg_121.mov"]);
+  var z = RNC.buildPreview(rowsOf("Higg", ["033.mov", "x.mov"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(z.map(function (r) { return r.newName; }), ["Higg_033.mov", "Higg_34.mov"]);
+});
+
+test("{num}: already renamed files stay put even when many new numbers pass 99", () => {
+  var names = ["Senyue_09.MOV", "Senyue_64.MOV"];
+  for (var i = 0; i < 60; i++) names.push("2025-08-18 " + (100000 + i) + ".mov");
+  var p = RNC.buildPreview(rowsOf("Senyue", names), "{bin}_{num}", 1);
+  assert.ok(p[0].same && p[1].same, p[0].newName + " / " + p[1].newName);
+  assert.strictEqual(p[2].newName, "Senyue_65.mov");
+  assert.strictEqual(p[p.length - 1].newName, "Senyue_124.mov");
+});
+
+test("{num} counts per bin; start field acts as a floor", () => {
+  var rows = rowsOf("Senyue", ["41.mov", "IMG_1.mov"]).concat(rowsOf("Higg", ["IMG_2.mov", "Higg 7.mov"]));
+  var p = RNC.buildPreview(rows, "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["Senyue_41.mov", "Senyue_42.mov", "Higg_08.mov", "Higg_07.mov"]);
+  var f = RNC.buildPreview(rowsOf("S", ["3.mov", "IMG.mov"]), "{bin}_{num}", 10);
+  assert.deepStrictEqual(f.map(function (r) { return r.newName; }), ["S_03.mov", "S_10.mov"]);
+});
+
+test("{num} re-run on already renamed files is a no-op", () => {
+  var p = RNC.buildPreview(rowsOf("Senyue", ["Senyue_41.MOV", "Senyue_54.MOV"]), "{bin}_{num}", 1);
+  assert.ok(p.every(function (r) { return r.same; }));
+});
+
+test("numberInfo recognises copies of a numbered name", () => {
+  assert.deepStrictEqual(RNC.numberInfo("41", "S"), { num: "41", copy: false });
+  assert.deepStrictEqual(RNC.numberInfo("Copy of 1", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 copy", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 copy 2", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("1 (2)", "S"), { num: "1", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("Senyue 41 copy", "Senyue"), { num: "41", copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("Copy of IMG_4821", "S"), { num: null, copy: true });
+  assert.deepStrictEqual(RNC.numberInfo("IMG_4821", "S"), { num: null, copy: false });
+});
+
+test("{num}: a copy keeps its number when free, otherwise takes a new one", () => {
+  var p = RNC.buildPreview(rowsOf("OUTPUT", ["Copy of 1.mp4", "Copy of 2.mp4", "Copy of 10.mp4"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["OUTPUT_01.mp4", "OUTPUT_02.mp4", "OUTPUT_10.mp4"]);
+  assert.deepStrictEqual(p.map(function (r) { return r.numKind; }), ["keep", "keep", "keep"]);
+  assert.strictEqual(p[0].numCopyOf, "1");
+  // Bản gốc còn trong lượt → bản copy lấy số mới, kể cả khi bản copy đứng trước.
+  var q = RNC.buildPreview(rowsOf("S", ["Copy of 1.mp4", "1.mp4", "2.mp4"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(q.map(function (r) { return r.newName; }), ["S_03.mp4", "S_01.mp4", "S_02.mp4"]);
+  assert.strictEqual(q[0].numKind, "new");
+  assert.strictEqual(q[0].numCopyOf, "1");
+  assert.ok(q.every(function (r) { return !r.error; }));
+});
+
+test("{num}: two genuine names with one number — first keeps, the rest get new numbers", () => {
+  var p = RNC.buildPreview(rowsOf("S", ["41.mov", "S 41.mov", "IMG.mov"]), "{bin}_{num}", 1);
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["S_41.mov", "S_42.mov", "S_43.mov"]);
+  assert.strictEqual(p[1].numDupOf, "41");
+  assert.ok(p.every(function (r) { return !r.error; }));
+});
+
+test("{num}: numbers used by files already on disk are never handed out again", () => {
+  // Thư mục đã có Senyue_51..64 (đổi ở lượt trước, không nằm trong bảng).
+  var occupied = { senyue: [] };
+  for (var k = 51; k <= 64; k++) occupied.senyue.push(k);
+  var p = RNC.buildPreview(rowsOf("Senyue", ["49.MOV", "50.MOV", "DSC_6852.MOV", "DSC_6857.MOV", "51.MOV"]),
+    "{bin}_{num}", 1, { occupied: occupied });
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }),
+    ["Senyue_49.MOV", "Senyue_50.MOV", "Senyue_65.MOV", "Senyue_66.MOV", "Senyue_67.MOV"]);
+  assert.strictEqual(p[4].numDupOf, "51", "51.MOV collides with the existing Senyue_51 → new number");
+});
