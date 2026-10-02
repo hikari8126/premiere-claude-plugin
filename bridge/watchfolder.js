@@ -18,6 +18,19 @@ const MAX_TRIES       = 3;
 const MAX_DEAD        = 200;
 const STATE_FLUSH_MS  = 30000;
 
+// State lưu THEO PROJECT: { byProject: { <prproj>: { byWatch, queue, dead } } }.
+// Bản cũ chỉ giữ một project ({ byWatch, queue, dead, projectPath }) nên đổi project
+// rồi quay lại là mất snapshot + hàng đợi của project trước (W1) → chuyển đổi khi đọc.
+function migrateState(raw) {
+  const s = (raw && typeof raw === 'object') ? raw : {};
+  if (s.byProject && typeof s.byProject === 'object') return { byProject: s.byProject };
+  const out = { byProject: {} };
+  if (s.projectPath) {
+    out.byProject[s.projectPath] = { byWatch: s.byWatch || {}, queue: s.queue || [], dead: s.dead || [] };
+  }
+  return out;
+}
+
 function createEngine(deps) {
   const d = deps || {};
   const scan  = d.scan  || ((folder, opts) => scanFolder(folder, opts));
@@ -36,6 +49,8 @@ function createEngine(deps) {
   let huge = false;
   let running = false;
 
+  function readAllState() { return migrateState(store.readState()); }
+
   function stateFor(w) {
     if (!state[w.id]) state[w.id] = { snapshot: null, pending: {}, status: 'ok' };
     const s = state[w.id];
@@ -45,18 +60,24 @@ function createEngine(deps) {
 
   function flush(force) {
     if (!force && now() - lastFlushAt < STATE_FLUSH_MS) return;
+    if (!projectPath) return;
     lastFlushAt = now();
     const out = {};
     for (const id of Object.keys(state)) {
       out[id] = { snapshot: state[id].snapshot, status: state[id].status };
     }
-    store.writeState({ byWatch: out, queue, dead, projectPath });
+    // Ghi phần của project này, GIỮ phần của project khác (W1).
+    const all = readAllState();
+    all.byProject[projectPath] = { byWatch: out, queue, dead };
+    store.writeState(all);
   }
 
   function start(p) {
+    // Đổi project khi session cũ chưa stop → ghi lại state project cũ trước đã.
+    if (running && projectPath && projectPath !== p) flush(true);
     projectPath = p;
     watches = store.readConfig(p).filter(w => validateWatch(w).ok);
-    const saved = store.readState() || {};
+    const saved = readAllState().byProject[p] || {};
     const by = saved.byWatch || {};
     state = {};
     for (const w of watches) {
@@ -66,8 +87,8 @@ function createEngine(deps) {
         status: 'ok',
       };
     }
-    queue = (saved.projectPath === p && Array.isArray(saved.queue)) ? saved.queue : [];
-    dead  = (saved.projectPath === p && Array.isArray(saved.dead))  ? saved.dead  : [];
+    queue = Array.isArray(saved.queue) ? saved.queue : [];
+    dead  = Array.isArray(saved.dead)  ? saved.dead  : [];
     running = true;
     lastNewAt = now();
     return { watches, queued: queue.length };
@@ -243,4 +264,4 @@ function createEngine(deps) {
   return { start, stop, tick, scanNow, poll, ack, nextDelay, stats };
 }
 
-module.exports = { createEngine, MAX_QUEUE, MAX_TRIES };
+module.exports = { createEngine, migrateState, MAX_QUEUE, MAX_TRIES };

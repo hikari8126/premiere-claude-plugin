@@ -116,5 +116,41 @@ fake.files['x.mp4'] = [10, 30];
 eng3.tick(); eng3.tick(); eng3.tick();
 assert.deepStrictEqual(eng3.poll(20).items, [], 'watch tắt thì bỏ qua hoàn toàn');
 
+// ── 11. Đổi project rồi quay lại: snapshot + hàng đợi project trước còn nguyên (W1) ──
+const PROJ_A = '/Users/x/Series_A2.prproj';
+const WA = { ...W, id: 'w_a', folder: '/watchedA' };
+const PROJ_B = '/Users/x/Series_B.prproj';
+const WB = { ...W, id: 'w_b', folder: '/watchedB', binPath: 'Footage/B' };
+store.writeConfig(PROJ_A, [WA]);
+store.writeConfig(PROJ_B, [WB]);
+fake = { ok: true, files: { 'a1.mp4': [10, 1] }, truncated: false };
+const e4 = newEngine();
+e4.start(PROJ_A);
+e4.tick();                                       // baseline A
+fake.files['a-new.mp4'] = [55, 2];
+e4.tick(); e4.tick();
+const aQueued = e4.poll(20).items.filter(i => /a-new\.mp4/.test(i.filePath));
+assert.strictEqual(aQueued.length, 1, 'A có file chờ import');
+e4.start(PROJ_B);                                // đổi sang B, KHÔNG stop A
+fake = { ok: true, files: { 'b1.mp4': [10, 1] }, truncated: false };
+e4.tick();
+assert.ok(!e4.poll(20).items.some(i => /a-new/.test(i.filePath)), 'hàng đợi A không lẫn sang B');
+e4.stop();
+fake = { ok: true, files: { 'a1.mp4': [10, 1], 'a-new.mp4': [55, 2], 'a-late.mp4': [66, 3] }, truncated: false };
+const e5 = newEngine();
+e5.start(PROJ_A);                                // quay lại A
+assert.ok(e5.poll(20).items.some(i => /a-new\.mp4/.test(i.filePath)), 'hàng đợi A còn nguyên');
+e5.tick(); e5.tick();
+const aItems = e5.poll(20).items;
+assert.ok(aItems.some(i => /a-late\.mp4/.test(i.filePath)), 'file rơi lúc ở B vẫn được quét bù (snapshot A còn)');
+assert.ok(!aItems.some(i => /a1\.mp4/.test(i.filePath)), 'file đã biết không bị coi là mới');
+
+// ── 12. State bản cũ (một project) được chuyển sang byProject ────────────
+const { migrateState } = require('../watchfolder.js');
+const mig = migrateState({ byWatch: { w_1: { snapshot: { 'x.mp4': [1, 1] } } }, queue: [{ id: 'q1' }], dead: [], projectPath: PROJ });
+assert.deepStrictEqual(mig.byProject[PROJ].queue, [{ id: 'q1' }], 'migrate giữ queue');
+assert.ok(mig.byProject[PROJ].byWatch.w_1.snapshot['x.mp4'], 'migrate giữ snapshot');
+assert.deepStrictEqual(migrateState({}), { byProject: {} });
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log('watchfolder-engine: OK');
