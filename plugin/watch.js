@@ -376,7 +376,7 @@
         row.className = 'sac-bind-row sac-checkRow';
 
         var box = document.createElement('input');
-        box.type = 'checkbox'; box.checked = true;
+        box.type = 'checkbox'; box.checked = r.checked !== false;   // vẽ lại giữ đúng tick người dùng đã bỏ (W6)
         box.addEventListener('change', function () {
           r.checked = box.checked; wfCmpCount();
         });
