@@ -5694,6 +5694,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
   }
   function sacOpenNewSeqModal() {
+    if (sacRunBusy) { sacRunAutoCut('new'); return; }   // đang dựng → chỉ báo, không mở modal (F3)
     var modal = $('sacNewSeqModal');
     if (!modal) { sacRunAutoCut('new'); return; }
     var nameInp = $('sacNewSeqName');
@@ -7398,9 +7399,26 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }, 'SAC insert clip');
   }
 
+  // Chặn lượt dựng chồng lên lượt đang chạy (bấm This seq / New seq 2 lần → 2 lượt
+  // dựng đè nhau, F3). Trang Auto gọi tuần tự có await nên không bao giờ chạm cờ này.
+  var sacRunBusy = false;
+  function sacSetRunBusy(on) {
+    sacRunBusy = on;
+    ['sacCutThis', 'sacCutNew'].forEach(function(id) {
+      var b = $(id);
+      if (b) b.classList[on ? 'add' : 'remove']('is-disabled');
+    });
+  }
+
   async function sacRunAutoCut(seqMode) {
     seqMode = seqMode || 'current';
     var status = $('sacStatus');
+    if (sacRunBusy) {
+      status.style.display = 'block';
+      status.textContent = '⏳ Đang dựng… chờ lượt hiện tại xong.';
+      return;
+    }
+    sacSetRunBusy(true);
     status.style.display = 'block';
     status.textContent = '⏳ Đang khởi động assembly...';
 
@@ -7685,6 +7703,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch(e) {
       status.textContent = '❌ ' + e.message;
       console.error('[SAC] sacRunAutoCut error:', e);
+    } finally {
+      sacSetRunBusy(false);
     }
   }
 
