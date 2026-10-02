@@ -5008,3 +5008,8 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .rn-prog-bar { height: 6px; width: 0; background: var(--accent); border-radius: 3px; }
 .rn-prog-pct { flex: 0 0 auto; margin-left: 8px; font-size: 11px; color: var(--accent-light); min-width: 32px; text-align: right; }
 .rn-prog-text { font-size: 11px; color: var(--text-dim); margin-top: 4px; word-break: break-word; }
+
+/* Voice Gen — modal Lưu: dòng "theo sequence" (vg-seq.js) */
+.vg-save-seqNote { font-size: 11px; color: var(--accent-light); background: var(--accent-a15);
+  border: 1px solid var(--accent-a30); border-radius: 5px; padding: 5px 8px; margin: 2px 0 8px; line-height: 1.4; word-break: break-word; }
+.vg-save-seqNote[hidden] { display: none; }

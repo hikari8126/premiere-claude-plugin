@@ -946,7 +946,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.14.0';  // Tab Watch có mục mới "Đổi tên source hàng loạt": chọn clip/bin ở Project panel → bấm "Giữ số gốc" (41.MOV → Senyue_41.MOV, tên kiểu IMG_4821 lấy số nối tiếp) hoặc "Đánh số lại" → plugin đổi tên file thật trên đĩa, relink mọi clip dùng file đó, đổi tên trong Project panel, relink cả file After Effects (.aep) trong thư mục sản phẩm. Quét luôn file cùng thư mục chưa import hoặc nằm ở bin khác (tuỳ chọn chuyển về đúng bin); tick bỏ chọn từng dòng; thanh tiến trình; Hoàn tác lượt vừa rồi. Báo trước file trong thư mục chỉ đọc (vd Sources của SAMX). CẦN BRIDGE APP 3.18 (server 1.22.0). v5.13.1 — Voice Gen/Autocut: đóng panel hoặc chuyển tab là dừng audio đang phát (trước đây afplay ở bridge kêu tiếp). KHÔNG cần bridge mới. v5.13.0 — Tab RAW xuất hàng loạt: chọn nhiều sequence ở Project panel → tab version (v14.1…) xem chi tiết từng sequence, XUẤT N SEQUENCE chạy lần lượt (Timeline Render tự mở từng sequence), báo cáo + thử lại theo sequence. Bridge giữ 1.21.0 (app 3.17). v5.12.0 — Tab RAW (port Raw-cutter 3.93 của mill2nn): cắt từng cut của timeline ra file riêng + clips.csv/manifest.json; Source Render → raw/, Timeline Render (Premiere render từng cut) → edited/, Both; thư mục <Sản phẩm>/Output/ACT/<vN>/ theo SAMX_WORKSPACE; MP3 voice-over/từng track; CRF/scale/fps/preset; chống timeline bị sửa; Retry. Tự đọc sequence + tự cập nhật khi timeline đổi; tự khớp sản phẩm khi tên khác nhau; ẩn text & MOGRT khi render; nhân vật pixel báo tiến trình. Settings: vòng màu chọn màu giao diện. CẦN BRIDGE ≥1.21.0 (Bridge app 3.17, python3 ≥3.8 + ffmpeg). v5.11.0 — Voice Gen: Eleven v4 (mặc định) + v3; v4 có Stability/Similarity, gợi ý retrain clone cũ. Tab RESIZE (port từ 1-Click Resizer): chọn sequence ở Project panel → nhân bản sang 9:16 / 4:5 / 1:1 (GG), 9:16⇄4:5 (FB), 2:3 (PIN), đổi khung + tên, về bin nguồn, canh text/MOGRT theo guide từng ratio; nút Chẩn đoán để dò API. Voice Gen: import/timeline nhận clip theo ĐƯỜNG DẪN file (getMediaFilePath) — hết đặt nhầm clip cũ trùng tên; nhạc (mode Music) lưu chọn sẵn <sản phẩm>/BGM/AI. CẦN BRIDGE ≥1.20.0 (Bridge app 3.16). v5.10.1 — Autocut: paste CSV (kèm header text_overlay/footage_name/shot_start) vào ô bảng → đọc y như nút ＋ CSV, nhận cả CSV lẫn TSV từ Google Sheet, ghi đè bảng. KHÔNG cần bridge mới. v5.10.0 — Watch: file mới không tự import nữa — hiện bảng duyệt, bấm Import thì import theo mẻ mỗi bin. Tạo Sub: nút riêng "AI ngắt câu" (chỉ chia script, không Whisper) để sửa tay; nút chính "Tạo Sub" chạy full pipeline, hoặc chỉ Whisper canh giờ giữ đúng 1 dòng = 1 cue nếu đã ngắt trước. Autocut: thẻ thiếu source ẩn khi Clear, tự validate lại sau khi Watch import. CẦN BRIDGE ≥1.19.0 cho keepLines (Bridge app 3.15). v5.9.1 — Autocut — Tìm trong Watch Folder: đếm giây lúc chờ, timeout 90s, báo khi bridge chưa quét hết (hạn 45s). CẦN BRIDGE ≥1.18.2 (quét bất đồng bộ, không còn treo bridge trên Google Drive). v5.9.0 — Gộp 3: (1) Fix DỨT ĐIỂM ô tìm voice clone nuốt chữ — .elv-list height cố định + debounce lọc + khôi phục caret (gốc là reflow do lọc, không phải keyboard). (2) Autocut nút ＋CSV nạp script từ file CSV (map text_overlay→script, shot_start-shot_end→time, footage_name→source bỏ đuôi video; parser plugin/csv-parse.js + test; giữ nguyên paste Google Sheet). (3) Voice Gen: 2 nút icon sắp xếp list voice clone (thời gian tạo / tên, bấm đảo chiều; localStorage elv_sort_mode; elv-sort.js + test). KHÔNG cần bridge mới. v5.8.2 — Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.15.0-beta.1';  // Voice Gen (Voice/TTS): mở sequence kiểu trang Auto "… vid31.0 …" thì khi Lưu/Import tự chọn sẵn thư mục <thư mục .prproj>/Voice Over/31x, tên "31.0 - <voice>", import vào bin "Voice Over / 31x" (modal Lưu ghi rõ đang theo sequence nào); đổi thư mục tay thì bin theo Settings như cũ. KHÔNG cần bridge mới. v5.14.0 — Tab Watch có mục mới "Đổi tên source hàng loạt": chọn clip/bin ở Project panel → bấm "Giữ số gốc" (41.MOV → Senyue_41.MOV, tên kiểu IMG_4821 lấy số nối tiếp) hoặc "Đánh số lại" → plugin đổi tên file thật trên đĩa, relink mọi clip dùng file đó, đổi tên trong Project panel, relink cả file After Effects (.aep) trong thư mục sản phẩm. Quét luôn file cùng thư mục chưa import hoặc nằm ở bin khác (tuỳ chọn chuyển về đúng bin); tick bỏ chọn từng dòng; thanh tiến trình; Hoàn tác lượt vừa rồi. Báo trước file trong thư mục chỉ đọc (vd Sources của SAMX). CẦN BRIDGE APP 3.18 (server 1.22.0). v5.13.1 — Voice Gen/Autocut: đóng panel hoặc chuyển tab là dừng audio đang phát (trước đây afplay ở bridge kêu tiếp). KHÔNG cần bridge mới. v5.13.0 — Tab RAW xuất hàng loạt: chọn nhiều sequence ở Project panel → tab version (v14.1…) xem chi tiết từng sequence, XUẤT N SEQUENCE chạy lần lượt (Timeline Render tự mở từng sequence), báo cáo + thử lại theo sequence. Bridge giữ 1.21.0 (app 3.17). v5.12.0 — Tab RAW (port Raw-cutter 3.93 của mill2nn): cắt từng cut của timeline ra file riêng + clips.csv/manifest.json; Source Render → raw/, Timeline Render (Premiere render từng cut) → edited/, Both; thư mục <Sản phẩm>/Output/ACT/<vN>/ theo SAMX_WORKSPACE; MP3 voice-over/từng track; CRF/scale/fps/preset; chống timeline bị sửa; Retry. Tự đọc sequence + tự cập nhật khi timeline đổi; tự khớp sản phẩm khi tên khác nhau; ẩn text & MOGRT khi render; nhân vật pixel báo tiến trình. Settings: vòng màu chọn màu giao diện. CẦN BRIDGE ≥1.21.0 (Bridge app 3.17, python3 ≥3.8 + ffmpeg). v5.11.0 — Voice Gen: Eleven v4 (mặc định) + v3; v4 có Stability/Similarity, gợi ý retrain clone cũ. Tab RESIZE (port từ 1-Click Resizer): chọn sequence ở Project panel → nhân bản sang 9:16 / 4:5 / 1:1 (GG), 9:16⇄4:5 (FB), 2:3 (PIN), đổi khung + tên, về bin nguồn, canh text/MOGRT theo guide từng ratio; nút Chẩn đoán để dò API. Voice Gen: import/timeline nhận clip theo ĐƯỜNG DẪN file (getMediaFilePath) — hết đặt nhầm clip cũ trùng tên; nhạc (mode Music) lưu chọn sẵn <sản phẩm>/BGM/AI. CẦN BRIDGE ≥1.20.0 (Bridge app 3.16). v5.10.1 — Autocut: paste CSV (kèm header text_overlay/footage_name/shot_start) vào ô bảng → đọc y như nút ＋ CSV, nhận cả CSV lẫn TSV từ Google Sheet, ghi đè bảng. KHÔNG cần bridge mới. v5.10.0 — Watch: file mới không tự import nữa — hiện bảng duyệt, bấm Import thì import theo mẻ mỗi bin. Tạo Sub: nút riêng "AI ngắt câu" (chỉ chia script, không Whisper) để sửa tay; nút chính "Tạo Sub" chạy full pipeline, hoặc chỉ Whisper canh giờ giữ đúng 1 dòng = 1 cue nếu đã ngắt trước. Autocut: thẻ thiếu source ẩn khi Clear, tự validate lại sau khi Watch import. CẦN BRIDGE ≥1.19.0 cho keepLines (Bridge app 3.15). v5.9.1 — Autocut — Tìm trong Watch Folder: đếm giây lúc chờ, timeout 90s, báo khi bridge chưa quét hết (hạn 45s). CẦN BRIDGE ≥1.18.2 (quét bất đồng bộ, không còn treo bridge trên Google Drive). v5.9.0 — Gộp 3: (1) Fix DỨT ĐIỂM ô tìm voice clone nuốt chữ — .elv-list height cố định + debounce lọc + khôi phục caret (gốc là reflow do lọc, không phải keyboard). (2) Autocut nút ＋CSV nạp script từ file CSV (map text_overlay→script, shot_start-shot_end→time, footage_name→source bỏ đuôi video; parser plugin/csv-parse.js + test; giữ nguyên paste Google Sheet). (3) Voice Gen: 2 nút icon sắp xếp list voice clone (thời gian tạo / tên, bấm đảo chiều; localStorage elv_sort_mode; elv-sort.js + test). KHÔNG cần bridge mới. v5.8.2 — Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.
@@ -7829,6 +7829,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var voicesLoaded = false;
   // Restore the last save folder so imports remember it across sessions (see importVariation).
   var customOutputFolder = localStorage.getItem('vg_last_save_folder') || '';
+  var vgSaveUsingSeqPart = '';   // phần tên do sequence gợi ý trong modal Lưu đang mở (vg-seq.js)
   if (customOutputFolder && els.outputFolder) els.outputFolder.value = customOutputFolder;
   var lastVariations = []; // [{audioPath, previewUrl, sizeBytes, filename}, ...]
   var lastVariationsMode = ''; // mode đã sinh ra lastVariations → đổi mode không mất audio
@@ -9044,7 +9045,74 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
-  // Lưu 1 variation ra file rồi trả { path, name, reused }.
+  // Voice (TTS) theo sequence đang mở: tên kiểu trang Auto "… vid31.0 …" → thư mục
+  // <thư mục .prproj>/Voice Over/31x, bin "Voice Over / 31x", tên "31.0 - <voice>"
+  // (logic ở vg-seq.js). Chỉ TÌM thư mục qua /watch/browse, không tạo — /tts/move tự
+  // tạo khi lưu thật, nên Huỷ không để lại thư mục rỗng. null khi không áp dụng được
+  // (mode khác, sequence không theo quy ước, project chưa lưu, bridge không trả lời).
+  async function vgSeqVoiceTarget() {
+    var mode = (currentMode === 'create') ? 'tts' : currentMode;
+    if (mode !== 'tts' || typeof VGSEQ === 'undefined') return null;
+    try {
+      var seq = await getActiveSequence();
+      if (!seq) return null;
+      var nm = seq.name != null ? seq.name : (seq.getName ? seq.getName() : '');
+      if (nm && typeof nm.then === 'function') nm = await nm;
+      var parsed = VGSEQ.parseSeqSet(nm);
+      if (!parsed) return null;
+      var proj = await getActiveProject();
+      var pp = proj && proj.path;
+      if (pp && typeof pp.then === 'function') pp = await pp;
+      if (!pp || typeof pp !== 'string' || pp.charAt(0) !== '/') return null;
+      var ls = async function (dir) {
+        try {
+          var r = await fetch(BRIDGE_URL + '/watch/browse?path=' + encodeURIComponent(dir)).then(function (x) { return x.json(); });
+          return (r && r.ok && r.dirs) ? r.dirs.map(function (d) { return d.name; }) : [];
+        } catch (e) { return []; }
+      };
+      // 1. Học từ project: voice của bộ gần nhất trong bin "Voice Over / Nx" nằm ở đâu.
+      var entries = [];
+      try {
+        var root = await proj.getRootItem();
+        var all = await sacCollectBinItems(root);
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].isFolder || !/^voice\s*over\s*\/\s*\d+x$/i.test(String(all[i].path || '').trim())) continue;
+          var cp = ppro.ClipProjectItem.cast(all[i].item);
+          var mp = cp ? await cp.getMediaFilePath() : '';
+          if (mp) entries.push({ bin: all[i].path, dir: String(mp).slice(0, String(mp).lastIndexOf('/')) });
+        }
+      } catch (e0) {}
+      var bin = 'Voice Over / ' + parsed.set + 'x';
+      var inf = VGSEQ.inferVoiceDir(entries, parsed.set);
+      if (inf) {
+        var segs = inf.dir.split('/');
+        return { dir: inf.dir, bin: bin, namePart: parsed.label, seqName: String(nm),
+                 shortDir: segs.slice(-2).join('/'), basis: inf.basis };
+      }
+      // 2. Không học được → thư mục Voice Over / VO / Voice cạnh .prproj.
+      var projDir = pp.slice(0, pp.lastIndexOf('/'));
+      var projDirs = await ls(projDir);
+      var vo = VGSEQ.pickVoiceOverDir(projDirs);
+      var setDirs = projDirs.indexOf(vo) >= 0 ? await ls(projDir + '/' + vo) : [];
+      var t = VGSEQ.buildTarget(pp, parsed, projDirs, setDirs);
+      if (t) { t.seqName = String(nm); t.shortDir = t.voDir + '/' + t.setDir; t.basis = ''; }
+      return t;
+    } catch (e) {
+      console.warn('[VG] seq target:', e && e.message);
+      return null;
+    }
+  }
+
+  // Gỡ lỗi từ console UXP.
+  window.VoiceGenSeqTarget = vgSeqVoiceTarget;
+  window.VoiceGenSeqSavePrompt = async function () {
+    var t = await vgSeqVoiceTarget();
+    return promptSaveLocation('voice.mp3', t ? { defaultDir: t.dir, namePart: t.namePart,
+      note: 'Theo sequence "' + t.seqName + '" → bin ' + t.bin + ' · thư mục …/' + t.shortDir + (t.basis ? ' (cạnh voice của bin ' + t.basis + ')' : '') } : null);
+  };
+
+  // Lưu 1 variation ra file rồi trả { path, name, reused, bin }. bin = bin theo sequence
+  // ('' = dùng bin trong Settings như cũ).
   //  • LẦN ĐẦU của take: mở modal "Lưu audio" + copy sang folder chọn (bridge tự
   //    đánh " (1)(2)" nếu trùng tên → không ghi đè file cũ).
   //  • LẦN SAU cùng take (import lại vào bin/timeline khác, hay chuyển Autocut):
@@ -9055,17 +9123,26 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (variation._savedPath) {
       return { path: variation._savedPath,
                name: variation._savedName || variation._savedPath.split('/').pop(),
-               reused: true };
+               reused: true, bin: variation._seqBin || '' };
     }
     // Nhạc nền (mode Music): chọn sẵn <thư mục sản phẩm>/BGM/AI — vẫn sửa được tên
     // và thư mục. Bridge cũ / project chưa lưu → hộp thoại như cũ.
     var saveOpts = null;
+    var seqT = null;
     if (vgIsMusicVariation(variation)) {
       var bgmDir = await vgBgmDir();
       if (bgmDir) saveOpts = { defaultDir: bgmDir };
+    } else {
+      seqT = await vgSeqVoiceTarget();
+      if (seqT) saveOpts = { defaultDir: seqT.dir, namePart: seqT.namePart,
+        note: 'Theo sequence "' + seqT.seqName + '" → bin ' + seqT.bin + ' · thư mục …/' + seqT.shortDir
+          + (seqT.basis ? ' (cạnh voice của bin ' + seqT.basis + ')' : '') };
     }
     var picked = await promptSaveLocation(suggestedName || variation.filename || 'voice.mp3', saveOpts);
     if (!picked) return null;
+    // Giữ thư mục theo sequence → import vào bin theo sequence. Đổi sang thư mục khác
+    // nghĩa là user không theo bộ này nữa → dùng bin trong Settings như cũ.
+    variation._seqBin = (seqT && picked.dir.replace(/\/+$/, '') === seqT.dir) ? seqT.bin : '';
     // Ô "thư mục lưu" là của voice — nhạc vào BGM/AI không được đổi nó.
     if (els.outputFolder && !saveOpts) els.outputFolder.value = picked.dir;
     var finalPath = variation.audioPath;
@@ -9083,7 +9160,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
     variation._savedPath = finalPath;
     variation._savedName = finalName;
-    return { path: finalPath, name: finalName, reused: false };
+    return { path: finalPath, name: finalName, reused: false, bin: variation._seqBin || '' };
   }
 
   async function importVariation(variation) {
@@ -9133,7 +9210,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       // Move to target bin only if checkbox is checked
       if (ppShouldMoveToVOBin()) {
-        var targetBin = window.vgTargetBinName();
+        var targetBin = saved.bin || window.vgTargetBinName();
         try {
           if (!rootItem) throw new Error('không lấy được root project');
           var fname2 = importedName || finalPath.split('/').pop();
@@ -9228,7 +9305,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (r && typeof r.then === 'function') await r;
       if (txErr) throw txErr;
 
-      try { await ppMoveToVOBinIfEnabled(item, project); } catch (e) {}
+      try { await ppMoveToVOBinIfEnabled(item, project, saved.bin || ''); } catch (e) {}
       setMsg('is-ok', '✓ Đã đặt "' + fname + '" lên A' + (targetA + 1) + ' tại ' + atSec.toFixed(2) + 's');
     } catch (e) {
       setMsg('is-err', '✗ Timeline: ' + e.message);
@@ -9248,9 +9325,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // project (vgNameParts). Chưa lưu lần nào trong project này → fallback
   // "v{vg_last_version}" (hành vi cũ, global) để không mất quán tính.
   // Không có đuôi — okB tự thêm ext khi lưu.
-  function vgBuildDefaultName() {
+  function vgBuildDefaultName(partOverride) {
     var mode = (currentMode === 'create') ? 'tts' : currentMode;
-    var part = vgNameParts[mode] || '';
+    var part = partOverride || vgNameParts[mode] || '';
     // Music: tên mặc định riêng (không gắn với tên voice).
     if (mode === 'music') return part || 'AI BGM';
     if (!part) {
@@ -9290,7 +9367,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var m = /^v\s*([0-9]+(?:\.[0-9x]+)?)/i.exec(finalName);
     if (m) { try { localStorage.setItem('vg_last_version', m[1]); } catch (e) {} }
     var mode = (currentMode === 'create') ? 'tts' : currentMode;
-    vgSaveNamePart(mode, vgStripVoiceSuffix(finalName));
+    // Phần tên lấy từ sequence (vd "31.0") không phải phần user tự đặt — đừng nhớ nó,
+    // nếu không lần sau ở sequence không theo quy ước lại gợi ý "31.0 - …".
+    var part = vgStripVoiceSuffix(finalName);
+    if (!vgSaveUsingSeqPart || part !== vgSaveUsingSeqPart) vgSaveNamePart(mode, part);
     var r = vgGetNameList('vg_recent_names').filter(function (n) { return n !== finalName; });
     r.unshift(finalName);
     if (r.length > 5) r = r.slice(0, 5);
@@ -9695,8 +9775,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var ext = dot >= 0 ? suggestedName.substring(dot) : '.mp3';
       // Smart default: {phần user lần trước của project này} - {voice đang chọn}
       // (ext added on save).
-      var autoName = vgBuildDefaultName();
+      var namePart = (opts && opts.namePart) || '';
+      var autoName = vgBuildDefaultName(namePart);
       nameInp.value = autoName;
+      vgSaveUsingSeqPart = namePart;
+      var seqNote = $('vgSaveSeqNote');
+      if (seqNote) { seqNote.textContent = (opts && opts.note) || ''; seqNote.hidden = !(opts && opts.note); }
 
       // Tên project (bỏ đuôi) để rút gọn path trong danh sách folder. Nạp async;
       // nếu chưa kịp thì vgShortPath fallback 4 đoạn cuối.
@@ -9711,7 +9795,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         // Nạp lại theo project thật rồi cập nhật tên gợi ý, miễn user chưa sửa ô.
         try {
           await vgLoadBinsForProject();
-          var fresh = vgBuildDefaultName();
+          var fresh = vgBuildDefaultName(namePart);
           if (modal && !modal.hidden && nameInp.value === autoName && fresh !== autoName) {
             autoName = fresh;
             nameInp.value = fresh;
