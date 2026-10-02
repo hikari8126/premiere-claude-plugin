@@ -3,6 +3,40 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.16.0-beta.1 / bridge server 1.23.0-beta.1 — 2026-10-03 (chưa release)
+
+> QC đợt 2 — thay đổi giao diện đã duyệt. Cần bridge 1.23.0-beta.1 cho VG8 (lỗi tiếng Việt), ST4 (Huỷ dừng Whisper), ST7 (hỏi ghi đè); bridge cũ thì các phần đó chạy như trước.
+
+### ✨ Thanh tab 2 trang
+- Trang 1 (edit): **Voice Gen · Autocut · Tạo Sub · Un-nest**; trang 2: **Watch · Resize · RAW**. Một nút bên phải (`›` / `‹`) lật qua lại, mở tab dùng gần nhất của trang đó; mở lại panel về đúng tab lần trước. Code bấm hộ tab ở trang kia tự lật trang.
+- **Un-nest** ra tab riêng (chuyển nguyên từ Settings).
+
+### ✨ Khung chung
+- **S2** — chấm trạng thái Bridge + chữ báo (offline / hết phiên Claude CLI — bấm để đăng nhập) trên version bar, thấy ở mọi tab.
+- **S4** — Bridge tối thiểu 1.22.0 (app 3.18) báo ngay khi mở panel; so version hiểu `-beta.N` (`plugin/ver-compare.js`, bridge dùng bản sao cho `isNewer`); banner cập nhật đưa dòng "CẦN BRIDGE …" lên đầu.
+- **S5** — Settings: Save lưu cả tên/key profile ElevenLabs; đóng không Save thì ô nhập về giá trị đã lưu; ẩn ô Claude Model (chỉ dùng cho tab Claude đang ẩn).
+- **S11** — một câu báo Bridge offline dùng chung (`BRIDGE_OFFLINE_MSG`, `bridgeErrText()`).
+
+### ✨ Autocut
+- **A7** — trang Auto: tổng kết kèm lỗi từng video, tab video lỗi viền đỏ; trang Auto Sub ghi rõ video nào chưa dựng xong và vì sao.
+- **A9** — panel Manual khi được trang Auto mượn: ẩn This seq / New seq, Without voice, Run anyway, 2 nút xoá.
+- **A10** — nút "Mở lại trang Sub của bộ vừa dựng" sau khi bấm "Về cut".
+- **F12** — 🗑 dưới bảng giờ xoá giống hệt "Xoá script" (trước đây để lại bind/voice); cả hai và "Bỏ voice" (trước là ✕ trơn) bấm 2 lần mới chạy.
+
+### ✨ Voice Gen
+- **VG6** — sau multi-speaker, trạng thái Import / Timeline ở khu single hiện lại.
+- **VG8** — lỗi ElevenLabs bằng tiếng Việt (`bridge/eleven-errors.js`: hết credit còn/cần bao nhiêu, key sai, thiếu quyền, voice không thuộc key, quá tải); key sai / hết credit không còn báo "✓ Using default voices".
+
+### ✨ Tạo Sub / Un-nest
+- **ST4** — Huỷ (hoặc quá 10 phút) đóng request → bridge kill Whisper, không ghi .srt; status đếm giây.
+- **ST7** — tự lưu mà `<version>.srt` đã có → bấm Tạo Sub lần 2 trong 15s mới ghi đè (`POST /fs/exists`); file đã có trong project thì không import thêm; ⚙ ở Tạo Sub mở mục Voice Gen.
+- **UN4** — chạy Un-nest bằng phím tắt khi đang ở tab khác → version bar báo đang chạy / kết quả, bấm để mở tab.
+
+### ✨ Watch / Resize
+- **W5** — "Duyệt N file đang chờ" khi hàng đợi còn file mà bảng duyệt đã đóng.
+- **W9** — chấm xám khi không có watch nào bật; đếm file lỗi 3 lần + xem lý do; xoá watch bấm 2 lần; ô "Số cấp thư mục con" (1-10).
+- **R3** — RESIZE bấm lần 1 xem trước danh sách (SẼ TẠO / BỎ QUA), lần 2 ("TẠO N BẢN", trong 30s) mới tạo; tên trùng sequence đã có / trùng trong lượt bị bỏ qua.
+
 ## v5.15.1-beta.1 / bridge server 1.22.1-beta.1 — 2026-10-03 (chưa release)
 
 > Sửa lỗi QC đợt 1 (`docs/qc/2026-10-03-qc-review.md`). Cần bridge 1.22.1-beta.1 cho VG2 (phần bridge) và W1; Bridge app sẽ lên 3.19 khi ship (S1, S3 sửa `bridge-app/main.swift`).

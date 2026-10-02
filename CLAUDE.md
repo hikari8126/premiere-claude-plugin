@@ -46,7 +46,7 @@ premiere-claude-plugin/
 ├── README.md               ← Mô tả ngắn
 ├── plugin/                 ← UXP Plugin (load vào Premiere)
 │   ├── manifest.json       ← UXP manifest v5, id: com.claudeai.premiere-assistant
-│   ├── index.html          ← UI 3 tab: Claude / Voice Gen / Autocut
+│   ├── index.html          ← UI 2 trang tab: Voice Gen · Autocut · Tạo Sub · Un-nest | Watch · Resize · RAW
 │   ├── main.js             ← Toàn bộ logic plugin (~7300 lines, no ES modules)
 │   └── styles.css          ← Dark purple theme (~3350 lines)
 ├── bridge/
@@ -338,6 +338,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/watch/config` | GET/POST | Đọc/ghi danh sách watch của project hiện tại |
 | `/watch/scan-now` | POST | Đối chiếu một watch: đẩy file đã có sẵn về hàng đợi để plugin so với project |
 | `/watch/browse` | GET | Liệt kê thư mục con (mặc định mở ở cấp cha của thư mục chứa .prproj) |
+| `/fs/exists` | POST | File đã có chưa (Tạo Sub hỏi trước khi ghi đè .srt) |
 | `/rawcut/status` | GET | Raw-cutter: python3 / ffmpeg / engine `xmlcut.py` có sẵn chưa |
 | `/rawcut/scan` | POST | Lưu dump + FCP XML cạnh .prproj, engine đọc cut list (`--manifest-only`, `half: source\|render`) |
 | `/rawcut/export` | POST | SSE: engine cắt vào thư mục xuất (raw/ hoặc edited/ + `renderDir`); đóng request = Dừng |
