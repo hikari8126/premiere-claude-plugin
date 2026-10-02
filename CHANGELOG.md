@@ -3,6 +3,16 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.13.1 / bridge app 3.17 (server 1.21.0) — 2026-10-02
+
+> Không cần Bridge mới (vẫn Bridge app 3.17).
+
+### 🐛 Đóng panel / chuyển tab mà audio vẫn phát
+- **Lỗi:** bấm ▶ (vd. list "Gần đây" của Voice Gen) rồi đóng panel thì tiếng vẫn chạy tiếp; phải mở lại panel bấm ▶ rồi ■ mới tắt.
+- **Nguyên nhân:** UXP không phát audio được nên tiếng là `afplay` chạy ở bridge (`/tts/play`). Đóng panel không dừng JS cũng không báo gì cho bridge, nên không ai gửi `/tts/stop`.
+- **Fix:** `require('uxp').entrypoints.setup({ panels: { main: { hide } } })` — `hide` gọi `pluginStopAudio()` rồi luôn bắn thêm `/tts/stop`. Các player đăng ký hàm dừng qua `pluginOnStopAudio()` (Voice Gen `vgStopAll`, player voice Autocut `sacVPStop`, preview Voice Changer `stopVcPreview`), nút về lại ▶. Bấm sang tab khác trong plugin cũng gọi `pluginStopAudio()` (bấm lại tab đang mở thì không).
+- Lưu ý dò lỗi: chạy từ `dev.sh eval` thì `element.click()` trên `<div>` không bắn sự kiện — giả lập bấm tab phải `dispatchEvent(new Event('click'))`.
+
 ## v5.13.0 / bridge app 3.17 (server 1.21.0) — 2026-10-02
 
 > Không cần Bridge mới (vẫn Bridge app 3.17).
