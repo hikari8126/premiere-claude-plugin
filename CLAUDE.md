@@ -363,6 +363,14 @@ cd bridge && node server.js 2>&1 | tee bridge.log
 
 ### Bản DEV chạy song song bản đang cài
 
+**Không cần Terminal:** chạy `bash dev.sh app` một lần để build **Claude Bridge DEV.app** (ở gốc repo,
+không commit). Từ đó chỉ cần mở app: icon **DEV** trên menu bar (● xanh = bridge dev đang chạy,
+… = đang dựng, ✕ = lỗi) tự dựng + load bản DEV; menu có *Dựng lại & reload* (⌘R),
+*Tự reload khi sửa code* (bật sẵn — lưu file trong `plugin/` hoặc `bridge/` là tự reload),
+*Tắt bản DEV*, *Xem log*; *Thoát* là gỡ plugin DEV + tắt bridge dev. Kéo app vào Dock/Login Items tuỳ ý.
+
+Lệnh tương đương:
+
 ```bash
 bash dev.sh          # dựng .dev/plugin (id …-dev, panel "Claude AI DEV"), bridge repo ở :3035, load/reload vào Premiere
 bash dev.sh stop     # gỡ bản DEV khỏi Premiere + tắt bridge dev
