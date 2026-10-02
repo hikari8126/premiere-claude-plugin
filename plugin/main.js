@@ -12878,6 +12878,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var stOrganized = false;   // đã bấm AI ngắt câu (ô script đang là dòng phụ đề)
   var stSplitReady = false;  // đã bấm nút "AI ngắt câu" riêng → Tạo Sub chỉ còn Whisper canh giờ theo dòng
   var stTimedCues = null;    // [{text,start,end}] timing từ Whisper+AI để ghi thẳng
+  var stFlagScript = '';     // nội dung ô script lúc đặt stSplitReady/stOrganized (ST3)
   var stCountTimer = null, stCountLeft = 0;
   var stDiag = '';           // dòng chẩn đoán ngắn (hiện kèm khi đếm ngược)
   var ST_COUNTDOWN = 5;
@@ -12972,7 +12973,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // stSetScript trực tiếp, phải đi qua window.* (handoff §3.3).
   // Điền script KHÔNG kích hoạt chạy: stStartCountdown() chỉ được gọi từ MỘT chỗ,
   // ở cuối bước transcribe, tức là sau khi người dùng đã bấm nút.
-  window.SubtextSetScript = function (lines) { stSetScript(lines); };
+  window.SubtextSetScript = function (lines) {
+    stSplitReady = false; stResetOrganize();   // script mới → cờ của script cũ không còn đúng (ST3)
+    stSetScript(lines);
+  };
   // Quét lại track audio của sequence ĐANG active. Trang Auto Sub cần gọi tay:
   // stScanTracks() vốn chỉ chạy khi bấm nút tab TẠO SUB, hoặc qua __subtextSync
   // vốn đòi #tab-subtext phải đang .active — mà trang Auto Sub đã mượn .st-app
@@ -13147,6 +13151,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stBusy = false; stAbort = null;
       if (b) b.classList.remove('is-cancel');
       stOrganized = true;
+      stFlagScript = ($('stScript') || {}).value || '';
       var dg = stDiagText(d.diag);
       // Ghim dòng script ĐẦU TIÊN đang dùng vào chẩn đoán → nhìn là biết ngay có
       // đang xài nhầm script của video khác không.
@@ -13264,6 +13269,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Tạo Sub = full pipeline: Whisper + AI ngắt câu → tạo SRT luôn. Đã bấm nút
     // "AI ngắt câu" riêng (stSplitReady) thì chỉ còn Whisper canh giờ theo từng dòng
     // trong ô (keepLines). stOrganized: full pipeline dừng lại vì timing đáng ngờ.
+    // Ô script đã bị thay bằng script khác (không phải sửa nhẹ) → bỏ cờ, chạy full
+    // pipeline thay vì keepLines trên dòng chưa ngắt / timing cũ trên chữ mới (ST3).
+    if ((stSplitReady || stOrganized) && !stScriptSameSource(stFlagScript, ($('stScript') || {}).value || '')) {
+      stSplitReady = false; stResetOrganize();
+    }
     if (stSplitReady && stScriptLines().length) { stTimedCues = null; stFinalize(); }
     else if (stOrganized) stFinalize(stRunCtx);
     else stOrganize();
@@ -13293,6 +13303,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!d || !d.ok || !d.lines || !d.lines.length) { stStatus('❌ ' + ((d && d.error) || 'Ngắt câu lỗi')); return; }
       stSetScript(d.lines);
       stOrganized = false; stTimedCues = null; stSplitReady = true;
+      stFlagScript = ($('stScript') || {}).value || '';
       stSetBtn('closed_captioning', 'Tạo Sub');
       stStatus('✅ ' + (d.ai ? 'AI' : 'Luật') + ' đã ngắt ' + d.lines.length + ' dòng — sửa trong ô nếu cần (mỗi dòng = 1 câu phụ đề) rồi bấm Tạo Sub.');
     } catch (e) {
