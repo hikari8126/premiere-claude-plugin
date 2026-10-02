@@ -3,9 +3,9 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.15.0-beta.1 — 2026-10-02 (chưa release)
+## v5.15.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
 
-> Không cần Bridge mới (dùng `/watch/browse` có từ bridge 1.16).
+> Không cần Bridge mới (vẫn Bridge app 3.18; dùng `/watch/browse` có từ bridge 1.16).
 
 ### ✨ Voice Gen — chọn sẵn bin + thư mục lưu voice theo sequence đang mở
 - Mode Voice (TTS): sequence đặt tên kiểu trang Auto (`AeriSoft vid40.0 [c.…] [Editor]`) → khi Lưu / Import / Lên timeline, modal Lưu điền sẵn tên `40.0 - <voice>` và thư mục của bộ 40, import vào bin `Voice Over / 40x`; modal ghi rõ "Theo sequence … → bin … · thư mục …".
