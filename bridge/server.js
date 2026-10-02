@@ -596,7 +596,8 @@ function ensureWhisperModel(modelName) {
   });
 }
 
-async function transcribeWhisper(audioPath, language) {
+// opts.onProc(proc): bên gọi giữ tiến trình whisper để kill khi plugin huỷ (ST4).
+async function transcribeWhisper(audioPath, language, opts) {
   // First ensure model is cached locally — this avoids Python's SSL issue.
   try {
     await ensureWhisperModel(WHISPER_MODEL);
@@ -630,6 +631,7 @@ async function transcribeWhisper(audioPath, language) {
     // FileNotFoundError(errno 2) when the inherited cwd is gone (the Bridge app
     // can be launched from a folder that was later moved/deleted).
     const proc = spawn(WHISPER_BIN, args, { env, cwd: outDir });
+    if (opts && typeof opts.onProc === 'function') opts.onProc(proc);
 
     let stderr = '';
     proc.stderr.on('data', d => { stderr += d.toString(); });
@@ -2553,6 +2555,16 @@ function ffprobeDuration(audioPath) {
 }
 
 app.post('/superautocut/subtext', async (req, res) => {
+  // Plugin bấm Huỷ / hết giờ → đóng request. Trước đây bridge vẫn chạy Whisper tới
+  // cùng rồi GHI ĐÈ .srt (ST4) → dừng Whisper, bỏ qua các bước sau, không ghi file.
+  const job = { aborted: false, proc: null };
+  res.on('close', () => {
+    if (res.writableEnded) return;
+    job.aborted = true;
+    console.log('[subtext] plugin huỷ — dừng Whisper, không ghi file');
+    if (job.proc) { try { job.proc.kill('SIGTERM'); } catch (e) {} }
+  });
+  const checkAbort = () => { if (job.aborted) throw new Error('Đã huỷ'); };
   try {
     let { audioPath, clips, scriptLines = [], language, outputPath, maxWords, maxChars, maxDur,
           useAI, provider, model, apiKey, previewOnly, keepLines } = req.body || {};
@@ -2565,8 +2577,11 @@ app.post('/superautocut/subtext', async (req, res) => {
     }
     if (!audioPath) throw new Error('Cần audioPath hoặc clips');
     if (!fs.existsSync(audioPath)) throw new Error('audio not found: ' + audioPath);
+    checkAbort();
 
-    const { words, segments } = await transcribeWhisper(audioPath, language);
+    const { words, segments } = await transcribeWhisper(audioPath, language, { onProc: p => { job.proc = p; } });
+    job.proc = null;
+    checkAbort();
     if (!words || !words.length) throw new Error('Whisper không nhận được từ nào');
 
     const cleanScript = (Array.isArray(scriptLines) ? scriptLines : []).filter(s => String(s || '').trim());
@@ -2586,6 +2601,7 @@ app.post('/superautocut/subtext', async (req, res) => {
       cues = await subtextSegmentAI(sw, { maxChars }, { provider, model, apiKey });
       console.log(cues ? `[subtext] AI segmentation → ${cues.length} cues` : '[subtext] AI segmentation failed → rule chunker');
     }
+    checkAbort();
     if (!cues && keepLines && cleanScript.length) cues = subtextByLine(sw);
     if (!cues) cues = subtextChunk(sw, { maxWords, maxChars, maxDur });
     // Extend the LAST cue to the true audio end — whisper's last word usually ends
@@ -2628,10 +2644,12 @@ app.post('/superautocut/subtext', async (req, res) => {
 
     // previewOnly → CHỈ trả cues (đã có timing) để xem/sửa; KHÔNG ghi file.
     if (previewOnly) { res.json({ ok: true, cues, srt, timed: true, diag }); return; }
+    checkAbort();
     const savedPath = subtextWriteSrt(outputPath, srt);
     res.json({ ok: true, path: savedPath, cues, srt, diag });
   } catch (e) {
     console.error('[subtext]', e.message);
+    if (job.aborted) return;   // plugin đã đóng kết nối
     res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });

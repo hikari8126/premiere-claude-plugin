@@ -13277,6 +13277,28 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return folder.replace(/[\/\\]+$/, '') + '/' + base + '.srt';
   }
 
+  // Đếm giây + hạn 10 phút cho lượt Whisper (ST4): trước đây không đếm, không timeout,
+  // kẹt là chờ mãi. Hết hạn → abort fetch (bridge thấy kết nối đóng → dừng Whisper).
+  var ST_TIMEOUT_MS = 10 * 60 * 1000;
+  var stTimedOut = false;
+  function stTickStart(msg) {
+    var t0 = Date.now();
+    stTimedOut = false;
+    var show = function () {
+      var sec = Math.round((Date.now() - t0) / 1000);
+      stStatus(msg + ' (' + (sec >= 60 ? Math.floor(sec / 60) + 'p' + ('0' + sec % 60).slice(-2) : sec + 's')
+        + ' · bấm Huỷ để dừng)');
+    };
+    show();
+    var iv = setInterval(show, 1000);
+    var to = setTimeout(function () { stTimedOut = true; if (stAbort) stAbort.abort(); }, ST_TIMEOUT_MS);
+    return function () { clearInterval(iv); clearTimeout(to); };
+  }
+  function stAbortText(kind) {
+    return stTimedOut ? '⏹ Quá 10 phút chưa xong — đã dừng ' + kind + '. Thử lại, hoặc bỏ tick bớt track / kiểm tra Whisper trên menu Claude Bridge.'
+                      : '⏹ Đã huỷ ' + kind + '.';
+  }
+
   // BƯỚC 1: AI ngắt câu → ghi vào ô script → đếm ngược.
   async function stOrganize() {
     stStopCountdown();
@@ -13302,14 +13324,17 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 3;
       var useAI = !($('stUseAI')) || $('stUseAI').checked;
       var aiCfg = (useAI && window.sacOrganizeConfig) ? window.sacOrganizeConfig() : {};
-      stStatus('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '... (~1-2 phút · bấm Huỷ để dừng)');
-      var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clips: clips, scriptLines: scriptLines, maxWords: maxWords, maxChars: maxChars, maxDur: maxDur,
-          useAI: useAI, provider: aiCfg.provider, model: aiCfg.model, apiKey: aiCfg.apiKey, previewOnly: true }),
-        signal: stAbort ? stAbort.signal : undefined,
-      });
-      var d = await resp.json();
+      var stopTick = stTickStart('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '… thường 1-2 phút');
+      var d;
+      try {
+        var resp = await fetch(BRIDGE_URL + '/superautocut/subtext', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clips: clips, scriptLines: scriptLines, maxWords: maxWords, maxChars: maxChars, maxDur: maxDur,
+            useAI: useAI, provider: aiCfg.provider, model: aiCfg.model, apiKey: aiCfg.apiKey, previewOnly: true }),
+          signal: stAbort ? stAbort.signal : undefined,
+        });
+        d = await resp.json();
+      } finally { stopTick(); }
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Ngắt câu lỗi')); stBusy = false; stAbort = null; stResetOrganize(); return; }
       // Ô script đã đổi trong lúc chạy → kết quả này là của script CŨ, bỏ đi.
       if ((($('stScript') || {}).value || '') !== stScriptAtStart) {
@@ -13349,7 +13374,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch (e) {
       stBusy = false; stAbort = null;
       if (b) b.classList.remove('is-cancel');
-      if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ.');
+      if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus(stAbortText('canh giờ'));
       else stStatus('❌ ' + bridgeErrText(e));
       stResetOrganize();
     }
@@ -13386,18 +13411,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 5;
         var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 30;
         var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 3;
-        stStatus('⏳ Whisper canh giờ + ghi .srt... (~1-2 phút · bấm Huỷ để dừng)');
+        var stTickMsg = '⏳ Whisper canh giờ + ghi .srt… thường 1-2 phút';
         url = '/superautocut/subtext';
         body = { clips: clips, scriptLines: lines, outputPath: outputPath,
           maxWords: maxWords, maxChars: maxChars, maxDur: maxDur, useAI: false,
           keepLines: true };  // ô script đã chia tay/qua AI → giữ đúng 1 dòng = 1 cue
       }
       var stPostFinalize = async function () {
-        var r = await fetch(BRIDGE_URL + url, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body), signal: stAbort ? stAbort.signal : undefined,
-        });
-        return r.json();
+        var stopTick = stTickMsg ? stTickStart(stTickMsg) : function () {};
+        try {
+          var r = await fetch(BRIDGE_URL + url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body), signal: stAbort ? stAbort.signal : undefined,
+          });
+          return await r.json();
+        } finally { stopTick(); }
       };
       var d = await stPostFinalize();
       // Thư mục đích không ghi được (VD folder VO trên NAS chỉ-đọc / đã unmount) →
@@ -13439,7 +13467,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stSplitReady = false;
       stResetOrganize(); // xong → về trạng thái đầu cho lần sau
     } catch (e) {
-      if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ tạo phụ đề.');
+      if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus(stAbortText('tạo phụ đề'));
       else stStatus('❌ ' + bridgeErrText(e));
     } finally {
       stBusy = false; stAbort = null;
