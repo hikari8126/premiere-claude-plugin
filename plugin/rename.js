@@ -185,34 +185,37 @@
   }
 
   // Mọi đường dẫn media trong project (fold) — để biết file nào trong thư mục chưa import.
+  // Mọi đường dẫn media trong project → {fold(path): đường dẫn bin chứa clip đầu tiên}.
   async function projectPaths(project) {
     var root = await un(project.getRootItem());
     var all = await sacCollectBinItems(root);
-    var out = [];
+    var out = {};
     for (var i = 0; i < all.length; i++) {
       if (all[i].isFolder) continue;
       var p = await mediaPathOf(all[i].item);
-      if (p) out.push(fold(p));
+      if (p && !(fold(p) in out)) out[fold(p)] = all[i].path || '(gốc project)';
     }
     return out;
   }
 
-  // Thêm file media cùng thư mục với source mà project chưa import (bridge liệt kê),
-  // {bin} lấy theo dòng đầu tiên của thư mục đó.
+  // Thêm MỌI file media cùng thư mục với source mà chưa nằm trong lựa chọn (bridge liệt kê):
+  // chưa import (extra + external: chỉ đổi tên trên đĩa) hoặc đã import ở bin khác (extra +
+  // otherBin: vẫn relink + đổi tên hiển thị). {bin} theo dòng đầu tiên của thư mục đó.
   async function addSiblings(project) {
     var binOfDir = {}, dirs = [];
     rn.rows.forEach(function (r) {
       var d = r.path.slice(0, r.path.lastIndexOf('/'));
       if (!(d in binOfDir)) { binOfDir[d] = r.bin; dirs.push(d); }
     });
-    var known = await projectPaths(project);
+    var inProj = await projectPaths(project);
     rn.binOfDir = binOfDir; rn.dirNames = {};
-    var r = await api('POST', '/rename/siblings', { dirs: dirs, known: known });
+    var r = await api('POST', '/rename/siblings', { dirs: dirs, known: rn.rows.map(function (x) { return x.path; }) });
     if (!r.ok) { rn.siblingNote = 'Không quét được thư mục: ' + r.error; return 0; }
     rn.dirNames = r.names || {};
     (r.files || []).forEach(function (f) {
-      rn.rows.push({ path: f.path, oldName: baseName(f.path), bin: binOfDir[f.dir] || '', items: [], external: true,
-        checked: prefs.withExternal });
+      var bin = inProj[fold(f.path)];
+      rn.rows.push({ path: f.path, oldName: baseName(f.path), bin: binOfDir[f.dir] || '', items: [],
+        extra: true, external: bin == null, otherBin: bin == null ? '' : bin, checked: prefs.withExternal });
     });
     rn.rows = RNC.sortRows(rn.rows);
     return (r.files || []).length;
@@ -437,7 +440,8 @@
       names.appendChild(o); names.appendChild(a); names.appendChild(n);
       txt.appendChild(names);
       var cnt = r.items.length;
-      var tag = p ? [numTag(p), r.external ? 'chưa import vào project' : ''].filter(Boolean).join(' · ') : '';
+      var where = r.external ? 'chưa import vào project' : (r.otherBin ? 'ở bin khác: ' + r.otherBin : '');
+      var tag = p ? [numTag(p), where].filter(Boolean).join(' · ') : '';
       if (p && (err || cnt > 1 || tag)) {
         var sub = document.createElement('div'); sub.className = 'rn-sub' + (!err && p.numKind === 'new' ? ' is-new' : '');
         sub.textContent = err || [tag, cnt > 1 ? cnt + ' clip trong project dùng file này' : '']
@@ -456,11 +460,13 @@
     });
     var c = counts();
     var on = rn.preview.length;
-    var ext = rn.rows.filter(function (r) { return r.external; });
+    var ext = rn.rows.filter(function (r) { return r.extra; });
+    var nNew = ext.filter(function (r) { return r.external; }).length, nOther = ext.length - nNew;
     $('rnExtWrap').style.display = ext.length || rn.siblingNote ? '' : 'none';
     $('rnExt').checked = ext.some(function (r) { return r.checked !== false; });
     $('rnExt').disabled = !ext.length || rn.busy || rn.done;
-    $('rnExtText').textContent = rn.siblingNote || ('Đổi tên cả ' + ext.length + ' file chưa import nằm cùng thư mục với source');
+    $('rnExtText').textContent = rn.siblingNote || ('Đổi tên cả ' + ext.length + ' file khác cùng thư mục với source ('
+      + [nNew ? nNew + ' chưa import' : '', nOther ? nOther + ' ở bin khác' : ''].filter(Boolean).join(', ') + ')');
     $('rnDropErr').style.display = c.errs && !rn.busy && !rn.done ? '' : 'none';
     $('rnAll').textContent = on === rn.rows.length ? 'Bỏ chọn hết' : 'Chọn hết';
     $('rnSummary').textContent = (on === rn.rows.length ? rn.rows.length + ' file' : on + '/' + rn.rows.length + ' file được chọn')
@@ -785,7 +791,7 @@
     $('rnExt').addEventListener('change', function () {
       if (rn.busy || rn.done) return;
       prefs.withExternal = $('rnExt').checked; savePrefs(prefs);
-      rn.rows.forEach(function (r) { if (r.external) r.checked = prefs.withExternal; });
+      rn.rows.forEach(function (r) { if (r.extra) r.checked = prefs.withExternal; });
       refresh();
     });
     $('rnDropErr').addEventListener('click', function () {
