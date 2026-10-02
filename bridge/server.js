@@ -1509,6 +1509,16 @@ app.post('/fs/mkdir', (req, res) => {
   }
 });
 
+// File đã có chưa — Tạo Sub hỏi trước khi ghi đè .srt (ST7). UXP không stat được
+// đường dẫn tuỳ ý.
+app.post('/fs/exists', (req, res) => {
+  const p = (req.body && req.body.path) || '';
+  if (!p) return res.status(400).json({ ok: false, error: 'path required' });
+  let st = null;
+  try { st = fs.statSync(p); } catch (e) {}
+  res.json({ ok: true, exists: !!st, isFile: !!(st && st.isFile()), mtimeMs: st ? st.mtimeMs : null });
+});
+
 // Serve audio for preview — from temp dir (Documents/11Lab temp/)
 app.get('/tts/audio/:filename', (req, res) => {
   const fname = decodeURIComponent(req.params.filename);

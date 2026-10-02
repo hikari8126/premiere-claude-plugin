@@ -2158,7 +2158,8 @@ function closeSettingsPanel() {
 
 // The ⚙ opens the settings panel belonging to the tab you're currently on.
 // 'subtext' has no panel of its own yet, so it falls back to General.
-var SETTINGS_TAB_FOR = { autocut: 'autocut', voicegen: 'voicegen', subtext: 'general', resize: 'resize' };
+// Tạo Sub: công tắc "tự lưu SRT" nằm ở mục Voice Gen (ST7: trước đây mở General).
+var SETTINGS_TAB_FOR = { autocut: 'autocut', voicegen: 'voicegen', subtext: 'voicegen', resize: 'resize' };
 function settingsTabForActivePanel() {
   var active = document.querySelector('.tab-btn.active');
   var which  = active ? active.getAttribute('data-tab') : '';
@@ -13037,6 +13038,39 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // Own import (SAC's sacFindOrImportFile lives in another IIFE).
+  // Đã có clip trỏ đúng file .srt này trong project chưa (ST7: chạy lại là import trùng).
+  async function stAlreadyImported(filePath) {
+    try {
+      var proj = await getActiveProject();
+      var root = proj && (typeof proj.getRootItem === 'function' ? await proj.getRootItem() : proj.rootItem);
+      if (!root) return false;
+      var items = await sacCollectBinItems(root);
+      var fname = String(filePath).split('/').pop();
+      return !!(await ppFindItemByPath(items, filePath, fname));
+    } catch (e) { return false; }
+  }
+
+  // Ghi đè .srt đã có phải bấm lần 2 (ST7). Lần 1 dừng trước khi chạy Whisper / ghi
+  // file, nhớ đường dẫn; bấm Tạo Sub lại trong 15s cùng đường dẫn đó mới ghi.
+  var stOverwriteOk = { path: '', until: 0 };
+  async function stConfirmOverwrite(outputPath) {
+    if (stOverwriteOk.path === outputPath && Date.now() < stOverwriteOk.until) {
+      stOverwriteOk = { path: '', until: 0 };
+      return true;
+    }
+    var ex = null;
+    try {
+      var r = await fetch(BRIDGE_URL + '/fs/exists', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: outputPath }) });
+      ex = r.ok ? await r.json() : null;   // bridge cũ không có endpoint → không hỏi (như trước)
+    } catch (e) { ex = null; }
+    if (!ex || !ex.exists) return true;
+    stOverwriteOk = { path: outputPath, until: Date.now() + 15000 };
+    stStatus('⚠ Đã có "' + outputPath.split('/').pop() + '" trong thư mục này — bấm Tạo Sub lần nữa (trong 15s) để GHI ĐÈ.\n'
+      + 'Không muốn ghi đè: tắt "Tự lưu SRT" ở ⚙ → Voice Gen để chọn tên khác.');
+    return false;
+  }
+
   async function stImportFile(filePath) {
     var proj = await getActiveProject();
     if (!proj) throw new Error('Không có project đang mở');
@@ -13394,6 +13428,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!ctx) ctx = await stCaptureCtx();
       var outputPath = await stResolveOutputPath(false, ctx);
       if (!outputPath) { stStatus('Đã huỷ — chưa chọn thư mục lưu.'); return; }
+      // Tự lưu (không qua hộp Save — hộp Save của macOS đã tự hỏi ghi đè).
+      if (stSrtAutoSaveOn() && !(await stConfirmOverwrite(outputPath))) return;
       var url, body;
       // Luồng no-script CHƯA đổi số dòng → ghi thẳng timing gốc (== bản cũ), lấy text
       // hiện tại trong ô (cho phép sửa chữ nhẹ mà không phải canh lại).
@@ -13451,8 +13487,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         return;
       }
       stStatus('⏳ Import .srt vào project...');
-      var imported = true;
-      try { await stImportFile(d.path); } catch (e) { imported = false; }
+      var imported = true, wasThere = false;
+      try {
+        wasThere = await stAlreadyImported(d.path);
+        if (!wasThere) await stImportFile(d.path);
+      } catch (e) { imported = false; }
       var logHint = (d.diag && d.diag.reportPath)
         ? '\n📄 Log: ' + String(d.diag.reportPath).split('/').pop() + ' (Documents ▸ Claude Bridge Logs ▸ autosub)'
         : '';
@@ -13461,7 +13500,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         ? '\n⚠ Đã lưu theo sequence "' + ctx.seqName + '" (lúc bấm) — sequence đang mở là "' + (nowSeq || '?') + '".'
         : '';
       stStatus('✅ ' + d.cues.length + ' dòng phụ đề → "' + d.path.split('/').pop() + '"' +
-        (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
+        (wasThere ? ' · đã có sẵn trong project (cùng file, không import thêm).'
+          : imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
                   : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + seqHint
         + (dgF && dgF.warn ? '\n⚠ Timing có thể LỆCH — ' + dgF.text : logHint));
       stSplitReady = false;
