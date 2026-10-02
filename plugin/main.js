@@ -1039,6 +1039,21 @@ function bridgeErrText(e) {
   return /failed to fetch|network ?error|networkerror|load failed|ECONNREFUSED|^bridge offline$/i.test(m) ? BRIDGE_OFFLINE_MSG : m;
 }
 window.BRIDGE_OFFLINE_MSG = BRIDGE_OFFLINE_MSG;
+
+// Ghi chú ngắn trên version bar (thấy ở mọi tab), tự tắt sau ms. tab: bấm vào thì mở tab đó.
+var _vbNoteTimer = null;
+function versionBarNote(text, opts) {
+  var el = document.getElementById('versionBarNote');
+  if (!el) return;
+  opts = opts || {};
+  if (_vbNoteTimer) { clearTimeout(_vbNoteTimer); _vbNoteTimer = null; }
+  el.textContent = text || '';
+  el.className = 'version-bar-note' + (opts.err ? ' is-err' : '');
+  el.style.display = text ? '' : 'none';
+  el.onclick = opts.tab ? function () { if (window.tabOpen) window.tabOpen(opts.tab); } : null;
+  if (text && opts.ms !== 0) _vbNoteTimer = setTimeout(function () { el.style.display = 'none'; }, opts.ms || 8000);
+}
+window.versionBarNote = versionBarNote;
 window.bridgeErrText = bridgeErrText;
 
 // Trạng thái bridge + phiên Claude CLI hiện ở version bar (luôn thấy), không còn chỉ
@@ -14840,10 +14855,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // ── global hotkey trigger: poll the bridge, run on the current selection ────
   // The Swift app registers OS-global hotkeys and POSTs /unnest/trigger; we poll
   // and run — works regardless of which tab/panel is active.
+  // Chạy bằng phím tắt thường là lúc đang ở tab khác → log trong tab Un-nest không ai
+  // thấy (UN4). Báo trên version bar: đang chạy → dòng kết quả cuối; bấm để mở tab.
   async function runMode(mode) {
     var r = document.querySelector('input[name="unMode"][value="' + mode + '"]');
     if (r) r.checked = true;
+    var onTab = !!document.querySelector('.tab-btn.active[data-tab="unnest"]');
+    if (!onTab) versionBarNote('⏳ Un-nest đang chạy…', { tab: 'unnest', ms: 0 });
     await run();
+    var last = els.log && els.log.lastChild;
+    var txt = last ? String(last.textContent || '') : '';
+    var bad = !!(last && /err|warn/.test(last.className || ''));
+    if (!onTab || bad) {
+      versionBarNote('Un-nest: ' + (txt.length > 90 ? txt.slice(0, 87) + '…' : (txt || 'xong')) + ' — bấm để xem',
+        { tab: 'unnest', err: bad, ms: 10000 });
+    }
   }
   // Host Premiere major version ('25'/'26') so the bridge can route a hotkey trigger
   // to the FOCUSED Premiere when 2025 and 2026 are open at once (both instances poll
