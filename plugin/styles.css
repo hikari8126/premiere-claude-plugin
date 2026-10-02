@@ -4823,7 +4823,9 @@ div.rc-row[role="button"] { display: flex; justify-content: flex-start; align-it
 .rc-confirm-acts .wf-btn { margin-right: 6px; }
 
 .rc-cancel-wrap { display: flex; justify-content: center; margin-top: 6px; }
-.rc-progress { margin-top: 10px; }
+.rc-live { display: flex; align-items: center; margin-top: 10px; }
+.rc-pixel { flex: 0 0 auto; width: 36px; height: 36px; margin-right: 10px; }
+.rc-progress { flex: 1 1 auto; min-width: 0; }
 .rc-bar { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
 .rc-bar-fill { height: 6px; width: 0; background: var(--accent); }
 .rc-prog-text { font-size: 10px; color: var(--text-dim); margin-top: 5px; line-height: 1.45; word-break: break-all; }

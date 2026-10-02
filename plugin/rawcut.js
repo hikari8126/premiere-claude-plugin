@@ -130,6 +130,13 @@
     });
   }
 
+  // ── Nhân vật pixel (rawcut-pixel.js) — không có thì bỏ qua ──
+  function pixel(scene) { if (typeof RCPX !== 'undefined') RCPX.play(scene, $('rcPixel')); }
+  function pixelEnd(ok, cancelled) {
+    if (typeof RCPX === 'undefined') return;
+    if (cancelled) RCPX.hide(); else RCPX.finish(ok);
+  }
+
   // ── Trạng thái chung ────────────────────────────────────────────────────
   function setStatus(msg, kind) {
     var s = $('rcStatus');
@@ -157,6 +164,8 @@
     if (!bridgeHasRawcut()) { setStatus('⛔ Bridge chưa có Raw-cutter — cập nhật Claude Bridge rồi thử lại.', 'err'); return; }
     setBusy(true, 'ĐANG ĐỌC…');
     hideReport();
+    pixel('read');
+    var readOk = false;
     try {
       var env = await api('GET', '/rawcut/status');
       paintEnv(env);
@@ -179,10 +188,12 @@
       paintAll();
       var n = read.rows.source.length || read.rows.render.length;
       setStatus(read.noCuts ? '⚠ Timeline không có cut nào để cắt.' : ('✓ Đọc xong · ' + n + ' cut' + (read.xmlWhy ? ' · ' + read.xmlWhy : '')), read.xmlWhy || read.noCuts ? 'warn' : '');
+      readOk = !read.noCuts;
     } catch (e) {
       setStatus('❌ ' + ((e && e.message) || e), 'err');
     } finally {
       setBusy(false);
+      pixelEnd(readOk, /Đã dừng/.test($('rcStatus').textContent));
     }
   }
 
@@ -680,6 +691,8 @@
     }
     st.last = { results: results, dest: dest, halves: halves };
     paintReport(results);
+    pixelEnd(results.length && results.every(function (r) { return r.skipped || (!r.error && !r.failed); }),
+             results.some(function (r) { return r.cancelled; }));
     var bad = results.some(function (r) { return r.error || r.failed > 0 || r.cancelled; });
     try { api('POST', '/notify', { title: 'Raw-cutter', body: bad ? 'Xuất xong — có clip lỗi' : 'Xuất xong — ' + results.map(function (r) { return r.ok + ' clip ' + (r.half === 'render' ? 'edited/' : 'raw/'); }).join(', ') }); } catch (e) {}
   }
@@ -689,6 +702,7 @@
     var res = { half: half, dir: outDir, ok: 0, failed: 0, total: picked.length, errors: [] };
     if (!picked.length) { res.skipped = true; return res; }
     if (st.stop) { res.cancelled = true; res.error = 'Đã dừng — chưa cắt gì.'; return res; }
+    pixel('cut');
     var opts = exportOptions(half);
     if (isRetry) opts.resume = true;
     var body = {
@@ -760,6 +774,7 @@
     if (preset.warning) res.errors.push('⚠ ' + preset.warning);
     if (rr.ranges.length) {
       showProgress(true, prefix + ' · Premiere render 0/' + rr.ranges.length, 0);
+      pixel('render');
       var rend = await RCP.renderRanges({
         ranges: rr.ranges, dir: cache.dir, preset: preset.path, stockPreset: preset.stockPath,
         keepVideo: includeList(), keepAudio: hearList(), offeredAudio: st.read.audioTracks.map(function (t) { return t.index; }),
