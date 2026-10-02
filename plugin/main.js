@@ -2141,6 +2141,16 @@ function openSettingsPanel(tab) {
   if (spv) spv.textContent = PLUGIN_VERSION;
 }
 function closeSettingsPanel() {
+  // Đóng mà chưa Save (Cancel / bấm ra ngoài / đổi tab) → ô nhập về giá trị đã lưu (S5).
+  // Save gán biến trước rồi mới đóng nên trả về đúng giá trị vừa lưu.
+  if (settingsModal.style.display === 'block') {
+    if (bridgeUrlInput) bridgeUrlInput.value = BRIDGE_URL;
+    if (modelSelect)    modelSelect.value = CLAUDE_MODEL;
+    if (apiKeyInput)    apiKeyInput.value = ANTHROPIC_KEY;
+    var gemIn = document.getElementById('gemini-key-input');
+    if (gemIn)          gemIn.value = GEMINI_KEY;
+    if (typeof window.vgLoadProfileFields === 'function') window.vgLoadProfileFields();
+  }
   settingsModal.style.display = 'none';
   // Clear the inline display so the .tab-panel.active CSS rule shows the right tab again.
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = ''; });
@@ -2189,7 +2199,8 @@ document.getElementById('save-settings').addEventListener('click', function() {
   CLAUDE_MODEL   = (modelSelect && modelSelect.value) || CLAUDE_MODEL;
   ANTHROPIC_KEY  = readInput(apiKeyInput);
   GEMINI_KEY     = readInput(document.getElementById('gemini-key-input'));
-  // ElevenLabs key is managed in the Voice Gen settings tab — don't overwrite it here
+  // ElevenLabs key nằm trong profile (tab Voice Gen): ô đã sửa → lưu profile luôn.
+  if (typeof window.vgCommitProfileFields === 'function') window.vgCommitProfileFields();
   console.log('[Settings] saved — anthropic:', ANTHROPIC_KEY.length, 'chars | gemini:', GEMINI_KEY.length, 'chars');
   var settingsObj = {
     bridgeUrl:                  BRIDGE_URL,
@@ -11659,6 +11670,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
     });
   }
+
+  // Nút Save chung của Settings: ô tên / key profile đã sửa mà chưa bấm lưu riêng →
+  // lưu luôn (S5: trước đây Save chung bỏ qua key ElevenLabs). Trả true nếu có lưu.
+  window.vgCommitProfileFields = function () {
+    var active = EL_PROFILES.find(function(p) { return p.id === EL_ACTIVE_PROFILE_ID; });
+    var name = (vgProfileName ? (vgProfileName.value || '') : '').trim();
+    var key  = (vgElKeyInput  ? (vgElKeyInput.value  || '') : '').trim();
+    if (active && name === active.name && key === active.key) return false;
+    if (!active && !key) return false;
+    if (vgSaveKeyBtn) vgSaveKeyBtn.click();
+    return true;
+  };
+  // Cancel / đóng Settings: trả ô profile về giá trị đã lưu.
+  window.vgLoadProfileFields = vgLoadProfileFields;
 
   // Save (create or update) active profile
   if (vgSaveKeyBtn) {
