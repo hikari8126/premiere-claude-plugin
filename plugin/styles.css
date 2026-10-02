@@ -819,7 +819,12 @@ body {
 .accent-custom { display: flex; flex-direction: column; margin-top: 8px; padding: 10px;
                  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .cw-wrap { display: flex; align-items: flex-start; }
-.cw-wheel { flex: 0 0 auto; width: 150px; height: 150px; cursor: crosshair; }
+.cw-stack { flex: 0 0 auto; position: relative; width: 150px; height: 150px; }
+.cw-layer { position: absolute; left: 0; top: 0; width: 150px; height: 150px; pointer-events: none; }
+.cw-dark { border-radius: 50%; background: #000; opacity: 0; }
+.cw-dot { position: absolute; left: 75px; top: 75px; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+          border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.6); pointer-events: none; }
+.cw-wheel { cursor: crosshair; }
 .cw-side { flex: 1 1 auto; min-width: 0; margin-left: 12px; display: flex; flex-direction: column; }
 .cw-preview { height: 34px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.18); margin-bottom: 10px; }
 .cw-label { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }

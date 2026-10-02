@@ -180,7 +180,12 @@
         <!-- Vòng màu (UXP không có <input type=color>): canvas 2D, tông theo góc, độ đậm theo bán kính. -->
         <div class="accent-custom" id="accentCustomRow" hidden>
           <div class="cw-wrap">
-            <canvas id="cwWheel" class="cw-wheel" width="150" height="150"></canvas>
+            <!-- Ảnh vòng màu dựng sẵn (color-wheel.js) + lớp tối theo độ sáng + chấm đánh dấu (div). -->
+            <div class="cw-stack cw-wheel" id="cwStack">
+              <img id="cwImg" class="cw-layer" alt="" />
+              <div id="cwDark" class="cw-layer cw-dark"></div>
+              <div id="cwDot" class="cw-dot"></div>
+            </div>
             <div class="cw-side">
               <div class="cw-preview" id="cwPreview"></div>
               <div class="cw-label">Độ sáng</div>
@@ -1999,6 +2004,7 @@
 
 <script src="csv-parse.js"></script>
 <script src="elv-sort.js"></script>
+<script src="color-wheel.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
 <script src="resize-core.js"></script>
