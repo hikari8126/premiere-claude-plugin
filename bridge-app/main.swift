@@ -328,7 +328,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     // MARK: ─── First-run Setup ─────────────────────────────────────────────
+    // Bridge KHÔNG cần Claude CLI cho Voice Gen / Watch / RAW / Tạo Sub → khởi động
+    // ngay, kiểm CLI + đăng nhập + Whisper chạy song song, chỉ báo trạng thái / popup,
+    // không chặn (S3: trước đây chưa đăng nhập hoặc CLI chậm >10s là bridge không lên).
     func firstRunSetup() {
+        ensureBridge()
         DispatchQueue.global(qos: .userInitiated).async {
             let claudePath = self.findClaude()
             guard !claudePath.isEmpty else {
@@ -339,13 +343,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { self.promptLogin(claudePath: claudePath) }
                 return
             }
-            // Check Whisper before starting bridge (required for Autocut)
+            // Check Whisper (required for Autocut)
             if self.findWhisper().isEmpty {
                 DispatchQueue.main.async { self.promptInstallWhisperBlocking() }
             } else {
-                DispatchQueue.main.async { self.startBridge() }
+                DispatchQueue.main.async { self.ensureBridge() }
             }
         }
+    }
+
+    // Bridge đang chạy / đang khởi động → giữ nguyên (chỉ cập nhật nhãn); chưa có → start.
+    // startBridge() dọn port nếu bridge chưa trả /health, gọi chồng sẽ giết bridge vừa bật.
+    func ensureBridge() {
+        if startPending { return }
+        if let t = bridgeTask, t.isRunning { updateStatusWithBridgeVersion(); return }
+        startBridge()
     }
 
     // Blocking prompt for Whisper during first-run setup.
@@ -363,10 +375,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             installWhisper()
             // Poll until whisper is installed then start bridge
             pollUntil(check: { !self.findWhisper().isEmpty }, interval: 5, timeout: 600) {
-                self.startBridge()
+                self.ensureBridge()
             }
         } else {
-            startBridge()
+            ensureBridge()
         }
     }
 
@@ -453,7 +465,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             check:     { self.checkAuth(claudePath: claudePath) },
             interval:  3,
             timeout:   300,
-            then:      { self.log("Auth confirmed"); self.startBridge() },
+            then:      { self.log("Auth confirmed"); self.ensureBridge() },
             onTimeout: { self.setStatus("⚠️  Hết thời gian chờ — click ↺ để thử lại", running: false) }
         )
     }
