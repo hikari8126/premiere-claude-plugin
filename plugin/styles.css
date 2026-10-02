@@ -4908,3 +4908,21 @@ div.rc-pick-item[role="button"]:hover { background: var(--accent-a15); }
 .rc-pick-tag { font-size: 9px; color: var(--text-dim); margin-left: 6px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--border); }
 .rc-pick-empty { font-size: 10px; color: var(--text-dim); padding: 6px; }
 .rc-chips-right { justify-content: flex-end; margin-bottom: 0; }
+
+/* Hàng loạt: danh sách sequence trong Thư mục xuất + thanh tab version */
+.rc-bulk-list { margin-top: 2px; }
+.rc-bulk-row { display: flex; align-items: flex-start; padding: 5px 2px; border-bottom: 1px solid var(--border); }
+.rc-bulk-row:last-child { border-bottom: none; }
+div.rc-bulk-row[role="button"] { display: flex; width: 100%; justify-content: flex-start; align-items: flex-start; text-align: left; }
+div.rc-bulk-row[role="button"]:hover { background: var(--accent-a06); }
+.rc-bulk-row.is-err .rc-row-sub { color: #fca5a5; }
+.rc-bulk-row.is-err .rc-tick { opacity: 0.4; }
+.rc-ver { display: inline-block; font-size: 10px; font-weight: 700; color: var(--accent-light); background: var(--accent-a15);
+          border: 1px solid var(--accent-a40); border-radius: 8px; padding: 0 6px; margin-right: 6px; }
+.rc-seqtabs { display: flex; flex-wrap: wrap; margin: -2px 0 10px; }
+div.rc-seqtab[role="button"] { margin: 0 6px 6px 0; padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 12px;
+                               border: 1px solid var(--border); color: var(--text-dim); background: var(--surface); }
+div.rc-seqtab[role="button"]:hover { border-color: var(--accent-a40); color: var(--text); }
+.rc-seqtab.active { color: var(--accent-light); background: var(--accent-a15); border-color: var(--accent); }
+.rc-seqtab.is-off { opacity: 0.5; }
+.rc-seqtab .wf-dot { margin-right: 6px; }
