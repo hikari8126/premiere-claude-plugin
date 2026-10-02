@@ -237,10 +237,11 @@ function piRenderAccentUI() {
     addBtn.addEventListener('click', function () {
       if (!row) return;
       var show = row.hasAttribute('hidden');
-      if (show) { row.removeAttribute('hidden'); if (hexIn) { hexIn.value = current; try { hexIn.focus(); } catch (e) {} } }
-      else row.setAttribute('hidden', '');
+      if (show) { row.removeAttribute('hidden'); if (hexIn) hexIn.value = current; cwOpen(current); }
+      else cwCancel();
     });
   }
+  cwWire();
   if (hexIn && !hexIn.__wired) {
     hexIn.__wired = true;
     hexIn.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
@@ -267,6 +268,124 @@ function piAccentApplyHex() {
   piRenderAccentUI();
 }
 window.piRenderAccentUI = piRenderAccentUI;
+
+// ── Vòng màu (color wheel) ───────────────────────────────────────────────────
+// UXP canvas 2D có arc + gradient nhưng KHÔNG có getImageData / conic gradient (đo 2026-10-02)
+// → vẽ 360 lát quạt theo tông + phủ gradient trắng từ tâm, và tính màu thẳng từ toạ độ chuột
+// (HSV: góc = tông, bán kính = độ đậm, thanh Độ sáng = V). Kéo tới đâu cả plugin đổi màu tới đó;
+// Áp dụng = lưu thành ô màu riêng, Huỷ = trả về màu lúc mở.
+var CW = { h: 270, s: 0.66, v: 0.97, orig: '', drag: '', lastApply: 0 };
+function cwHsvToHex(h, s, v) {
+  var c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c, r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; } else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  function hx(n) { var t = Math.round((n + m) * 255).toString(16); return t.length === 1 ? '0' + t : t; }
+  return '#' + hx(r) + hx(g) + hx(b);
+}
+function cwHexToHsv(hex) {
+  var rgb = piHexToRgb(hex);
+  if (!rgb) return null;
+  var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+  if (d) {
+    if (mx === r) h = 60 * (((g - b) / d) % 6); else if (mx === g) h = 60 * ((b - r) / d + 2); else h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+  return { h: h, s: mx ? d / mx : 0, v: mx };
+}
+function cwHex() { return cwHsvToHex(CW.h, CW.s, CW.v); }
+function cwDraw() {
+  var wc = document.getElementById('cwWheel'), bc = document.getElementById('cwBright');
+  if (!wc || !wc.getContext) return;
+  var ctx = wc.getContext('2d'), W = wc.width, cx = W / 2, cy = W / 2, R = W / 2 - 2, i;
+  ctx.clearRect(0, 0, W, W);
+  for (i = 0; i < 360; i += 2) {
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, (i - 1.5) * Math.PI / 180, (i + 1.5) * Math.PI / 180);
+    ctx.closePath(); ctx.fillStyle = cwHsvToHex(i, 1, 1); ctx.fill();
+  }
+  var gw = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  gw.addColorStop(0, 'rgba(255,255,255,1)'); gw.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fillStyle = gw; ctx.fill();
+  if (CW.v < 1) { ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,' + (1 - CW.v).toFixed(3) + ')'; ctx.fill(); }
+  // chấm đánh dấu (vẽ trên canvas — không dựa vào xếp lớp DOM)
+  var a = CW.h * Math.PI / 180, px = cx + Math.cos(a) * CW.s * R, py = cy + Math.sin(a) * CW.s * R;
+  ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py, 7.5, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.stroke();
+  if (bc && bc.getContext) {
+    var b = bc.getContext('2d'), BW = bc.width, BH = bc.height;
+    var gl = b.createLinearGradient(0, 0, BW, 0);
+    gl.addColorStop(0, '#000000'); gl.addColorStop(1, cwHsvToHex(CW.h, CW.s, 1));
+    b.clearRect(0, 0, BW, BH); b.fillStyle = gl; b.fillRect(0, 2, BW, BH - 4);
+    var bx = Math.max(2, Math.min(BW - 2, CW.v * BW));
+    b.fillStyle = '#ffffff'; b.fillRect(bx - 2, 0, 4, BH);
+    b.strokeStyle = 'rgba(0,0,0,0.6)'; b.lineWidth = 1; b.strokeRect(bx - 2.5, 0.5, 5, BH - 1);
+  }
+  var pv = document.getElementById('cwPreview'); if (pv) pv.style.background = cwHex();
+}
+function cwSync(live) {
+  var hex = cwHex(), hexIn = document.getElementById('accentHex');
+  if (hexIn) hexIn.value = hex;
+  cwDraw();
+  var now = Date.now();
+  if (live && now - CW.lastApply > 60) { CW.lastApply = now; piApplyAccent(hex); }
+}
+// Toạ độ chuột trong phần tử: offsetX nếu UXP có, không thì clientX − mép trái của phần tử.
+function cwLocal(e, el) {
+  if (e.target === el && typeof e.offsetX === 'number' && typeof e.offsetY === 'number') return { x: e.offsetX, y: e.offsetY };
+  var r = el.getBoundingClientRect();
+  var left = r.left != null ? r.left : (r.x != null ? r.x : r._x), top = r.top != null ? r.top : (r.y != null ? r.y : r._y);
+  return { x: e.clientX - left, y: e.clientY - top };
+}
+function cwPick(e) {
+  var el = document.getElementById(CW.drag === 'v' ? 'cwBright' : 'cwWheel');
+  if (!el) return;
+  var p = cwLocal(e, el), dispW = el.clientWidth || el.width;
+  if (CW.drag === 'v') {
+    CW.v = Math.max(0, Math.min(1, p.x / dispW));
+  } else {
+    var R = dispW / 2, dx = p.x - R, dy = p.y - R;
+    CW.h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    CW.s = Math.max(0, Math.min(1, Math.sqrt(dx * dx + dy * dy) / (R - 2)));
+  }
+  cwSync(true);
+}
+function cwOpen(hex) {
+  CW.orig = String(hex || '#a855f7');
+  var hsv = cwHexToHsv(CW.orig) || { h: 270, s: 0.66, v: 0.97 };
+  CW.h = hsv.h; CW.s = hsv.s; CW.v = hsv.v;
+  cwSync(false);
+}
+function cwCancel() {
+  var row = document.getElementById('accentCustomRow');
+  if (CW.orig) piApplyAccent(CW.orig);
+  if (row) row.setAttribute('hidden', '');
+  piRenderAccentUI();
+}
+function cwWire() {
+  var wc = document.getElementById('cwWheel'), bc = document.getElementById('cwBright'), cancel = document.getElementById('cwCancel');
+  if (!wc || wc.__wired) return;
+  wc.__wired = true;
+  wc.addEventListener('mousedown', function (e) { CW.drag = 'hs'; cwPick(e); e.preventDefault(); });
+  if (bc) bc.addEventListener('mousedown', function (e) { CW.drag = 'v'; cwPick(e); e.preventDefault(); });
+  document.addEventListener('mousemove', function (e) {
+    if (!CW.drag) return;
+    // Lỡ mất sự kiện thả chuột (thả ngoài panel…) → không còn nút nào giữ thì thôi kéo, khỏi đổi màu lung tung.
+    if (typeof e.buttons === 'number' && e.buttons === 0) { CW.drag = ''; return; }
+    cwPick(e);
+  });
+  document.addEventListener('mouseup', function () {
+    if (!CW.drag) return;
+    CW.drag = '';
+    piApplyAccent(cwHex());   // lần cuối (bỏ qua giới hạn 60ms)
+  });
+  if (cancel) cancel.addEventListener('click', cwCancel);
+  var hexIn = document.getElementById('accentHex');
+  if (hexIn) hexIn.addEventListener('input', function () {
+    var v = String(hexIn.value || '').trim(); if (v && v[0] !== '#') v = '#' + v;
+    var hsv = /^#[0-9a-fA-F]{6}$/.test(v) ? cwHexToHsv(v) : null;
+    if (hsv) { CW.h = hsv.h; CW.s = hsv.s; CW.v = hsv.v; cwDraw(); piApplyAccent(v); }
+  });
+}
 
 // Render placeholders now + a couple of deferred passes (UXP's DOMContentLoaded
 // is unreliable; main.js runs at body end so the DOM is already parsed).

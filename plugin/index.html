@@ -177,9 +177,21 @@
           <div id="accentSwatches" class="accent-swatches"></div>
           <div class="accent-add" id="accentAddBtn" role="button" title="Nhập mã màu hex"><span data-ic="plus" data-ic-size="12"></span></div>
         </div>
+        <!-- Vòng màu (UXP không có <input type=color>): canvas 2D, tông theo góc, độ đậm theo bán kính. -->
         <div class="accent-custom" id="accentCustomRow" hidden>
-          <input type="text" id="accentHex" class="accent-hex" placeholder="#a855f7" maxlength="7" autocomplete="off" />
-          <div class="accent-hexApply" id="accentHexApply" role="button">Áp dụng</div>
+          <div class="cw-wrap">
+            <canvas id="cwWheel" class="cw-wheel" width="150" height="150"></canvas>
+            <div class="cw-side">
+              <div class="cw-preview" id="cwPreview"></div>
+              <div class="cw-label">Độ sáng</div>
+              <canvas id="cwBright" class="cw-bright" width="120" height="16"></canvas>
+              <input type="text" id="accentHex" class="accent-hex" placeholder="#a855f7" maxlength="7" autocomplete="off" />
+            </div>
+          </div>
+          <div class="cw-actions">
+            <div class="accent-hexApply" id="accentHexApply" role="button">Áp dụng</div>
+            <div class="cw-cancel" id="cwCancel" role="button">Huỷ</div>
+          </div>
         </div>
       </div>
 
