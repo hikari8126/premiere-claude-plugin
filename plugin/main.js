@@ -9070,31 +9070,42 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           return (r && r.ok && r.dirs) ? r.dirs.map(function (d) { return d.name; }) : [];
         } catch (e) { return []; }
       };
-      // 1. Học từ project: voice của bộ gần nhất trong bin "Voice Over / Nx" nằm ở đâu.
+      // 1. Học từ project: voice của các bộ trước nằm ở đâu (…/Voice|VO|Voice Over/Nx, bin
+      //    tên gì cũng được) — xem VGSEQ.inferVoiceDir.
       var entries = [];
       try {
         var root = await proj.getRootItem();
         var all = await sacCollectBinItems(root);
         for (var i = 0; i < all.length; i++) {
-          if (all[i].isFolder || !/^voice\s*over\s*\/\s*\d+x$/i.test(String(all[i].path || '').trim())) continue;
+          if (all[i].isFolder) continue;
           var cp = ppro.ClipProjectItem.cast(all[i].item);
           var mp = cp ? await cp.getMediaFilePath() : '';
-          if (mp) entries.push({ bin: all[i].path, dir: String(mp).slice(0, String(mp).lastIndexOf('/')) });
+          if (!mp || !/\.(mp3|wav|m4a|aac|aif|aiff|flac)$/i.test(mp)) continue;
+          entries.push({ bin: all[i].path || '', dir: String(mp).slice(0, String(mp).lastIndexOf('/')) });
         }
       } catch (e0) {}
-      var bin = 'Voice Over / ' + parsed.set + 'x';
       var inf = VGSEQ.inferVoiceDir(entries, parsed.set);
       if (inf) {
-        var segs = inf.dir.split('/');
-        return { dir: inf.dir, bin: bin, namePart: parsed.label, seqName: String(nm),
-                 shortDir: segs.slice(-2).join('/'), basis: inf.basis };
+        return { dir: inf.dir, bin: inf.bin, namePart: parsed.label, seqName: String(nm),
+                 shortDir: inf.dir.split('/').slice(-2).join('/'),
+                 basis: inf.from === inf.dir ? '' : '…/' + inf.from.split('/').slice(-2).join('/') };
       }
-      // 2. Không học được → thư mục Voice Over / VO / Voice cạnh .prproj.
+      // 2. Chưa có voice nào → thư mục voice (Voice Over / VO / Voice) cạnh .prproj, trong
+      //    <sản phẩm>/Source, hoặc ngay <sản phẩm> (sản phẩm = cấp cha của thư mục .prproj).
       var projDir = pp.slice(0, pp.lastIndexOf('/'));
-      var projDirs = await ls(projDir);
-      var vo = VGSEQ.pickVoiceOverDir(projDirs);
-      var setDirs = projDirs.indexOf(vo) >= 0 ? await ls(projDir + '/' + vo) : [];
-      var t = VGSEQ.buildTarget(pp, parsed, projDirs, setDirs);
+      var spDir = projDir.slice(0, projDir.lastIndexOf('/')) || projDir;
+      var bases = [projDir, spDir + '/Source', spDir];
+      for (var bi = 0; bi < bases.length; bi++) {
+        var names = await ls(bases[bi]);
+        var vo = VGSEQ.findVoiceDirName(names);
+        if (!vo) continue;
+        var sd = VGSEQ.pickSetDir(await ls(bases[bi] + '/' + vo), parsed.set);
+        var d = bases[bi] + '/' + vo + '/' + sd;
+        return { dir: d, bin: 'Voice Over / ' + parsed.set + 'x', namePart: parsed.label, seqName: String(nm),
+                 shortDir: d.split('/').slice(-3).join('/'), basis: '' };
+      }
+      // 3. Không có thư mục voice nào → tạo "Voice Over/{set}x" cạnh .prproj (như trang Auto).
+      var t = VGSEQ.buildTarget(pp, parsed, [], []);
       if (t) { t.seqName = String(nm); t.shortDir = t.voDir + '/' + t.setDir; t.basis = ''; }
       return t;
     } catch (e) {
@@ -9108,7 +9119,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   window.VoiceGenSeqSavePrompt = async function () {
     var t = await vgSeqVoiceTarget();
     return promptSaveLocation('voice.mp3', t ? { defaultDir: t.dir, namePart: t.namePart,
-      note: 'Theo sequence "' + t.seqName + '" → bin ' + t.bin + ' · thư mục …/' + t.shortDir + (t.basis ? ' (cạnh voice của bin ' + t.basis + ')' : '') } : null);
+      note: 'Theo sequence "' + t.seqName + '" → bin ' + t.bin + ' · thư mục …/' + t.shortDir + (t.basis ? ' (cạnh ' + t.basis + ')' : '') } : null);
   };
 
   // Lưu 1 variation ra file rồi trả { path, name, reused, bin }. bin = bin theo sequence
@@ -9136,7 +9147,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       seqT = await vgSeqVoiceTarget();
       if (seqT) saveOpts = { defaultDir: seqT.dir, namePart: seqT.namePart,
         note: 'Theo sequence "' + seqT.seqName + '" → bin ' + seqT.bin + ' · thư mục …/' + seqT.shortDir
-          + (seqT.basis ? ' (cạnh voice của bin ' + seqT.basis + ')' : '') };
+          + (seqT.basis ? ' (cạnh ' + seqT.basis + ')' : '') };
     }
     var picked = await promptSaveLocation(suggestedName || variation.filename || 'voice.mp3', saveOpts);
     if (!picked) return null;

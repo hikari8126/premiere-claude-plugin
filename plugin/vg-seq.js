@@ -2,8 +2,8 @@
 // Cùng quy ước với trang Auto của Autocut (bridge/autoset-names.js):
 //   sequence  "{sp} vid{set}.{idx} [c.{CO}] [{Editor}]"   vd "AeriSoft vid31.0 [c.trang] [viet]"
 //   bin       "Voice Over / {set}x"
-//   thư mục   học từ bin "Voice Over / Nx" đã có voice (cạnh thư mục của bộ gần nhất);
-//             không có thì "<thư mục chứa .prproj>/Voice Over|VO|Voice/{set}x"
+//   thư mục   học từ nơi voice của các bộ trước nằm (…/Voice|VO|Voice Over/Nx), bin học theo;
+//             chưa có voice → thư mục voice cạnh .prproj, trong <SP>/Source, hoặc <SP>
 //   tên file  "{set}.{idx} - {voice}"
 // Logic thuần, không đụng Premiere → test bằng Node (bridge/test/vg-seq.test.js). ES5.
 
@@ -18,7 +18,7 @@ var VGSEQ = (function () {
 
   // Thư mục voice cạnh .prproj: ưu tiên "Voice Over"/"VoiceOver"/"VO" (như autoset-names),
   // rồi tới "Voice" (project thật hay dùng "Editing File/Voice/39x"). Giữ đúng tên trên đĩa.
-  function pickVoiceOverDir(names) {
+  function findVoiceDirName(names) {
     var list = names || [], i;
     for (i = 0; i < list.length; i++) {
       if (/^(voice\s*over|voiceover|vo)$/i.test(String(list[i]).trim())) return list[i];
@@ -26,29 +26,37 @@ var VGSEQ = (function () {
     for (i = 0; i < list.length; i++) {
       if (/^voices?$/i.test(String(list[i]).trim())) return list[i];
     }
-    return 'Voice Over';
+    return null;
   }
+  function pickVoiceOverDir(names) { return findVoiceDirName(names) || 'Voice Over'; }
 
-  // Học từ project: entries [{bin: "Voice Over / 39x", dir: thư mục chứa file voice}].
-  // Bin đúng bộ này đã có voice → dùng thư mục đó; không thì lấy bin "Voice Over / Nx"
-  // có N lớn nhất (bộ gần nhất) mà file nằm trong thư mục "Nx", đặt bộ mới cạnh nó.
-  // Bin "Voice Over / OLD / …" hay thư mục không theo kiểu Nx (Downloads…) bị bỏ qua.
-  // → {dir, basis: tên bin dựa vào} | null.
+  var VOICE_DIR_RE = /^(voice\s*over|voiceover|vo|voices?)$/i;
+  var OLD_SEG_RE = /^(old|cũ|archive|backup)$/i;
+
+  // Học từ project: entries [{bin: đường dẫn bin, dir: thư mục chứa file audio}] của các clip
+  // audio. Mẫu hợp lệ = file nằm trong thư mục "Nx" mà thư mục cha là thư mục voice (Voice
+  // Over / VO / Voice…) — ở đâu cũng được (Editing File/Voice/39x, Source/VO/12x…), bin tên
+  // gì cũng được; bỏ bin có đoạn OLD/archive. Bộ này đã có voice → đúng thư mục + bin đó;
+  // không thì bộ có N lớn nhất, đặt bộ mới cạnh nó. Bin học theo (… / 39x → … / 40x), bin
+  // không kết thúc bằng Nx → "Voice Over / {set}x". → {dir, bin, basis: bin mẫu, from: thư mục mẫu} | null.
   function inferVoiceDir(entries, set) {
     var best = null, want = String(set);
     (entries || []).forEach(function (e) {
-      var m = /^voice\s*over\s*\/\s*(\d+)x$/i.exec(String(e.bin || '').trim());
-      if (!m) return;
+      var bin = String(e.bin || '').trim();
+      if (bin.split('/').some(function (seg) { return OLD_SEG_RE.test(seg.trim()); })) return;
       var dir = String(e.dir || '').replace(/\/+$/, '');
-      var leaf = dir.slice(dir.lastIndexOf('/') + 1);
-      if (!new RegExp('^' + m[1] + 'x$', 'i').test(leaf)) return;
+      var parts = dir.split('/');
+      var m = /^(\d+)x$/i.exec(parts[parts.length - 1] || '');
+      if (!m || !VOICE_DIR_RE.test((parts[parts.length - 2] || '').trim())) return;
       var n = parseInt(m[1], 10);
-      if (String(n) === want) { best = { n: Infinity, dir: dir, basis: String(e.bin).trim() }; return; }
-      if (!best || n > best.n) best = { n: n, dir: dir, basis: String(e.bin).trim() };
+      var rank = String(n) === want ? Infinity : n;
+      if (!best || rank > best.rank) best = { rank: rank, n: n, dir: dir, bin: bin };
     });
     if (!best) return null;
-    if (best.n === Infinity) return { dir: best.dir, basis: best.basis };
-    return { dir: best.dir.slice(0, best.dir.lastIndexOf('/')) + '/' + want + 'x', basis: best.basis };
+    var bm = /^(.*?)(\d+)x$/i.exec(best.bin);
+    var bin = (bm && parseInt(bm[2], 10) === best.n) ? bm[1] + want + 'x' : 'Voice Over / ' + want + 'x';
+    var dir = best.rank === Infinity ? best.dir : best.dir.slice(0, best.dir.lastIndexOf('/')) + '/' + want + 'x';
+    return { dir: dir, bin: bin, basis: best.bin, from: best.dir };
   }
 
   function pickSetDir(names, set) {
@@ -75,7 +83,7 @@ var VGSEQ = (function () {
     };
   }
 
-  return { parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
+  return { parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, findVoiceDirName: findVoiceDirName, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
 })();
 
 (function (root) {
