@@ -4394,6 +4394,14 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 .sac-autoManualSlot { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }
 /* Panel Manual được mượn vào slot: bỏ padding riêng của nó để không thụt hai lần. */
 .sac-autoManualSlot .sac-panel { padding: 0; }
+/* A9: nút riêng của Manual (dựng 1 video, Without voice, Run anyway, 2 nút Clear)
+   phá trạng thái trang Auto → ẩn khi panel đang được mượn. !important vì code Manual
+   bật/tắt các nút này bằng style inline. */
+.sac-autoManualSlot #sacCutPanel,
+.sac-autoManualSlot #sacCutNoVoiceBtn,
+.sac-autoManualSlot #sacRunAnywayBtn,
+.sac-autoManualSlot #sacScriptClear,
+.sac-autoManualSlot #sacClearBoard { display: none !important; }
 .sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
 .sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
 .sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); min-height: 16px; white-space: pre-wrap; }
