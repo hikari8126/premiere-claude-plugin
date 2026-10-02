@@ -30,6 +30,9 @@ function createParser(onEvent, onLine) {
   let buf = '', prev = null;
   function line(l) {
     l = l.replace(/\r$/, '');
+    // Engine cắt song song: luồng khác đôi khi in "[n/N] FLAG file" dính vào cuối dòng ">> …".
+    const glued = /^(\s*>>.*?)(\s+\[\d+\/\d+\]\s+\S+.*)$/.exec(l);
+    if (glued) { line(glued[1]); line(glued[2]); return; }
     if (onLine) onLine(l);
     const ev = parseLine(l, prev);
     if (ev) { prev = ev; if (onEvent) onEvent(ev); }

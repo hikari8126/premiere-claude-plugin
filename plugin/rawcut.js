@@ -22,6 +22,8 @@
   var MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024;   // cache render cần trống ≥ 2 GB
   // Cờ [n/N] của engine coi là lỗi thật (xmlcut.py ~12241): FAIL, BAD, MISS (mất nguồn), NORE (thiếu render).
   var REAL_FAIL = { FAIL: 1, BAD: 1, MISS: 1, NORE: 1 };
+  // Cờ tính là "đã xử lý một clip đã chọn" (SKIP/SLNT/DRY là dòng không cắt được gửi kèm).
+  var COUNTED = { OK: 1, HAVE: 1, FAIL: 1, BAD: 1, MISS: 1, NORE: 1 };
 
   var st = {
     prefs: null,
@@ -126,6 +128,9 @@
           } else finish();
         }
       };
+      // UXP chỉ bắn readystatechange MỘT lần ở readyState 3 — các đoạn sau chỉ đến qua onprogress
+      // (đo 2026-10-02). Không nghe onprogress thì tiến độ đứng yên tới khi xuất xong.
+      xhr.onprogress = pump;
       xhr.onerror = function () { finish({ error: 'Mất kết nối Bridge giữa chừng' }); };
       xhr.onabort = function () { finish({ aborted: true }); };
       xhr.send(JSON.stringify(body || {}));
@@ -544,6 +549,8 @@
     var sd = $('rcShowDead');
     sd.style.display = dead ? '' : 'none';
     sd.textContent = (st.showDead ? 'Ẩn ' : 'Hiện ') + dead + ' clip không cắt được';
+    $('rcListToggle').textContent = (st.listOpen ? '▾ Ẩn danh sách' : '▸ Xem danh sách') + ' (' + rows.length + ' dòng)';
+    $('rcListWrap').style.display = st.listOpen ? '' : 'none';
     $('rcAllToggle').textContent = picked.length ? 'Bỏ chọn hết' : 'Chọn hết';
   }
 
@@ -802,6 +809,7 @@
       results.push({ half: '?', error: (e && e.message) || String(e), errors: [] });
     } finally {
       st.running = false;
+      progStop();
       showProgress(false);
       paintGo();
     }
@@ -826,25 +834,25 @@
       pick: RCC.pickKeys(rowsOf(half), picked)
     };
     if (renderDir) body.renderDir = renderDir;
-    var done = 0, cur = '', lastFail = false;
-    showProgress(true, prefix + ' · chuẩn bị…', 0);
+    var lastFail = false;
+    progStart({ prefix: prefix, total: picked.length, phase: 'cut' });
     var r = await sse('/rawcut/export', body, function (ev) {
       if (ev.type !== 'event') return;
       var e = ev.ev;
-      if (e.type === 'start') cur = e.file;
-      else if (e.type === 'done') {
-        done = e.n;
+      if (e.type === 'start') {
+        if (!prog.started[e.file]) { prog.started[e.file] = true; prog.inflight++; }
+        prog.label = e.file;
+      } else if (e.type === 'done') {
+        if (prog.started[e.file]) { delete prog.started[e.file]; prog.inflight = Math.max(0, prog.inflight - 1); }
+        if (COUNTED[e.flag]) prog.done = Math.min(prog.total, prog.done + 1);
         // SKIP/SLNT/DRY = dòng không cắt được, đã có trong tóm tắt — chỉ liệt kê lỗi thật.
         // MISS của dòng không chọn (gửi kèm để giữ cảnh báo) không phải lỗi lượt này — chỉ FAIL/BAD/NORE
         // luôn là lỗi; MISS chỉ tính khi đã có trong tóm tắt clip chọn (xem dưới).
         lastFail = !e.ok && !!REAL_FAIL[e.flag] && e.flag !== 'MISS';
         if (lastFail) res.errors.push(e.flag + ' ' + e.file);
-        showProgress(true, prefix + ' · ' + e.n + '/' + e.total + ' · ' + e.file, e.total ? e.n / e.total : 0);
-        return;
-      } else if (e.type === 'reason') { if (lastFail && res.errors.length) res.errors[res.errors.length - 1] += ' — ' + e.text; return; }
-      else if (e.type === 'encoding') cur = 'bắt đầu cắt';
-      showProgress(true, prefix + ' · ' + done + '/' + picked.length + (cur ? ' · ' + cur : ''), picked.length ? done / picked.length : 0);
+      } else if (e.type === 'reason') { if (lastFail && res.errors.length) res.errors[res.errors.length - 1] += ' — ' + e.text; }
     });
+    progStop();
     var end = r.end;
     if (r.error) { res.error = r.error; return res; }
     if (r.aborted || (end && end.cancelled)) { res.cancelled = true; res.error = 'Đã dừng — clip đang cắt dở bị bỏ, manifest không ghi.'; return res; }
@@ -889,16 +897,21 @@
     if (!preset.ok) { res.error = preset.error; return res; }
     if (preset.warning) res.errors.push('⚠ ' + preset.warning);
     if (rr.ranges.length) {
-      showProgress(true, prefix + ' · Premiere render 0/' + rr.ranges.length, 0);
+      progStart({ prefix: prefix, total: rr.ranges.length, phase: 'render' });
       pixel('render');
       var rend = await RCP.renderRanges({
         ranges: rr.ranges, dir: cache.dir, preset: preset.path, stockPreset: preset.stockPath,
         hideText: st.prefs.hideText, master: st.read.master,
         keepVideo: includeList(), keepAudio: hearList(), offeredAudio: st.read.audioTracks.map(function (t) { return t.index; }),
         expect: { id: st.read.seqId, fp: consentFp || st.read.fp },
-        onProgress: function (d, t, label) { showProgress(true, prefix + ' · Premiere render ' + d + '/' + t + (label ? ' · ' + label : ''), t ? d / t : 0); },
+        onProgress: function (d, t, label) {
+          var now = Date.now();
+          if (d > prog.done) { prog.stepMs.push((now - prog.stepAt) / (d - prog.done)); prog.stepAt = now; prog.done = d; }
+          prog.total = t; prog.label = label || ''; progPaint();
+        },
         shouldStop: function () { return st.stop; }
       });
+      progStop();
       res.render = rend;
       (rend.warnings || []).forEach(function (x) { res.errors.push('⚠ ' + x); });
       rend.renders.filter(function (x) { return !x.ok; }).forEach(function (x) { res.errors.push('Render lỗi ' + x.label + ': ' + x.error); });
@@ -932,6 +945,35 @@
   }
 
   // ── Tiến độ + báo cáo ───────────────────────────────────────────────────
+  // ── Tiến độ chạy: đồng hồ + thanh nhích dần, để thấy plugin đang làm việc ──
+  // Engine cắt song song (8 clip) và chỉ báo khi một clip XONG — clip CRF 1 từ Drive có thể
+  // mất cả chục giây → đếm thêm clip đang cắt, thanh nhích theo đó. Render: Premiere làm từng
+  // cut (~1.5–3s), thanh nhích theo thời gian trung bình mỗi cut. Đồng hồ nhảy mỗi giây.
+  var prog = { timer: null };
+  function fmtTime(ms) { var x = Math.floor(ms / 1000); return Math.floor(x / 60) + ':' + ('0' + (x % 60)).slice(-2); }
+  function progStart(o) {
+    progStop();
+    prog = { t0: Date.now(), done: 0, total: o.total || 0, inflight: 0, label: '', phase: o.phase || 'cut',
+             prefix: o.prefix || '', stepAt: Date.now(), stepMs: [], started: {}, timer: null };
+    prog.timer = setInterval(progPaint, 250);
+    progPaint();
+  }
+  function progStop() { if (prog.timer) clearInterval(prog.timer); prog.timer = null; }
+  function progPaint() {
+    var p = prog, now = Date.now(), total = Math.max(1, p.total), frac, mid;
+    if (p.phase === 'render') {
+      var avg = 2500;
+      if (p.stepMs.length) avg = p.stepMs.reduce(function (a, b) { return a + b; }, 0) / p.stepMs.length;
+      frac = (p.done + Math.min(0.9, (now - p.stepAt) / avg)) / total;
+      mid = 'Premiere render ' + p.done + '/' + p.total;
+    } else {
+      frac = (p.done + 0.4 * p.inflight) / total;
+      mid = (p.done || p.inflight) ? 'xong ' + p.done + '/' + p.total + (p.inflight ? ' · đang cắt ' + p.inflight : '')
+                                   : 'chuẩn bị ' + p.total + ' clip…';
+    }
+    showProgress(true, p.prefix + ' · ' + mid + ' · ' + fmtTime(now - p.t0) + (p.label ? '\n' + p.label : ''), Math.min(1, frac));
+  }
+
   function showProgress(on, text, frac) {
     $('rcProgress').style.display = on ? '' : 'none';
     if (!on) return;
@@ -1024,6 +1066,7 @@
     });
     bindKeyboard('rcProductSearch');
     $('rcAllToggle').addEventListener('click', onAllToggle);
+    $('rcListToggle').addEventListener('click', function () { st.listOpen = !st.listOpen; paintClips(); });
     $('rcShowDead').addEventListener('click', function () { st.showDead = !st.showDead; paintClips(); });
     $('rcAudioMix').addEventListener('click', function () { st.prefs.audioMix = !st.prefs.audioMix; savePrefs(); paintAudio(); });
     $('rcCrfMinus').addEventListener('click', function () { stepCrf(-0.5); });

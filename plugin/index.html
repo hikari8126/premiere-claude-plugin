@@ -1871,8 +1871,12 @@
         </div>
         <div class="rsz-modes rc-viewtabs" id="rcViewTabs"></div>
         <div class="rsz-chips" id="rcTypes"></div>
-        <div class="rc-list" id="rcList"></div>
-        <div class="rsz-link rc-showdead" id="rcShowDead" role="button" style="display:none"></div>
+        <!-- Danh sách clip trải trong trang (không cuộn riêng — cuộn lồng nhau giành lăn chuột). -->
+        <div class="rsz-link rc-more rc-list-toggle" id="rcListToggle" role="button">▸ Xem danh sách</div>
+        <div id="rcListWrap" style="display:none">
+          <div class="rc-list" id="rcList"></div>
+          <div class="rsz-link rc-showdead" id="rcShowDead" role="button" style="display:none"></div>
+        </div>
       </div>
 
       <!-- Hai thẻ cùng hàng khi panel đủ rộng, hẹp thì tự xuống hàng (flex-wrap). -->

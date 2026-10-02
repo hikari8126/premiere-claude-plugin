@@ -34,4 +34,14 @@ assert.strictEqual(s.noCuts, false);
 assert.strictEqual(parseStderr('error: No cuts found in "Seq".').noCuts, true);
 assert.strictEqual(parseStderr('1\n2\n3\n4\n5\n6\n7\n8\n').tail, '3\n4\n5\n6\n7\n8');
 
+// dòng dính nhau do cắt song song → tách thành start + done
+const g = [];
+const pg = createParser(e => g.push(e));
+pg.feed('  >> video/1/506/597 03_(00.67-03.67)_K33_o2.mp4  [1/69] OK  01_(06.67-20.00)_26.mp4\n');
+pg.end();
+assert.deepStrictEqual(g.map(e => e.type), ['start', 'done']);
+assert.strictEqual(g[0].file, '03_(00.67-03.67)_K33_o2.mp4');
+assert.strictEqual(g[1].n, 1);
+assert.strictEqual(g[1].file, '01_(06.67-20.00)_26.mp4');
+
 console.log('✓ rawcut-protocol');
