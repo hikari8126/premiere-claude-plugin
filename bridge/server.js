@@ -7,7 +7,8 @@ const path = require('path');
 const os   = require('os');
 const autosubLog = require('./autosub-log');   // ghi report mỗi lần auto sub
 const elevenV4 = require('./eleven-v4.js');      // Eleven v4: TTS hoặc Text to Dialogue
-const { collectVariations } = require('./variations.js');  // lỗi variation sau không bỏ variation đã gen
+const { collectVariations } = require('./variations.js');
+const { friendlyElevenError } = require('./eleven-errors.js');  // lỗi ElevenLabs → tiếng Việt (VG8)  // lỗi variation sau không bỏ variation đã gen
 
 const app  = express();
 const PORT = Number(process.env.PORT) || 3030;
@@ -520,7 +521,7 @@ app.post('/transcribe', async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[transcribe]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -723,7 +724,7 @@ app.post('/align', async (req, res) => {
     const alignments = alignScriptToWords(words, scriptLines);
     res.json({ ok: true, alignments });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -886,7 +887,7 @@ function elevenLabsMultipart(apiKey, urlPath, fields, files, expectBinary) {
           try   { resolve(JSON.parse(buf.toString('utf8'))); }
           catch (e) { reject(new Error('Bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
         } else {
-          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 1200)));
         }
       });
     });
@@ -921,7 +922,7 @@ function elevenLabsBinaryPost(apiKey, urlPath, body) {
         if (response.statusCode >= 200 && response.statusCode < 300) {
           resolve({ buffer: buf, generationId });
         } else {
-          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 1200)));
         }
       });
     });
@@ -962,7 +963,7 @@ function elevenLabsRequest(apiKey, method, urlPath, body, expectBinary) {
           try { resolve(JSON.parse(buf.toString('utf8'))); }
           catch(e) { reject(new Error('Bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
         } else {
-          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+          reject(new Error('ElevenLabs HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 1200)));
         }
       });
     });
@@ -1025,7 +1026,7 @@ function elevenLabsUpload(apiKey, filePath, extraFields) {
           try { resolve(JSON.parse(buf.toString('utf8'))); }
           catch (e) { reject(new Error('Upload bad JSON: ' + buf.toString('utf8').slice(0, 200))); }
         } else {
-          reject(new Error('ElevenLabs upload HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 300)));
+          reject(new Error('ElevenLabs upload HTTP ' + response.statusCode + ': ' + buf.toString('utf8').slice(0, 1200)));
         }
       });
     });
@@ -1050,7 +1051,7 @@ app.post('/tts/voices', async (req, res) => {
     res.json({ ok: true, voices });
   } catch (err) {
     console.error('[tts/voices]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1152,7 +1153,7 @@ app.post('/tts/generate', async (req, res) => {
     res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[tts/generate]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1181,7 +1182,7 @@ app.post('/sfx/generate', async (req, res) => {
     res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[sfx/generate]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1247,7 +1248,7 @@ app.post('/music/generate', async (req, res) => {
     res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[music/generate]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1278,7 +1279,7 @@ app.post('/voice/clone', async (req, res) => {
     res.json({ ok: true, voice_id: data.voice_id, name: voiceName });
   } catch (err) {
     console.error('[voice/clone]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1313,7 +1314,7 @@ app.post('/voice/design/preview', async (req, res) => {
     });
   } catch (err) {
     console.error('[voice/design/preview]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1336,7 +1337,7 @@ app.post('/voice/design/save', async (req, res) => {
     res.json({ ok: true, voice_id: data.voice_id, name: voiceName });
   } catch (err) {
     console.error('[voice/design/save]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1397,7 +1398,7 @@ app.post('/voice/change', async (req, res) => {
     });
   } catch (err) {
     console.error('[voice/change]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1440,7 +1441,7 @@ app.post('/tts/voice-preview', async (req, res) => {
     res.json({ ok: true, previewUrl: '/tts/audio/' + encodeURIComponent(fname) });
   } catch (err) {
     console.error('[tts/voice-preview]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1474,7 +1475,7 @@ app.post('/tts/move', async (req, res) => {
     res.json({ ok: true, targetPath: targetPath, name: filename });
   } catch (err) {
     console.error('[tts/move]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1488,7 +1489,7 @@ app.post('/bgm/dir', (req, res) => {
     res.json({ ok: true, dir: r.dir, bgmFound: r.bgmFound, aiFound: r.aiFound });
   } catch (err) {
     console.error('[bgm/dir]', err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    res.status(400).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1502,7 +1503,7 @@ app.post('/fs/mkdir', (req, res) => {
     res.json({ ok: true, dir: dir });
   } catch (err) {
     console.error('[fs/mkdir]', err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -1562,7 +1563,7 @@ app.post('/tts/play', async (req, res) => {
     });
     res.json({ ok: true, finished: true });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1590,7 +1591,7 @@ app.post('/tts/duration', async (req, res) => {
     });
     res.json({ ok: true, duration: dur });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1608,7 +1609,7 @@ app.post('/tts/reveal', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1720,7 +1721,7 @@ app.post('/plugin/update', async (req, res) => {
     res.json({ ok: true });
   } catch(e) {
     console.error('[plugin/update]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1741,7 +1742,7 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
       p.on('error', () => reject(new Error('ffmpeg not installed — run: brew install ffmpeg')));
     });
   } catch(e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 
   const tmpDir = getTempDir();
@@ -1822,7 +1823,7 @@ app.post('/tts/concat-from-sequence', async (req, res) => {
   } catch(e) {
     for (const seg of segPaths) { try { fs.unlinkSync(seg); } catch(err) {} }
     console.error('[concat-from-sequence]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1854,7 +1855,7 @@ app.post('/media/extract-audio', async (req, res) => {
     res.json({ ok: true, audioPath: outPath, durationSec: +dur.toFixed(3) });
   } catch (e) {
     console.error('[media/extract-audio]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1890,7 +1891,7 @@ app.get('/media/audio-preset', (req, res) => {
     }
     res.status(404).json({ ok: false, error: 'Không tìm thấy preset audio .epr trong /Applications/Adobe Premiere Pro*' });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1910,7 +1911,7 @@ app.post('/api/read-image', async (req, res) => {
     const mediaType = mimeMap[ext] || 'image/png';
     res.json({ ok: true, base64: buf.toString('base64'), mediaType, size: buf.length });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -1979,7 +1980,7 @@ app.post('/superautocut/voice-align', async (req, res) => {
 
     res.json({ ok: true, alignments, fullText });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(err.message) });
   }
 });
 
@@ -2631,7 +2632,7 @@ app.post('/superautocut/subtext', async (req, res) => {
     res.json({ ok: true, path: savedPath, cues, srt, diag });
   } catch (e) {
     console.error('[subtext]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2650,7 +2651,7 @@ app.post('/superautocut/subtext-segment', async (req, res) => {
     res.json({ ok: true, lines, ai });
   } catch (e) {
     console.error('[subtext-segment]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2714,7 +2715,7 @@ app.post('/superautocut/subtext-finalize', async (req, res) => {
     res.json({ ok: true, path: savedPath, cues: fin, srt, diag: fDiag });
   } catch (e) {
     console.error('[subtext-finalize]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2783,7 +2784,7 @@ Return ONLY a JSON array, no markdown, no explanation:
     res.json({ ok: true, rows });
   } catch (e) {
     try { fs.unlinkSync(tmpImg); } catch (_) {}
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2942,7 +2943,7 @@ app.post('/superautocut/normalize-script', async (req, res) => {
     }
     return res.json({ ok: true, lines: outLines });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2963,7 +2964,7 @@ app.post('/sac/log', (req, res) => {
     fs.appendFileSync(SAC_LOG_PATH, line);
     res.json({ ok: true });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -2979,7 +2980,7 @@ app.get('/autosub/logs', (req, res) => {
     if (req.query.reveal) spawn('open', [dir]);
     res.json({ ok: true, dir, files, history: autosubLog.HISTORY_PATH });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3010,7 +3011,7 @@ app.post('/music/prompt', async (req, res) => {
     res.json({ ok: true, prompt: prompt.trim() });
   } catch (e) {
     console.error('[music/prompt]', e.message);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3118,7 +3119,7 @@ app.post('/superautocut/split-voice', async (req, res) => {
     }
     res.json({ ok: true, files });
   } catch(e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3155,7 +3156,7 @@ app.post('/autoset/names', (req, res) => {
     const jobs = autosetNames.buildSetNames(config, setNumber, ext, voiceName);
     res.json({ ok: true, jobs });
   } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
+    res.status(400).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3179,7 +3180,7 @@ app.post('/autoset/voicedir', (req, res) => {
     ensureDir(outDir);
     res.json({ ok: true, dir: outDir, voiceOverDir: voDir, created: !hit });
   } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
+    res.status(400).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3273,7 +3274,7 @@ app.post('/unnest/hotkeys', (req, res) => {
     fs.mkdirSync(HK_DIR, { recursive: true });
     fs.writeFileSync(HK_FILE, JSON.stringify(Object.assign({}, HK_DEFAULT, hk), null, 2));
     res.json({ ok: true, hotkeys: readHotkeys() });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── Premiere keyboard-shortcut conflict lookup ──────────────────────────────
@@ -3415,7 +3416,7 @@ app.post('/watch/session/start', (req, res) => {
     clearTimeout(watchTimer);
     watchTimer = setTimeout(watchLoop, watchEngine.nextDelay());
     res.json({ ok: true, watches: info.watches, queued: info.queued });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 app.post('/watch/session/stop', (_req, res) => {
@@ -3423,21 +3424,21 @@ app.post('/watch/session/stop', (_req, res) => {
     clearTimeout(watchTimer); watchTimer = null;
     watchEngine.stop();
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 app.get('/watch/poll', (_req, res) => {
   try {
     const out = watchEngine.poll(20);
     res.json({ ok: true, items: out.items, stats: out.stats });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 app.post('/watch/ack', (req, res) => {
   try {
     const b = req.body || {};
     res.json(Object.assign({ ok: true }, watchEngine.ack(b.done || [], b.failed || [])));
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 app.get('/watch/config', (req, res) => {
@@ -3445,7 +3446,7 @@ app.get('/watch/config', (req, res) => {
     const p = req.query.projectPath || '';
     if (!p) return res.status(400).json({ ok: false, error: 'thiếu projectPath' });
     res.json({ ok: true, watches: wfStore.readConfig(p) });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 app.post('/watch/config', (req, res) => {
@@ -3461,7 +3462,7 @@ app.post('/watch/config', (req, res) => {
     }
     wfStore.writeConfig(b.projectPath, list);
     res.json({ ok: true, watches: list });
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // Duyệt thư mục cho bảng chọn "Thư mục" của tab Watch. Không truyền path thì mở
@@ -3484,7 +3485,7 @@ app.post('/watch/scan-now', (req, res) => {
   try {
     res.json(watchEngine.scanNow((req.body && req.body.watchId) || '',
       { preview: !!(req.body && req.body.preview) }));
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /watch/find-sources ───────────────────────────────────────────────
@@ -3505,7 +3506,7 @@ app.post('/watch/find-sources', async (req, res) => {
       // Thư mục các watch đang có — có thể nằm ngoài cây sản phẩm (ổ ngoài, NAS).
       extraRoots: Array.isArray(b.extraRoots) ? b.extraRoots : [],
     }));
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /watch/suggest-bins ───────────────────────────────────────────────
@@ -3691,7 +3692,7 @@ app.post('/rawcut/scan', async (req, res) => {
     fs.rmSync(dir, { recursive: true, force: true });
     res.json({ ok: true, read, half, manifest, notes, warnings });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3724,7 +3725,7 @@ app.post('/rawcut/export', async (req, res) => {
     fs.copyFileSync(read.json, path.join(rep, path.basename(read.json)));
     if (xml) fs.copyFileSync(xml, path.join(rep, path.basename(xml)));
   } catch (e) {
-    return res.status(400).json({ ok: false, error: e.message });
+    return res.status(400).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 
   const manPath = path.join(b.out, 'manifest.json');
@@ -3766,7 +3767,7 @@ app.post('/rawcut/render-cache', (req, res) => {
     fs.mkdirSync(dir, { recursive: true });
     res.json({ ok: true, dir, pruned, freeBytes: rcCache.freeBytes(dir), files: fs.readdirSync(dir).filter(n => !n.startsWith('.')) });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3775,7 +3776,7 @@ app.post('/rawcut/render-cache/clean', (req, res) => {
   const dir = (req.body || {}).dir;
   if (!rcAbs(dir) || !rcCache.isUnder(RC_CACHE, dir)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được thư mục trong cache render' });
   try { fs.rmSync(dir, { recursive: true, force: true }); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /rawcut/render-preset ── {dir, mbps} → {ok, path, stockPath, stock, bitrate?, warning?}
@@ -3820,7 +3821,7 @@ app.post('/rawcut/presets', async (req, res) => {
     if (out.ok === undefined) out.ok = !out.error;
     res.json(out);
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3839,7 +3840,7 @@ app.post('/rawcut/unlink', (req, res) => {
   const p = (req.body || {}).path;
   if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được file trong cache render' });
   try { fs.rmSync(p, { force: true }); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /rawcut/open ── {dir} → mở thư mục trong Finder
@@ -3847,7 +3848,7 @@ app.post('/rawcut/open', (req, res) => {
   const dir = (req.body || {}).dir;
   if (!rcAbs(dir) || !fs.existsSync(dir)) return res.status(400).json({ ok: false, error: 'Thư mục không tồn tại' });
   try { spawn('open', [dir], { detached: true, stdio: 'ignore' }).unref(); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /rawcut/dest ── {projectPath, sequenceName, sequenceId?, mode?:'source'|'render'|'both',
@@ -3865,7 +3866,7 @@ app.post('/rawcut/dest', (req, res) => {
     });
     res.json(Object.assign({}, r));
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: friendlyElevenError(e.message) });
   }
 });
 
@@ -3904,7 +3905,7 @@ app.post('/rename/plan', async (req, res) => {
       Object.assign(out, { aep: s.files, aepRoot: root, aepTimedOut: s.timedOut });
     }
     res.json(out);
-  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /rename/siblings ── {dirs:[thư mục], known:[đường dẫn project đã có]}
@@ -3913,7 +3914,7 @@ app.post('/rename/siblings', (req, res) => {
   const b = req.body || {};
   const dirs = (Array.isArray(b.dirs) ? b.dirs : []).filter(d => typeof d === 'string' && path.isAbsolute(d));
   try { res.json(Object.assign({ ok: true }, rnOps.siblings(dirs, Array.isArray(b.known) ? b.known : []))); }
-  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
 // ── POST /rename/apply ── {projectPath, rows, aep:[đường dẫn .aep được tick]}

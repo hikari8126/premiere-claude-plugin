@@ -8843,7 +8843,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
     } catch(e) {
       console.warn('[VoiceGen] voices fetch failed (expected for TTS-only keys):', e.message);
-      setStatus('✓ Using default voices (key TTS-restricted)', true);
+      // Key sai / bridge offline thì đừng báo "✓" (VG8) — gen sẽ hỏng ngay sau đó.
+      // Chỉ key thiếu quyền đọc voice (TTS-only) mới là "dùng voice mặc định".
+      if (/không hợp lệ|Hết credit|Bridge chưa chạy|offline/i.test(e.message || '')) {
+        setStatus('✗ ' + bridgeErrText(e), false);
+        els.voiceSource.textContent = 'defaults';
+        voicesLoaded = false;
+        vgRenderHistory();
+        return;
+      }
+      setStatus('✓ Dùng 25 voice mặc định (key không có quyền đọc danh sách voice)', true);
       els.voiceSource.textContent = 'defaults';
       voicesLoaded = true;
       vgRenderHistory();  // VG_VOICES_DATA vừa có → lọc lại history theo voice dùng được
@@ -9119,6 +9128,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var multiVars  = document.getElementById('vgMultiVars');
     if (singleVars) singleVars.style.display = '';
     if (multiVars)  { multiVars.style.display = 'none'; multiVars.innerHTML = ''; }
+    // Multi-speaker trỏ els.importStatus sang ô status trong #vgMultiVars (vừa xoá) →
+    // trả về ô của khu single, không thì trạng thái Import/Timeline không hiện (VG6).
+    var singleStatus = $('vgImportStatus');
+    if (singleStatus) els.importStatus = singleStatus;
 
     var v1 = lastVariations[0];
     var v2 = lastVariations[1];
