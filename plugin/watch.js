@@ -231,6 +231,22 @@
     return null;
   }
 
+  // Không đọc được media path (API cũ) → chỉ nhận clip MỚI xuất hiện sau mẻ import
+  // (đếm theo bin::tên tăng lên) và chính nó cũng không đọc được path. Clip đọc được
+  // path mà khác file thì chắc chắn không phải.
+  async function wfPickNewByName(after, beforeKeys, name) {
+    var seen = Object.create(null);
+    for (var i = 0; i < after.length; i++) {
+      var b = after[i];
+      if (b.isFolder) continue;
+      var k = (b.path || '') + ' :: ' + b.name;
+      seen[k] = (seen[k] || 0) + 1;
+      if (b.name !== name || seen[k] <= (beforeKeys[k] || 0)) continue;
+      if (!(await mediaPathOf(b))) return b;
+    }
+    return null;
+  }
+
   // ── Đối chiếu: xem lại trước khi import ─────────────────────────────────
   // Trước đây nút này đẩy thẳng cả thư mục vào hàng đợi, vòng poll import từng
   // file một — Premiere nhảy dialog liên tục và chậm. Giờ: bridge chỉ LIỆT KÊ
@@ -410,6 +426,8 @@
             + '… (' + (b + 1) + '/' + order.length + ')');
         }
         var paths = group.map(function (r) { return r.filePath; });
+        // Chụp project TRƯỚC mẻ để nhận đúng clip mới khi không đọc được media path (W2).
+        var beforeKeys = ppSnapshotBinKeys(await collectAll(proj));
         try {
           await proj.importFiles(paths);
         } catch (e) {
@@ -424,9 +442,11 @@
           var fp = group[i].filePath;
           var name = baseName(fp);
           try {
+            // Chỉ nhận clip trỏ đúng file. Không lấy bừa clip cũ trùng tên ở bin khác (W2):
+            // import hụt (Drive chưa tải, codec…) mà lấy theo tên sẽ chuyển nhầm clip cũ rồi ack done.
             var hit = (await findByMediaPath(after, fp))
-              || after.filter(function (x) { return !x.isFolder && x.name === name; })[0];
-            if (!hit) throw new Error('import xong nhưng không thấy trong project');
+              || (await wfPickNewByName(after, beforeKeys, name));
+            if (!hit) throw new Error('không import được (không thấy clip trỏ tới file này trong project)');
             var mv = await ppMoveToBin(hit.item, proj, toBinName(bin));
             if (!mv || !mv.ok) throw new Error((mv && mv.error) || 'chuyển vào bin thất bại');
             out.ok += 1;
