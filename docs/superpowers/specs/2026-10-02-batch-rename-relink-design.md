@@ -100,8 +100,9 @@ Module `bridge/aep-relink.js`, không cần Python.
   parse lại file mới đếm đủ số `fullpath` mới, không còn `fullpath` cũ đã thay.
   Sai → không ghi, báo lỗi dòng `.aep` đó.
 - **Ghi an toàn**: backup → ghi `<file>.rn-tmp` → `rename` đè.
-- **AE đang chạy**: `pgrep -x "After Effects"` (hoặc khớp `AfterFX`) → `aeRunning:true`;
-  `/rename/aep` từ chối khi AE đang chạy.
+- **AE đang chạy**: có tiến trình `…app/Contents/MacOS/After Effects` → `aeRunning:true`;
+  `/rename/aep` từ chối khi AE đang chạy. KHÔNG tính `aerendercore -livelink` (Dynamic
+  Link Premiere tự bật — chỉ đọc .aep). LIST không chứa chunk con (vd `btdk`) coi là khối kín.
 
 Không đụng `ascendcount_*` vì đổi tên trong cùng thư mục không đổi độ sâu.
 

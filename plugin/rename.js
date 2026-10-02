@@ -125,7 +125,15 @@
   // Selection ở Project panel → {entries, skipped}. Bin → mọi clip bên trong (đệ quy);
   // {bin} = bin trực tiếp chứa clip.
   async function readSelection(project) {
-    var entries = [], skipped = [];
+    var entries = [], skipped = [], seen = {};
+    // Chọn cả bin lẫn clip trong bin đó → cùng một item gặp 2 lần.
+    async function push(c, item) {
+      if (c.skip) { skipped.push(c.skip); return; }
+      var id = await call(ppro.ProjectItem.cast(item), 'getId');
+      if (id && seen[id]) return;
+      if (id) seen[id] = true;
+      entries.push(c.entry);
+    }
     if (!ppro.ProjectUtils || typeof ppro.ProjectUtils.getSelection !== 'function') {
       throw new Error('Premiere này không có ProjectUtils.getSelection');
     }
@@ -140,8 +148,7 @@
         var kids = await sacCollectBinItems(it);
         for (var k = 0; k < kids.length; k++) {
           if (kids[k].isFolder) continue;
-          var c = await classify(kids[k].item, kids[k].parent || binName);
-          if (c.entry) entries.push(c.entry); else skipped.push(c.skip);
+          await push(await classify(kids[k].item, kids[k].parent || binName), kids[k].item);
         }
         continue;
       }
@@ -153,8 +160,7 @@
           if (!rootId || pid !== rootId) parent = await sacGetItemName(pb);
         }
       } catch (e) {}
-      var r = await classify(it, parent);
-      if (r.entry) entries.push(r.entry); else skipped.push(r.skip);
+      await push(await classify(it, parent), it);
     }
     return { entries: entries, skipped: skipped };
   }
@@ -213,20 +219,23 @@
   }
 
   // Đổi tên hiển thị trong một transaction. onlyIf(nameHiện tại, pair) → có đổi không.
+  // Action tạo BÊN TRONG callback transaction (cùng cách sacCommitTx ở main.js).
   async function renameItems(project, pairs, idx, onlyIf) {
-    var acts = [];
+    var todo = [];
     for (var i = 0; i < pairs.length; i++) {
       var items = idx[fold(pairs[i].from)] || [];
       for (var k = 0; k < items.length; k++) {
         var pi = ppro.ProjectItem.cast(items[k]);
         if (!pi || typeof pi.createSetNameAction !== 'function') continue;
         if (onlyIf && !onlyIf(await sacGetItemName(items[k]), pairs[i])) continue;
-        acts.push(pi.createSetNameAction(baseName(pairs[i].to)));
+        todo.push({ pi: pi, name: baseName(pairs[i].to) });
       }
     }
-    if (!acts.length) return 0;
-    await commit(project, function (ca) { acts.forEach(function (a) { ca.addAction(a); }); }, 'Đổi tên source');
-    return acts.length;
+    if (!todo.length) return 0;
+    await commit(project, function (ca) {
+      todo.forEach(function (t) { ca.addAction(t.pi.createSetNameAction(t.name)); });
+    }, 'Đổi tên source');
+    return todo.length;
   }
 
   // ── Bảng ────────────────────────────────────────────────────────────────
@@ -464,7 +473,7 @@
       try { named = await renameItems(proj, rl.ok, idx, null); }
       catch (e) { nameErr = e.message || String(e); log('✗ Đổi tên hiển thị — ' + nameErr, true); }
 
-      var aepMsg = '';
+      var aepMsg = rn.aeRunning && rn.aep.length ? ' · AE: bỏ qua vì After Effects đang mở' : '';
       if (aepPaths.length && rl.ok.length) {
         status('⏳ Relink ' + aepPaths.length + ' file After Effects…', '');
         var ae = await api('POST', '/rename/aep', { projectPath: rn.projectPath, batchId: ap.batchId });
@@ -539,6 +548,11 @@
     rn.undoArmed = 0;
     var proj = await getActiveProject();
     if (!proj) { lastLine('✗ Không có project đang mở', true); return; }
+    if ((await currentProjectPath()) !== rn.journal.projectPath) {
+      await loadJournal();
+      lastLine('Project đang mở đã đổi — nạp lại lượt đổi tên của project này', true);
+      return;
+    }
     rn.busy = true;
     $('rnUndo').textContent = 'Đang hoàn tác…';
     try {

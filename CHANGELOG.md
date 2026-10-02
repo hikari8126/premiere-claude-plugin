@@ -3,6 +3,18 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.14.0-beta.1 / bridge server 1.22.0-beta.1 — 2026-10-02 (chưa release)
+
+> **Cần bridge ≥ 1.22.0** (Bridge app mới khi ship) cho mục Đổi tên source. Bridge cũ → plugin báo rõ.
+
+### ✨ Tab Watch — Đổi tên source hàng loạt
+- Chọn clip / bin ở Project panel → **Lấy clip đang chọn** → bảng xem trước tên cũ → tên mới theo mẫu (`{bin}` tên bin, `{n}` số thứ tự tự đệm 0 tối thiểu 2 chữ số, `{name}` tên cũ; đuôi giữ nguyên), sắp tự nhiên A→Z, ↑↓ đổi thứ tự. Bỏ qua kèm lý do: sequence, title/MOGRT, clip offline, `canChangeMediaPath()` = false.
+- **Đổi tên:** bridge đổi tên file thật 2 pha (cũ → `.rn-tmp-*` → mới) để hoán đổi tên trong lượt không đè nhau; kiểm tra trùng không phân biệt hoa/thường (APFS); lỗi giữa chừng tự đổi mọi file về. Plugin quét project TRƯỚC khi đổi (lúc file còn online) để relink **mọi** clip trỏ cùng file (`ClipProjectItem.changeMediaFilePath`, đọc lại `getMediaFilePath` để chắc), relink hỏng dòng nào thì `/rename/revert` đổi file dòng đó về. Tên hiển thị = tên file mới (`createSetNameAction`, một transaction).
+- **After Effects:** quét `*.aep` trong thư mục sản phẩm (cấp cha thư mục chứa .prproj, bỏ `Auto-Save`, sâu ≤ 6, hạn 30s). `bridge/aep-relink.js` sửa `fullpath` trong chunk `alas` bằng một lượt đệ quy dựng lại RIFX — **cả footage trong folder** (bản `relink_aep.py` cũ bỏ sót); LIST không chứa chunk con (`btdk`) coi là khối kín; giữ XMP trailer; đổi Utf8 tên hiển thị chỉ khi nó đang là tên file cũ. Kiểm tra độ dài + đọc lại từng footage trước khi ghi; backup ở `~/Library/Application Support/ClaudeBridge/rename/aep-backup/` (7 ngày). Thử trên 2 .aep thật: không đổi → giống hệt từng byte; relink 263 footage rồi đổi ngược → về đúng.
+- AE đang mở → khoá phần AE (Save trong AE sẽ ghi đè relink). Chỉ tính app AE chính — `aerendercore -livelink` (Dynamic Link do Premiere tự bật) không tính.
+- **Hoàn tác lượt vừa rồi** (bấm 2 lần): đổi tên file về, sửa .aep theo ánh xạ ngược (không chép đè backup), relink + đổi tên hiển thị về (chỉ khi tên vẫn là tên mới). Nhật ký 1 lượt/project ở `~/Library/Application Support/ClaudeBridge/rename/`.
+- Bridge: `/rename/plan|apply|revert|aep|journal|undo` (`rename-ops.js`, `aep-relink.js`). Test: `rename-core`, `rename-ops`, `aep-relink` (`AEP_SAMPLE=` để thử file thật), `rename-endpoints`.
+
 ## v5.13.1 / bridge app 3.17 (server 1.21.0) — 2026-10-02
 
 > Không cần Bridge mới (vẫn Bridge app 3.17).
