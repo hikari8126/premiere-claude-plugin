@@ -88,6 +88,28 @@ test('path match ignores case and Unicode normalisation', () => {
   assert.strictEqual(r.replaced, 1);
 });
 
+test('matches AE paths with a /Volumes/<disk> prefix or another account\'s Drive mount, keeps their prefix', () => {
+  const PRE = '/Users/me/Library/CloudStorage/GoogleDrive-me@x.com/Shared drives/Team 04/SP/Raw';
+  const buf = aepFile([list('Fold', [
+    footage('45.MOV', '/Volumes/Macintosh HD' + PRE + '/45.MOV'),
+    footage('', '/Users/quan/Library/CloudStorage/GoogleDrive-quan@x.com/Shared drives/Team 04/SP/Raw/3.mov'),
+    footage('x.MOV', '/Volumes/Macintosh HD' + PRE + '/other.MOV'),
+  ])]);
+  const map = aep.buildMap([
+    { oldPath: PRE + '/45.MOV', newPath: PRE + '/Senyue_45.MOV' },
+    { oldPath: PRE + '/3.MOV', newPath: PRE + '/Senyue_03.mov' },
+  ]);
+  assert.strictEqual(aep.countAepMatches(buf, map), 2);
+  const r = aep.rewriteAep(buf, map);
+  assert.strictEqual(r.replaced, 2);
+  assert.deepStrictEqual(aep.fullpaths(r.buf), [
+    '/Volumes/Macintosh HD' + PRE + '/Senyue_45.MOV',
+    '/Users/quan/Library/CloudStorage/GoogleDrive-quan@x.com/Shared drives/Team 04/SP/Raw/Senyue_03.mov',
+    '/Volumes/Macintosh HD' + PRE + '/other.MOV',
+  ]);
+  assert.deepStrictEqual(aep.itemNames(r.buf), ['Senyue_45.MOV', '', 'x.MOV']);
+});
+
 test('countAepMatches counts footage pointing at the given paths', () => {
   assert.strictEqual(aep.countAepMatches(sample(), aep.buildMap([{ oldPath: A, newPath: '/z' }, { oldPath: C, newPath: '/y' }])), 2);
   assert.strictEqual(aep.countAepMatches(Buffer.from('not an aep'), aep.buildMap([{ oldPath: A, newPath: '/z' }])), 0);

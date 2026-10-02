@@ -22,11 +22,31 @@ const { spawnSync } = require('child_process');
 const fold = p => String(p == null ? '' : p).normalize('NFC').toLowerCase();
 const base = p => String(p).split('/').pop();
 
-// pairs [{oldPath, newPath}] → Map(fold(old) → new)
+// Khoá so khớp đường dẫn. AE hay lưu kèm ổ khởi động ("/Volumes/Macintosh HD/Users/…")
+// trong khi Premiere trả "/Users/…" — so nguyên chuỗi thì trượt hết (FX.aep thật: 65/87
+// footage dạng này). File trên Shared drive so theo phần SAU "Shared drives/", nên .aep
+// do máy đồng nghiệp lưu (GoogleDrive-<email khác>) vẫn khớp.
+function keyOf(p) {
+  let s = fold(p).replace(/^\/volumes\/[^/]+(?=\/users\/)/, '');
+  const i = s.indexOf('/shared drives/');
+  return i >= 0 ? 'sd:' + s.slice(i + 15) : s;
+}
+const dirOf = p => String(p).slice(0, String(p).lastIndexOf('/'));
+
+// pairs [{oldPath, newPath}] → Map(keyOf(old) → new)
 function buildMap(pairs) {
   const m = new Map();
-  (pairs || []).forEach(p => { if (p && p.oldPath && p.newPath) m.set(fold(p.oldPath), String(p.newPath)); });
+  (pairs || []).forEach(p => { if (p && p.oldPath && p.newPath) m.set(keyOf(p.oldPath), String(p.newPath)); });
   return m;
+}
+
+// Đường dẫn mới cho một fullpath trong .aep, null nếu không có trong map. Đổi tên trong cùng
+// thư mục (mọi lượt đổi tên của plugin) → GIỮ tiền tố AE đang lưu, chỉ thay tên file, để
+// AE trên máy đồng nghiệp vẫn tìm được theo đường dẫn của họ.
+function resolveTo(map, fp) {
+  const to = map.get(keyOf(fp));
+  if (to == null) return null;
+  return keyOf(dirOf(fp) + '/x') === keyOf(dirOf(to) + '/x') ? dirOf(fp) + '/' + base(to) : to;
 }
 
 function header(id, size) {
@@ -111,7 +131,7 @@ function itemNames(buf) {
 }
 
 function countAepMatches(buf, map) {
-  try { return fullpaths(buf).filter(p => map.has(fold(p))).length; } catch (e) { return 0; }
+  try { return fullpaths(buf).filter(p => map.has(keyOf(p))).length; } catch (e) { return 0; }
 }
 
 // → { buf, replaced, renamed }. Ném lỗi khi cấu trúc sai hoặc kiểm tra sau ghi sai.
@@ -157,7 +177,7 @@ function rewriteAep(buf, map) {
       if (id === 'alas') {
         const text = buf.toString('utf8', d, d + size);
         const fp = readFullpath(text);
-        const to = fp && map.get(fold(fp.value));
+        const to = fp && resolveTo(map, fp.value);
         if (to != null) {
           const val = JSON.stringify(to);
           const nt = text.slice(0, fp.index) + fp.match.replace('"' + fp.raw + '"', val) + text.slice(fp.index + fp.match.length);
@@ -185,8 +205,8 @@ function rewriteAep(buf, map) {
   const before = fullpaths(buf), after = fullpaths(out);
   if (after.length !== before.length) throw new Error('Số footage đổi sau khi ghi (' + before.length + ' → ' + after.length + ')');
   for (let i = 0; i < before.length; i++) {
-    const want = map.has(fold(before[i])) ? map.get(fold(before[i])) : before[i];
-    if (after[i] !== want) throw new Error('Đọc lại sai đường dẫn footage #' + (i + 1));
+    const want = resolveTo(map, before[i]);
+    if (after[i] !== (want == null ? before[i] : want)) throw new Error('Đọc lại sai đường dẫn footage #' + (i + 1));
   }
   return { buf: out, replaced, renamed };
 }
@@ -282,6 +302,6 @@ function isAeRunning(psOutput) {
 }
 
 module.exports = {
-  buildMap, fullpaths, itemNames, countAepMatches, rewriteAep,
+  keyOf, resolveTo, buildMap, fullpaths, itemNames, countAepMatches, rewriteAep,
   relinkAepFile, findAepFiles, scanAep, isAeRunning,
 };

@@ -3,6 +3,13 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## bridge server 1.22.1-beta.1 — 2026-10-02 (chưa release)
+
+### 🐛 Đổi tên source không relink file After Effects
+- **Lỗi:** đổi tên xong, footage trong `FX.aep` vẫn offline; bảng đổi tên báo "Không có file .aep nào dùng các file này".
+- **Nguyên nhân:** AE lưu `fullpath` kèm ổ khởi động — `/Volumes/Macintosh HD/Users/crossian/…` (FX.aep thật: 65/87 footage) — còn Premiere trả `/Users/crossian/…`. `aep-relink.js` so nguyên chuỗi (chỉ bỏ qua hoa/thường + NFC) nên không khớp file nào. Test trước đó dùng `.aep` thật nhưng tự sinh ánh xạ từ chính đường dẫn trong file, nên không lộ.
+- **Fix:** `keyOf()` bỏ tiền tố `/Volumes/<ổ>` trước `/Users/` và so phần sau `Shared drives/` (khớp cả `.aep` do máy đồng nghiệp lưu với `GoogleDrive-<email khác>`); khi ghi giữ nguyên tiền tố AE đang lưu, chỉ thay tên file (`resolveTo`). Thử trên bản copy FX.aep: relink 11 footage, phần còn offline là đường dẫn cũ có từ trước.
+
 ## v5.15.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
 
 > Không cần Bridge mới (vẫn Bridge app 3.18; dùng `/watch/browse` có từ bridge 1.16).
