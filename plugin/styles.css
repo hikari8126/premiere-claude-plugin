@@ -3548,11 +3548,15 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sac-cutBackBtn {
-  flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%;
+  flex: 0 0 auto; height: 18px; padding: 0 7px; border-radius: 9px;
   background: transparent; border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.35); font-size: 9px; cursor: pointer;
+  color: rgba(255,255,255,0.45); font-size: 9.5px; cursor: pointer; white-space: nowrap;
   display: flex; align-items: center; justify-content: center;
 }
+.sac-cutBackBtn.is-armed, .sac-clearBoardBtn.is-armed, .sac-scriptClearBtn.is-armed {
+  border-color: #ef4444; color: #fca5a5; background: rgba(239,68,68,0.15);
+}
+.sac-clearBoardBtn.is-armed { width: auto; padding: 0 8px; font-size: 10px; }
 .sac-cutBackBtn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
 .sac-cutNoVoiceToggle {
   display: flex; align-items: center; gap: 6px; padding: 0 4px;

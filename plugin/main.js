@@ -5176,13 +5176,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   $('sacAddRow').addEventListener('click', function() { createRow(); });
 
-  $('sacClearBoard').addEventListener('click', function() {
-    $('sacBody').innerHTML = '';
-    rowSeq = 0;
-    $('sacBlockSection').style.display = 'none';
-    $('sacStatus').style.display = 'none';
-    parsedBlocks = [];
-    createRow(); createRow(); createRow();
+  // Nút 🗑 dưới bảng = đúng nút Clear trên đầu script (F12: trước đây 2 nút xoá khác
+  // nhau — nút này để lại bind/voice/cờ validate của script cũ). Cả hai bấm 2 lần.
+  $('sacClearBoard').addEventListener('click', function(e) {
+    e.stopPropagation();
+    sacArmThen($('sacClearBoard'), '⚠ Xoá?', sacClearScriptAll);
   });
 
   // Validate = render blocks + check sources in bin + check structure (1 click).
@@ -5817,10 +5815,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   var sacCutBackBtn = $('sacCutBack');
+  // ✕ Bỏ voice: xoá voice + timing đã khớp (không phải chỉ đóng panel) → bấm 2 lần (F12).
   if (sacCutBackBtn) sacCutBackBtn.addEventListener('click', function() {
-    sacClearVoice();
-    sacHideCutPanel();
-    sacUpdateRunVisibility();
+    sacArmThen(sacCutBackBtn, '⚠ Bỏ voice?', function () {
+      sacClearVoice();
+      sacHideCutPanel();
+      sacUpdateRunVisibility();
+    });
   });
 
   // [▶ This seq] — run assembly into current active sequence
@@ -7937,8 +7938,30 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // 🗑 Clear (in the script header, visible even when collapsed): wipe the whole
   // script AND cancel any running normalize / validate, then re-open the editor.
   var sacScriptClearBtn = $('sacScriptClear');
+  // Xác nhận 2 bước dùng chung cho nút xoá (F12): lần 1 đổi chữ nút, 3s không bấm
+  // lại thì trả về như cũ; lần 2 mới chạy.
+  function sacArmThen(btn, armLabel, go) {
+    if (!btn) return;
+    if (btn.__armTimer) {
+      clearTimeout(btn.__armTimer); btn.__armTimer = null;
+      btn.innerHTML = btn.__armHtml; btn.classList.remove('is-armed');
+      go();
+      return;
+    }
+    btn.__armHtml = btn.innerHTML;
+    btn.textContent = armLabel;
+    btn.classList.add('is-armed');
+    btn.__armTimer = setTimeout(function () {
+      btn.__armTimer = null; btn.innerHTML = btn.__armHtml; btn.classList.remove('is-armed');
+    }, 3000);
+  }
+  window.sacArmThen = sacArmThen;
+
   if (sacScriptClearBtn) sacScriptClearBtn.addEventListener('click', function(e) {
     e.stopPropagation(); // don't toggle collapse
+    sacArmThen(sacScriptClearBtn, '⚠ Bấm lần nữa để xoá', sacClearScriptAll);
+  });
+  function sacClearScriptAll() {
     sacCancelNorm();           // abort in-flight normalize
     sacValidateToken++;        // invalidate in-flight validate
     try { sacVPStop(); } catch(err) {}
@@ -7968,7 +7991,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     $('sacBlockSection').style.flex = '';
     var st = $('sacStatus'); if (st) { st.textContent = '🗑 Đã clear script + huỷ tác vụ đang chạy.'; st.style.display = 'block'; }
     if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
-  });
+  }
 
   // ── Autocut: nạp script từ CSV (không đụng logic paste Google Sheet) ──────
   var sacCsvArmed = false, sacCsvArmTimer = null;
