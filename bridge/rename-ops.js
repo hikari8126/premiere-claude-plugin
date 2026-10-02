@@ -168,7 +168,7 @@ function cleanupBackups(maxAgeMs) {
 
 // File media (video/audio/ảnh) nằm ngay trong các thư mục `dirs` mà project chưa có
 // (`known`: đường dẫn đã có, so không phân biệt hoa/thường) — để đổi tên luôn cho đủ bộ.
-// Không đệ quy: chỉ "thư mục chứa source".
+// Không đệ quy: chỉ "thư mục chứa source". Trả thêm names: {dir → mọi tên file}.
 const MEDIA_EXT = (() => {
   const P = require('./watchfolder-rules.js').PRESETS;
   return new Set([].concat(P.video, P.audio, P.image));
@@ -176,17 +176,19 @@ const MEDIA_EXT = (() => {
 function siblings(dirs, known) {
   const have = new Set((known || []).map(fold));
   const natCmp = require('./watchfolder-browse.js').natCmp;
-  const files = [];
+  const files = [], names = {};
   Array.from(new Set((dirs || []).map(String))).forEach(dir => {
     let ents = [];
     try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    // Mọi tên file đang có — plugin dùng để không cấp lại số đã có file giữ.
+    names[dir] = ents.filter(en => en.isFile() && en.name.charAt(0) !== '.').map(en => en.name);
     ents.filter(en => en.isFile() && en.name.charAt(0) !== '.' && MEDIA_EXT.has(path.extname(en.name).toLowerCase()))
       .map(en => path.join(dir, en.name))
       .filter(p => !have.has(fold(p)))
       .sort((a, b) => natCmp(path.basename(a), path.basename(b)))
       .forEach(p => files.push({ path: p, dir }));
   });
-  return { files };
+  return { files, names };
 }
 
 module.exports = {

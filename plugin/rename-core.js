@@ -145,11 +145,23 @@ var RNC = (function () {
   // mới nối tiếp sau số lớn nhất đã giữ của bin (không có thì từ ô "Bắt đầu từ", và
   // không thấp hơn ô đó).
   // → [{num, kind:'keep'|'new', copyOf, dupOf}]
-  function assignNums(rows, start) {
+  // occupied: {bin (thường) → [số]} — số đã có file khác dùng trong thư mục trên đĩa
+  // (file không nằm trong lượt / bị bỏ tick). Không ai được lấy lại số đó, và số mới nối
+  // tiếp sau cả những số này.
+  function assignNums(rows, start, occupied) {
     var groups = {}, order = [];
+    function group(g) {
+      if (!groups[g]) {
+        groups[g] = { taken: {}, max: -1, idx: [] }; order.push(g);
+        ((occupied && occupied[g]) || []).forEach(function (v) {
+          groups[g].taken[v] = true; groups[g].max = Math.max(groups[g].max, v);
+        });
+      }
+      return groups[g];
+    }
     var info = rows.map(function (r, i) {
       var g = nfc(r.bin).toLowerCase();
-      if (!groups[g]) { groups[g] = { taken: {}, max: -1, idx: [] }; order.push(g); }
+      group(g);
       groups[g].idx.push(i);
       var ni = numberInfo(splitExt(r.oldName).base, r.bin);
       return { g: g, raw: ni.num, copy: ni.copy, value: null, kind: 'new', copyOf: ni.copy && ni.num !== null ? ni.num : '', dupOf: '' };
@@ -170,20 +182,21 @@ var RNC = (function () {
       var G = groups[g], next = Math.max(G.max + 1, start);
       G.idx.forEach(function (i) {
         var x = info[i];
-        if (x.value === null) x.value = next++;
+        if (x.value === null) { while (G.taken[next]) next++; x.value = next++; }
         x.num = pad(x.value, Math.max(2, x.kind === 'keep' ? x.raw.length : 0));
       });
     });
     return info;
   }
 
-  function buildPreview(rows, tpl, start) {
+  // opts.occupied — xem assignNums.
+  function buildPreview(rows, tpl, start, opts) {
     rows = rows || [];
     var s = parseInt(start, 10);
     if (isNaN(s) || s < 0) s = 1;
     var w = padWidth(s, rows.length);
     var useNum = /\{num\}/.test(String(tpl || ''));
-    var nums = useNum ? assignNums(rows, s) : null;
+    var nums = useNum ? assignNums(rows, s, opts && opts.occupied) : null;
     var out = rows.map(function (r, i) {
       var p = splitExt(r.oldName);
       var base = renderName(tpl, { bin: r.bin, n: s + i, name: p.base, num: nums ? nums[i].num : '' }, w);

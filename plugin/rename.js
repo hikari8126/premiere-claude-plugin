@@ -206,8 +206,10 @@
       if (!(d in binOfDir)) { binOfDir[d] = r.bin; dirs.push(d); }
     });
     var known = await projectPaths(project);
+    rn.binOfDir = binOfDir; rn.dirNames = {};
     var r = await api('POST', '/rename/siblings', { dirs: dirs, known: known });
     if (!r.ok) { rn.siblingNote = 'Không quét được thư mục: ' + r.error; return 0; }
+    rn.dirNames = r.names || {};
     (r.files || []).forEach(function (f) {
       rn.rows.push({ path: f.path, oldName: baseName(f.path), bin: binOfDir[f.dir] || '', items: [], external: true,
         checked: prefs.withExternal });
@@ -314,7 +316,24 @@
   function computePreview() {
     var j = 0;
     rn.pidx = rn.rows.map(function (r) { return r.checked !== false ? j++ : -1; });
-    rn.preview = RNC.buildPreview(active(), currentTpl(), startNum());
+    rn.preview = RNC.buildPreview(active(), currentTpl(), startNum(), { occupied: occupiedNums() });
+  }
+
+  // Số đã có file khác giữ trong thư mục trên đĩa (file ngoài lượt hoặc bị bỏ tick vẫn
+  // nằm đó với tên của nó) → {bin → [số]}. Thiếu cái này thì số mới đè lên Senyue_51…
+  // đã đổi ở lượt trước (bridge báo "Đã có file trùng tên").
+  function occupiedNums() {
+    var mine = {}, out = {};
+    active().forEach(function (r) { mine[fold(r.path)] = true; });
+    Object.keys(rn.dirNames || {}).forEach(function (dir) {
+      var bin = (rn.binOfDir || {})[dir] || '', g = fold(bin);
+      (rn.dirNames[dir] || []).forEach(function (name) {
+        if (mine[fold(dir + '/' + name)]) return;
+        var ni = RNC.numberInfo(RNC.splitExt(name).base, bin);
+        if (ni.num !== null && !ni.copy) (out[g] = out[g] || []).push(parseInt(ni.num, 10));
+      });
+    });
+    return out;
   }
 
   function renderModes() {
@@ -348,9 +367,10 @@
   function startNum() { var n = parseInt($('rnStart').value, 10); return isNaN(n) || n < 0 ? 1 : n; }
 
   // Lỗi một dòng: ưu tiên kết quả bridge (biết đĩa) khi còn khớp tên mới.
+  // Khớp theo đường dẫn (không theo vị trí — bỏ tick làm lệch vị trí trước khi bridge trả lời).
   function rowError(i) {
     var p = rn.preview[i];
-    var s = rn.server && rn.server.rows && rn.server.rows[i];
+    var s = rn.server && rn.server.byPath && rn.server.byPath[fold(p.path)];
     if (s && s.newName === p.newName && s.error) return s.error;
     return p.error;
   }
@@ -514,7 +534,9 @@
       rn.aepNote = r.aepTimedOut ? 'Quét .aep quá 30 giây nên dừng giữa chừng — có thể còn sót file.' : '';
     }
     if (seq === rn.planSeq) {
-      rn.server = { seq: seq, rows: r.rows };
+      var byPath = {};
+      (r.rows || []).forEach(function (x) { byPath[fold(x.oldPath)] = x; });
+      rn.server = { seq: seq, rows: r.rows, byPath: byPath };
       renderList();
     }
     renderAep();
@@ -542,7 +564,7 @@
       return;
     }
     btn.textContent = 'Đang quét thư mục chứa source…';
-    rn.siblingNote = '';
+    rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {};
     try { await addSiblings(proj); } catch (e) { rn.siblingNote = 'Không quét được thư mục: ' + (e.message || e); }
     btn.textContent = 'Lấy clip đang chọn';
     rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
@@ -821,7 +843,7 @@
     debugOpen: async function (entries, withSiblings) {
       wire();
       rn.projectPath = await currentProjectPath();
-      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = []; rn.siblingNote = '';
+      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = []; rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {};
       if (withSiblings) await addSiblings(await getActiveProject());
       rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
       $('rnTpl').value = prefs.tpl; $('rnStart').value = '1';

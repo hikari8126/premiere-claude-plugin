@@ -152,5 +152,6 @@ test('siblings lists media files in the same folders that the project does not h
   const r = ops.siblings([d, d], [path.join(d, '1.MOV').toLowerCase()]);
   assert.deepStrictEqual(r.files.map(f => path.basename(f.path)), ['2.mov', '10.mp4', 'still.png', 'voice.wav']);
   assert.strictEqual(r.files[0].dir, d);
+  assert.ok(r.names[d].indexOf('1.MOV') >= 0 && r.names[d].indexOf('notes.txt') >= 0 && r.names[d].indexOf('.hidden.mov') < 0);
   assert.deepStrictEqual(ops.siblings([path.join(d, 'nope')], []).files, []);
 });

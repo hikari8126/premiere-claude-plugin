@@ -194,3 +194,14 @@ test("{num}: two genuine names with one number — first keeps, the rest get new
   assert.strictEqual(p[1].numDupOf, "41");
   assert.ok(p.every(function (r) { return !r.error; }));
 });
+
+test("{num}: numbers used by files already on disk are never handed out again", () => {
+  // Thư mục đã có Senyue_51..64 (đổi ở lượt trước, không nằm trong bảng).
+  var occupied = { senyue: [] };
+  for (var k = 51; k <= 64; k++) occupied.senyue.push(k);
+  var p = RNC.buildPreview(rowsOf("Senyue", ["49.MOV", "50.MOV", "DSC_6852.MOV", "DSC_6857.MOV", "51.MOV"]),
+    "{bin}_{num}", 1, { occupied: occupied });
+  assert.deepStrictEqual(p.map(function (r) { return r.newName; }),
+    ["Senyue_49.MOV", "Senyue_50.MOV", "Senyue_65.MOV", "Senyue_66.MOV", "Senyue_67.MOV"]);
+  assert.strictEqual(p[4].numDupOf, "51", "51.MOV collides with the existing Senyue_51 → new number");
+});
