@@ -290,15 +290,27 @@ var RCP = (function () {
     }
     var ioChanged = false;
     var curOut = ticksOf(origOut);
-    async function setIO(a, b) {
-      // In mới vượt out hiện tại → đặt out trước, khỏi có lúc in > out.
-      var aT = Number(ticksOf(a)), outFirst = curOut !== null && Number(curOut) >= 0 && aT >= Number(curOut);
+    // ⚠️ Premiere 25.6 (đo 2026-10-02): đặt out RỒI in trong CÙNG một transaction thì out bị bỏ,
+    // sequence giữ out "chưa đặt" (−101606400000000000) → render hỏng ngay cut thứ 2. Đặt từng
+    // điểm một transaction riêng thì thứ tự nào cũng nhận. Vẫn đọc lại; lệch thì thử thứ tự ngược.
+    async function setPoint(which, t) {
       await commit(project, function (ca) {
-        if (outFirst) { ca.addAction(seq.createSetOutPointAction(b)); ca.addAction(seq.createSetInPointAction(a)); }
-        else { ca.addAction(seq.createSetInPointAction(a)); ca.addAction(seq.createSetOutPointAction(b)); }
-      }, 'Raw-cutter in/out');
+        ca.addAction(which === 'in' ? seq.createSetInPointAction(t) : seq.createSetOutPointAction(t));
+      }, 'Raw-cutter ' + which);
+    }
+    async function setIO(a, b) {
+      var wa = ticksOf(a), wb = ticksOf(b);
+      // In mới vượt out hiện tại → đặt out trước, khỏi có lúc in > out.
+      var outFirst = curOut !== null && Number(curOut) >= 0 && Number(wa) >= Number(curOut);
+      var order = outFirst ? ['out', 'in'] : ['in', 'out'];
+      for (var k = 0; k < 2; k++) await setPoint(order[k], order[k] === 'in' ? a : b);
       ioChanged = true;
-      curOut = ticksOf(b);
+      var gi = ticksOf(await call(seq, 'getInPoint', null)), go = ticksOf(await call(seq, 'getOutPoint', null));
+      if (gi !== wa || go !== wb) {
+        order.reverse();
+        for (var j = 0; j < 2; j++) await setPoint(order[j], order[j] === 'in' ? a : b);
+      }
+      curOut = ticksOf(await call(seq, 'getOutPoint', null));
     }
     try {
       // Hình: chỉ track được chọn hiện trong bản render.
