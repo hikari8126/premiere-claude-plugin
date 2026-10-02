@@ -4483,6 +4483,8 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 .wf-status-line { display: flex; align-items: center; }
 .wf-status-line > * { margin-right: 8px; }
 .wf-status-line > *:last-child { margin-right: 0; }
+.wf-subLink { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.wf-subLink.is-err { color: #f87171; }
 .wf-status-sub { margin-top: 5px; font-size: 11px; color: var(--text-dim);
                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wf-spacer { flex: 1 1 auto; }

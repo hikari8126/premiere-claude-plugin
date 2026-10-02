@@ -112,7 +112,7 @@
     }
 
     renderWatches();
-    setStatusUI('ok', 'Đang theo dõi');
+    setStatusUI(wfOnCount() ? 'ok' : 'idle', wfOnText());
     startPolling();
     return true;
   }
@@ -143,7 +143,8 @@
         : ('Lỗi: ' + r.error));
       return;
     }
-    setStatusUI(wfState.paused ? 'pause' : 'ok', wfState.paused ? 'Tạm dừng' : 'Đang theo dõi');
+    setStatusUI(wfState.paused ? 'pause' : (wfOnCount() ? 'ok' : 'idle'),
+      wfState.paused ? 'Tạm dừng' : wfOnText());
     updateStatsUI(r.stats);
     if (!r.items || r.items.length === 0) return;
 
@@ -655,11 +656,28 @@
   }
 
   // ── Trạng thái UI ───────────────────────────────────────────────────────
+  // W9: 0 watch (hoặc tắt hết) mà chấm vẫn xanh "Đang theo dõi" → nhìn tưởng đang chạy.
+  function wfOnCount() {
+    return wfState.watches.filter(function (w) { return w.enabled !== false && w.folder && w.binPath; }).length;
+  }
+  function wfOnText() {
+    var n = wfOnCount();
+    return n ? 'Đang theo dõi ' + n + ' thư mục' : (wfState.watches.length ? 'Không có watch nào đang bật' : 'Chưa có watch nào');
+  }
   function setStatusUI(kind, text) {
     var dot = document.getElementById('wfDot');
     var txt = document.getElementById('wfStatusText');
-    if (dot) dot.className = 'wf-dot ' + (kind === 'ok' ? 'ok' : kind === 'pause' ? 'pause' : 'err');
+    if (dot) dot.className = 'wf-dot ' + (kind === 'ok' ? 'ok' : (kind === 'pause' || kind === 'idle') ? 'pause' : 'err');
     if (txt) txt.textContent = text;
+  }
+
+  function wfSubLink(text, onClick, isErr) {
+    var a = document.createElement('span');
+    a.className = 'wf-subLink' + (isErr ? ' is-err' : '');
+    a.setAttribute('role', 'button');
+    a.textContent = text;
+    a.addEventListener('click', onClick);
+    return a;
   }
 
   function updateStatsUI(stats) {
@@ -669,6 +687,26 @@
     sub.textContent = stats.watches.length + ' watch · ' + name
       + ' · chờ ' + stats.queued + ' file · đã import '
       + wfState.sessionImported + ' file phiên này';
+    // W5: hàng đợi còn file mà bảng duyệt đang đóng (đã bấm "để sau", hoặc >20 file
+    // không vào hết một lượt) → trước đây không bao giờ hỏi lại. Bấm để mở lại.
+    var tableOpen = wfCmp.mode && wfCmp.rows.length;
+    if (stats.queued > 0 && !tableOpen) {
+      sub.appendChild(document.createTextNode(' · '));
+      sub.appendChild(wfSubLink('Duyệt ' + stats.queued + ' file đang chờ', function () {
+        wfState.seen = {};
+        pollOnce();
+      }));
+    }
+    // W9: file lỗi 3 lần bị bỏ khỏi hàng đợi → giờ đếm + bấm xem lý do ở nhật ký.
+    var dead = stats.dead || [];
+    if (dead.length) {
+      sub.appendChild(document.createTextNode(' · '));
+      sub.appendChild(wfSubLink(dead.length + ' file lỗi (bấm xem)', function () {
+        dead.slice(-20).forEach(function (d) {
+          wfLog('✗ ' + baseName(d.filePath) + ' — ' + (d.reason || 'lỗi') + ' (thử 3 lần, đã bỏ)', true);
+        });
+      }, true));
+    }
 
     // Watch mất thư mục thì tô cảnh báo lên đúng card.
     stats.watches.forEach(function (w) {
@@ -783,9 +821,13 @@
 
     var edit = mkBtn('Sửa', 'wf-btn-sm', 'gear');
     var del  = mkBtn('', 'wf-btn-sm wf-btn-danger', 'trash');
+    // Xoá watch phải bấm 2 lần (W9).
     del.addEventListener('click', function () {
-      wfState.watches = wfState.watches.filter(function (x) { return x.id !== w.id; });
-      saveConfig(); renderWatches();
+      var go = function () {
+        wfState.watches = wfState.watches.filter(function (x) { return x.id !== w.id; });
+        saveConfig(); renderWatches();
+      };
+      if (window.sacArmThen) window.sacArmThen(del, '⚠ Xoá?', go); else go();
     });
 
     head.appendChild(chk); head.appendChild(title); head.appendChild(badge);
@@ -893,6 +935,18 @@
       return row(labelText, c);
     }
     body.appendChild(checkRow('Quét thư mục con', 'recursive'));
+    // Độ sâu thư mục con (W9: trước đây cố định 3 cấp). 1 = chỉ file ngay trong thư mục.
+    var depthIn = document.createElement('input');
+    depthIn.type = 'number'; depthIn.min = '1'; depthIn.max = '10';
+    depthIn.value = String(w.maxDepth || 3);
+    depthIn.style.width = '56px';
+    bindKeyboard(depthIn);
+    depthIn.addEventListener('change', function () {
+      var n = Math.max(1, Math.min(10, parseInt(depthIn.value, 10) || 3));
+      depthIn.value = String(n);
+      w.maxDepth = n; saveConfig();
+    });
+    body.appendChild(row('Số cấp thư mục con', depthIn));
     body.appendChild(checkRow('Mirror thành bin con', 'mirrorSubfolders'));
 
     function textRow(labelText, key, placeholder) {
@@ -937,9 +991,9 @@
 
     // Config đổi thì khởi động lại session để engine nạp watch mới.
     await api('POST', '/watch/session/start', { projectPath: wfState.projectPath });
-    setStatusUI(wfState.paused ? 'pause' : 'ok',
+    setStatusUI(wfState.paused ? 'pause' : (wfOnCount() ? 'ok' : 'idle'),
       incomplete.length ? (incomplete.length + ' watch chưa đủ thư mục/bin')
-                        : (wfState.paused ? 'Tạm dừng' : 'Đang theo dõi'));
+                        : (wfState.paused ? 'Tạm dừng' : wfOnText()));
   }
 
   // ── Gắn sự kiện ─────────────────────────────────────────────────────────
@@ -954,8 +1008,8 @@
   if (pauseBtn) pauseBtn.addEventListener('click', function () {
     wfState.paused = !wfState.paused;
     pauseBtn.textContent = wfState.paused ? 'Tiếp tục' : 'Tạm dừng tất cả';
-    setStatusUI(wfState.paused ? 'pause' : 'ok',
-      wfState.paused ? 'Tạm dừng' : 'Đang theo dõi');
+    setStatusUI(wfState.paused ? 'pause' : (wfOnCount() ? 'ok' : 'idle'),
+      wfState.paused ? 'Tạm dừng' : wfOnText());
   });
 
   var logHead = document.getElementById('wfLogHead');
