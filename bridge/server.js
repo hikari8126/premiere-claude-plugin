@@ -3875,6 +3875,124 @@ app.post('/rawcut/dest', (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Đổi tên source hàng loạt (tab Watch): bridge đổi tên file trên đĩa + relink .aep,
+// plugin relink clip Premiere. Chỉ giữ lượt gần nhất của mỗi project để hoàn tác.
+// Spec: docs/superpowers/specs/2026-10-02-batch-rename-relink-design.md
+// ═══════════════════════════════════════════════════════════════════════════
+const rnOps = require('./rename-ops.js');
+const rnAep = require('./aep-relink.js');
+const RN_BACKUP_MAX_AGE = 7 * 864e5;
+
+function rnRows(b) {
+  return (Array.isArray(b.rows) ? b.rows : []).map(r => ({ oldPath: String((r && r.oldPath) || ''), newName: String((r && r.newName) || '') }));
+}
+function rnJournal(b, res) {
+  if (!b.projectPath) { res.status(400).json({ ok: false, error: 'Thiếu projectPath' }); return null; }
+  const j = rnOps.loadJournal(String(b.projectPath));
+  if (!j || (b.batchId && j.batchId !== b.batchId)) { res.status(404).json({ ok: false, error: 'Không còn lượt đổi tên này trong nhật ký' }); return null; }
+  return j;
+}
+const rnSwap = p => ({ oldPath: p.newPath, newPath: p.oldPath });
+
+// ── POST /rename/plan ── {projectPath, rows:[{oldPath,newName}], scanAep?:bool}
+//    → {ok, rows:[{oldPath,newPath,newName,error,same}], aep?:[{path,name,count}], aepRoot, aepTimedOut, aeRunning}
+//    scanAep=false khi chỉ đổi mẫu tên: .aep khớp theo đường dẫn CŨ nên không cần quét lại.
+app.post('/rename/plan', async (req, res) => {
+  const b = req.body || {};
+  try {
+    const rows = rnOps.planRows(rnRows(b));
+    const out = { ok: true, rows, aeRunning: rnAep.isAeRunning() };
+    if (b.projectPath && b.scanAep !== false) {
+      const root = require('./watchfolder-browse.js').productRoot(String(b.projectPath));
+      const olds = rows.filter(r => !r.error && !r.same).map(r => r.oldPath);
+      const s = olds.length ? await rnAep.scanAep(root, olds, { timeoutMs: 30000 }) : { files: [], timedOut: false };
+      Object.assign(out, { aep: s.files, aepRoot: root, aepTimedOut: s.timedOut });
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rename/apply ── {projectPath, rows, aep:[đường dẫn .aep được tick]}
+//    → {ok, batchId, rows:[{oldPath,newPath}]} — kiểm tra lại toàn bộ; có lỗi thì không đụng file nào.
+app.post('/rename/apply', (req, res) => {
+  const b = req.body || {};
+  if (!b.projectPath) return res.status(400).json({ ok: false, error: 'Thiếu projectPath' });
+  const plan = rnOps.planRows(rnRows(b));
+  const bad = plan.filter(r => r.error);
+  if (bad.length) return res.status(400).json({ ok: false, error: bad.length + ' dòng lỗi: ' + bad[0].error, rows: plan });
+  const pairs = plan.filter(r => !r.same).map(r => ({ oldPath: r.oldPath, newPath: r.newPath }));
+  if (!pairs.length) return res.json({ ok: true, batchId: null, rows: [] });
+  const r = rnOps.applyRenames(pairs);
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  const batch = {
+    batchId: rnOps.newBatchId(), time: Date.now(), projectPath: String(b.projectPath), rows: pairs,
+    aepSelected: (Array.isArray(b.aep) ? b.aep : []).filter(p => typeof p === 'string' && path.isAbsolute(p) && /\.aep$/i.test(p)),
+    aep: [],
+  };
+  try { rnOps.saveJournal(batch.projectPath, batch); }
+  catch (e) { console.warn('[rename] không ghi được nhật ký:', e.message); }
+  rnOps.cleanupBackups(RN_BACKUP_MAX_AGE);
+  res.json({ ok: true, batchId: batch.batchId, rows: pairs });
+});
+
+// ── POST /rename/revert ── {projectPath, batchId, oldPaths:[...]} — plugin relink lỗi
+//    ở dòng nào thì đổi riêng file của dòng đó về tên cũ, bỏ khỏi lượt.
+app.post('/rename/revert', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  const want = new Set((b.oldPaths || []).map(String));
+  const sel = j.rows.filter(p => want.has(p.oldPath));
+  const r = rnOps.applyRenames(sel.map(rnSwap));
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  j.rows = j.rows.filter(p => !want.has(p.oldPath));
+  if (j.rows.length) rnOps.saveJournal(j.projectPath, j); else rnOps.clearJournal(j.projectPath);
+  res.json({ ok: true, reverted: sel.length });
+});
+
+// ── POST /rename/aep ── {projectPath, batchId} → {ok, files:[{path,name,ok,replaced,renamed,error}]}
+app.post('/rename/aep', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  if (!j.aepSelected.length || !j.rows.length) return res.json({ ok: true, files: [] });
+  if (rnAep.isAeRunning()) return res.status(409).json({ ok: false, aeRunning: true, error: 'After Effects đang mở — đóng AE rồi thử lại' });
+  const map = rnAep.buildMap(j.rows);
+  const dir = path.join(rnOps.backupRoot(), j.batchId);
+  const files = j.aepSelected.map(f => Object.assign({ path: f, name: path.basename(f) }, rnAep.relinkAepFile(f, map, dir)));
+  j.aep = files.filter(f => f.ok && f.replaced).map(f => ({ path: f.path, count: f.replaced }));
+  rnOps.saveJournal(j.projectPath, j);
+  res.json({ ok: true, files });
+});
+
+// ── GET /rename/journal?projectPath= → {ok, batch|null}
+app.get('/rename/journal', (req, res) => {
+  const p = req.query.projectPath;
+  if (!p) return res.status(400).json({ ok: false, error: 'Thiếu projectPath' });
+  res.json({ ok: true, batch: rnOps.loadJournal(String(p)) });
+});
+
+// ── POST /rename/undo ── {projectPath, batchId}
+//    → {ok, rows:[{oldPath,newPath}] (đã đổi về), skipped:[{oldPath,newPath,reason}], aep:[...]}
+//    .aep sửa theo ánh xạ ngược (không chép đè backup → giữ thay đổi làm sau trong AE).
+app.post('/rename/undo', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  if (j.aep.length && rnAep.isAeRunning()) return res.status(409).json({ ok: false, aeRunning: true, error: 'After Effects đang mở — đóng AE rồi hoàn tác' });
+  const ok = [], skipped = [];
+  j.rows.forEach(p => {
+    if (!fs.existsSync(p.newPath)) skipped.push(Object.assign({ reason: 'File mới không còn ở chỗ cũ' }, p));
+    else if (fs.existsSync(p.oldPath) && p.oldPath.toLowerCase() !== p.newPath.toLowerCase()) skipped.push(Object.assign({ reason: 'Tên cũ đã có file khác chiếm' }, p));
+    else ok.push(p);
+  });
+  const r = rnOps.applyRenames(ok.map(rnSwap));
+  if (!r.ok) return res.status(500).json({ ok: false, error: r.error });
+  const map = rnAep.buildMap(ok.map(rnSwap));
+  const dir = path.join(rnOps.backupRoot(), j.batchId + '-undo');
+  const aep = ok.length ? j.aep.map(a => Object.assign({ path: a.path, name: path.basename(a.path) }, rnAep.relinkAepFile(a.path, map, dir))) : [];
+  rnOps.clearJournal(j.projectPath);
+  res.json({ ok: true, rows: ok, skipped, aep });
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────
 if (require.main === module) {
   app.listen(PORT, '127.0.0.1', () => {
