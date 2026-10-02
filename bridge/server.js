@@ -3959,6 +3959,18 @@ app.post('/rename/revert', (req, res) => {
   res.json({ ok: true, reverted: sel.length });
 });
 
+// ── POST /rename/note ── {projectPath, batchId, moves:[{path, fromBin}]} — plugin ghi các clip
+//    đã chuyển bin (từ bin khác về bin của thư mục) để Hoàn tác chuyển lại.
+app.post('/rename/note', (req, res) => {
+  const b = req.body || {};
+  const j = rnJournal(b, res); if (!j) return;
+  j.moves = (Array.isArray(b.moves) ? b.moves : [])
+    .filter(m => m && typeof m.path === 'string' && typeof m.fromBin === 'string')
+    .map(m => ({ path: m.path, fromBin: m.fromBin }));
+  rnOps.saveJournal(j.projectPath, j);
+  res.json({ ok: true, moves: j.moves.length });
+});
+
 // ── POST /rename/aep ── {projectPath, batchId} → {ok, files:[{path,name,ok,replaced,renamed,error}]}
 app.post('/rename/aep', (req, res) => {
   const b = req.body || {};
@@ -3999,7 +4011,7 @@ app.post('/rename/undo', (req, res) => {
   const dir = path.join(rnOps.backupRoot(), j.batchId + '-undo');
   const aep = ok.length ? j.aep.map(a => Object.assign({ path: a.path, name: path.basename(a.path) }, rnAep.relinkAepFile(a.path, map, dir))) : [];
   rnOps.clearJournal(j.projectPath);
-  res.json({ ok: true, rows: ok, skipped, aep });
+  res.json({ ok: true, rows: ok, skipped, aep, moves: j.moves || [] });
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────

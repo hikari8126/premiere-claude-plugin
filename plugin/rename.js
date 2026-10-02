@@ -68,7 +68,7 @@
     try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) {}
     var mode = (s.mode === 'n' || s.mode === 'custom') ? s.mode : 'num';
     return { mode: mode, tpl: typeof s.tpl === 'string' && s.tpl ? s.tpl : '{bin}_{num}', open: !!s.open,
-      withExternal: s.withExternal !== false };
+      withExternal: s.withExternal !== false, moveBins: s.moveBins !== false };
   }
   // Hai kiểu bấm là chạy; "Tự đặt mẫu…" mới cần gõ (prefs.tpl).
   var MODE_TPL = { num: '{bin}_{num}', n: '{bin}_{n}' };
@@ -193,7 +193,7 @@
     for (var i = 0; i < all.length; i++) {
       if (all[i].isFolder) continue;
       var p = await mediaPathOf(all[i].item);
-      if (p && !(fold(p) in out)) out[fold(p)] = all[i].path || '(gốc project)';
+      if (p && !(fold(p) in out)) out[fold(p)] = all[i].path || '';
     }
     return out;
   }
@@ -208,17 +208,44 @@
       if (!(d in binOfDir)) { binOfDir[d] = r.bin; dirs.push(d); }
     });
     var inProj = await projectPaths(project);
-    rn.binOfDir = binOfDir; rn.dirNames = {};
+    rn.binOfDir = binOfDir; rn.dirNames = {}; rn.binObjOfDir = {};
+    // Bin thật (object) của từng thư mục = bin chứa clip đầu tiên trong lựa chọn — đích khi
+    // "Chuyển clip ở bin khác về bin …". Lấy theo object, không theo tên (tên bin có thể trùng).
+    for (var i = 0; i < rn.rows.length; i++) {
+      var row = rn.rows[i], d = row.path.slice(0, row.path.lastIndexOf('/'));
+      if (rn.binObjOfDir[d] || !row.items.length) continue;
+      try {
+        var pb = typeof row.items[0].getParentBin === 'function' ? await un(row.items[0].getParentBin()) : null;
+        if (pb) rn.binObjOfDir[d] = { bin: pb, id: await call(ppro.ProjectItem.cast(pb), 'getId') };
+      } catch (e) {}
+    }
     var r = await api('POST', '/rename/siblings', { dirs: dirs, known: rn.rows.map(function (x) { return x.path; }) });
     if (!r.ok) { rn.siblingNote = 'Không quét được thư mục: ' + r.error; return 0; }
     rn.dirNames = r.names || {};
     (r.files || []).forEach(function (f) {
       var bin = inProj[fold(f.path)];
       rn.rows.push({ path: f.path, oldName: baseName(f.path), bin: binOfDir[f.dir] || '', items: [],
-        extra: true, external: bin == null, otherBin: bin == null ? '' : bin, checked: prefs.withExternal });
+        extra: true, external: bin == null, otherBin: bin == null ? null : bin, checked: prefs.withExternal });
     });
     rn.rows = RNC.sortRows(rn.rows);
     return (r.files || []).length;
+  }
+
+  function dirOf(p) { return String(p).slice(0, String(p).lastIndexOf('/')); }
+  function binLabel(b) { return b ? b : '(gốc project)'; }
+
+  // Dòng "ở bin khác" sẽ được chuyển về bin của thư mục (ô tick chung, bật sẵn).
+  function willMove(r) {
+    return prefs.moveBins && r.otherBin != null && r.checked !== false && !!(rn.binObjOfDir || {})[dirOf(r.path)];
+  }
+
+  // Chuyển clip trong một transaction. todo [{item, target(FolderItem đã cast)}].
+  async function moveItems(project, todo) {
+    if (!todo.length) return 0;
+    await commit(project, function (ca) {
+      todo.forEach(function (t) { ca.addAction(t.target.createMoveItemAction(t.item, t.target)); });
+    }, 'Chuyển clip về bin');
+    return todo.length;
   }
 
   async function relinkItem(project, item, newPath) {
@@ -440,7 +467,8 @@
       names.appendChild(o); names.appendChild(a); names.appendChild(n);
       txt.appendChild(names);
       var cnt = r.items.length;
-      var where = r.external ? 'chưa import vào project' : (r.otherBin ? 'ở bin khác: ' + r.otherBin : '');
+      var where = r.external ? 'chưa import vào project'
+        : (r.otherBin != null ? binLabel(r.otherBin) + (willMove(r) ? ' → chuyển về bin ' + (r.bin || '(gốc project)') : ' (ở bin khác)') : '');
       var tag = p ? [numTag(p), where].filter(Boolean).join(' · ') : '';
       if (p && (err || cnt > 1 || tag)) {
         var sub = document.createElement('div'); sub.className = 'rn-sub' + (!err && p.numKind === 'new' ? ' is-new' : '');
@@ -467,6 +495,14 @@
     $('rnExt').disabled = !ext.length || rn.busy || rn.done;
     $('rnExtText').textContent = rn.siblingNote || ('Đổi tên cả ' + ext.length + ' file khác cùng thư mục với source ('
       + [nNew ? nNew + ' chưa import' : '', nOther ? nOther + ' ở bin khác' : ''].filter(Boolean).join(', ') + ')');
+    var movable = rn.rows.filter(function (r) { return r.otherBin != null && r.checked !== false && (rn.binObjOfDir || {})[dirOf(r.path)]; });
+    var tgtBins = {};
+    movable.forEach(function (r) { tgtBins[r.bin || '(gốc project)'] = true; });
+    $('rnMoveWrap').style.display = movable.length ? '' : 'none';
+    $('rnMove').checked = prefs.moveBins;
+    $('rnMove').disabled = rn.busy || rn.done;
+    $('rnMoveText').textContent = 'Chuyển ' + movable.length + ' clip ở bin khác về bin '
+      + (Object.keys(tgtBins).length === 1 ? Object.keys(tgtBins)[0] : 'của thư mục');
     $('rnDropErr').style.display = c.errs && !rn.busy && !rn.done ? '' : 'none';
     $('rnAll').textContent = on === rn.rows.length ? 'Bỏ chọn hết' : 'Chọn hết';
     $('rnSummary').textContent = (on === rn.rows.length ? rn.rows.length + ' file' : on + '/' + rn.rows.length + ' file được chọn')
@@ -570,7 +606,7 @@
       return;
     }
     btn.textContent = 'Đang quét thư mục chứa source…';
-    rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {};
+    rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {}; rn.binObjOfDir = {};
     try { await addSiblings(proj); } catch (e) { rn.siblingNote = 'Không quét được thư mục: ' + (e.message || e); }
     btn.textContent = 'Lấy clip đang chọn';
     rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
@@ -626,6 +662,8 @@
       var todo = rn.preview.filter(function (p) { return !p.same; });
       var wanted = {};
       todo.forEach(function (p) { wanted[fold(p.path)] = true; });
+      var movers = rn.rows.filter(willMove);
+      movers.forEach(function (r) { wanted[fold(r.path)] = true; });
       status('', '');
       prog(0, 0);
       var idx = await indexProject(proj, wanted);
@@ -653,6 +691,32 @@
       try { named = await renameItems(proj, rl.ok, idx, null); }
       catch (e) { nameErr = e.message || String(e); log('✗ Đổi tên hiển thị — ' + nameErr, true); }
 
+      // Chuyển clip ở bin khác về bin của thư mục (bỏ qua dòng relink lỗi — đã đổi tên về).
+      var moved = 0, moveErr = '', failed = {}, finalOf = {};
+      rl.fail.forEach(function (f) { failed[fold(f.pair.from)] = true; });
+      pairs.forEach(function (p) { finalOf[fold(p.from)] = p.to; });
+      var mv = [], notes = [];
+      for (var mi = 0; mi < movers.length; mi++) {
+        var r0 = movers[mi], k0 = fold(r0.path);
+        if (failed[k0]) continue;
+        var tb = rn.binObjOfDir[dirOf(r0.path)], target = ppro.FolderItem.cast(tb.bin);
+        if (!target || typeof target.createMoveItemAction !== 'function') continue;
+        var its = idx[k0] || [];
+        for (var q = 0; q < its.length; q++) {
+          var cur = typeof its[q].getParentBin === 'function' ? await un(its[q].getParentBin()) : null;
+          if (cur && tb.id && (await call(ppro.ProjectItem.cast(cur), 'getId')) === tb.id) continue;
+          mv.push({ item: its[q], target: target });
+        }
+        if (its.length) notes.push({ path: finalOf[k0] || r0.path, fromBin: r0.otherBin });
+      }
+      if (mv.length) {
+        prog(3, 0.5, 'chuyển ' + mv.length + ' clip về bin');
+        try {
+          moved = await moveItems(proj, mv);
+          await api('POST', '/rename/note', { projectPath: rn.projectPath, batchId: ap.batchId, moves: notes });
+        } catch (e) { moveErr = e.message || String(e); log('✗ Chuyển bin — ' + moveErr, true); }
+      }
+
       var aepMsg = rn.aeRunning && rn.aep.length ? ' · AE: bỏ qua vì After Effects đang mở' : '';
       if (aepPaths.length && rl.ok.length) {
         prog(4, 0, aepPaths.length + ' file .aep');
@@ -673,7 +737,8 @@
         + (nExt ? ' (' + nExt + ' file chưa import)' : '') + ', relink '
         + rl.ok.reduce(function (n, p) { return n + (idx[fold(p.from)] || []).length; }, 0) + ' clip'
         + (rl.fail.length ? ' · ' + rl.fail.length + ' file relink lỗi đã đổi tên về' : '')
-        + (nameErr ? ' · tên hiển thị chưa đổi (' + nameErr + ')' : '') + aepMsg;
+        + (nameErr ? ' · tên hiển thị chưa đổi (' + nameErr + ')' : '')
+        + (moved ? ' · chuyển ' + moved + ' clip về bin' : '') + (moveErr ? ' · chưa chuyển bin được (' + moveErr + ')' : '') + aepMsg;
       status(msg, rl.fail.length || nameErr ? 'is-warn' : 'is-ok');
       log('Đổi tên source: ' + msg.replace(/^[✓⚠] /, ''));
       rn.done = true;
@@ -743,6 +808,7 @@
       var j = rn.journal;
       var wanted = {};
       j.rows.forEach(function (r) { wanted[fold(r.newPath)] = true; });
+      (j.moves || []).forEach(function (m) { wanted[fold(m.path)] = true; });
       var idx = await indexProject(proj, wanted);
       var r = await api('POST', '/rename/undo', { projectPath: j.projectPath, batchId: j.batchId });
       if (!r.ok) { lastLine('✗ ' + r.error, true); return; }
@@ -753,6 +819,24 @@
       try {
         await renameItems(proj, rl.ok, idx, function (cur, p) { return fold(cur) === fold(baseName(p.from)); });
       } catch (e) { log('✗ Hoàn tác tên hiển thị — ' + (e.message || e), true); }
+      // Chuyển clip về lại bin cũ (ppGetOrCreateBin hiểu đường dẫn "A / B / C").
+      var back = 0;
+      for (var mi = 0; mi < (r.moves || []).length; mi++) {
+        var m = r.moves[mi], its = idx[fold(m.path)] || [];
+        for (var q = 0; q < its.length; q++) {
+          try {
+            if (!m.fromBin) {
+              var rt = ppro.FolderItem.cast(await un(proj.getRootItem()));
+              await moveItems(proj, [{ item: its[q], target: rt }]);
+            } else {
+              var mr = await ppMoveToBin(its[q], proj, m.fromBin);
+              if (!mr.ok) throw new Error(mr.error);
+            }
+            back++;
+          } catch (e) { log('✗ Hoàn tác chuyển bin ' + baseName(m.path) + ' — ' + (e.message || e), true); }
+        }
+      }
+      if (back) log('Hoàn tác: chuyển ' + back + ' clip về bin cũ');
       rl.fail.forEach(function (f) { log('✗ Hoàn tác relink ' + baseName(f.pair.to) + ' — ' + f.error + ' (file đã về tên cũ, relink tay trong Premiere)', true); });
       (r.skipped || []).forEach(function (s) { log('✗ Hoàn tác bỏ qua ' + baseName(s.newPath) + ' — ' + s.reason, true); });
       (r.aep || []).forEach(function (a) { log((a.ok ? 'AE ' : '✗ AE ') + a.name + (a.ok ? ': đổi về ' + a.replaced + ' footage' : ' — ' + a.error), !a.ok); });
@@ -788,6 +872,11 @@
     $('rnClose').addEventListener('click', closeModal);
     $('rnGo').addEventListener('click', run);
     $('rnRescan').addEventListener('click', function () { if (!rn.busy && !rn.done) schedulePlan(true); });
+    $('rnMove').addEventListener('change', function () {
+      if (rn.busy || rn.done) return;
+      prefs.moveBins = $('rnMove').checked; savePrefs(prefs);
+      renderList();
+    });
     $('rnExt').addEventListener('change', function () {
       if (rn.busy || rn.done) return;
       prefs.withExternal = $('rnExt').checked; savePrefs(prefs);
@@ -849,7 +938,7 @@
     debugOpen: async function (entries, withSiblings) {
       wire();
       rn.projectPath = await currentProjectPath();
-      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = []; rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {};
+      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = []; rn.siblingNote = ''; rn.dirNames = {}; rn.binOfDir = {}; rn.binObjOfDir = {};
       if (withSiblings) await addSiblings(await getActiveProject());
       rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
       $('rnTpl').value = prefs.tpl; $('rnStart').value = '1';

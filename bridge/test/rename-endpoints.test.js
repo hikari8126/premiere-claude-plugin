@@ -87,6 +87,10 @@ const server = app.listen(3036, async () => {
     assert.strictEqual(j.batch.rows.length, 3);
     assert.deepStrictEqual(j.batch.aep, [{ path: AEP, count: 2 }]);
 
+    // 6b. ghi clip đã chuyển bin → undo trả lại để plugin chuyển về
+    const nt = await post('/rename/note', { projectPath: PROJ, batchId: ap.batchId, moves: [{ path: F('Higg_01.mov'), fromBin: 'Source / Kling' }, { bad: 1 }] });
+    assert.strictEqual(nt.moves, 1);
+
     // 7. revert riêng dòng 3 (giả lập plugin relink lỗi)
     const rv = await post('/rename/revert', { projectPath: PROJ, batchId: ap.batchId, oldPaths: [F('IMG_3.mov')] });
     assert.strictEqual(rv.reverted, 1);
@@ -100,6 +104,7 @@ const server = app.listen(3036, async () => {
     const un = await post('/rename/undo', { projectPath: PROJ, batchId: ap.batchId });
     assert.strictEqual(un.ok, true, un.error);
     assert.strictEqual(un.rows.length, 2);
+    assert.deepStrictEqual(un.moves, [{ path: F('Higg_01.mov'), fromBin: 'Source / Kling' }]);
     assert.deepStrictEqual(fs.readdirSync(path.join(SP, 'Footage')).sort(), ['IMG_1.mov', 'IMG_2.mov', 'IMG_3.mov']);
     assert.deepStrictEqual(aep.fullpaths(fs.readFileSync(AEP)), [F('IMG_1.mov'), F('IMG_2.mov')]);
     assert.deepStrictEqual(aep.itemNames(fs.readFileSync(AEP)), ['IMG_1.mov', '']);

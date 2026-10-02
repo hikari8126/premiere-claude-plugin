@@ -352,6 +352,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/rename/siblings` | POST | File media cùng thư mục với source mà project chưa import (đổi tên cho đủ bộ) |
 | `/rename/apply` | POST | Đổi tên file 2 pha (lỗi → tự đổi về), ghi nhật ký lượt, trả `batchId` |
 | `/rename/revert` | POST | Đổi riêng vài file của lượt về tên cũ (plugin relink lỗi) |
+| `/rename/note` | POST | Ghi clip đã chuyển bin trong lượt (Hoàn tác chuyển về bin cũ) |
 | `/rename/aep` | POST | Sửa `fullpath` trong các `.aep` đã tick theo lượt (backup 7 ngày) |
 | `/rename/journal` · `/rename/undo` | GET · POST | Lượt gần nhất của project / hoàn tác lượt đó (file + `.aep`) |
 
