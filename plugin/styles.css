@@ -127,7 +127,7 @@ body {
   margin: 0 1px;
   bottom: -1px;
 }
-/* Phân trang tab: tab không thuộc trang đang xem bị [hidden]; ‹ › chuyển trang. */
+/* Phân trang tab: tab không thuộc trang đang xem bị [hidden]; nút bên phải lật trang. */
 .tab-btn[hidden] { display: none; }
 .tab-pageBtn {
   flex: 0 0 auto;
@@ -137,7 +137,6 @@ body {
   cursor: pointer; border-radius: 4px;
 }
 .tab-pageBtn:hover { color: var(--accent); background: rgba(255, 255, 255, 0.05); }
-.tab-pageBtn.is-disabled { opacity: 0.25; pointer-events: none; }
 .un-tabScroll { display: flex; flex-direction: column; }
 .tab-btn:hover:not(.active) {
   background: rgba(255, 255, 255, 0.05);

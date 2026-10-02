@@ -2664,7 +2664,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
 // ── Phân trang tab ───────────────────────────────────────────────────────
 // Trang 1 = 4 tab edit (Voice Gen / Autocut / Tạo Sub / Un-nest), trang 2 = còn lại.
-// ‹ › đổi trang và mở tab dùng gần nhất của trang đó (chưa có → tab đầu trang).
+// Một nút bên phải lật qua lại (› ở trang 1, ‹ ở trang 2), mở tab dùng gần nhất
+// của trang đó (chưa có → tab đầu trang).
 var TAB_PAGES = 2;
 var tabPage = 1;
 function tabShowPage(page) {
@@ -2672,9 +2673,8 @@ function tabShowPage(page) {
   document.querySelectorAll('.tab-btn[data-page]').forEach(function (b) {
     b.hidden = String(b.dataset.page) !== String(tabPage);
   });
-  var prev = document.getElementById('tabPagePrev'), next = document.getElementById('tabPageNext');
-  if (prev) prev.classList.toggle('is-disabled', tabPage <= 1);
-  if (next) next.classList.toggle('is-disabled', tabPage >= TAB_PAGES);
+  var tg = document.getElementById('tabPageToggle');
+  if (tg) tg.textContent = tabPage >= TAB_PAGES ? '‹' : '›';
 }
 function tabGoPage(page) {
   page = Math.max(1, Math.min(TAB_PAGES, page));
@@ -2694,9 +2694,8 @@ function tabOpen(tab) {
 }
 window.tabOpen = tabOpen;
 (function () {
-  var prev = document.getElementById('tabPagePrev'), next = document.getElementById('tabPageNext');
-  if (prev) prev.addEventListener('click', function () { tabGoPage(tabPage - 1); });
-  if (next) next.addEventListener('click', function () { tabGoPage(tabPage + 1); });
+  var tg = document.getElementById('tabPageToggle');
+  if (tg) tg.addEventListener('click', function () { tabGoPage(tabPage >= TAB_PAGES ? 1 : tabPage + 1); });
   tabShowPage(1);
   // Khôi phục tab lần trước sau khi mọi script (watch.js, rawcut.js…) đã gắn handler.
   setTimeout(function () {
