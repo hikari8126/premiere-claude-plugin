@@ -2596,6 +2596,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     var tab = btn.dataset.tab;
     // Rời tab đang phát thì dừng audio (bấm lại đúng tab đang mở thì thôi).
     if (!btn.classList.contains('active')) pluginStopAudio();
+    // Code bấm hộ tab ở trang khác (vd "sang Voice Gen") → lật thanh tab sang trang đó.
+    if (btn.dataset.page && String(btn.dataset.page) !== String(tabPage)) tabShowPage(parseInt(btn.dataset.page, 10) || 1);
     document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
     document.querySelectorAll('.tab-panel').forEach(function(p) {
       p.classList.toggle('active', p.id === 'tab-' + tab);
@@ -2615,8 +2617,57 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     if (_vdp) _vdp.style.display = 'none';
     var _vdt = document.getElementById('vgVoiceDropTrigger');
     if (_vdt) _vdt.classList.remove('is-open');
+    // Nhớ tab đang dùng (cả theo từng trang) để mở lại panel / đổi trang quay về đúng chỗ.
+    try {
+      localStorage.setItem('tab_active', tab);
+      localStorage.setItem('tab_last_p' + (btn.dataset.page || '1'), tab);
+    } catch (e) {}
   });
 });
+
+// ── Phân trang tab ───────────────────────────────────────────────────────
+// Trang 1 = 4 tab edit (Voice Gen / Autocut / Tạo Sub / Un-nest), trang 2 = còn lại.
+// ‹ › đổi trang và mở tab dùng gần nhất của trang đó (chưa có → tab đầu trang).
+var TAB_PAGES = 2;
+var tabPage = 1;
+function tabShowPage(page) {
+  tabPage = Math.max(1, Math.min(TAB_PAGES, page));
+  document.querySelectorAll('.tab-btn[data-page]').forEach(function (b) {
+    b.hidden = String(b.dataset.page) !== String(tabPage);
+  });
+  var prev = document.getElementById('tabPagePrev'), next = document.getElementById('tabPageNext');
+  if (prev) prev.classList.toggle('is-disabled', tabPage <= 1);
+  if (next) next.classList.toggle('is-disabled', tabPage >= TAB_PAGES);
+}
+function tabGoPage(page) {
+  page = Math.max(1, Math.min(TAB_PAGES, page));
+  var last = null;
+  try { last = localStorage.getItem('tab_last_p' + page); } catch (e) {}
+  var btn = (last && document.querySelector('.tab-btn[data-page="' + page + '"][data-tab="' + last + '"]'))
+         || document.querySelector('.tab-btn[data-page="' + page + '"]');
+  tabShowPage(page);
+  if (btn && !btn.classList.contains('active')) btn.click();
+}
+// Mở tab bất kỳ (kể cả từ code, vd nút "sang Voice Gen") — tự lật sang đúng trang.
+function tabOpen(tab) {
+  var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+  if (!btn) return;
+  tabShowPage(parseInt(btn.dataset.page, 10) || 1);
+  if (!btn.classList.contains('active')) btn.click();
+}
+window.tabOpen = tabOpen;
+(function () {
+  var prev = document.getElementById('tabPagePrev'), next = document.getElementById('tabPageNext');
+  if (prev) prev.addEventListener('click', function () { tabGoPage(tabPage - 1); });
+  if (next) next.addEventListener('click', function () { tabGoPage(tabPage + 1); });
+  tabShowPage(1);
+  // Khôi phục tab lần trước sau khi mọi script (watch.js, rawcut.js…) đã gắn handler.
+  setTimeout(function () {
+    var saved = null;
+    try { saved = localStorage.getItem('tab_active'); } catch (e) {}
+    if (saved && document.querySelector('.tab-btn[data-tab="' + saved + '"]')) tabOpen(saved);
+  }, 300);
+})();
 
 // ── SAC: Project bin traversal (premierepro UXP API) ──────────────────────
 // The modern API uses the cast() pattern (like ClipProjectItem.cast above):
@@ -14812,7 +14863,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   });
   loadHotkeys(); // populate labels + premiere-shortcut conflicts (defaults if unreachable)
   unnestInitExclude();
-  document.querySelectorAll('.settings-tab').forEach(function (t) {
-    if (t.getAttribute('data-stab') === 'unnest') t.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
-  });
+  var unTabBtn = document.querySelector('.tab-btn[data-tab="unnest"]');
+  if (unTabBtn) unTabBtn.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });
 })();
