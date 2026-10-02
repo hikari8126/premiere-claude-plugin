@@ -286,6 +286,31 @@ assert.ok(!r.ok && r.needPick && /Không có gì trong đường dẫn/.test(r.w
 r = rd({ projectPath: proj('Zebra Cream', 'Video', 'x.prproj'), sequenceName: 'X v1.0' });
 assert.ok(!r.ok && /chưa có thư mục cho “Zebra Cream”/.test(r.why), r.why);
 
+// tên khác nhau giữa SAMX và ổ team: "CurvyFlex 2.0" vs "CurvyFlex (BEVA ZoeyFlex v.A) - …"
+for (const p of ['CurvyFlex 2.0', 'CurvyLace', 'Cadie 2.0', 'Cadie 3.0']) mk('gd', 'Shared drives', 'SAMX_WORKSPACE', p, 'Output');
+const pCurvy = proj('CurvyFlex (BEVA ZoeyFlex v.A) - Side Smoothing Plus Support Bra', 'Videos', 'Editing', 'c.prproj');
+// (a) theo tên sequence
+r = rd({ projectPath: pCurvy, sequenceName: 'CurvyFlex2.0 vid14.1 [c.ha.ttdo] [hoang]', mode: 'both' });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'CurvyFlex 2.0');
+assert.strictEqual(r.matchedBy, 'sequence');
+assert.strictEqual(r.dirs.raw, path.join(SAMX2, 'CurvyFlex 2.0', 'Output', 'ACT', 'v14.1', 'raw'));
+// (b) sequence không mang tên sản phẩm → tên gốc bỏ version khớp đầu thư mục project
+r = rd({ projectPath: pCurvy, sequenceName: '17.1', mode: 'source' });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'CurvyFlex 2.0');
+assert.strictEqual(r.matchedBy, 'base');
+// (c) hai version cùng tên gốc → không đoán, menu đưa cả hai lên đầu
+const pCadie = proj('Cadie (old brand) - shapewear', 'v.prproj');
+r = rd({ projectPath: pCadie, sequenceName: 'X v1.0' });
+assert.ok(!r.ok && r.needPick, r.why);
+assert.ok(/2 sản phẩm.*“Cadie 2.0” và “Cadie 3.0”/.test(r.why), r.why);
+assert.deepStrictEqual(r.candidates.slice(0, 2), ['Cadie 2.0', 'Cadie 3.0']);
+// (d) …nhưng tên sequence chỉ rõ version thì chọn được
+r = rd({ projectPath: pCadie, sequenceName: 'Cadie3.0 vid2.0' });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'Cadie 3.0');
+
 // SAMX_WORKSPACE trong CloudStorage (Drive for desktop) khi không có cạnh ổ chung
 const CS = mk('cs');
 mk('cs', 'GoogleDrive-someone@example.com', 'Shared drives', 'SAMX_WORKSPACE', 'Glow Serum', 'Output');

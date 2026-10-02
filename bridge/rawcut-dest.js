@@ -345,6 +345,40 @@ function leadingProducts(names, below) {
   return hit;
 }
 
+// Sản phẩm mà tên (chỉ chữ+số) MỞ ĐẦU tên sequence: "CurvyFlex2.0 vid14.1" → "CurvyFlex 2.0".
+// Nhiều sản phẩm cùng khớp ("CurvyFlex", "CurvyFlex 2.0") → lấy tên DÀI nhất; cùng dài → trả cả hai.
+function sequenceProducts(names, seqName) {
+  const sk = alnumKey(stripHandles(seqName));
+  if (sk.length < 4) return [];
+  let best = 0, hits = [];
+  for (const n of names) {
+    const nk = alnumKey(n);
+    if (nk.length < 4 || sk.indexOf(nk) !== 0) continue;
+    if (nk.length > best) { best = nk.length; hits = [n]; } else if (nk.length === best) hits.push(n);
+  }
+  return hits;
+}
+
+// Sản phẩm có version ở đuôi ("CurvyFlex 2.0", "EllaCurve3") mà phần tên gốc MỞ ĐẦU một thư mục
+// của project, theo sau là dấu phân cách: "CurvyFlex (BEVA ZoeyFlex v.A) - Side Smoothing…".
+const VERSION_TAIL_RE = /[\s\-_.]*(?:v(?:er(?:sion)?)?\.?\s*)?\d+(?:\.\d+)*$/;
+function baseLeadProducts(names, below) {
+  const hits = [];
+  for (const n of names) {
+    const nk = nameKey(n), base = nk.replace(VERSION_TAIL_RE, '');
+    if (base === nk || base.length < 4) continue;
+    for (const b of below) {
+      const ck = nameKey(b);
+      if (ck.indexOf(base) !== 0) continue;
+      const rest = ck.slice(base.length);
+      if (rest && /[a-z0-9ß-öø-ɏḀ-ỿ]/.test(rest.charAt(0))) continue;
+      hits.push(n);
+      break;
+    }
+  }
+  return hits;
+}
+
 function sharedLead(name, below) {
   const nk = nameKey(name);
   let best = 0;
@@ -383,7 +417,7 @@ function productFolderOf(below) {
 
 // Đường đi sản phẩm của project nằm trên ổ chung KHÁC (không trong SAMX_WORKSPACE):
 // khớp đúng / khớp phần đầu / chọn từ menu. null khi không áp dụng.
-function productRoute(projectPath, productPick, opts) {
+function productRoute(projectPath, productPick, opts, seqName) {
   const pp = String(projectPath || '');
   if (!pp || projectProduct(pp)) return null;
   const sr = samxRoute(pp, opts);
@@ -397,13 +431,28 @@ function productRoute(projectPath, productPick, opts) {
     const at = n => { const i = ord.indexOf(n); return i < 0 ? ord.length : i; };
     lead.sort((a, b) => (at(a) - at(b)) || (a < b ? -1 : a > b ? 1 : 0));
   }
+  // Cùng một sản phẩm hay mang tên khác nhau giữa SAMX và ổ của team ("CurvyFlex 2.0" vs
+  // "CurvyFlex (BEVA ZoeyFlex v.A) - …") → dò thêm tên sequence, rồi tên gốc bỏ version.
+  // Còn nhiều hơn một ứng viên thì KHÔNG đoán (xuất nhầm sản phẩm là lỗi khó thấy) → menu.
+  const seqHit = matches.length ? [] : sequenceProducts(names, seqName);
+  let by = matches.length === 1 ? 'exact' : '', auto = matches.length === 1 ? matches[0] : '', multi = [];
+  if (!matches.length) {
+    const leadSeq = lead.filter(n => seqHit.indexOf(n) >= 0);
+    if (lead.length === 1) { auto = lead[0]; by = 'lead'; }
+    else if (lead.length > 1 && leadSeq.length === 1) { auto = leadSeq[0]; by = 'sequence'; }
+    else if (!lead.length && seqHit.length === 1) { auto = seqHit[0]; by = 'sequence'; }
+    else if (!lead.length) {
+      const base = baseLeadProducts(names, below);
+      if (base.length === 1) { auto = base[0]; by = 'base'; }
+      else multi = seqHit.length > 1 ? seqHit : base;
+    }
+  }
   // ⚠️ Sản phẩm đã chọn mà SAMX_WORKSPACE không còn → `gone`, từ chối chứ không lặng lẽ
   // quay về sản phẩm khớp mà người dùng đã chọn bỏ.
   let pick = String(productPick || ''), gone = '';
   if (pick && names.indexOf(pick) < 0) { gone = pick; pick = ''; }
-  const auto = matches.length === 1 ? matches[0] : lead.length === 1 ? lead[0] : '';
   const chosen = pick || (gone ? '' : auto);
-  return { samx: sr.samx, names, below, folder: productFolderOf(below), matches, lead, auto,
+  return { samx: sr.samx, names, below, folder: productFolderOf(below), matches, lead, auto, by, multi,
            pick, gone, product: chosen ? path.join(sr.samx, chosen) : '' };
 }
 
@@ -420,6 +469,12 @@ function unmatchedWhy(r) {
   if (r.matches.length > 1) {
     return 'Các thư mục của project trùng tên ' + r.matches.length + ' sản phẩm trong SAMX_WORKSPACE, '
       + qn(r.matches[0]) + ' và ' + qn(r.matches[1]) + ', nên chưa xuất được — chọn sản phẩm của bản dựng này.';
+  }
+  if (r.multi && r.multi.length > 1) {
+    const named = r.multi.map(qn);
+    return 'Project và tên sequence khớp ' + r.multi.length + ' sản phẩm trong SAMX_WORKSPACE, '
+      + named.slice(0, -1).join(', ') + ' và ' + named[named.length - 1]
+      + ', nên chưa xuất được — chọn sản phẩm của bản dựng này.';
   }
   if (r.lead && r.lead.length > 1) {
     const named = r.lead.map(qn);
@@ -638,11 +693,12 @@ function resolveDest(o, env) {
   const mode = o.mode === 'source' || o.mode === 'render' ? o.mode : 'both';
   const res = { ok: false, why: '', version: '', samx: '', products: [], route: '', product: null };
   const own = projectProduct(pp);
-  const r = own ? null : productRoute(pp, o.productPick, env);
+  const r = own ? null : productRoute(pp, o.productPick, env, seqName);
   if (r) {
     res.samx = r.samx;
     res.products = r.names;
-    res.candidates = productCandidates(r.names, r.below);
+    const near = productCandidates(r.names, r.below);
+    res.candidates = (r.multi || []).concat(near.filter(n => (r.multi || []).indexOf(n) < 0));
   } else if (own) {
     res.samx = path.dirname(own);
     res.products = samxProducts(res.samx);
@@ -668,7 +724,7 @@ function resolveDest(o, env) {
     fromProject = true;
     if (r.gone) { res.route = 'picked'; res.needPick = true; whys.push(pickGoneWhy(r)); }
     else if (r.pick) { res.route = 'picked'; product = r.product; whose = 'Sản phẩm đã chọn cho project này, '; }
-    else if (r.auto) { res.route = 'matched'; product = r.product; whose = 'Sản phẩm khớp với project đang mở, '; }
+    else if (r.auto) { res.route = 'matched'; res.matchedBy = r.by; product = r.product; whose = 'Sản phẩm khớp với project đang mở, '; }
     else { res.needPick = true; whys.push(unmatchedWhy(r)); }
   } else {
     res.needPick = true;
