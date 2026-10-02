@@ -3178,11 +3178,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var sacSourceMap = {}; // name → ProjectItem|null, populated by sacValidateSources
   var sacBinItems  = []; // full flat list from last bin scan (persisted for hint UI)
   var sacBindOverrides = {}; // sacNorm(originalCutsheetName) → bound display name (survives re-parse)
+  var sacBindPaths     = {}; // sacNorm(originalCutsheetName) → media path của clip đã bind (F2)
 
   // ── Persistent binds (per open project) ───────────────────────────────────
   // Binds are remembered in localStorage keyed by project name, so cutting task 2
   // in the same project re-uses task 1's binds instead of re-binding every source.
   var SAC_BINDS_LS = 'sac_binds_v1'; // { projKey: { normOrigName: label } }
+  // Media path của clip đã bind, để validate lại resolve đúng clip đó thay vì khớp
+  // lại theo nhãn tên (dễ trượt sang clip cùng tên ở bin khác — F2). Key riêng để
+  // bind cũ (chỉ có nhãn) vẫn đọc được như trước.
+  var SAC_BIND_PATHS_LS = 'sac_bind_paths_v1'; // { projKey: { normOrigName: mediaPath } }
   var sacProjKey   = '';             // current project key (set on each validate)
   function sacLoadBindStore() {
     try { return JSON.parse(localStorage.getItem(SAC_BINDS_LS) || '{}') || {}; }
@@ -3205,6 +3210,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!sacProjKey) return;
     var saved = sacLoadBindStore()[sacProjKey];
     if (saved) for (var k in saved) if (saved.hasOwnProperty(k)) sacBindOverrides[k] = saved[k];
+    var savedP = sacLoadBindPathStore()[sacProjKey];
+    if (savedP) for (var kp in savedP) if (savedP.hasOwnProperty(kp)) sacBindPaths[kp] = savedP[kp];
+  }
+  function sacLoadBindPathStore() {
+    try { return JSON.parse(localStorage.getItem(SAC_BIND_PATHS_LS) || '{}') || {}; }
+    catch(e) { return {}; }
+  }
+  function sacPersistBindPath(normKey, mediaPath) {
+    if (!sacProjKey) return;
+    var store = sacLoadBindPathStore();
+    var m = store[sacProjKey] = store[sacProjKey] || {};
+    if (mediaPath) m[normKey] = mediaPath; else delete m[normKey];
+    try { localStorage.setItem(SAC_BIND_PATHS_LS, JSON.stringify(store)); } catch(e) {}
   }
   function sacPersistBind(normKey, label) {
     if (!sacProjKey) return;
@@ -3213,9 +3231,26 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     sacSaveBindStore(store);
   }
   function sacForgetBind(normKey) {
+    delete sacBindPaths[normKey];
     if (!sacProjKey) return;
     var store = sacLoadBindStore();
     if (store[sacProjKey]) { delete store[sacProjKey][normKey]; sacSaveBindStore(store); }
+    sacPersistBindPath(normKey, null);
+  }
+  // Tìm lại clip đã bind theo media path. Chỉ đọc path của clip có tên nằm cuối
+  // nhãn bind (nhãn = "<folder> <clip>") để khỏi quét cả project.
+  // Trả item | null (null = path không còn khớp clip nào → coi như thiếu).
+  async function sacFindBoundByPath(binItems, label, mediaPath) {
+    var want = ppNormPath(mediaPath);
+    var nl = sacNorm(label);
+    for (var i = 0; i < binItems.length; i++) {
+      var b = binItems[i];
+      if (b.isFolder) continue;
+      var n = sacNorm(b.name);
+      if (!n || (nl !== n && nl.slice(-(n.length + 1)) !== (' ' + n))) continue;
+      if (ppNormPath(await ppItemMediaPath(b.item)) === want) return b.item;
+    }
+    return null;
   }
   var sacVoicePath  = null; // native path of the chosen/generated voice file
   var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
@@ -4023,9 +4058,24 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       console.log('[SAC validate] row srcName="' + el.dataset.srcName + '" blockIdx=' + el.dataset.blockIdx);
     });
 
+    // Nhãn bind tay → media path đã lưu (F2). Bind cũ chỉ có nhãn → khớp theo tên như trước.
+    var boundPath = {};
+    blocks.forEach(function(b) {
+      (b.sources || []).forEach(function(s) {
+        var k = sacNorm(s._orig || s.name);
+        if (sacBindOverrides[k] === s.name && sacBindPaths[k]) boundPath[s.name] = sacBindPaths[k];
+      });
+    });
+
     for (var i = 0; i < names.length; i++) {
       var name = names[i];
-      var item = sacMatchBinItem(binItems, name);
+      var item;
+      if (boundPath[name]) {
+        item = await sacFindBoundByPath(binItems, name, boundPath[name]);
+        delete ambiguousNames[name];   // đã chỉ đích danh clip → không còn trùng
+      } else {
+        item = sacMatchBinItem(binItems, name);
+      }
       sacSourceMap[name] = item || null;
       var isAmbiguous = !!ambiguousNames[name];
       console.log('[SAC validate] "' + name + '" →', item ? '✓ found' : '✗ missing', '| ambiguous:', isAmbiguous);
@@ -4391,6 +4441,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var bindKey = sacNorm(theSrc._orig || theSrc.name);
       sacBindOverrides[bindKey] = label;
       sacPersistBind(bindKey, label);
+      delete sacBindPaths[bindKey];
+      if (c.item) ppItemMediaPath(c.item).then(function(mp) {
+        if (!mp || sacBindOverrides[bindKey] !== label) return;
+        sacBindPaths[bindKey] = mp;
+        sacPersistBindPath(bindKey, mp);
+      });
       // Bind directly to the chosen clip — no name re-matching needed (robust).
       sacSourceMap[label] = c.item || null;
       window.sacSourceMap = sacSourceMap;
@@ -7003,6 +7059,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     $('sacVoiceInfo').textContent = 'Chưa có voice';
     $('sacStatus').style.display = 'none';
     sacBindOverrides = {}; // forget manual binds on full reset
+    sacBindPaths = {};
     sacMarkScriptPrepared(false);
     sacCancelNorm();
     $('sacBody').innerHTML = '';
@@ -7765,6 +7822,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // Reset derived state
     parsedBlocks = [];
     sacBindOverrides = {};
+    sacBindPaths = {};
     sacValidatePassed = false;
     sacVoiceReady = false;
     sacNoVoiceMode = false;
