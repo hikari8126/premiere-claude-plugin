@@ -216,12 +216,28 @@ function toAnthropicMessage(m) {
   return { role, content: blocks };
 }
 
-// ── Default model (override by client per-request via `model` field) ─────
-// Claude 4.x family — all support vision:
-//   claude-opus-4-7        (best quality, slowest, most expensive)
-//   claude-sonnet-4-6      (recommended default — fast + good vision)
-//   claude-haiku-4-5       (fastest + cheapest, weaker reasoning)
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+// ── Model Claude (override per-request bằng `model`, hoặc ANTHROPIC_MODEL) ──
+// Mặc định Opus 5.5 — xem claude-model.js (tham số request, đọc text, ngưỡng CLI).
+const claudeModel = require('./claude-model.js');
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || claudeModel.CLAUDE_MODEL;
+
+// Phiên bản Claude CLI (cache 10 phút — user chạy `claude update` thì bridge tự nhận).
+// CLI < 2.1.280 không chạy được Opus 5.5 → cliModelArgs() trả [] để CLI dùng model mặc định.
+let _cliVer = { at: 0, v: '' };
+function cliVersion() {
+  if (Date.now() - _cliVer.at < 600000) return _cliVer.v;
+  let v = '';
+  try {
+    const r = require('child_process').spawnSync('claude', ['--version'], { encoding: 'utf8', timeout: 10000, env: cliEnv() });
+    v = String(r.stdout || '').trim();
+  } catch (e) {}
+  _cliVer = { at: Date.now(), v };
+  if (!claudeModel.cliAtLeast(v, claudeModel.MIN_CLI_FOR_MODEL)) {
+    console.warn('[cli] Claude CLI ' + (v || '?') + ' < ' + claudeModel.MIN_CLI_FOR_MODEL + ' → không dùng được ' + DEFAULT_MODEL + ', CLI tự chọn model. Chạy `claude update`.');
+  }
+  return v;
+}
+function cliModelArgs() { return claudeModel.cliModelArgs(cliVersion(), DEFAULT_MODEL); }
 
 // ── Mode A: Direct Anthropic API key ──────────────────────────────────────
 async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey, voiceContext) {
@@ -232,22 +248,25 @@ async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey,
   if (timelineContext) systemContent += `\n\n[Current Timeline]\n${JSON.stringify(timelineContext, null, 2)}`;
   if (voiceContext)    systemContent += `\n\n── Available ElevenLabs Voices ──\nWhen the user asks you to pick a voice or generate speech, choose the most appropriate voiceId from this list:\n${voiceContext}\nUse the voiceId (the part before the colon) in your voicegen_script action.`;
 
-  const useModel = model || DEFAULT_MODEL;
+  const useModel = claudeModel.pickModel(model, DEFAULT_MODEL);
   console.log(`[chat] model: ${useModel}, messages: ${messages.length}`);
 
   try {
-    const stream = await client.messages.stream({
-      model:      useModel,
-      max_tokens: 4096,
-      system:     systemContent,
-      messages:   messages.map(toAnthropicMessage),
-    });
+    // effort 'low': tab Claude chỉ hiểu ý → action, câu trả lời ngắn.
+    const stream = client.beta.messages.stream(claudeModel.apiParams({
+      model:    useModel,
+      effort:   'low',
+      system:   systemContent,
+      messages: messages.map(toAnthropicMessage),
+    }));
 
     for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
         send(res, { type: 'text', content: event.delta.text });
       }
     }
+    const final = await stream.finalMessage();
+    if (final.stop_reason === 'refusal') claudeModel.textOf(final);   // ném lỗi tiếng Việt
     send(res, { type: 'done' });
   } catch (err) {
     send(res, { type: 'error', content: `API Error: ${err.message}` });
@@ -339,6 +358,7 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext) {
       '--verbose',
       '--add-dir', attachRoot,
       '--permission-mode', 'bypassPermissions',
+      ...cliModelArgs(),
     ], {
       cwd: bridgeDir,
       env: cleanEnv()
@@ -2783,21 +2803,19 @@ Return ONLY a JSON array, no markdown, no explanation:
       // ── API key mode: Anthropic SDK ──────────────────────────────────────
       const Anthropic = require('@anthropic-ai/sdk');
       const client    = new Anthropic({ apiKey: API_KEY });
-      const response  = await client.messages.create({
-        model: DEFAULT_MODEL,
-        max_tokens: 2048,
+      const response  = await client.beta.messages.create(claudeModel.apiParams({
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64data } },
           { type: 'text', text: prompt },
         ]}],
-      });
-      outputText = response.content[0]?.text || '';
+      }));
+      outputText = claudeModel.textOf(response);
     } else {
       // ── CLI mode: pass image via @path token ─────────────────────────────
       const cliPrompt = `@${tmpImg}\n\n${prompt}`;
       outputText = await new Promise((resolve, reject) => {
         let out = '', err = '';
-        const proc = spawn('claude', ['--print', cliPrompt], { env: cleanEnv() });
+        const proc = spawn('claude', ['--print', ...cliModelArgs(), cliPrompt], { env: cleanEnv() });
         proc.stdout.on('data', d => { out += d.toString(); });
         proc.stderr.on('data', d => { err += d.toString(); });
         proc.on('close', code => code === 0 ? resolve(out) : reject(new Error(err || 'claude CLI exit ' + code)));
@@ -2874,13 +2892,15 @@ async function callLLM(prompt, opts) {
   if (anthKey) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: anthKey });
-    const resp = await client.messages.create({ model: model || DEFAULT_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] });
-    return resp.content[0].text.trim();
+    const resp = await client.beta.messages.create(claudeModel.apiParams({
+      model: claudeModel.pickModel(model, DEFAULT_MODEL), maxTokens,
+      messages: [{ role: 'user', content: prompt }] }));
+    return claudeModel.textOf(resp).trim();
   }
   const { spawnSync } = require('child_process');
   const claudeEnv = cleanEnv();
   claudeEnv.PATH = ((claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + claudeEnv.PATH;
-  const result = spawnSync('claude', ['--print'], { input: prompt, encoding: 'utf8', timeout: 90000, env: claudeEnv });
+  const result = spawnSync('claude', ['--print', ...cliModelArgs()], { input: prompt, encoding: 'utf8', timeout: 90000, env: claudeEnv });
   if (result.error) throw result.error;
   // CLI lỗi (vd "Failed to authenticate: OAuth session expired") in lỗi ra STDOUT
   // rồi exit ≠ 0. Không chặn ở đây thì câu lỗi bị trả về như câu trả lời của
@@ -3061,6 +3081,9 @@ app.get('/health', (_req, res) => {
     version: BRIDGE_VERSION,
     mode:    API_KEY ? 'api-key' : 'cli-oauth',
     model:   DEFAULT_MODEL,
+    // Chế độ CLI: CLI < 2.1.280 chạy model mặc định của nó thay vì DEFAULT_MODEL.
+    cliVersion: API_KEY ? null : cliVersion(),
+    cliModel:   API_KEY ? null : (cliModelArgs()[1] || 'mặc định của CLI (cần claude update)'),
     // null = chưa kiểm tra xong / không đọc được — plugin không cảnh báo khi null.
     cliLoggedIn: cli ? cli.loggedIn : null,
     capabilities: {

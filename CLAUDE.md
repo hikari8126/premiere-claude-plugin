@@ -28,7 +28,7 @@ Adobe Premiere Pro
         ↓ HTTP POST / SSE  →  localhost:3030
   Bridge Server (bridge/server.js — Node.js + Express)
         ↓ Anthropic SDK hoặc Claude CLI
-  Claude AI  (claude-sonnet-4-6 mặc định)
+  Claude AI  (claude-opus-5-5 mặc định; CLI cần ≥ 2.1.280, cũ hơn thì CLI tự chọn model)
         
   Bridge cũng tích hợp:
   ├── ElevenLabs REST API  (TTS / SFX / Music)
@@ -233,8 +233,8 @@ API key được ưu tiên hơn CLI. Lấy key tại: https://console.anthropic.
 
 Trong `bridge/.env`:
 ```
-ANTHROPIC_MODEL=claude-opus-4-7     # mạnh nhất, chậm nhất
-ANTHROPIC_MODEL=claude-sonnet-4-6   # mặc định, cân bằng tốt
+ANTHROPIC_MODEL=claude-opus-5-5     # mặc định
+ANTHROPIC_MODEL=claude-sonnet-5-5   # nhanh hơn, rẻ hơn
 ANTHROPIC_MODEL=claude-haiku-4-5    # nhanh nhất, rẻ nhất
 ```
 

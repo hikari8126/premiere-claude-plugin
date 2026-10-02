@@ -959,24 +959,27 @@ var PLUGIN_VERSION = 'v5.16.0-beta.1';  // QC đợt 2 (UI): thanh tab 2 trang (
 // ── State ──────────────────────────────────────────────────────────────────
 
 var BRIDGE_URL      = 'http://localhost:3030';
-var CLAUDE_MODEL    = 'claude-sonnet-4-6';
+var CLAUDE_MODELS   = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5']; // khớp CURRENT_MODELS ở bridge/claude-model.js
+var CLAUDE_MODEL    = 'claude-opus-5-5';
 var ANTHROPIC_KEY   = ''; // user-provided API key (optional)
 var GEMINI_KEY      = ''; // user-provided Gemini key for Organize (optional; bridge .env is fallback)
 // Raw saved pick (rỗng nếu user chưa từng đổi dropdown). KHÔNG fallback ở đây —
 // giá trị mặc định được tính động trong sacResolveOrganizeModel() (phụ thuộc có key Gemini hay chưa).
 var ORGANIZE_MODEL  = localStorage.getItem('sac_organize_model') || '';
-var ORGANIZE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'claude-sonnet-4-6']; // Gemini 3.1 Flash Lite (default, an toàn khi bridge cũ) · Gemini 3.5 Flash Lite (cần bridge ≥1.11.1) · Sonnet (backup CLI)
+// Pick Claude đời cũ (vd 'claude-sonnet-4-6') → Opus 5.5, không rơi về Gemini.
+if (/^claude-/.test(ORGANIZE_MODEL) && ORGANIZE_MODEL !== 'claude-opus-5-5') ORGANIZE_MODEL = 'claude-opus-5-5';
+var ORGANIZE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite', 'claude-opus-5-5']; // Gemini 3.1 Flash Lite (default, an toàn khi bridge cũ) · Gemini 3.5 Flash Lite (cần bridge ≥1.11.1) · Opus 5.5 (backup CLI)
 var ELEVENLABS_KEY  = ''; // no hardcoded key — user enters in Settings, or bridge .env (ELEVENLABS_API_KEY) provides the shared default
 var EL_PROFILES     = []; // [{id, name, key}, ...] — saved ElevenLabs key profiles
 var EL_ACTIVE_PROFILE_ID = null; // id of the profile whose key is in ELEVENLABS_KEY
 
 // Model dùng cho Organize. Ưu tiên lựa chọn thủ công còn hợp lệ của user; nếu chưa
 // chọn (hoặc giá trị cũ đã bị bỏ) → mặc định Gemini 3.1 Flash Lite CHỈ KHI đã có key
-// Gemini, ngược lại dùng Sonnet 4.6 (chạy qua CLI, không cần key). Giữ 3.1 làm mặc
+// Gemini, ngược lại dùng Claude Opus 5.5 (chạy qua CLI, không cần key). Giữ 3.1 làm mặc
 // định để user chưa update bridge (≥1.11.1) vẫn dùng được; 3.5 là lựa chọn tự chọn.
 function sacResolveOrganizeModel() {
   if (ORGANIZE_MODELS.indexOf(ORGANIZE_MODEL) >= 0) return ORGANIZE_MODEL;
-  return GEMINI_KEY ? 'gemini-3.1-flash-lite' : 'claude-sonnet-4-6';
+  return GEMINI_KEY ? 'gemini-3.1-flash-lite' : 'claude-opus-5-5';
 }
 // Đồng bộ dropdown Organize về model đang hiệu lực (gọi khi load + khi đổi key).
 window.sacSyncOrganizeModelUI = function() {
@@ -2005,7 +2008,8 @@ async function loadSettingsFromFile() {
 function applySettings(s) {
   if (!s) return;
   if (s.bridgeUrl)     BRIDGE_URL    = s.bridgeUrl;
-  if (s.claudeModel)   CLAUDE_MODEL  = s.claudeModel;
+  // Setting cũ còn 'claude-sonnet-4-6' / 'claude-opus-4-7' → bỏ, dùng Opus 5.5.
+  if (s.claudeModel && CLAUDE_MODELS.indexOf(s.claudeModel) >= 0) CLAUDE_MODEL = s.claudeModel;
   if (s.anthropicKey)  ANTHROPIC_KEY = s.anthropicKey;
   if (s.geminiKey)     GEMINI_KEY    = s.geminiKey;
   if (s.elevenlabsKey) ELEVENLABS_KEY = s.elevenlabsKey;
@@ -10844,7 +10848,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // ── Organize script (normalize + emotion tags) — Claude or Gemini ──────────
   var vgOrgModel = $('vgOrganizeModel');
   if (vgOrgModel) {
-    vgOrgModel.value = sacResolveOrganizeModel(); // Gemini nếu có key, else Sonnet (hoặc pick của user)
+    vgOrgModel.value = sacResolveOrganizeModel(); // Gemini nếu có key, else Opus 5.5 (hoặc pick của user)
     vgOrgModel.addEventListener('change', function() {
       ORGANIZE_MODEL = vgOrgModel.value;
       localStorage.setItem('sac_organize_model', ORGANIZE_MODEL);

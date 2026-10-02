@@ -170,12 +170,12 @@
       <div class="setting-row" style="display:none">
         <label>Claude Model</label>
         <select id="model-select">
-          <option value="claude-opus-4-7">Opus 4.7 — best quality (slow + expensive)</option>
-          <option value="claude-sonnet-4-6" selected>Sonnet 4.6 — recommended (fast + smart)</option>
-          <option value="claude-haiku-4-5">Haiku 4.5 — fastest + cheapest</option>
+          <option value="claude-opus-5-5" selected>Opus 5.5 — mặc định</option>
+          <option value="claude-sonnet-5-5">Sonnet 5.5 — nhanh hơn</option>
+          <option value="claude-haiku-4-5">Haiku 4.5 — nhanh nhất</option>
         </select>
         <div class="setting-hint-inline">
-          Vision support: all Claude 4.x models. Only used in API key mode.
+          Chỉ dùng ở chế độ API key. Chế độ Claude CLI dùng Opus 5.5 khi CLI ≥ 2.1.280.
         </div>
       </div>
 
@@ -807,7 +807,7 @@
             <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
               <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
-              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (backup)</option>
+              <option value="claude-opus-5-5">Claude Opus 5.5 (backup)</option>
             </select>
             <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
           </div>
