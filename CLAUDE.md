@@ -349,6 +349,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/rawcut/stat` · `/rawcut/unlink` | POST | Kiểm tra / xoá file render trong cache (chỉ trong cache) |
 | `/rawcut/open` | POST | Mở thư mục xuất trong Finder |
 | `/rename/plan` | POST | Đổi tên source: kiểm tra tên/trùng trên đĩa, quét `.aep` trong thư mục sản phẩm, cờ `aeRunning` |
+| `/rename/siblings` | POST | File media cùng thư mục với source mà project chưa import (đổi tên cho đủ bộ) |
 | `/rename/apply` | POST | Đổi tên file 2 pha (lỗi → tự đổi về), ghi nhật ký lượt, trả `batchId` |
 | `/rename/revert` | POST | Đổi riêng vài file của lượt về tên cũ (plugin relink lỗi) |
 | `/rename/aep` | POST | Sửa `fullpath` trong các `.aep` đã tick theo lượt (backup 7 ngày) |

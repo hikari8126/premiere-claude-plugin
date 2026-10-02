@@ -166,7 +166,31 @@ function cleanupBackups(maxAgeMs) {
   });
 }
 
+// File media (video/audio/ảnh) nằm ngay trong các thư mục `dirs` mà project chưa có
+// (`known`: đường dẫn đã có, so không phân biệt hoa/thường) — để đổi tên luôn cho đủ bộ.
+// Không đệ quy: chỉ "thư mục chứa source".
+const MEDIA_EXT = (() => {
+  const P = require('./watchfolder-rules.js').PRESETS;
+  return new Set([].concat(P.video, P.audio, P.image));
+})();
+function siblings(dirs, known) {
+  const have = new Set((known || []).map(fold));
+  const natCmp = require('./watchfolder-browse.js').natCmp;
+  const files = [];
+  Array.from(new Set((dirs || []).map(String))).forEach(dir => {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    ents.filter(en => en.isFile() && en.name.charAt(0) !== '.' && MEDIA_EXT.has(path.extname(en.name).toLowerCase()))
+      .map(en => path.join(dir, en.name))
+      .filter(p => !have.has(fold(p)))
+      .sort((a, b) => natCmp(path.basename(a), path.basename(b)))
+      .forEach(p => files.push({ path: p, dir }));
+  });
+  return { files };
+}
+
 module.exports = {
+  siblings,
   nameError, planRows, applyRenames,
   loadJournal, saveJournal, clearJournal, newBatchId,
   backupRoot, cleanupBackups, fold,

@@ -144,3 +144,13 @@ test('planRows flags files in a read-only folder before anything is touched', ()
     assert.strictEqual(r[1].error, '');
   } finally { fs.chmodSync(d, 0o700); }
 });
+
+test('siblings lists media files in the same folders that the project does not have yet', () => {
+  const d = tmpDir();
+  ['1.MOV', '2.mov', '10.mp4', 'voice.wav', 'still.png', 'notes.txt', '.hidden.mov', 'x.part'].forEach(n => put(d, n));
+  fs.mkdirSync(path.join(d, 'sub')); put(path.join(d, 'sub'), '3.mov');
+  const r = ops.siblings([d, d], [path.join(d, '1.MOV').toLowerCase()]);
+  assert.deepStrictEqual(r.files.map(f => path.basename(f.path)), ['2.mov', '10.mp4', 'still.png', 'voice.wav']);
+  assert.strictEqual(r.files[0].dir, d);
+  assert.deepStrictEqual(ops.siblings([path.join(d, 'nope')], []).files, []);
+});

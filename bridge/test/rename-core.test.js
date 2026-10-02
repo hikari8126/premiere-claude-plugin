@@ -132,13 +132,23 @@ test("{num} keeps original numbers and continues after the largest for the rest"
   assert.deepStrictEqual(p.map(function (r) { return r.numKind; }), ["keep", "new", "keep", "new", "keep"]);
 });
 
-test("{num} with nothing to keep starts from the start field; pads all to one width", () => {
+test("{num} with nothing to keep starts from the start field; each number at least 2 digits", () => {
   var p = RNC.buildPreview(rowsOf("Higg", ["IMG_1.mov", "IMG_2.mov"]), "{bin}_{num}", 1);
   assert.deepStrictEqual(p.map(function (r) { return r.newName; }), ["Higg_01.mov", "Higg_02.mov"]);
+  // Không đệm cả bin theo số dài nhất — file đã đổi (Higg_05) không bị đổi lại thành Higg_005.
   var q = RNC.buildPreview(rowsOf("Higg", ["5.mov", "120.mov", "IMG.mov"]), "{bin}_{num}", 1);
-  assert.deepStrictEqual(q.map(function (r) { return r.newName; }), ["Higg_005.mov", "Higg_120.mov", "Higg_121.mov"]);
+  assert.deepStrictEqual(q.map(function (r) { return r.newName; }), ["Higg_05.mov", "Higg_120.mov", "Higg_121.mov"]);
   var z = RNC.buildPreview(rowsOf("Higg", ["033.mov", "x.mov"]), "{bin}_{num}", 1);
-  assert.deepStrictEqual(z.map(function (r) { return r.newName; }), ["Higg_033.mov", "Higg_034.mov"]);
+  assert.deepStrictEqual(z.map(function (r) { return r.newName; }), ["Higg_033.mov", "Higg_34.mov"]);
+});
+
+test("{num}: already renamed files stay put even when many new numbers pass 99", () => {
+  var names = ["Senyue_09.MOV", "Senyue_64.MOV"];
+  for (var i = 0; i < 60; i++) names.push("2025-08-18 " + (100000 + i) + ".mov");
+  var p = RNC.buildPreview(rowsOf("Senyue", names), "{bin}_{num}", 1);
+  assert.ok(p[0].same && p[1].same, p[0].newName + " / " + p[1].newName);
+  assert.strictEqual(p[2].newName, "Senyue_65.mov");
+  assert.strictEqual(p[p.length - 1].newName, "Senyue_124.mov");
 });
 
 test("{num} counts per bin; start field acts as a floor", () => {

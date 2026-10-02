@@ -143,13 +143,13 @@ var RNC = (function () {
   // {num} theo từng bin. Thứ tự giành số: (1) tên "thật" có số (41, Senyue 41) — trùng số
   // thì dòng đầu giữ; (2) bản copy (Copy of 1…) giữ số nếu chưa ai giữ. Còn lại lấy số
   // mới nối tiếp sau số lớn nhất đã giữ của bin (không có thì từ ô "Bắt đầu từ", và
-  // không thấp hơn ô đó). Cả bin đệm 0 cùng độ dài.
+  // không thấp hơn ô đó).
   // → [{num, kind:'keep'|'new', copyOf, dupOf}]
   function assignNums(rows, start) {
     var groups = {}, order = [];
     var info = rows.map(function (r, i) {
       var g = nfc(r.bin).toLowerCase();
-      if (!groups[g]) { groups[g] = { taken: {}, max: -1, len: 0, idx: [] }; order.push(g); }
+      if (!groups[g]) { groups[g] = { taken: {}, max: -1, idx: [] }; order.push(g); }
       groups[g].idx.push(i);
       var ni = numberInfo(splitExt(r.oldName).base, r.bin);
       return { g: g, raw: ni.num, copy: ni.copy, value: null, kind: 'new', copyOf: ni.copy && ni.num !== null ? ni.num : '', dupOf: '' };
@@ -159,17 +159,20 @@ var RNC = (function () {
       if (G.taken[v]) return false;
       G.taken[v] = true;
       G.max = Math.max(G.max, v);
-      G.len = Math.max(G.len, x.raw.length);
       x.value = v; x.kind = 'keep';
       return true;
     }
     info.forEach(function (x) { if (x.raw !== null && !x.copy && !claim(x)) x.dupOf = x.raw; });
     info.forEach(function (x) { if (x.raw !== null && x.copy) claim(x); });
+    // Mỗi số tự giữ độ dài (tối thiểu 2; số gốc "033" giữ 3 chữ số) — KHÔNG đệm cả bin
+    // theo số dài nhất: thêm file làm số mới vượt 99 thì file đã đổi (Senyue_09) vẫn y nguyên.
     order.forEach(function (g) {
-      var G = groups[g], next = Math.max(G.max + 1, start), last = G.max;
-      G.idx.forEach(function (i) { if (info[i].value === null) { info[i].value = next++; last = Math.max(last, info[i].value); } });
-      var w = Math.max(2, G.len, String(Math.max(last, 0)).length);
-      G.idx.forEach(function (i) { info[i].num = pad(info[i].value, w); });
+      var G = groups[g], next = Math.max(G.max + 1, start);
+      G.idx.forEach(function (i) {
+        var x = info[i];
+        if (x.value === null) x.value = next++;
+        x.num = pad(x.value, Math.max(2, x.kind === 'keep' ? x.raw.length : 0));
+      });
     });
     return info;
   }

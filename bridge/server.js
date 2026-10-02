@@ -3913,6 +3913,15 @@ app.post('/rename/plan', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ── POST /rename/siblings ── {dirs:[thư mục], known:[đường dẫn project đã có]}
+//    → {ok, files:[{path, dir}]} — file media cùng thư mục mà chưa import, để đổi tên cho đủ bộ.
+app.post('/rename/siblings', (req, res) => {
+  const b = req.body || {};
+  const dirs = (Array.isArray(b.dirs) ? b.dirs : []).filter(d => typeof d === 'string' && path.isAbsolute(d));
+  try { res.json(Object.assign({ ok: true }, rnOps.siblings(dirs, Array.isArray(b.known) ? b.known : []))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── POST /rename/apply ── {projectPath, rows, aep:[đường dẫn .aep được tick]}
 //    → {ok, batchId, rows:[{oldPath,newPath}]} — kiểm tra lại toàn bộ; có lỗi thì không đụng file nào.
 app.post('/rename/apply', (req, res) => {

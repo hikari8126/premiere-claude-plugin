@@ -67,7 +67,8 @@
     var s = {};
     try { s = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) {}
     var mode = (s.mode === 'n' || s.mode === 'custom') ? s.mode : 'num';
-    return { mode: mode, tpl: typeof s.tpl === 'string' && s.tpl ? s.tpl : '{bin}_{num}', open: !!s.open };
+    return { mode: mode, tpl: typeof s.tpl === 'string' && s.tpl ? s.tpl : '{bin}_{num}', open: !!s.open,
+      withExternal: s.withExternal !== false };
   }
   // Hai kiểu bấm là chạy; "Tự đặt mẫu…" mới cần gõ (prefs.tpl).
   var MODE_TPL = { num: '{bin}_{num}', n: '{bin}_{n}' };
@@ -183,6 +184,38 @@
     return idx;
   }
 
+  // Mọi đường dẫn media trong project (fold) — để biết file nào trong thư mục chưa import.
+  async function projectPaths(project) {
+    var root = await un(project.getRootItem());
+    var all = await sacCollectBinItems(root);
+    var out = [];
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].isFolder) continue;
+      var p = await mediaPathOf(all[i].item);
+      if (p) out.push(fold(p));
+    }
+    return out;
+  }
+
+  // Thêm file media cùng thư mục với source mà project chưa import (bridge liệt kê),
+  // {bin} lấy theo dòng đầu tiên của thư mục đó.
+  async function addSiblings(project) {
+    var binOfDir = {}, dirs = [];
+    rn.rows.forEach(function (r) {
+      var d = r.path.slice(0, r.path.lastIndexOf('/'));
+      if (!(d in binOfDir)) { binOfDir[d] = r.bin; dirs.push(d); }
+    });
+    var known = await projectPaths(project);
+    var r = await api('POST', '/rename/siblings', { dirs: dirs, known: known });
+    if (!r.ok) { rn.siblingNote = 'Không quét được thư mục: ' + r.error; return 0; }
+    (r.files || []).forEach(function (f) {
+      rn.rows.push({ path: f.path, oldName: baseName(f.path), bin: binOfDir[f.dir] || '', items: [], external: true,
+        checked: prefs.withExternal });
+    });
+    rn.rows = RNC.sortRows(rn.rows);
+    return (r.files || []).length;
+  }
+
   async function relinkItem(project, item, newPath) {
     var cp = castClip(item);
     if (!cp || typeof cp.changeMediaFilePath !== 'function') throw new Error('Premiere này không có changeMediaFilePath');
@@ -205,12 +238,18 @@
 
   // pairs [{from, to}] + idx → {ok:[pair], fail:[{pair, error}]}. Dòng hỏng thì các
   // item đã relink trong dòng đó được đưa về `from`.
-  async function relinkPairs(project, pairs, idx) {
+  // external: Set(fold(path)) của file chưa import — không có clip thì không cần relink.
+  // onProgress(i, total, tên file) trước mỗi file.
+  async function relinkPairs(project, pairs, idx, external, onProgress) {
     var ok = [], fail = [];
     for (var i = 0; i < pairs.length; i++) {
       var p = pairs[i], items = idx[fold(p.from)] || [], done = [];
+      if (onProgress) { try { onProgress(i, pairs.length, baseName(p.to)); } catch (e0) {} }
       try {
-        if (!items.length) throw new Error('Không tìm lại được clip trong project');
+        if (!items.length) {
+          if (external === true || (external && external[fold(p.from)])) { ok.push(p); continue; }
+          throw new Error('Không tìm lại được clip trong project');
+        }
         for (var k = 0; k < items.length; k++) { await relinkItem(project, items[k], p.to); done.push(items[k]); }
         ok.push(p);
       } catch (e) {
@@ -328,7 +367,7 @@
     var c = counts();
     var fresh = rn.server && rn.server.seq === rn.planSeq;
     var ready = !rn.busy && fresh && !c.errs && c.todo > 0;
-    t.textContent = rn.busy ? 'Đang chạy…' : (c.errs ? c.errs + ' dòng lỗi' : (c.todo ? 'Đổi tên ' + c.todo + ' clip' : 'Không có gì để đổi'));
+    t.textContent = rn.busy ? 'Đang chạy…' : (c.errs ? c.errs + ' dòng lỗi' : (c.todo ? 'Đổi tên ' + c.todo + ' file' : 'Không có gì để đổi'));
     if (ready) go.classList.remove('is-disabled'); else go.classList.add('is-disabled');
   }
 
@@ -378,7 +417,7 @@
       names.appendChild(o); names.appendChild(a); names.appendChild(n);
       txt.appendChild(names);
       var cnt = r.items.length;
-      var tag = p ? numTag(p) : '';
+      var tag = p ? [numTag(p), r.external ? 'chưa import vào project' : ''].filter(Boolean).join(' · ') : '';
       if (p && (err || cnt > 1 || tag)) {
         var sub = document.createElement('div'); sub.className = 'rn-sub' + (!err && p.numKind === 'new' ? ' is-new' : '');
         sub.textContent = err || [tag, cnt > 1 ? cnt + ' clip trong project dùng file này' : '']
@@ -397,6 +436,11 @@
     });
     var c = counts();
     var on = rn.preview.length;
+    var ext = rn.rows.filter(function (r) { return r.external; });
+    $('rnExtWrap').style.display = ext.length || rn.siblingNote ? '' : 'none';
+    $('rnExt').checked = ext.some(function (r) { return r.checked !== false; });
+    $('rnExt').disabled = !ext.length || rn.busy || rn.done;
+    $('rnExtText').textContent = rn.siblingNote || ('Đổi tên cả ' + ext.length + ' file chưa import nằm cùng thư mục với source');
     $('rnDropErr').style.display = c.errs && !rn.busy && !rn.done ? '' : 'none';
     $('rnAll').textContent = on === rn.rows.length ? 'Bỏ chọn hết' : 'Chọn hết';
     $('rnSummary').textContent = (on === rn.rows.length ? rn.rows.length + ' file' : on + '/' + rn.rows.length + ' file được chọn')
@@ -489,24 +533,57 @@
     var got;
     try { got = await readSelection(proj); }
     catch (e) { btn.textContent = 'Lấy clip đang chọn'; lastLine('✗ ' + e.message, true); return; }
-    btn.textContent = 'Lấy clip đang chọn';
     rn.rows = RNC.sortRows(RNC.groupByPath(got.entries));
     rn.skipped = got.skipped;
     if (!rn.rows.length) {
+      btn.textContent = 'Lấy clip đang chọn';
       lastLine(got.skipped.length ? '✗ Không có clip đổi tên được (' + got.skipped.length + ' bỏ qua: ' + got.skipped[0].reason + '…)'
         : '✗ Chưa chọn clip hoặc bin nào ở Project panel', true);
       return;
     }
+    btn.textContent = 'Đang quét thư mục chứa source…';
+    rn.siblingNote = '';
+    try { await addSiblings(proj); } catch (e) { rn.siblingNote = 'Không quét được thư mục: ' + (e.message || e); }
+    btn.textContent = 'Lấy clip đang chọn';
     rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
     $('rnTpl').value = prefs.tpl;
     $('rnStart').value = '1';
     status('', '');
+    progHide();
     openModal();
     computePreview();
     renderModes();
     renderList();
     renderAep();
     schedulePlan(true);
+  }
+
+  // ── Tiến trình ──────────────────────────────────────────────────────────
+  // Thanh chung cho cả lượt: mỗi bước một phần (relink trong Premiere lâu nhất vì
+  // Premiere đọc lại từng file — trên Google Drive mất cả giây mỗi file).
+  var STEPS = [['Đọc clip trong project', 5], ['Đổi tên file trên đĩa', 15], ['Relink trong Premiere', 65],
+               ['Đổi tên trong Project panel', 5], ['Relink After Effects', 10]];
+  function prog(step, frac, detail) {
+    var before = 0, total = 0;
+    STEPS.forEach(function (st, i) { total += st[1]; if (i < step) before += st[1]; });
+    var pct = Math.max(0, Math.min(100, Math.round((before + STEPS[step][1] * Math.max(0, Math.min(1, frac))) * 100 / total)));
+    $('rnProg').style.display = '';
+    $('rnProgBar').style.width = pct + '%';
+    $('rnProgPct').textContent = pct + '%';
+    $('rnProgText').textContent = 'Bước ' + (step + 1) + '/' + STEPS.length + ' · ' + STEPS[step][0] + (detail ? ' · ' + detail : '');
+  }
+  function progHide() { $('rnProg').style.display = 'none'; }
+  function fmtLeft(ms) {
+    var sec = Math.round(ms / 1000);
+    return sec < 60 ? 'còn ~' + Math.max(1, sec) + ' giây' : 'còn ~' + Math.round(sec / 60) + ' phút';
+  }
+  // onProgress cho relinkPairs: "12/53 · Senyue_12.MOV · còn ~40 giây".
+  function relinkTicker(show) {
+    var t0 = Date.now();
+    return function (i, total, name) {
+      var left = i > 0 ? ' · ' + fmtLeft((Date.now() - t0) / i * (total - i)) : '';
+      show(i / total, (i + 1) + '/' + total + ' · ' + name + left);
+    };
   }
 
   async function run() {
@@ -521,33 +598,36 @@
       var todo = rn.preview.filter(function (p) { return !p.same; });
       var wanted = {};
       todo.forEach(function (p) { wanted[fold(p.path)] = true; });
-      status('⏳ Đọc clip trong project…', '');
+      status('', '');
+      prog(0, 0);
       var idx = await indexProject(proj, wanted);
+      var external = {};
+      rn.rows.forEach(function (r) { if (r.external) external[fold(r.path)] = true; });
 
-      status('⏳ Đổi tên ' + todo.length + ' file trên đĩa…', '');
+      prog(1, 0, todo.length + ' file');
       var aepPaths = rn.aeRunning ? [] : rn.aep.filter(function (a) { return a.checked; }).map(function (a) { return a.path; });
       var ap = await api('POST', '/rename/apply', {
         projectPath: rn.projectPath, aep: aepPaths,
         rows: rn.preview.map(function (p) { return { oldPath: p.path, newName: p.newName }; }),
       });
-      if (!ap.ok) { status('✗ ' + ap.error + ' — chưa đổi file nào', 'is-err'); return; }
-      if (!ap.batchId) { status('Không có file nào cần đổi tên.', ''); return; }
+      if (!ap.ok) { progHide(); status('✗ ' + ap.error + ' — chưa đổi file nào', 'is-err'); return; }
+      if (!ap.batchId) { progHide(); status('Không có file nào cần đổi tên.', ''); return; }
 
-      status('⏳ Relink ' + ap.rows.length + ' file trong Premiere…', '');
       var pairs = ap.rows.map(function (r) { return { from: r.oldPath, to: r.newPath }; });
-      var rl = await relinkPairs(proj, pairs, idx);
+      var rl = await relinkPairs(proj, pairs, idx, external, relinkTicker(function (f, d) { prog(2, f, d); }));
       if (rl.fail.length) {
         await api('POST', '/rename/revert', { projectPath: rn.projectPath, batchId: ap.batchId,
           oldPaths: rl.fail.map(function (f) { return f.pair.from; }) });
         rl.fail.forEach(function (f) { log('✗ Relink ' + baseName(f.pair.from) + ' — ' + f.error + ' (đã đổi tên file về)', true); });
       }
       var named = 0, nameErr = '';
+      prog(3, 0);
       try { named = await renameItems(proj, rl.ok, idx, null); }
       catch (e) { nameErr = e.message || String(e); log('✗ Đổi tên hiển thị — ' + nameErr, true); }
 
       var aepMsg = rn.aeRunning && rn.aep.length ? ' · AE: bỏ qua vì After Effects đang mở' : '';
       if (aepPaths.length && rl.ok.length) {
-        status('⏳ Relink ' + aepPaths.length + ' file After Effects…', '');
+        prog(4, 0, aepPaths.length + ' file .aep');
         var ae = await api('POST', '/rename/aep', { projectPath: rn.projectPath, batchId: ap.batchId });
         if (!ae.ok) aepMsg = ' · AE: ✗ ' + ae.error;
         else {
@@ -559,7 +639,10 @@
         }
       }
 
-      var msg = (rl.fail.length ? '⚠ ' : '✓ ') + 'Đã đổi tên ' + rl.ok.length + '/' + pairs.length + ' file, relink '
+      prog(4, 1);
+      var nExt = rl.ok.filter(function (p) { return external[fold(p.from)] && !(idx[fold(p.from)] || []).length; }).length;
+      var msg = (rl.fail.length ? '⚠ ' : '✓ ') + 'Đã đổi tên ' + rl.ok.length + '/' + pairs.length + ' file'
+        + (nExt ? ' (' + nExt + ' file chưa import)' : '') + ', relink '
         + rl.ok.reduce(function (n, p) { return n + (idx[fold(p.from)] || []).length; }, 0) + ' clip'
         + (rl.fail.length ? ' · ' + rl.fail.length + ' file relink lỗi đã đổi tên về' : '')
         + (nameErr ? ' · tên hiển thị chưa đổi (' + nameErr + ')' : '') + aepMsg;
@@ -567,6 +650,7 @@
       log('Đổi tên source: ' + msg.replace(/^[✓⚠] /, ''));
       rn.done = true;
     } catch (e) {
+      progHide();
       status('✗ ' + (e.message || e), 'is-err');
       log('✗ Đổi tên source — ' + (e.message || e), true);
     } finally {
@@ -635,7 +719,9 @@
       var r = await api('POST', '/rename/undo', { projectPath: j.projectPath, batchId: j.batchId });
       if (!r.ok) { lastLine('✗ ' + r.error, true); return; }
       var pairs = r.rows.map(function (x) { return { from: x.newPath, to: x.oldPath }; });
-      var rl = await relinkPairs(proj, pairs, idx);
+      var rl = await relinkPairs(proj, pairs, idx, true, relinkTicker(function (f, d) {
+        lastLine('⏳ Hoàn tác ' + Math.round(f * 100) + '% · relink ' + d);
+      }));
       try {
         await renameItems(proj, rl.ok, idx, function (cur, p) { return fold(cur) === fold(baseName(p.from)); });
       } catch (e) { log('✗ Hoàn tác tên hiển thị — ' + (e.message || e), true); }
@@ -674,6 +760,12 @@
     $('rnClose').addEventListener('click', closeModal);
     $('rnGo').addEventListener('click', run);
     $('rnRescan').addEventListener('click', function () { if (!rn.busy && !rn.done) schedulePlan(true); });
+    $('rnExt').addEventListener('change', function () {
+      if (rn.busy || rn.done) return;
+      prefs.withExternal = $('rnExt').checked; savePrefs(prefs);
+      rn.rows.forEach(function (r) { if (r.external) r.checked = prefs.withExternal; });
+      refresh();
+    });
     $('rnDropErr').addEventListener('click', function () {
       if (rn.busy || rn.done) return;
       rn.rows.forEach(function (r, i) { var pi = rn.pidx[i]; if (pi >= 0 && rowError(pi)) r.checked = false; });
@@ -726,14 +818,16 @@
   window.rnInternals = {
     state: rn, readSelection: readSelection, indexProject: indexProject, loadJournal: loadJournal,
     close: closeModal,
-    debugOpen: async function (entries) {
+    debugOpen: async function (entries, withSiblings) {
       wire();
       rn.projectPath = await currentProjectPath();
-      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = [];
+      rn.rows = RNC.sortRows(RNC.groupByPath(entries)); rn.skipped = []; rn.siblingNote = '';
+      if (withSiblings) await addSiblings(await getActiveProject());
       rn.done = false; rn.server = null; rn.aep = []; rn.aepNote = '';
       $('rnTpl').value = prefs.tpl; $('rnStart').value = '1';
       openModal(); refresh(); schedulePlan(true);
     },
     setMode: setMode,
+    prog: function (a, b, c) { prog(a, b, c); }, progHide: function () { progHide(); }, ticker: relinkTicker,
   };
 })();

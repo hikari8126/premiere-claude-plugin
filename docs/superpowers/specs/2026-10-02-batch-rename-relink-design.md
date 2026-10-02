@@ -26,10 +26,12 @@ lý do với `#wfCmpModal`: UXP không có z-index):
   - `{name}` — tên file cũ bỏ đuôi
   - `{num}` — giữ số gốc nếu tên gốc (bỏ đuôi) là số hoặc `<bin>[ _-]số`; còn lại lấy số
     mới nối tiếp sau số lớn nhất được giữ của cùng bin (không có → từ "Bắt đầu từ", và
-    không thấp hơn ô đó); cả bin đệm 0 theo độ dài lớn nhất (≥2, giữ độ dài số gốc như `033`)
+    không thấp hơn ô đó); mỗi số ≥ 2 chữ số, số gốc giữ độ dài (`033`) — không đệm cả bin
     Bản copy (`Copy of N`, `N copy`, `N copy 2`, `N (2)`) giữ số N nếu chưa ai giữ, không thì
     số mới; hai tên thật trùng số → dòng đầu giữ, dòng sau số mới.
 - Ô tick từng dòng + Chọn hết/Bỏ chọn hết; dòng bỏ tick không có trong lượt (không chiếm số).
+- Quét thêm file media cùng thư mục với source mà project chưa import (`/rename/siblings`), ô tick
+  "Đổi tên cả N file chưa import"; thanh tiến trình 5 bước có %, i/N, tên file, thời gian còn lại.
 - **Bắt đầu từ** — mặc định 1.
 - **Bảng xem trước** tên cũ → tên mới, mặc định A→Z theo tên cũ (so sánh số tự
   nhiên: `IMG_2` trước `IMG_10`), nút ↑↓ mỗi dòng để đổi thứ tự. Dòng lỗi tô đỏ
