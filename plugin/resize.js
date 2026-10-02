@@ -34,6 +34,7 @@
     lastInfoKey: null,
     srcRatios: [],       // ratio các nguồn đang chọn → ẩn chip trùng ratio nguồn
     seqByItemId: null,   // cache projectItem id → Sequence
+    pending: null,       // R3: kế hoạch đã xem trước, chờ bấm lần 2 { sig, plan, count, at }
   };
 
   function $(id) { return document.getElementById(id); }
@@ -388,34 +389,52 @@
     return jobs;
   }
 
-  async function runResize(platform, wanted, prefs, onRow) {
+  // R3: lập kế hoạch (chưa đụng project) để xem trước + đánh dấu tên trùng.
+  async function planResize(platform, wanted) {
     var project = await getActiveProject();
     var src = await resolveSources(project);
     if (!src.seqs.length) return { ok: false, error: 'Chưa chọn hoặc mở sequence nào' };
     var jobs = await snapshotJobs(project, src.seqs);
-    var results = [];
+    var plan = [];
     for (var i = 0; i < jobs.length; i++) {
       var j = jobs[i];
       if (platform !== 'PIN' && !j.ratio) {
-        var r0 = { src: j.name, skip: 'ratio nguồn ' + j.width + '×' + j.height + ' không thuộc 9:16 / 4:5 / 1:1' };
-        results.push(r0); onRow(r0); continue;
+        plan.push({ src: j.name, skip: 'ratio nguồn ' + j.width + '×' + j.height + ' không thuộc 9:16 / 4:5 / 1:1' }); continue;
       }
       if (platform === 'PIN' && RSZ.matchesRatio(j.width, j.height, '2-3')) {
-        var r2 = { src: j.name, skip: 'nguồn đã là 2:3 — PIN không tạo thêm bản trùng' };
-        results.push(r2); onRow(r2); continue;
+        plan.push({ src: j.name, skip: 'nguồn đã là 2:3 — PIN không tạo thêm bản trùng' }); continue;
       }
       var targets = RSZ.targetsFor(platform, j.ratio, wanted);
       if (!targets.length) {
-        var r1 = { src: j.name, skip: 'không còn size nào được tick cho nguồn này' };
-        results.push(r1); onRow(r1); continue;
+        plan.push({ src: j.name, skip: 'không còn size nào được tick cho nguồn này' }); continue;
       }
       for (var t = 0; t < targets.length; t++) {
-        var r = await makeVariant(project, j, targets[t], platform, prefs);
-        results.push(r); onRow(r);
+        plan.push({ job: j, src: j.name, ratio: targets[t], name: RSZ.buildName(j.name, targets[t], platform) });
       }
     }
+    var names = [];
+    var all = await listSequences(project);
+    for (var k = 0; k < all.length; k++) names.push(await nameOf(all[k]));
+    return { ok: true, count: jobs.length, plan: RSZ.markPlanDuplicates(plan, names) };
+  }
+
+  var DUP_SKIP = 'đã có sequence cùng tên — bỏ qua (xoá bản cũ nếu muốn tạo lại)';
+
+  async function runResize(platform, plan, prefs, onRow) {
+    var project = await getActiveProject();
+    var results = [];
+    for (var i = 0; i < plan.length; i++) {
+      var p = plan[i];
+      if (p.skip) { results.push(p); onRow(p); continue; }
+      if (p.exists || p.dupInPlan) {
+        var rd = { src: p.src, ratio: p.ratio, name: p.name, skip: p.exists ? DUP_SKIP : 'trùng tên với bản khác trong lượt này — bỏ qua' };
+        results.push(rd); onRow(rd); continue;
+      }
+      var r = await makeVariant(project, p.job, p.ratio, platform, prefs);
+      results.push(r); onRow(r);
+    }
     rszState.seqByItemId = null;   // project vừa có thêm sequence
-    return { ok: true, count: jobs.length, results: results };
+    return { ok: true, results: results };
   }
 
   // ── Nhận diện nguồn (hiện trên đầu tab) ─────────────────────────────────
@@ -471,6 +490,11 @@
       var info = await readSourceInfo();
       var key = JSON.stringify(info);
       if (force || key !== rszState.lastInfoKey) {
+        // Nguồn đổi sau khi xem trước → danh sách cũ không còn đúng (R3).
+        if (key !== rszState.lastInfoKey && rszState.pending) {
+          clearPending();
+          setStatus('Nguồn đã đổi — bấm RESIZE để xem lại danh sách.');
+        }
         rszState.lastInfoKey = key;
         paintSource(info);
         var seen = (info.ratios || []).join(',');
@@ -536,6 +560,7 @@
       b.addEventListener('click', function () {
         rszState.prefs.ratios[key] = !on;
         savePrefs();
+        clearPending();
         renderChips();
       });
       box.appendChild(b);
@@ -544,6 +569,7 @@
 
   function renderMode() {
     var mode = rszState.prefs.mode;
+    if (rszState.pending) clearPending();
     document.querySelectorAll('#rszModes .rsz-seg').forEach(function (el) {
       el.classList.toggle('active', el.getAttribute('data-mode') === mode);
     });
@@ -556,6 +582,24 @@
     var outs = $('rszOuts');
     var row = document.createElement('div');
     var ok = !r.error && !r.skip;
+    if (r.preview) {
+      // Dòng xem trước (R3): sẽ tạo / trùng tên bị bỏ qua.
+      var willMake = !r.skip && !r.exists && !r.dupInPlan;
+      row.className = 'rsz-row' + (willMake ? '' : ' is-skip');
+      var pt = document.createElement('div');
+      pt.className = 'rsz-row-head';
+      var ptt = document.createElement('div'); ptt.className = 'rsz-row-title'; ptt.textContent = r.name || r.src || '';
+      var pb = document.createElement('span'); pb.className = 'rsz-row-badge';
+      pb.textContent = willMake ? 'SẼ TẠO' : 'BỎ QUA';
+      pt.appendChild(ptt); pt.appendChild(pb);
+      var ps = document.createElement('div'); ps.className = 'rsz-row-sub';
+      ps.textContent = r.skip ? r.skip
+        : (r.ratio ? CHIP_LABEL[r.ratio] + ' · ' : '') + 'từ ' + r.src
+          + (r.exists ? ' · ' + DUP_SKIP : r.dupInPlan ? ' · trùng tên với bản khác trong lượt này' : '');
+      row.appendChild(pt); row.appendChild(ps);
+      outs.appendChild(row);
+      return;
+    }
     row.className = 'rsz-row' + (ok ? '' : r.skip ? ' is-skip' : ' is-err');
     var title = document.createElement('div');
     title.className = 'rsz-row-title';
@@ -594,6 +638,14 @@
     $('rszGoLabel').textContent = busy ? 'ĐANG RESIZE…' : 'RESIZE';
   }
 
+  function clearPending() {
+    if (rszState.pending && rszState.pending.timer) clearTimeout(rszState.pending.timer);
+    rszState.pending = null;
+    if (!rszState.busy) $('rszGoLabel').textContent = 'RESIZE';
+  }
+
+  // Bấm lần 1 = xem trước danh sách sẽ tạo (tên trùng bị bỏ qua); bấm lần 2 trong 30s
+  // (cùng chế độ + size) mới tạo thật (R3).
   async function onGo() {
     if (rszState.busy) return;
     var mode = rszState.prefs.mode;
@@ -601,21 +653,44 @@
     var pickable = visibleTargets(mode);
     var anyVisible = pickable.some(function (k) { return wanted.indexOf(k) !== -1; });
     if (!wanted.length || (pickable.length && !anyVisible)) { setStatus('Chưa tick size nào để tạo.'); return; }
-    $('rszOuts').innerHTML = '';
-    setStatus('Đang xử lý…');
-    setBusy(true);
-    try {
-      var res = await runResize(mode, wanted, rszState.prefs, addRow);
-      if (!res.ok) { setStatus(res.error); return; }
-      var made = res.results.filter(function (r) { return !r.error && !r.skip; }).length;
-      var bad = res.results.length - made;
-      setStatus(res.count + ' sequence nguồn · tạo ' + made + ' bản' + (bad ? ' · ' + bad + ' lỗi/bỏ qua' : ''));
-    } catch (e) {
-      setStatus('Lỗi: ' + ((e && e.message) || e));
-    } finally {
-      setBusy(false);
-      refreshSource(true);
+    var sig = mode + '|' + wanted.join(',');
+    var pend = rszState.pending;
+    if (pend && pend.sig === sig) {
+      clearPending();
+      $('rszOuts').innerHTML = '';
+      setStatus('Đang xử lý…');
+      setBusy(true);
+      try {
+        var res = await runResize(mode, pend.plan, rszState.prefs, addRow);
+        var made = res.results.filter(function (r) { return !r.error && !r.skip; }).length;
+        var bad = res.results.length - made;
+        setStatus(pend.count + ' sequence nguồn · tạo ' + made + ' bản' + (bad ? ' · ' + bad + ' lỗi/bỏ qua' : ''));
+      } catch (e) {
+        setStatus('Lỗi: ' + ((e && e.message) || e));
+      } finally {
+        setBusy(false);
+        refreshSource(true);
+      }
+      return;
     }
+    clearPending();
+    $('rszOuts').innerHTML = '';
+    setStatus('Đang lập danh sách…');
+    setBusy(true);
+    var pl;
+    try { pl = await planResize(mode, wanted); }
+    catch (e) { pl = { ok: false, error: 'Lỗi: ' + ((e && e.message) || e) }; }
+    finally { setBusy(false); }
+    if (!pl.ok) { setStatus(pl.error); return; }
+    pl.plan.forEach(function (p) { var q = {}; for (var k in p) q[k] = p[k]; q.preview = true; addRow(q); });
+    var n = pl.plan.filter(function (p) { return !p.skip && !p.exists && !p.dupInPlan; }).length;
+    var dup = pl.plan.filter(function (p) { return p.exists || p.dupInPlan; }).length;
+    if (!n) { setStatus('Không có bản nào để tạo' + (dup ? ' — ' + dup + ' bản đã có sequence cùng tên' : '') + '.'); return; }
+    rszState.pending = { sig: sig, plan: pl.plan, count: pl.count,
+      timer: setTimeout(function () { clearPending(); setStatus('Hết 30s — bấm RESIZE để xem lại danh sách.'); }, 30000) };
+    $('rszGoLabel').textContent = 'TẠO ' + n + ' BẢN';
+    setStatus('Xem trước: sẽ tạo ' + n + ' bản' + (dup ? ' · bỏ qua ' + dup + ' bản trùng tên' : '')
+      + '. Bấm "TẠO ' + n + ' BẢN" để làm (trong 30s).');
   }
 
   // ── Cài đặt (tab Resize trong Settings dùng chung) ─────────────────────

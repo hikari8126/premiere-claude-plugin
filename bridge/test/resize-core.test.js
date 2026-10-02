@@ -224,3 +224,19 @@ test("matchesRatio nhận đúng 2:3 (PIN bỏ qua nguồn đã là 2:3)", () =>
   assert.strictEqual(RSZ.matchesRatio(0, 1620, "2-3"), false);
   assert.strictEqual(RSZ.matchesRatio(1080, 1620, "x-y"), false);
 });
+
+test("markPlanDuplicates flags names already in project and repeats within the run (R3)", () => {
+  const plan = [
+    { src: "A", ratio: "4-5", name: "Ad v1 4x5 GG" },
+    { src: "A", ratio: "1-1", name: "Ad v1 1x1 GG" },
+    { src: "B", ratio: "4-5", name: "ad v1  4x5 gg" },   // trùng dòng 1 (khác hoa/thường, khoảng trắng)
+    { src: "C", skip: "ratio lạ" },
+  ];
+  const out = RSZ.markPlanDuplicates(plan, ["Ad v1 1x1 GG", "Khác"]);
+  assert.strictEqual(out[0].exists, undefined);
+  assert.strictEqual(out[0].dupInPlan, undefined);
+  assert.strictEqual(out[1].exists, true);
+  assert.strictEqual(out[2].dupInPlan, true);
+  assert.strictEqual(out[3].exists, undefined);
+  assert.strictEqual(plan[1].exists, undefined, "không đổi mảng gốc");
+});

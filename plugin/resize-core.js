@@ -158,6 +158,26 @@ var RSZ = (function () {
     return out;
   }
 
+  // R3: chạy lại / chọn cả bin → tạo sequence trùng tên. Đánh dấu dòng kế hoạch có
+  // tên đã có trong project (exists) hoặc trùng dòng trước trong cùng lượt (dupInPlan).
+  // So không phân biệt hoa/thường + bỏ khoảng trắng thừa. Không đổi mảng gốc.
+  function markPlanDuplicates(plan, existingNames) {
+    function key(n) { return String(n || "").replace(/\s+/g, " ").trim().toLowerCase(); }
+    var have = {};
+    (existingNames || []).forEach(function (n) { have[key(n)] = true; });
+    var seen = {};
+    return (plan || []).map(function (p) {
+      var o = {}; for (var k in p) { if (Object.prototype.hasOwnProperty.call(p, k)) o[k] = p[k]; }
+      if (o.name) {
+        var kk = key(o.name);
+        if (have[kk]) o.exists = true;
+        else if (seen[kk]) o.dupInPlan = true;
+        seen[kk] = true;
+      }
+      return o;
+    });
+  }
+
   // A clip is treated as a logo when its name contains any of these hints
   // (case-insensitive substring). The team names logo files like "logo",
   // "fav vid", "fav video" — "fav" covers all of those. Add more hints here to
@@ -227,6 +247,7 @@ var RSZ = (function () {
     describeRatio: describeRatio,
     stripTrailingRatioLabel: stripTrailingRatioLabel,
     buildName: buildName,
+    markPlanDuplicates: markPlanDuplicates,
     clamp01: clamp01,
     PLATFORM_TAGS: PLATFORM_TAGS,
     PLATFORM_TARGETS: PLATFORM_TARGETS,
