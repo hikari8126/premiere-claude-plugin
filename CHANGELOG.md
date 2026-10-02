@@ -3,6 +3,15 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.15.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
+
+> Không cần Bridge mới (vẫn Bridge app 3.18; dùng `/watch/browse` có từ bridge 1.16).
+
+### ✨ Voice Gen — chọn sẵn bin + thư mục lưu voice theo sequence đang mở
+- Mode Voice (TTS): sequence đặt tên kiểu trang Auto (`AeriSoft vid40.0 [c.…] [Editor]`) → khi Lưu / Import / Lên timeline, modal Lưu điền sẵn tên `40.0 - <voice>` và thư mục của bộ 40, import vào bin `Voice Over / 40x`; modal ghi rõ "Theo sequence … → bin … · thư mục …".
+- Thư mục + bin **học từ project** (`plugin/vg-seq.js` `inferVoiceDir`): clip audio nằm trong thư mục `Nx` có cha là thư mục voice (`Voice Over`/`VO`/`Voice`) ở bất kỳ đâu (`Editing File/Voice/39x`, `Source/VO/12x`…), bin tên gì cũng được (bin `VO / 12x` → `VO / 13x`), bỏ bin có `OLD`/archive. Bộ này đã có voice → đúng thư mục đó; chưa có → cạnh bộ gần nhất. Chưa có voice nào → thư mục voice cạnh .prproj, trong `<SP>/Source`, hoặc `<SP>`; không có nữa → `Voice Over/{set}x` cạnh .prproj. Chỉ tìm, không tạo — `/tts/move` tạo khi lưu thật, Huỷ không để lại thư mục rỗng.
+- Đổi thư mục tay trong modal → bin theo Settings như cũ. Phần tên lấy từ sequence không bị nhớ thành "phần tên của user". SFX / BGM giữ nguyên.
+
 ## v5.14.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
 
 > **Cần Bridge app 3.18** (server 1.22.0) cho mục Đổi tên source. Bridge cũ → plugin báo rõ cần cập nhật.
