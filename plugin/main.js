@@ -8700,12 +8700,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
+  // Gen dài (Music, Voice Changer, TTS v4 nhiều đoạn) hay quá 2 phút: hết giờ ở plugin
+  // thì bridge vẫn gen + trừ credit mà plugin mất kết quả (VG1) → cho 10 phút.
+  var VG_LONG_ENDPOINTS = { '/music/generate': 1, '/voice/change': 1, '/tts/generate': 1 };
   function postJsonVG(endpoint, body) {
+    var longCall = !!VG_LONG_ENDPOINTS[endpoint];
     return new Promise(function(resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', BRIDGE_URL + endpoint, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.timeout = 120000;
+      xhr.timeout = longCall ? 600000 : 120000;
       xhr.onload = function() {
         try {
           var data = JSON.parse(xhr.responseText);
@@ -8714,7 +8718,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         } catch(e) { reject(new Error('Invalid response: ' + xhr.responseText.slice(0,200))); }
       };
       xhr.onerror = function() { reject(new Error('Bridge offline')); };
-      xhr.ontimeout = function() { reject(new Error('Bridge timeout (2 min)')); };
+      xhr.ontimeout = function() { reject(new Error('Bridge timeout (' + (longCall ? '10' : '2') + ' min)')); };
       xhr.send(JSON.stringify(body));
     });
   }
