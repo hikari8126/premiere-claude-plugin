@@ -5,6 +5,7 @@
 #   bash dev.sh stop       gỡ bản DEV khỏi Premiere, tắt bridge dev
 #   bash dev.sh log        xem log bridge dev (tail -f)
 #   bash dev.sh eval f.js  chạy biểu thức JS trong panel DEV (in kết quả) — để dò API Premiere
+#   bash dev.sh app        build "Claude Bridge DEV.app" (icon menu bar làm hết việc trên) rồi mở nó
 #
 # Bản DEV: id com.claudeai.premiere-assistant-dev, panel "Claude AI DEV"
 # (Window → Extensions), bridge chạy code trong repo ở port 3035 (DEV_PORT để đổi).
@@ -108,11 +109,15 @@ case "${1:-start}" in
   log)
     tail -f "$LOG"
     ;;
+  app)
+    bash "$ROOT/tools/dev/build-dev-app.sh"
+    open "$ROOT/Claude Bridge DEV.app"
+    ;;
   eval)
     [ -n "${2:-}" ] || { echo "Dùng: bash dev.sh eval <file.js | ->"; exit 1; }
     node "$TOOL" eval "$SESSION" "$2"
     ;;
   *)
-    echo "Dùng: bash dev.sh [start|stop|log|eval <file.js>]"; exit 1
+    echo "Dùng: bash dev.sh [start|stop|log|app|eval <file.js>]"; exit 1
     ;;
 esac
