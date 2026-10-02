@@ -1689,6 +1689,20 @@
       <div class="wf-btn wf-btn-primary" id="wfAdd" role="button">Thêm thư mục theo dõi</div>
     </div>
 
+    <!-- Đổi tên source hàng loạt (rename.js) — gập/mở, nhớ trạng thái -->
+    <div class="rn-wrap">
+      <div class="wf-log-head" id="rnHead" role="button">
+        <span class="wf-log-caret" id="rnCaret">▸</span> Đổi tên source hàng loạt
+      </div>
+      <div class="rn-body" id="rnBody" style="display:none">
+        <div class="rn-desc">Chọn clip hoặc bin ở Project panel → đổi tên file trên đĩa, relink Premiere + After Effects, đổi tên trong project.</div>
+        <div class="rn-actions">
+          <div class="wf-btn wf-btn-primary" id="rnPick" role="button">Lấy clip đang chọn</div>
+          <div class="wf-btn" id="rnUndo" role="button" style="display:none">Hoàn tác lượt vừa rồi</div>
+        </div>
+        <div class="rn-last" id="rnLast"></div>
+      </div>
+    </div>
     <!-- Nhật ký, mặc định gập -->
     <div class="wf-log-wrap">
       <div class="wf-log-head" id="wfLogHead" role="button">
@@ -1765,6 +1779,46 @@
   </div>
 </div>
 
+<!-- Bảng "Đổi tên source hàng loạt" (tab Watch, rename.js). Ngoài .tab-panel
+     vì UXP không có z-index — input native của tab đang mở sẽ vẽ đè lên modal. -->
+<div id="rnModal" class="sac-bind-modal" hidden>
+  <div class="sac-bind-box">
+    <div class="sac-bind-head">
+      <span class="sac-bind-title">Đổi tên source hàng loạt</span>
+      <div id="rnClose" class="sac-bind-close" role="button"><span data-ic="xmark" data-ic-size="14"></span></div>
+    </div>
+    <div class="rn-form">
+      <div class="wf-row"><label>Mẫu tên</label><input id="rnTpl" type="text" class="wf-field" placeholder="{bin}_{n}" /></div>
+      <div class="wf-row">
+        <label>Bắt đầu từ</label><input id="rnStart" type="number" value="1" min="0" />
+        <div class="wf-spacer"></div>
+        <div id="rnSort" class="wf-btn wf-btn-sm" role="button">Sắp A→Z</div>
+      </div>
+      <div class="rn-hint">
+        <span class="rn-tok" role="button" data-tok="{bin}">{bin}</span> tên bin
+        <span class="rn-tok" role="button" data-tok="{n}">{n}</span> số thứ tự
+        <span class="rn-tok" role="button" data-tok="{name}">{name}</span> tên cũ · đuôi file giữ nguyên
+      </div>
+    </div>
+    <div id="rnSummary" class="wf-dir-crumb"></div>
+    <div id="rnList" class="sac-bind-list"></div>
+    <div class="rn-aep">
+      <div class="rn-aep-head">
+        <span>After Effects dùng các file này</span>
+        <div class="wf-spacer"></div>
+        <div id="rnRescan" class="wf-btn wf-btn-sm" role="button">Quét lại</div>
+      </div>
+      <div id="rnAeWarn" class="rn-warn" hidden></div>
+      <div id="rnAepList"></div>
+    </div>
+    <div class="rn-note">Project Premiere khác (nếu có) dùng chung các file này sẽ bị offline.</div>
+    <div id="rnStatus" class="vgm-status" hidden></div>
+    <div class="vg-binFoot">
+      <div class="wf-spacer"></div>
+      <div id="rnGo" class="btn-primary vg-binSaveBtn is-disabled" role="button"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> <span id="rnGoText">Đổi tên</span></div>
+    </div>
+  </div>
+</div>
 <!-- Bảng "Tìm source thiếu trong Watch Folder" (tab Autocut). Ngoài .tab-panel
      vì UXP không có z-index — input native của tab sẽ vẽ đè lên modal. -->
 <div id="sacFindModal" class="sac-bind-modal" hidden>
@@ -2011,6 +2065,8 @@
 <script src="color-wheel.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
+<script src="rename-core.js"></script>
+<script src="rename.js"></script>
 <script src="resize-core.js"></script>
 <script src="resize.js"></script>
 <script src="rawcut-core.js"></script>

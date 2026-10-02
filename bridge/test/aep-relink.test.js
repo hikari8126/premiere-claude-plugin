@@ -137,6 +137,16 @@ test('scanAep returns only files that reference the paths', async () => {
   assert.deepStrictEqual(r.files.map(f => [path.basename(f.path), f.count]), [['Hit.aep', 2]]);
 });
 
+test('isAeRunning matches the AE app, not the Dynamic Link renderer Premiere starts', () => {
+  const saved = process.env.RENAME_FAKE_AE; delete process.env.RENAME_FAKE_AE;
+  const DL = '/Applications/Adobe After Effects 2025/Adobe After Effects 2025.app/Contents/aerendercore.app/Contents/MacOS/aerendercore -m -livelink';
+  const AE = '/Applications/Adobe After Effects 2025/Adobe After Effects 2025.app/Contents/MacOS/After Effects';
+  assert.strictEqual(aep.isAeRunning(DL + '\n/usr/bin/login'), false);
+  assert.strictEqual(aep.isAeRunning(DL + '\n' + AE), true);
+  assert.strictEqual(aep.isAeRunning(AE + ' -psn_0_123'), true);
+  if (saved != null) process.env.RENAME_FAKE_AE = saved;
+});
+
 if (process.env.AEP_SAMPLE) {
   test('real sample: round-trip with no changes is byte-identical; full relink + back restores paths', () => {
     const buf = fs.readFileSync(process.env.AEP_SAMPLE);

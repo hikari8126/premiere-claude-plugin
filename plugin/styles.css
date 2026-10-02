@@ -4926,3 +4926,49 @@ div.rc-seqtab[role="button"]:hover { border-color: var(--accent-a40); color: var
 .rc-seqtab.active { color: var(--accent-light); background: var(--accent-a15); border-color: var(--accent); }
 .rc-seqtab.is-off { opacity: 0.5; }
 .rc-seqtab .wf-dot { margin-right: 6px; }
+
+/* ═══ Tab Watch — Đổi tên source hàng loạt (rename.js) ═══ */
+.rn-wrap { flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--surface); }
+.rn-body { padding: 0 12px 10px; }
+.rn-desc { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-bottom: 8px; }
+.rn-actions { display: flex; align-items: center; }
+.rn-actions > * { margin-right: 6px; }
+.rn-actions .wf-btn-primary { flex: 1 1 auto; justify-content: center; }
+.rn-last { margin-top: 6px; font-size: 11px; color: var(--text-dim); }
+.rn-last.is-err { color: #fca5a5; }
+
+.rn-form { flex: 0 0 auto; margin-bottom: 6px; }
+.rn-form .wf-row > label { flex: 0 0 76px; }
+.rn-form input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.rn-hint { font-size: 10px; color: var(--text-dim); padding-left: 76px; line-height: 1.6; }
+div.rn-tok[role="button"] { font-family: monospace; font-size: 10px; padding: 0 5px; margin: 0 2px 0 6px;
+  border: 1px solid var(--border); border-radius: 4px; color: var(--accent-light); cursor: pointer; }
+div.rn-tok[role="button"]:first-child { margin-left: 0; }
+div.rn-tok[role="button"]:hover { border-color: var(--accent); }
+
+.rn-row { display: flex; align-items: flex-start; padding: 4px 6px; font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.04); }
+.rn-move { flex: 0 0 auto; display: flex; margin-right: 6px; }
+div.rn-mv[role="button"] { width: 18px; height: 18px; font-size: 11px; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 4px; margin-right: 2px; cursor: pointer; }
+div.rn-mv[role="button"]:hover { color: #fff; border-color: var(--accent); }
+.rn-txt { flex: 1 1 auto; min-width: 0; word-break: break-word; color: var(--text); }
+.rn-old { color: var(--text-dim); }
+.rn-arrow { color: var(--accent-light); margin: 0 6px; }
+.rn-new { color: #fff; }
+.rn-sub { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+.rn-row.is-err .rn-new, .rn-row.is-err .rn-sub { color: #f87171; }
+.rn-row.is-same .rn-new { color: var(--text-dim); font-style: italic; }
+.rn-row.is-skip .rn-txt { color: var(--text-dim); font-style: italic; padding-left: 4px; }
+
+.rn-aep { flex: 0 0 auto; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);
+  max-height: 120px; overflow-y: auto; scrollbar-width: thin; }
+.rn-aep-head { display: flex; align-items: center; font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.rn-aep-row { display: flex; align-items: center; font-size: 11px; color: var(--text); padding: 2px 0; }
+.rn-aep-row input { margin-right: 6px; }
+.rn-aep-row.is-locked { opacity: 0.5; }
+.rn-aep-empty { font-size: 11px; color: var(--text-dim); padding: 2px 0; }
+.rn-warn { font-size: 11px; color: #f87171; padding: 4px 0; line-height: 1.4; }
+.rn-warn[hidden] { display: none; }
+.rn-note { flex: 0 0 auto; font-size: 10px; color: #e0a33c; padding-top: 6px; }
+.vgm-status.is-ok { color: var(--success); }

@@ -266,13 +266,19 @@ async function scanAep(root, oldPaths, opts) {
 }
 
 // AE giữ project trong bộ nhớ — đang mở mà sửa file thì bấm Save là ghi đè mất.
-function isAeRunning() {
+// Chỉ khớp file chạy CHÍNH (…app/Contents/MacOS/After Effects): Premiere có Dynamic
+// Link sẽ tự bật aerendercore -livelink nằm trong cùng .app — tiến trình đó chỉ đọc
+// .aep để render, không Save, nên không được tính là "AE đang mở".
+const AE_MAIN_RE = /\.app\/Contents\/MacOS\/After Effects( |$)/;
+function isAeRunning(psOutput) {
   if (process.env.RENAME_FAKE_AE === '1') return true;
   if (process.env.RENAME_FAKE_AE === '0') return false;
-  try {
-    const r = spawnSync('pgrep', ['-f', 'Adobe After Effects'], { timeout: 3000 });
-    return r.status === 0;
-  } catch (e) { return false; }
+  let out = psOutput;
+  if (out == null) {
+    try { out = String(spawnSync('ps', ['-axo', 'command='], { timeout: 3000 }).stdout || ''); }
+    catch (e) { return false; }
+  }
+  return String(out).split('\n').some(l => AE_MAIN_RE.test(l));
 }
 
 module.exports = {
