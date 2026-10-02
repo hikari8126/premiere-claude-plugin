@@ -4871,3 +4871,22 @@ div.rc-collapse[role="button"] { display: flex; width: 100%; justify-content: fl
 .rc-foot-row .rsz-go { flex: 1 1 auto; }
 div.rc-stop[role="button"] { flex: 0 0 auto; margin-left: 8px; padding: 0 12px; }
 .rc-foot-row div.rsz-go[role="button"] { width: auto; }
+
+/* Ô chọn sản phẩm có tìm kiếm (thay <select>: không đổi khi lăn chuột) */
+.rc-pick { margin-top: 6px; }
+div.rc-pick-btn[role="button"] { display: flex; width: 100%; justify-content: flex-start; height: 28px; padding: 0 8px;
+                                 border: 1px solid var(--border); border-radius: 6px; background: rgba(0,0,0,0.3); }
+div.rc-pick-btn[role="button"]:hover { border-color: var(--accent-a40); }
+.rc-pick-label { flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--text); overflow: hidden;
+                 text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.rc-pick-caret { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); margin-left: 6px; }
+.rc-pick-panel { margin-top: 4px; border: 1px solid var(--accent-a40); border-radius: 6px; background: var(--surface2); padding: 6px; }
+.rc-pick-search { width: 100%; margin-right: 0; }
+.rc-pick-list { max-height: 200px; overflow-y: auto; scrollbar-width: thin; margin-top: 5px; }
+div.rc-pick-item[role="button"] { display: flex; width: 100%; justify-content: flex-start; padding: 5px 6px;
+                                  border-radius: 4px; font-size: 11px; color: var(--text); text-align: left; }
+div.rc-pick-item[role="button"]:hover { background: var(--accent-a15); }
+.rc-pick-item.is-cur { color: var(--accent-light); font-weight: 700; }
+.rc-pick-tag { font-size: 9px; color: var(--text-dim); margin-left: 6px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--border); }
+.rc-pick-empty { font-size: 10px; color: var(--text-dim); padding: 6px; }
+.rc-chips-right { justify-content: flex-end; margin-bottom: 0; }

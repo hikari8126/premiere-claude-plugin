@@ -361,8 +361,7 @@
     await resolveDest();
     paintDest(); paintGo();
   }
-  async function onProductPick() {
-    var v = $('rcProduct').value;
+  async function onProductPick(v) {
     if (v) st.prefs.productPick[projectKey()] = v; else delete st.prefs.productPick[projectKey()];
     savePrefs();
     await resolveDest();
@@ -373,9 +372,8 @@
     var card = $('rcDestCard'), line = $('rcDestLine'), d = st.dest, pick = $('rcProduct');
     card.style.display = st.read ? '' : 'none';
     $('rcResetFolder').style.display = st.prefs.chosen[projectKey()] ? '' : 'none';
-    pick.style.display = 'none';
     line.innerHTML = '';
-    if (!d) return;
+    if (!d) { pick.style.display = 'none'; return; }
     var mode = st.prefs.mode;
     if (d.ok) {
       var head = el('div', 'rc-dest-head', (d.product ? d.product.name + ' · ' : '') + d.version + (d.route === 'free' ? ' · thư mục tự chọn' : ''));
@@ -387,14 +385,60 @@
       line.appendChild(el('div', 'rc-dest-err', (d.why || d.error || 'Chưa xác định được thư mục xuất')));
     }
     var list = (d.candidates && d.candidates.length ? d.candidates : []).concat((d.products || []).filter(function (n) { return !d.candidates || d.candidates.indexOf(n) === -1; }));
-    if (list.length && (d.needPick || d.route === 'picked' || d.route === 'matched')) {
-      pick.innerHTML = '';
-      var o0 = el('option', '', d.route === 'matched' ? '— tự khớp: ' + (d.product ? d.product.name : '') + ' —' : '— chọn sản phẩm —');
-      o0.value = ''; pick.appendChild(o0);
-      list.forEach(function (n) { var o = el('option', '', n); o.value = n; pick.appendChild(o); });
-      pick.value = st.prefs.productPick[projectKey()] || '';
-      pick.style.display = '';
-    }
+    var showPick = list.length && (d.needPick || d.route === 'picked' || d.route === 'matched');
+    pick.style.display = showPick ? '' : 'none';
+    if (!showPick) { closePicker(); return; }
+    var cur = st.prefs.productPick[projectKey()] || '', cands = d.candidates || [];
+    var autoName = d.route === 'matched' && d.product ? d.product.name : '';
+    st.pickItems = [{ v: '', label: autoName ? 'Tự khớp: ' + autoName : 'Bỏ chọn (tự khớp)' }]
+      .concat(list.map(function (n) { return { v: n, label: n, cand: cands.indexOf(n) !== -1 }; }));
+    $('rcProductLabel').textContent = cur ? cur : (autoName ? autoName + '  ·  tự khớp' : 'Chọn sản phẩm…');
+    if (st.pickOpen) renderPickList();
+  }
+
+  // ── Ô chọn sản phẩm có tìm kiếm ──
+  function fold(x) {
+    var t = String(x || '').toLowerCase().replace(/đ/g, 'd');
+    try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+    return t.replace(/[^a-z0-9]/g, '');
+  }
+  function pickFiltered() {
+    var q = fold($('rcProductSearch').value), items = st.pickItems || [];
+    if (!q) return items.slice(0, 600);
+    return items.filter(function (it) { return it.v && fold(it.label).indexOf(q) !== -1; }).slice(0, 600);
+  }
+  function renderPickList() {
+    var box = $('rcProductList'), cur = st.prefs.productPick[projectKey()] || '';
+    box.innerHTML = '';
+    var items = pickFiltered();
+    if (!items.length) { box.appendChild(el('div', 'rc-pick-empty', 'Không có sản phẩm nào khớp.')); return; }
+    items.forEach(function (it) {
+      var row = el('div', 'rc-pick-item' + (it.v === cur ? ' is-cur' : ''));
+      row.appendChild(el('span', '', it.label));
+      if (it.cand && it.v !== cur) row.appendChild(el('span', 'rc-pick-tag', 'gợi ý'));
+      row.setAttribute('role', 'button');
+      row.addEventListener('click', function () { choosePick(it.v); });
+      box.appendChild(row);
+    });
+  }
+  function openPicker() {
+    if (st.running) return;
+    st.pickOpen = true;
+    $('rcProductPanel').style.display = '';
+    $('rcProductCaret').textContent = '▴';
+    $('rcProductSearch').value = '';
+    renderPickList();
+    try { $('rcProductSearch').focus(); } catch (e) {}
+  }
+  function closePicker() {
+    st.pickOpen = false;
+    $('rcProductPanel').style.display = 'none';
+    $('rcProductCaret').textContent = '▾';
+  }
+  function choosePick(v) {
+    closePicker();
+    if (v === (st.prefs.productPick[projectKey()] || '')) return;
+    onProductPick(v);
   }
 
   // ── Danh sách clip ──────────────────────────────────────────────────────
@@ -525,10 +569,10 @@
     var show = !!st.read && st.prefs.mode !== 'source' && rowsOf('render').length;
     $('rcRenderCard').style.display = show ? '' : 'none';
     if (!show) return;
-    var sel = $('rcMaster'), vt = RCC.videoTracksPresent(rowsOf('render'));
-    sel.innerHTML = '';
-    vt.forEach(function (t) { var o = el('option', '', 'V' + t.index + ' · ' + t.items + ' clip'); o.value = String(t.index); sel.appendChild(o); });
-    sel.value = String(st.read.master || '');
+    var vt = RCC.videoTracksPresent(rowsOf('render'));
+    chipRow($('rcMaster'), vt.map(function (t) { return { n: t.index, label: 'V' + t.index + ' · ' + t.items + ' clip' }; }),
+      function (it) { return it.n === st.read.master; },
+      function (it) { onMaster(it.n); });
     var inc = includeList();
     chipRow($('rcVTracks'), vt.map(function (t) { return { n: t.index, label: 'V' + t.index }; }),
       function (it) { return inc.indexOf(it.n) !== -1; },
@@ -540,9 +584,9 @@
       });
   }
 
-  async function onMaster() {
-    var v = Number($('rcMaster').value || 0);
-    if (st.running || st.busy) { $('rcMaster').value = String(st.read ? st.read.master : ''); return; }
+  async function onMaster(v) {
+    v = Number(v || 0);
+    if (st.running || st.busy) return;
     if (!st.read || !v || v === st.read.master) return;
     st.read.master = v;
     st.prefs.master[st.read.seqId] = v; savePrefs();
@@ -577,16 +621,18 @@
   function paintQuality() {
     $('rcMoreSum').textContent = 'CRF ' + st.prefs.crf + ' · ' + st.prefs.scale + '%' + (st.prefs.fps ? ' · ' + st.prefs.fps + ' fps' : '');
     $('rcCrfVal').textContent = String(st.prefs.crf);
-    $('rcScale').value = String(st.prefs.scale);
+    chipRow($('rcScale'), SCALES.map(function (x) { return { n: x, label: x + '%' }; }),
+      function (it) { return it.n === st.prefs.scale; },
+      function (it) { st.prefs.scale = it.n; savePrefs(); paintQuality(); });
     $('rcFps').value = st.prefs.fps;
     $('rcTrans').classList.toggle('on', st.prefs.transitions);
     $('rcResume').classList.toggle('on', st.prefs.resume);
     var fpsNote = $('rcFpsNote');
     fpsNote.textContent = st.prefs.fps ? 'Ép frame rate làm clip KHÔNG còn đúng từng frame của timeline.' : '';
-    var sel = $('rcPreset');
-    sel.innerHTML = '';
-    var o0 = el('option', '', '— preset —'); o0.value = ''; sel.appendChild(o0);
-    Object.keys(st.presets).sort().forEach(function (n) { var o = el('option', '', n); o.value = n; sel.appendChild(o); });
+    var names = Object.keys(st.presets).sort();
+    chipRow($('rcPreset'), names.map(function (n) { return { n: n, label: n }; }), function () { return false; },
+      function (it) { onPresetPick(it.n); });
+    if (!names.length) $('rcPreset').appendChild(el('div', 'rc-pick-empty', 'Chưa có preset — đặt tên bên dưới rồi Lưu.'));
   }
   function stepCrf(d) {
     var v = Math.round((st.prefs.crf + d) * 2) / 2;
@@ -598,15 +644,14 @@
     if (r && r.presets) st.presets = r.presets;
     paintQuality();
   }
-  function onPresetPick() {
-    var p = st.presets[$('rcPreset').value];
+  function onPresetPick(name) {
+    var p = st.presets[name];
     if (!p) return;
+    $('rcPresetName').value = name;
     if (p.crf != null) st.prefs.crf = Number(p.crf);
     if (p.scale != null) st.prefs.scale = SCALES.indexOf(Number(p.scale)) !== -1 ? Number(p.scale) : 100;
     st.prefs.fps = p.fps ? String(p.fps) : '';
-    savePrefs(); paintQuality();
-    $('rcPreset').value = '';
-    setStatus('Đã áp preset — bấm Đọc timeline lại nếu muốn số ước lượng theo cài đặt mới.');
+    savePrefs(); paintQuality(); paintGo();
   }
   async function onPresetSave() {
     var name = String($('rcPresetName').value || '').trim();
@@ -960,20 +1005,24 @@
     });
     $('rcChooseFolder').addEventListener('click', onChooseFolder);
     $('rcResetFolder').addEventListener('click', onResetFolder);
-    $('rcProduct').addEventListener('change', onProductPick);
+    $('rcProductBtn').addEventListener('click', function () { if (st.pickOpen) closePicker(); else openPicker(); });
+    $('rcProductSearch').addEventListener('input', renderPickList);
+    $('rcProductSearch').addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closePicker(); return; }
+      if (e.key === 'Enter') { var f = pickFiltered().filter(function (it) { return it.v; })[0]; if (f) choosePick(f.v); }
+    });
+    bindKeyboard('rcProductSearch');
     $('rcAllToggle').addEventListener('click', onAllToggle);
     $('rcShowDead').addEventListener('click', function () { st.showDead = !st.showDead; paintClips(); });
-    $('rcMaster').addEventListener('change', onMaster);
     $('rcAudioMix').addEventListener('click', function () { st.prefs.audioMix = !st.prefs.audioMix; savePrefs(); paintAudio(); });
     $('rcCrfMinus').addEventListener('click', function () { stepCrf(-0.5); });
     $('rcCrfPlus').addEventListener('click', function () { stepCrf(0.5); });
-    SCALES.forEach(function (s) { var o = el('option', '', s + '%'); o.value = String(s); $('rcScale').appendChild(o); });
     FPS_LIST.forEach(function (f) { var o = el('option', '', f ? f + ' fps' : 'Theo nguồn'); o.value = f; $('rcFps').appendChild(o); });
-    $('rcScale').addEventListener('change', function () { st.prefs.scale = Number($('rcScale').value) || 100; savePrefs(); paintQuality(); });
     $('rcFps').addEventListener('change', function () { st.prefs.fps = $('rcFps').value; savePrefs(); paintQuality(); });
+    // <select> của UXP đổi giá trị khi lăn chuột ngang qua → chặn lăn trên ô fps.
+    $('rcFps').addEventListener('wheel', function (e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
     $('rcTrans').addEventListener('click', function () { st.prefs.transitions = !st.prefs.transitions; savePrefs(); paintQuality(); });
     $('rcResume').addEventListener('click', function () { st.prefs.resume = !st.prefs.resume; savePrefs(); paintQuality(); });
-    $('rcPreset').addEventListener('change', onPresetPick);
     $('rcPresetSave').addEventListener('click', onPresetSave);
     $('rcPresetDel').addEventListener('click', onPresetDelete);
     bindKeyboard('rcPresetName');

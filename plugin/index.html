@@ -1850,7 +1850,16 @@
           <div class="rsz-link" id="rcChooseFolder" role="button"><span data-ic="folder" data-ic-size="11"></span> Đổi thư mục</div>
         </div>
         <div id="rcDestLine" class="rc-dest"></div>
-        <select id="rcProduct" class="vg-select rc-select" style="display:none"></select>
+        <!-- Ô chọn sản phẩm tự làm: <select> của UXP đổi giá trị khi lăn chuột ngang qua. -->
+        <div class="rc-pick" id="rcProduct" style="display:none">
+          <div class="rc-pick-btn" id="rcProductBtn" role="button">
+            <span class="rc-pick-label" id="rcProductLabel"></span><span class="rc-pick-caret" id="rcProductCaret">▾</span>
+          </div>
+          <div class="rc-pick-panel" id="rcProductPanel" style="display:none">
+            <input type="text" id="rcProductSearch" class="vg-select rc-input rc-pick-search" placeholder="Tìm sản phẩm…" />
+            <div class="rc-pick-list" id="rcProductList"></div>
+          </div>
+        </div>
       </div>
 
       <div class="rc-card" id="rcClipsCard" style="display:none">
@@ -1870,10 +1879,8 @@
       <div class="rc-pair">
         <div class="rc-card" id="rcRenderCard" style="display:none">
           <div class="rc-card-head"><span class="rc-card-title">TIMELINE RENDER</span></div>
-          <div class="rc-field">
-            <span class="rc-label">Master track</span>
-            <select id="rcMaster" class="vg-select rc-select rc-select-sm"></select>
-          </div>
+          <div class="rc-sub">Master track</div>
+          <div class="rsz-chips" id="rcMaster"></div>
           <div class="rc-sub">Track hình có trong bản render</div>
           <div class="rsz-chips" id="rcVTracks"></div>
         </div>
@@ -1907,7 +1914,7 @@
           </div>
           <div class="rc-field">
             <span class="rc-label">Độ phân giải</span>
-            <select id="rcScale" class="vg-select rc-select rc-select-sm"></select>
+            <div class="rsz-chips rc-chips-right" id="rcScale"></div>
           </div>
           <div class="rc-field">
             <span class="rc-label">Frame rate</span>
@@ -1916,9 +1923,8 @@
           <div class="rc-warn" id="rcFpsNote"></div>
           <div class="rc-toggle" id="rcTrans" role="button"><span class="rc-tick"></span>Tách cross-dissolve thành 2 clip (Timeline Render)</div>
           <div class="rc-toggle" id="rcResume" role="button"><span class="rc-tick"></span>Bỏ qua clip đã có sẵn trong thư mục</div>
-          <div class="rc-field rc-presets">
-            <select id="rcPreset" class="vg-select rc-select"></select>
-          </div>
+          <div class="rc-sub">Preset (bấm để áp)</div>
+          <div class="rsz-chips" id="rcPreset"></div>
           <div class="rc-field rc-presets">
             <input type="text" id="rcPresetName" class="vg-select rc-input" placeholder="Tên preset" />
             <div class="wf-btn wf-btn-sm" id="rcPresetSave" role="button">Lưu</div>
