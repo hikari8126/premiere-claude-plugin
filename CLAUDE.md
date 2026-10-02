@@ -9,7 +9,7 @@
 ## Tổng quan
 
 Plugin tích hợp thẳng vào Adobe Premiere Pro:
-- **Claude AI Chat** — trò chuyện với Claude để edit timeline
+- **Tab Claude (Clawd)** — gõ lệnh, Claude (Opus 5.5) hiểu ý rồi điều phối các tab (đẩy script sang Voice Gen, sắp bảng Autocut…); nhật ký 20 lệnh gần nhất
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json

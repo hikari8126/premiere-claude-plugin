@@ -14,6 +14,17 @@
 
 ---
 
+## Tiến độ
+
+- ✅ **Phase A (tab Clawd + làm lại giao diện)** — nhánh `feat/claude-tab`. Khác plan gốc: đập đi xây lại cả tab
+  (user cho phép): bỏ header / thanh trạng thái / bong bóng chat / **đính-dán ảnh cutsheet** (user bỏ); logic DOM ở
+  `plugin/claude-tab.js`, hàm thuần ở `plugin/claude-log.js` (render trả lời, lịch sử 20 lệnh, nhãn sequence) và
+  `plugin/clawd-pixel.js` (5 cảnh idle/blink/think/done/fail); `main.js` chỉ còn `ppExecuteAction` +
+  `refreshTimeline` → `window.ClaudeTabSetSeq`. Lệnh mẫu ở màn trống chỉ gồm việc đã chạy được (Voice Gen script/SFX,
+  Autocut) — thêm "tạo bộ NAV", "soát lỗi" khi Phase C/D xong. Đã chạy thật trong bản DEV (Opus 5.5 → action ✓).
+- ✅ Model Opus 5.5 cho mọi lời gọi (`bridge/claude-model.js`), CLI ≥ 2.1.280.
+- ⏳ Phase B (whitelist + prompt mới), C (tạo bộ NAV), D (soát lỗi), E (version).
+
 ## Quyết định đã chốt (2026-10-03)
 
 | # | Quyết định |

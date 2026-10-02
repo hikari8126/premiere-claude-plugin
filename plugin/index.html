@@ -35,7 +35,8 @@
 
 <!-- ── TAB BAR ── -->
 <div class="tab-bar">
-  <!-- Claude chat tab temporarily hidden (kept in DOM below for later) -->
+  <!-- Tab Claude: nhỏ, chỉ có Clawd, luôn đứng đầu trang 1 -->
+  <div class="tab-btn tab-btn--claude" role="button" data-tab="claude" data-page="1" aria-label="Claude"><span class="tab-clawd" id="clawdTabIcon"></span></div>
   <!-- 2 trang tab: trang 1 = edit (Voice / Cut / Sub / Un-nest), trang 2 = còn lại. Nút bên phải lật qua lại. -->
   <div class="tab-btn" role="button" data-tab="voicegen" data-page="1"><span data-ic="microphone" data-ic-size="12"></span> VOICE GEN</div>
   <div class="tab-btn active" role="button" data-tab="autocut" data-page="1"><span data-ic="scissors" data-ic-size="12"></span> AUTOCUT</div>
@@ -51,75 +52,56 @@
 <!-- TAB: CLAUDE                                            -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-claude">
-
-  <!-- Header -->
-  <div id="header">
-    <h1>&#10022; Claude AI <span id="plugin-version" style="font-size:10px;font-weight:400;opacity:0.5;margin-left:4px;"></span></h1>
-    <div id="header-actions">
-      <button class="text-btn" id="refresh-btn">&#8635; Refresh</button>
-      <button class="text-btn" id="clear-btn">&#10005; Clear</button>
-    </div>
+  <!-- Tab Claude: ô lệnh + nhật ký lệnh. Claude hiểu ý → action, các tab làm việc.
+       Logic ở claude-tab.js (DOM) + claude-log.js / clawd-pixel.js (thuần, có test). -->
+  <div class="cl-seq">
+    <span class="cl-seqName" id="clSeqName">Chưa mở sequence</span>
+    <div class="cl-clear" id="clClear" role="button" hidden>Xoá</div>
   </div>
 
-  <!-- Status bar -->
-  <div id="status-bar">
-    <div id="status-dot"></div>
-    <span id="status-text">Connecting...</span>
-    <span id="timeline-info"></span>
-  </div>
-
-  <!-- Timeline context -->
-  <div id="context-panel">
-    <div id="context-content"></div>
-  </div>
-
-  <!-- Bounded content wrapper: clips chat+input to panel bounds even
-       when #tab-claude has overflow:visible for the settings popup -->
-  <div id="claude-content">
-
-    <!-- Chat area -->
-    <div id="chat-area">
-      <div id="empty-state">
-        <div class="logo">&#10022;</div>
-        <p>Ask Claude to help with your<br>Premiere Pro project.</p>
-        <p class="sub">Edit timeline &middot; Add subtitles &middot; Apply effects</p>
-      </div>
-    </div>
-
-    <!-- Input area -->
-    <div id="input-area">
-
-      <!-- Chips row — only visible when an image is attached -->
-      <div id="chips-row" hidden>
-        <div id="dropzone-chips" class="dropzone-chips"></div>
-      </div>
-
-      <!-- Main row: textarea + attach + send -->
-      <div id="input-row">
-        <textarea
-          id="message-input"
-          placeholder="Ask Claude... (Enter to send, Shift+Enter for newline)"
-          rows="3"
-        ></textarea>
-        <div id="input-side">
-          <button id="attach-btn" class="icon-btn">&#128206;</button>
-          <button id="send-btn">Send</button>
+  <div class="cl-log" id="clLog">
+    <div class="cl-empty" id="clEmpty">
+      <div class="cl-emptyHero" id="clawdHero"></div>
+      <div class="cl-emptyTitle">Gõ lệnh cho Premiere</div>
+      <div class="cl-emptySub">Claude hiểu ý, các tab làm việc.</div>
+      <div class="cl-examples">
+        <div class="cl-ex" role="button" data-fill="Đọc script này bằng Voice Gen:&#10;">
+          <div class="cl-exCmd"><span class="cl-chev">›</span>đọc script này bằng Voice Gen</div>
+          <div class="cl-exSub">dán script, Claude đẩy sang tab Voice Gen</div>
+        </div>
+        <div class="cl-ex" role="button" data-fill="Tạo SFX: ">
+          <div class="cl-exCmd"><span class="cl-chev">›</span>tạo SFX tiếng mở hộp quà</div>
+          <div class="cl-exSub">tả âm thanh, Claude viết prompt SFX</div>
+        </div>
+        <div class="cl-ex" role="button" data-fill="Sắp script này vào bảng Autocut:&#10;">
+          <div class="cl-exCmd"><span class="cl-chev">›</span>sắp script này vào bảng Autocut</div>
+          <div class="cl-exSub">script + tên source lộn xộn → bảng 3 cột</div>
         </div>
       </div>
-
-      <div id="quick-actions">
-        <button class="quick-btn" data-prompt="Parse this cutsheet image into a cutlist action.">Parse cutsheet</button>
-        <!-- custom shortcuts rendered here by JS -->
-        <button class="quick-add-btn" id="add-shortcut-btn">+</button>
-      </div>
-
-      <!-- Hidden dropzone: DOM anchor for drag-drop + paste events (no visible UI) -->
-      <div id="dropzone" tabindex="-1" aria-hidden="true" style="display:none;"></div>
     </div>
+  </div>
 
-  </div><!-- /claude-content -->
+  <div class="cl-dock">
+    <div class="cl-perch"><span class="cl-perchClawd" id="clawdDock"></span><span class="cl-state" id="clState">Sẵn sàng</span></div>
+    <div class="cl-input" id="clInputRow">
+      <textarea id="message-input" rows="1" placeholder="Gõ lệnh… (Enter gửi, Shift+Enter xuống dòng)"></textarea>
+      <div class="cl-send" id="send-btn" role="button" aria-label="Gửi"></div>
+    </div>
+    <div class="cl-scForm" id="clScForm" hidden>
+      <input class="cl-scName" id="clScName" placeholder="Tên nút" maxlength="24" />
+      <textarea class="cl-scPrompt" id="clScPrompt" rows="2" placeholder="Lệnh khi bấm nút"></textarea>
+      <div class="cl-scActions">
+        <div class="cl-btn" id="clScCancel" role="button">Huỷ</div>
+        <div class="cl-btn cl-btn--primary" id="clScSave" role="button">Lưu nút</div>
+      </div>
+    </div>
+    <div class="cl-chips" id="quick-actions">
+      <div class="cl-chip cl-chipAdd" id="add-shortcut-btn" role="button" aria-label="Thêm nút lệnh">+</div>
+    </div>
+  </div>
+</div><!-- /tab-claude -->
 
-  <!-- Settings popup — positioned absolute within #tab-claude -->
+  <!-- Settings popup — overlay chung, mở từ ⚙ trên version bar (main.js gắn vào <body>) -->
   <div id="settings-modal">
     <div id="settings-box">
       <div class="settings-header">
@@ -462,7 +444,6 @@
     </div>
   </div>
 
-</div><!-- /tab-claude -->
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- TAB: VOICE GEN (ElevenLabs)                            -->
@@ -2109,6 +2090,8 @@
 <script src="vg-seq.js"></script>
 <script src="st-script.js"></script>
 <script src="ver-compare.js"></script>
+<script src="clawd-pixel.js"></script>
+<script src="claude-log.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
 <script src="rename-core.js"></script>
@@ -2119,5 +2102,6 @@
 <script src="rawcut-ppro.js"></script>
 <script src="rawcut-pixel.js"></script>
 <script src="rawcut.js"></script>
+<script src="claude-tab.js"></script>
 </body>
 </html>
