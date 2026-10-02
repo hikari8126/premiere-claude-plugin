@@ -12885,7 +12885,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     stStopCountdown();
     stCountLeft = ST_COUNTDOWN;
     var tick = function () {
-      if (stCountLeft <= 0) { stCountTimer = null; stFinalize(); return; }
+      if (stCountLeft <= 0) { stCountTimer = null; stFinalize(stRunCtx); return; }
       stSetBtn('closed_captioning', 'Tạo SRT ngay (' + stCountLeft + ')');
       stStatus('✅ ' + stScriptLines().length + ' dòng — tự Tạo SRT sau ' + stCountLeft + 's (sửa để dừng · bấm để tạo ngay)' + (stDiag ? '\n' + stDiag : ''));
       stCountLeft--;
@@ -12921,18 +12921,34 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   //   1. version trong tên sequence  → "v21.0"
   //   2. không có version            → tên sequence đã làm sạch ký tự cấm
   //   3. không lấy được tên          → "subtitle_<timestamp>" (giữ hành vi cũ)
-  async function stOutputBasename() {
+  async function stActiveSeqName() {
     try {
       var seq = await getActiveSequence();
       var nm = seq && (seq.name != null ? seq.name : (seq.getName ? seq.getName() : ''));
       if (nm && nm.then) nm = await nm;
-      nm = String(nm || '').trim();
+      return String(nm || '').trim();
+    } catch (e) { return ''; }
+  }
+  function stBasenameFromSeqName(nm) {
+    try {
       var tag = stSeqVersionTag(nm);
       if (tag) return tag;
       var safe = nm.replace(/[\/\\:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim();
       if (safe) return safe;
     } catch (e) {}
     return 'subtitle_' + Date.now();
+  }
+  async function stOutputBasename() {
+    return stBasenameFromSeqName(await stActiveSeqName());
+  }
+
+  // Chụp sequence + tên file + thư mục VO NGAY LÚC BẤM (ST1). Whisper chạy 1-2 phút,
+  // đổi sequence giữa chừng thì .srt vẫn đặt tên + lưu theo video đã bấm, không
+  // ghi đè SRT của video đang mở.
+  var stRunCtx = null;
+  async function stCaptureCtx() {
+    var nm = await stActiveSeqName();
+    return { seqName: nm, basename: stBasenameFromSeqName(nm), voFolder: await stVoMediaFolder() };
   }
 
   // Auto-save SRT bật/tắt (đặt trong settings Voice Gen). Chưa đặt → mặc định BẬT
@@ -12949,8 +12965,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // forcePrompt=true: bỏ qua 1 & 2, luôn hỏi (dùng khi thư mục cũ ghi hỏng).
   // Tên file lấy theo version của sequence (vd "v21.0.srt"); trùng tên sẽ ghi đè
   // (cùng version → thay bản mới).
-  async function stResolveOutputPath(forcePrompt) {
-    var base = await stOutputBasename();
+  async function stResolveOutputPath(forcePrompt, ctx) {
+    var base = ctx ? ctx.basename : await stOutputBasename();
     // Auto-save TẮT → luôn mở hộp thoại Save để user chọn thư mục + tên (bỏ qua tự tìm).
     if (!stSrtAutoSaveOn()) {
       try {
@@ -12967,7 +12983,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
     var folder = '';
     if (!forcePrompt) {
-      folder = await stVoMediaFolder();
+      folder = ctx ? ctx.voFolder : await stVoMediaFolder();
       if (!folder) folder = localStorage.getItem('vg_last_save_folder') || '';
     }
     if (!folder) {
@@ -12996,6 +13012,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // bạn viết), bỏ trống thì dùng chữ Whisper nghe được.
       var clips = await stCollectClips();
       if (!clips.length) { stStatus('⚠ Chưa chọn track có clip audio (bấm 🔄 Quét track rồi tick).'); stBusy = false; stAbort = null; stResetOrganize(); return; }
+      stRunCtx = await stCaptureCtx();
       var scriptLines = stScriptLines();
       // Chụp lại nội dung ô script LÚC BẮT ĐẦU. Whisper chạy 10s–2 phút, thừa thời
       // gian để bạn dán script khác vào; nếu cứ ghi đè kết quả cũ lên thì bản dán
@@ -13047,7 +13064,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         stSetBtn('closed_captioning', 'Tạo Sub');
         stStatus('⚠ Timing có thể LỆCH — ' + stDiag + '\nKiểm tra script trong ô có đúng của video này không (Clear session để xoá sạch), track đã tick đúng chưa, rồi bấm Tạo SRT.');
       } else {
-        stFinalize();   // full pipeline: ngắt câu xong tạo SRT luôn, không đếm ngược
+        stFinalize(stRunCtx);   // full pipeline: ngắt câu xong tạo SRT luôn, không đếm ngược
       }
     } catch (e) {
       stBusy = false; stAbort = null;
@@ -13059,7 +13076,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
 
   // BƯỚC 2: tạo .srt từ ô script + import.
-  async function stFinalize() {
+  // ctx: bản chụp lúc bấm (stCaptureCtx). Không truyền → chụp ngay bây giờ.
+  async function stFinalize(ctx) {
     var lines = stScriptLines();
     if (!lines.length) { stStatus('⚠ Ô script trống — chưa có nội dung phụ đề.'); return; }
     stStopCountdown();
@@ -13068,7 +13086,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var b = stMainBtn(); if (b) b.classList.add('is-cancel');
     stSetBtn('xmark', 'Huỷ');
     try {
-      var outputPath = await stResolveOutputPath();
+      if (!ctx) ctx = await stCaptureCtx();
+      var outputPath = await stResolveOutputPath(false, ctx);
       if (!outputPath) { stStatus('Đã huỷ — chưa chọn thư mục lưu.'); return; }
       var url, body;
       // Luồng no-script CHƯA đổi số dòng → ghi thẳng timing gốc (== bản cũ), lấy text
@@ -13106,7 +13125,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (d && d.ok === false && /EACCES|permission denied|Cannot create folder|ENOENT|no such file/i.test(String(d.error || ''))) {
         stStatus('⚠ Không ghi được .srt vào thư mục của VO (chỉ-đọc hoặc ổ đã ngắt). Chọn thư mục khác để lưu...');
         var alt = null;
-        try { alt = await stResolveOutputPath(true); } catch (e) { alt = null; }
+        try { alt = await stResolveOutputPath(true, ctx); } catch (e) { alt = null; }
         if (alt) { body.outputPath = alt; d = await stPostFinalize(); }
       }
       if (!d || !d.ok) { stStatus('❌ ' + ((d && d.error) || 'Tạo SRT thất bại')); return; }
@@ -13119,9 +13138,13 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var logHint = (d.diag && d.diag.reportPath)
         ? '\n📄 Log: ' + String(d.diag.reportPath).split('/').pop() + ' (Documents ▸ Claude Bridge Logs ▸ autosub)'
         : '';
+      var nowSeq = await stActiveSeqName();
+      var seqHint = (ctx.seqName && nowSeq !== ctx.seqName)
+        ? '\n⚠ Đã lưu theo sequence "' + ctx.seqName + '" (lúc bấm) — sequence đang mở là "' + (nowSeq || '?') + '".'
+        : '';
       stStatus('✅ ' + d.cues.length + ' dòng phụ đề → "' + d.path.split('/').pop() + '"' +
         (imported ? ' · đã import vào project — kéo từ bin xuống timeline.'
-                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + logHint);
+                  : ' · đã lưu (chưa import được — bấm 📂 mở thư mục rồi kéo .srt vào project).') + seqHint + logHint);
       stSplitReady = false;
       stResetOrganize(); // xong → về trạng thái đầu cho lần sau
     } catch (e) {
@@ -13143,7 +13166,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     // "AI ngắt câu" riêng (stSplitReady) thì chỉ còn Whisper canh giờ theo từng dòng
     // trong ô (keepLines). stOrganized: full pipeline dừng lại vì timing đáng ngờ.
     if (stSplitReady && stScriptLines().length) { stTimedCues = null; stFinalize(); }
-    else if (stOrganized) stFinalize();
+    else if (stOrganized) stFinalize(stRunCtx);
     else stOrganize();
   });
   // Nút nhỏ dưới ô script: AI chia script thành dòng phụ đề, KHÔNG Whisper (vài giây).
