@@ -3,6 +3,29 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.15.1-beta.1 / bridge server 1.22.1-beta.1 — 2026-10-03 (chưa release)
+
+> Sửa lỗi QC đợt 1 (`docs/qc/2026-10-03-qc-review.md`). Cần bridge 1.22.1-beta.1 cho VG2 (phần bridge) và W1; Bridge app sẽ lên 3.19 khi ship (S1, S3 sửa `bridge-app/main.swift`).
+
+### 🐛 An toàn dữ liệu
+- **S1** — "Khởi động lại Bridge" giết Premiere: `lsof -ti :3030` liệt kê cả client đang nối tới port. Giờ chỉ lấy PID `-sTCP:LISTEN` có lệnh `node … server.js`, SIGTERM rồi mới SIGKILL (`killBridgeOnPortCmd`).
+- **UN1** — Un-nest chỉ tắt nest đã bung được (placed > 0) + item linked V/A của nó, gộp một transaction; không bung được gì thì báo, giữ nguyên clip.
+- **W2** — Watch import hụt không lấy clip cũ trùng tên ở bin khác: chỉ nhận clip trỏ đúng media path (API không đọc được path → chỉ clip MỚI theo snapshot trước/sau mẻ); không thấy → ack failed kèm lý do.
+- **W6** — Bảng duyệt Watch vẽ lại giữ đúng tick đã bỏ.
+- **F3** — Autocut: cờ `sacRunBusy` chặn bấm This seq / New seq khi đang dựng (nút mờ, status "Đang dựng…").
+- **ST1** — Tạo Sub chụp `{seqName, basename, voFolder}` lúc bấm; đổi sequence giữa lúc Whisper chạy vẫn lưu theo video đã bấm, status ghi rõ.
+
+### 🐛 Logic
+- **A2** — `sacRunAutoCut` trả `{ok, error, placed, failed, voiceOk}`; trang Auto: lỗi → `error`, thiếu voice → `warn` + `job.error` (không sang trang Sub).
+- **F1** — Source ⚠ trùng tên chưa bind không lọt skip-gate.
+- **F2** — Bind tay lưu thêm media path (`sac_bind_paths_v1`); validate lại resolve theo path, không trượt sang clip cùng tên. Bind cũ (chỉ nhãn) khớp theo tên như trước.
+- **VG2** — Variation 2 lỗi → vẫn trả variation 1 + `errors` (`bridge/variations.js`); multi-speaker lỗi giữa chừng vẫn render + lưu history phần đã gen.
+- **VG1** — Timeout 10 phút cho `/music/generate`, `/voice/change`, `/tts/generate` (call ngắn giữ 2 phút).
+- **ST3** — Cờ ngắt câu / canh giờ gắn với nội dung script (`plugin/st-script.js`): dán script khác (<60% chữ khớp) → chạy full pipeline; sửa nhẹ vẫn giữ.
+- **ST2** — Luồng "AI ngắt câu → Tạo Sub" soi độ khớp: <40% → ⛔ SCRIPT KHÔNG KHỚP, không import (file .srt vẫn đã được ghi — bridge ghi trước khi trả diag).
+- **W1** — `watchfolder-state.json` lưu theo project (`byProject`), tự chuyển đổi state bản cũ; đổi project rồi quay lại còn snapshot + hàng đợi.
+- **S3** — Bridge app luôn khởi động bridge trước, kiểm Claude CLI / đăng nhập / Whisper song song (`ensureBridge`).
+
 ## bridge server 1.22.1-beta.1 — 2026-10-02 (chưa release)
 
 ### 🐛 Đổi tên source không relink file After Effects
