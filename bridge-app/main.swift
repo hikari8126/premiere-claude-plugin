@@ -484,7 +484,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             // ── Kill any zombie holding port 3030 ─────────────────────────────
-            let kill = self.shTimeout("lsof -ti :\(self.bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null; echo ok", env: shEnv, timeout: 8)
+            let kill = self.shTimeout(self.killBridgeOnPortCmd() + "; echo ok", env: shEnv, timeout: 8)
             self.log("Cleared port \(self.bridgePort): \(kill.out.trimmingCharacters(in: .whitespacesAndNewlines))")
             Thread.sleep(forTimeInterval: 0.4)
 
@@ -580,11 +580,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bridgeTask?.interrupt()
         bridgeTask?.terminate()
         bridgeTask = nil
-        // Force-kill anything on port (handles externally-started bridges) on a
+        // Dọn bridge còn giữ port (kể cả bridge chạy ngoài app; không đụng client như Premiere) on a
         // background queue: lsof can block for a long time, and doing it here
         // froze the menu bar app mid-click.
         DispatchQueue.global(qos: .userInitiated).async {
-            self.shTimeout("lsof -ti :\(self.bridgePort) 2>/dev/null | xargs kill -9 2>/dev/null",
+            self.shTimeout(self.killBridgeOnPortCmd(),
                            env: ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"], timeout: 8)
             Thread.sleep(forTimeInterval: 0.5)
             DispatchQueue.main.async {
@@ -1172,6 +1172,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         step()
+    }
+
+    // Lệnh shell dọn port bridge: CHỈ tiến trình đang LISTEN trên port và là `node … server.js`.
+    // `lsof -ti :PORT` cũ liệt kê cả client đang nối tới port (Premiere/UXP) → kill -9 giết Premiere (S1).
+    // SIGTERM trước, chờ ~1s, còn sống mới SIGKILL.
+    func killBridgeOnPortCmd() -> String {
+        return """
+        PIDS=""; for P in $(lsof -nP -t -iTCP:\(bridgePort) -sTCP:LISTEN 2>/dev/null); do \
+          C=$(ps -o command= -p "$P" 2>/dev/null); \
+          case "$C" in *node*server.js*) PIDS="$PIDS $P";; esac; \
+        done; \
+        if [ -n "$PIDS" ]; then kill $PIDS 2>/dev/null; sleep 1; \
+          for P in $PIDS; do kill -0 "$P" 2>/dev/null && kill -9 "$P" 2>/dev/null; done; fi; true
+        """
     }
 
     @discardableResult
