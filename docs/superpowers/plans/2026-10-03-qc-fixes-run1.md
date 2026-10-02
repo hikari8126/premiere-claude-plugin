@@ -37,7 +37,7 @@ Version: plugin `v5.15.1-beta.1` (manifest `5.15.1`), bridge `1.22.1-beta.1` (đ
 15. **S3 — Bridge không khởi động khi chưa đăng nhập Claude** — `bridge-app/main.swift:331-458`. Luôn `startBridge()` trước; kiểm đăng nhập chạy song song, chỉ hiện trạng thái/popup, không chặn.
 
 ## Việc riêng (chỉ khi điều kiện đúng)
-- **Cứu FX.aep**: nếu `isAeRunning()` = false: backup `…/AeriSoft/Videos/Editing File/FX.aep` vào `~/Library/Application Support/ClaudeBridge/rename/aep-backup/manual-<ts>/`, rồi `relinkAepFile(file, buildMap(pairs), backupDir)` (bridge/aep-relink.js, cần fix d25e82b) với cặp đã chuẩn bị ở `~/Library/Application Support/ClaudeBridge/rename/fx-aep-repair-pairs.json` (9 file → kỳ vọng `replaced: 11`). Kiểm từng `newPath` còn tồn tại trước khi ghi. Kiểm đọc lại: không còn footage offline trong `AeriSoft_Senyue_Raw Footage_20250825` và `Studio 2/OUTPUT`. AE đang mở → bỏ qua, ghi vào báo cáo.
+- **Cứu FX.aep**: nếu `isAeRunning()` = false: backup `…/AeriSoft/Videos/Editing File/FX.aep` vào `~/Library/Application Support/ClaudeBridge/rename/aep-backup/manual-<ts>/`, rồi `relinkAepFile(file, buildMap(pairs), backupDir)` (bridge/aep-relink.js, cần fix d25e82b) với cặp đã chuẩn bị ở `~/Library/Application Support/ClaudeBridge/rename/fx-aep-repair-pairs.json` (8 cặp — `3.MOV`/`3.mov` chung một khoá — kỳ vọng `replaced: 11`). Kiểm từng `newPath` còn tồn tại trước khi ghi. Kiểm đọc lại: không còn footage offline trong `AeriSoft_Senyue_Raw Footage_20250825` và `Studio 2/OUTPUT`. AE đang mở → bỏ qua, ghi vào báo cáo.
 
 ## Kết thúc
 - `cd bridge && npm test`; `bash dev.sh` dựng lại bản DEV (chỉ kiểm panel nạp được, không chạy thao tác sửa project thật).
