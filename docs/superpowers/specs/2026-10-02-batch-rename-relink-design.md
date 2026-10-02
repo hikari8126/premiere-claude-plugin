@@ -22,6 +22,9 @@ lý do với `#wfCmpModal`: UXP không có z-index):
   - `{bin}` — tên bin trực tiếp chứa clip
   - `{n}` — số thứ tự, tự đệm 0 theo số lớn nhất của lượt (≥2 chữ số: 01…09, 001…120)
   - `{name}` — tên file cũ bỏ đuôi
+  - `{num}` — giữ số gốc nếu tên gốc (bỏ đuôi) là số hoặc `<bin>[ _-]số`; còn lại lấy số
+    mới nối tiếp sau số lớn nhất được giữ của cùng bin (không có → từ "Bắt đầu từ", và
+    không thấp hơn ô đó); cả bin đệm 0 theo độ dài lớn nhất (≥2, giữ độ dài số gốc như `033`)
 - **Bắt đầu từ** — mặc định 1.
 - **Bảng xem trước** tên cũ → tên mới, mặc định A→Z theo tên cũ (so sánh số tự
   nhiên: `IMG_2` trước `IMG_10`), nút ↑↓ mỗi dòng để đổi thứ tự. Dòng lỗi tô đỏ

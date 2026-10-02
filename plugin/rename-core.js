@@ -41,9 +41,23 @@ var RNC = (function () {
 
   function pad(n, w) { var s = String(n); while (s.length < w) s = '0' + s; return s; }
 
-  // Token: {bin} {n} {name}. Token lạ để nguyên cho người dùng thấy mình gõ sai.
+  function nfc(s) { s = String(s == null ? '' : s); return typeof s.normalize === 'function' ? s.normalize('NFC') : s; }
+
+  // Số "có nghĩa" trong tên gốc (đã bỏ đuôi): tên chỉ toàn số ("41") hoặc tên bin + số
+  // ("Senyue 41", "senyue_041"). Tên kiểu máy quay (IMG_4821, DSC_0012…) → null.
+  function keptNumber(base, bin) {
+    var b = nfc(base).trim(), m = /^(\d+)$/.exec(b);
+    if (m) return m[1];
+    var bn = nfc(bin).trim();
+    if (!bn) return null;
+    var esc = bn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    m = new RegExp('^' + esc + '[\\s_\\-]*(\\d+)$', 'i').exec(b);
+    return m ? m[1] : null;
+  }
+
+  // Token: {bin} {n} {name} {num}. Token lạ để nguyên cho người dùng thấy mình gõ sai.
   function renderName(tpl, ctx, width) {
-    var out = String(tpl || '').replace(/\{(bin|n|name)\}/g, function (m, k) {
+    var out = String(tpl || '').replace(/\{(bin|n|name|num)\}/g, function (m, k) {
       if (k === 'n') return pad(ctx.n, width || 2);
       return String(ctx[k] == null ? '' : ctx[k]);
     });
@@ -105,16 +119,45 @@ var RNC = (function () {
 
   // rows (đã theo thứ tự) → [{path, oldName, newName, error, same}]. Trùng tên trong
   // CÙNG thư mục (không phân biệt hoa/thường — APFS mặc định vậy) báo lỗi mọi dòng dính.
+  // {num} theo từng bin: giữ số gốc (keptNumber); dòng không có số giữ được lấy số mới
+  // nối tiếp sau số lớn nhất được giữ của bin đó (không có thì từ ô "Bắt đầu từ", và
+  // không thấp hơn ô đó). Cả bin đệm 0 cùng độ dài. → [{num, kind:'keep'|'new'}]
+  function assignNums(rows, start) {
+    var groups = {}, order = [];
+    var info = rows.map(function (r, i) {
+      var g = nfc(r.bin).toLowerCase();
+      if (!groups[g]) { groups[g] = { max: -1, len: 0, idx: [] }; order.push(g); }
+      var k = keptNumber(splitExt(r.oldName).base, r.bin);
+      groups[g].idx.push(i);
+      if (k !== null) {
+        groups[g].max = Math.max(groups[g].max, parseInt(k, 10));
+        groups[g].len = Math.max(groups[g].len, k.length);
+        return { value: parseInt(k, 10), kind: 'keep' };
+      }
+      return { value: null, kind: 'new' };
+    });
+    order.forEach(function (g) {
+      var G = groups[g], next = Math.max(G.max + 1, start), last = G.max;
+      G.idx.forEach(function (i) { if (info[i].value === null) { info[i].value = next++; last = Math.max(last, info[i].value); } });
+      var w = Math.max(2, G.len, String(Math.max(last, 0)).length);
+      G.idx.forEach(function (i) { info[i].num = pad(info[i].value, w); });
+    });
+    return info;
+  }
+
   function buildPreview(rows, tpl, start) {
     rows = rows || [];
     var s = parseInt(start, 10);
     if (isNaN(s) || s < 0) s = 1;
     var w = padWidth(s, rows.length);
+    var useNum = /\{num\}/.test(String(tpl || ''));
+    var nums = useNum ? assignNums(rows, s) : null;
     var out = rows.map(function (r, i) {
       var p = splitExt(r.oldName);
-      var base = renderName(tpl, { bin: r.bin, n: s + i, name: p.base }, w);
+      var base = renderName(tpl, { bin: r.bin, n: s + i, name: p.base, num: nums ? nums[i].num : '' }, w);
       var nn = base + p.ext;
-      return { path: r.path, oldName: r.oldName, newName: nn, error: nameError(nn), same: nn === r.oldName };
+      return { path: r.path, oldName: r.oldName, newName: nn, error: nameError(nn), same: nn === r.oldName,
+        numKind: nums ? nums[i].kind : '' };
     });
     var seen = {};
     out.forEach(function (r, i) {
@@ -134,6 +177,7 @@ var RNC = (function () {
     natCmp: natCmp,
     padWidth: padWidth,
     renderName: renderName,
+    keptNumber: keptNumber,
     nameError: nameError,
     groupByPath: groupByPath,
     sortRows: sortRows,

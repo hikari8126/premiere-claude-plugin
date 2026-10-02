@@ -4957,6 +4957,7 @@ div.rn-mv[role="button"]:hover { color: #fff; border-color: var(--accent); }
 .rn-arrow { color: var(--accent-light); margin: 0 6px; }
 .rn-new { color: #fff; }
 .rn-sub { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+.rn-sub.is-new { color: var(--accent-light); }
 .rn-row.is-err .rn-new, .rn-row.is-err .rn-sub { color: #f87171; }
 .rn-row.is-same .rn-new { color: var(--text-dim); font-style: italic; }
 .rn-row.is-skip .rn-txt { color: var(--text-dim); font-style: italic; padding-left: 4px; }

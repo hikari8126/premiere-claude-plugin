@@ -314,9 +314,11 @@
       names.appendChild(o); names.appendChild(a); names.appendChild(n);
       txt.appendChild(names);
       var cnt = rn.rows[i] && rn.rows[i].items.length;
-      if (err || cnt > 1) {
-        var sub = document.createElement('div'); sub.className = 'rn-sub';
-        sub.textContent = err || (cnt + ' clip trong project dùng file này');
+      var tag = p.numKind === 'keep' ? 'giữ số gốc' : (p.numKind === 'new' ? 'số mới' : '');
+      if (err || cnt > 1 || tag) {
+        var sub = document.createElement('div'); sub.className = 'rn-sub' + (!err && p.numKind === 'new' ? ' is-new' : '');
+        sub.textContent = err || [tag, cnt > 1 ? cnt + ' clip trong project dùng file này' : '']
+          .filter(Boolean).join(' · ');
         txt.appendChild(sub);
       }
       row.appendChild(txt);
