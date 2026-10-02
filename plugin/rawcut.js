@@ -36,7 +36,8 @@
     xhr: null,
     confirmResolve: null,
     last: null,        // lượt xuất gần nhất (cho Retry / Mở thư mục)
-    presets: {}
+    presets: {},
+    watch: { polling: false, pendingKey: '', changedAt: 0, failKey: '' }
   };
 
   function $(id) { return document.getElementById(id); }
@@ -138,14 +139,29 @@
   }
 
   // ── Trạng thái chung ────────────────────────────────────────────────────
+  // Dòng trạng thái chỉ còn cho lỗi / cảnh báo. Thông tin tiến trình chạy ở chân trang
+  // (cạnh nhân vật pixel); thành công thì im — đã có thẻ báo cáo + ✓.
   function setStatus(msg, kind) {
+    var m = String(msg || '').replace(/^[✓✅❌⛔⚠⏳]\uFE0F?\s*/, '');
     var s = $('rcStatus');
-    s.textContent = msg || '';
-    s.className = 'rsz-status' + (kind ? ' rc-' + kind : '');
+    if (kind === 'err' || kind === 'warn') {
+      s.textContent = m;
+      s.className = 'rc-status' + (kind === 'err' ? ' rc-err' : '');
+      return;
+    }
+    s.textContent = '';
+    s.className = 'rc-status';
+    if (m && (st.busy || st.running)) liveText(m);
+  }
+  function liveText(m) {
+    $('rcProgress').style.display = '';
+    $('rcBar').style.display = 'none';
+    $('rcProgText').textContent = m;
   }
   function setBusy(b, label) {
     st.busy = b;
     $('rcRead').classList.toggle('is-disabled', b);
+    if (!b && !st.running) showProgress(false);
     paintGo(label);
   }
   function projectKey() { return (st.read && st.read.projectPath) || ''; }
@@ -158,21 +174,24 @@
     return o;
   }
 
-  async function onRead() {
-    if (st.busy || st.running) return;
-    if (typeof RCP === 'undefined' || typeof RCC === 'undefined') { setStatus('❌ Thiếu rawcut-core.js / rawcut-ppro.js', 'err'); return; }
-    if (!bridgeHasRawcut()) { setStatus('⛔ Bridge chưa có Raw-cutter — cập nhật Claude Bridge rồi thử lại.', 'err'); return; }
+  // opts.auto: do theo dõi timeline gọi (sequence mới / timeline vừa sửa) — không xoá báo cáo.
+  async function onRead(opts) {
+    opts = (opts && opts.auto) ? opts : {};
+    if (st.busy || st.running || st.confirmResolve) return;
+    if (typeof RCP === 'undefined' || typeof RCC === 'undefined') { setStatus('Thiếu rawcut-core.js / rawcut-ppro.js', 'err'); return; }
+    if (!bridgeHasRawcut()) { setStatus('Bridge chưa có Raw-cutter — cập nhật Claude Bridge rồi thử lại.', 'err'); return; }
+    if (!opts.auto) st.watch.failKey = '';
+    var prev = st.read;
     setBusy(true, 'ĐANG ĐỌC…');
-    hideReport();
     pixel('read');
     var readOk = false;
     try {
       var env = await api('GET', '/rawcut/status');
       paintEnv(env);
       if (!env.ok) { setStatus('❌ ' + envProblem(env), 'err'); return; }
-      setStatus('⏳ Đọc timeline trong Premiere…');
+      setStatus(prev && opts.auto ? 'Timeline vừa thay đổi — đang cập nhật…' : 'Đang đọc sequence…');
       var r = await RCP.readSequence();
-      setStatus('⏳ Xuất FCP XML…');
+      setStatus('Đang xuất FCP XML…');
       var x = await RCP.exportXml(r.seq);
       var read = {
         seqId: r.info.id, seqName: r.info.name, fp: r.fp, info: r.info, fps: r.fps,
@@ -180,20 +199,67 @@
         dump: r.dump, xmlPath: x.path, read: null, rows: { source: [], render: [] }, manifest: {},
         notes: [], master: 0, audioTracks: [], noCuts: false
       };
-      st.read = read;
-      st.unpicked = { source: {}, render: {} };
+      if (read.xmlWhy) read.warnings.unshift(read.xmlWhy);
       read.master = Number(st.prefs.master[read.seqId] || 0);
+      st.read = read;
+      // Cùng sequence (vừa sửa timeline) → giữ các clip người dùng đã bỏ tick.
+      if (!prev || prev.seqId !== read.seqId) st.unpicked = { source: {}, render: {} };
       await scanHalves();
       await resolveDest();
       paintAll();
-      var n = read.rows.source.length || read.rows.render.length;
-      setStatus(read.noCuts ? '⚠ Timeline không có cut nào để cắt.' : ('✓ Đọc xong · ' + n + ' cut' + (read.xmlWhy ? ' · ' + read.xmlWhy : '')), read.xmlWhy || read.noCuts ? 'warn' : '');
+      if (read.noCuts) setStatus('Timeline không có cut nào để cắt.', 'warn');
+      else setStatus('');
       readOk = !read.noCuts;
+      if (prev) flashName();
     } catch (e) {
-      setStatus('❌ ' + ((e && e.message) || e), 'err');
+      var msg = (e && e.message) || String(e);
+      if (opts.auto && opts.key) st.watch.failKey = opts.key;   // không đọc lại mãi một trạng thái lỗi
+      setStatus(msg, /Đã dừng/.test(msg) ? 'warn' : 'err');
     } finally {
       setBusy(false);
-      pixelEnd(readOk, /Đã dừng/.test($('rcStatus').textContent));
+      // Tự cập nhật thành công thì không hiện ✓ (đỡ nhiễu) — chỉ hiện khi đọc tay hoặc lỗi.
+      if (readOk && opts.auto) { if (typeof RCPX !== 'undefined') RCPX.hide(); }
+      else pixelEnd(readOk, /Đã dừng/.test($('rcStatus').textContent));
+    }
+  }
+
+  function flashName() {
+    var n = $('rcSeqName');
+    n.classList.add('rc-flash');
+    setTimeout(function () { n.classList.remove('rc-flash'); }, 900);
+  }
+
+  // ── Theo dõi sequence: tự đọc khi mở tab, khi đổi sequence, khi timeline bị sửa ──
+  // Hỏi Premiere mỗi 2s (chỉ khi tab RAW đang hiện). Timeline sửa → chờ yên 2s rồi đọc lại;
+  // đổi sang sequence khác → đọc ngay. Đang Đọc/Xuất/hỏi xác nhận thì không đụng.
+  var WATCH_MS = 2000, SETTLE_MS = 2000;
+  function tabVisible() { var t = $('tab-rawcut'); return !!t && t.classList.contains('active'); }
+  async function watchTick() {
+    var w = st.watch;
+    if (w.polling || !tabVisible() || st.busy || st.running || st.confirmResolve) return;
+    if (typeof RCP === 'undefined') return;
+    w.polling = true;
+    try {
+      var s = await RCP.stamp(true);
+      if (!s.ok) {
+        $('rcState').textContent = st.read ? 'Không có sequence nào đang mở — đang giữ lần đọc trước' : '';
+        if (!st.read) paintGo();
+        return;
+      }
+      if ($('rcState').textContent) $('rcState').textContent = '';
+      var key = s.id + '|' + (s.fp || '') + '|' + s.name;
+      var have = st.read ? st.read.seqId + '|' + st.read.fp + '|' + st.read.seqName : '';
+      if (key === have || key === w.failKey) { w.pendingKey = ''; return; }
+      var switched = !st.read || s.id !== st.read.seqId;
+      if (key !== w.pendingKey) {
+        w.pendingKey = key; w.changedAt = Date.now();
+        if (!switched) return;   // sửa timeline: đợi yên rồi mới đọc
+      } else if (!switched && Date.now() - w.changedAt < SETTLE_MS) return;
+      w.pendingKey = '';
+      await onRead({ auto: true, key: key });
+    } catch (e) {
+    } finally {
+      w.polling = false;
     }
   }
 
@@ -206,7 +272,7 @@
     read.notes = []; read.noCuts = false;
     for (var i = 0; i < halves.length; i++) {
       var half = halves[i];
-      setStatus('⏳ Engine đọc cut list (' + HALF_LABEL[half] + ') — file trên Google Drive chưa tải về máy sẽ đọc lâu; bấm Dừng nếu cần.');
+      setStatus('Đang đọc cut list ' + (half === 'render' ? 'edited/' : 'raw/') + '… (file Drive chưa tải về sẽ lâu hơn)');
       var body = { sequenceName: read.seqName, half: half, options: scanOptions(half) };
       if (read.read) body.read = read.read;
       else { body.projectPath = read.projectPath; body.dump = read.dump; body.xmlPath = read.xmlPath; }
@@ -260,7 +326,7 @@
   }
   function paintEnv(env) {
     var e = $('rcEnv');
-    e.textContent = env && env.ok ? '' : ('⚠ ' + envProblem(env || {}));
+    e.textContent = env && env.ok ? '' : envProblem(env || {});
   }
 
   // ── Thư mục xuất ────────────────────────────────────────────────────────
@@ -318,7 +384,7 @@
       if (mode !== 'source') line.appendChild(el('div', 'rc-dest-path', 'edited/ → ' + shortDir(d.dirs.edited)));
       (d.notes || []).forEach(function (n) { line.appendChild(el('div', 'rc-dest-note', n)); });
     } else {
-      line.appendChild(el('div', 'rc-dest-err', '⛔ ' + (d.why || d.error || 'Chưa xác định được thư mục xuất')));
+      line.appendChild(el('div', 'rc-dest-err', (d.why || d.error || 'Chưa xác định được thư mục xuất')));
     }
     var list = (d.candidates && d.candidates.length ? d.candidates : []).concat((d.products || []).filter(function (n) { return !d.candidates || d.candidates.indexOf(n) === -1; }));
     if (list.length && (d.needPick || d.route === 'picked' || d.route === 'matched')) {
@@ -509,13 +575,14 @@
 
   // ── Chất lượng ──────────────────────────────────────────────────────────
   function paintQuality() {
+    $('rcMoreSum').textContent = 'CRF ' + st.prefs.crf + ' · ' + st.prefs.scale + '%' + (st.prefs.fps ? ' · ' + st.prefs.fps + ' fps' : '');
     $('rcCrfVal').textContent = String(st.prefs.crf);
     $('rcScale').value = String(st.prefs.scale);
     $('rcFps').value = st.prefs.fps;
     $('rcTrans').classList.toggle('on', st.prefs.transitions);
     $('rcResume').classList.toggle('on', st.prefs.resume);
     var fpsNote = $('rcFpsNote');
-    fpsNote.textContent = st.prefs.fps ? '⚠ Ép frame rate làm clip KHÔNG còn đúng từng frame của timeline.' : '';
+    fpsNote.textContent = st.prefs.fps ? 'Ép frame rate làm clip KHÔNG còn đúng từng frame của timeline.' : '';
     var sel = $('rcPreset');
     sel.innerHTML = '';
     var o0 = el('option', '', '— preset —'); o0.value = ''; sel.appendChild(o0);
@@ -565,8 +632,10 @@
     if (st.read) halves.forEach(function (h) { n += pickedFor(h).length; });
     var ready = !!st.read && st.dest && st.dest.ok && n > 0;
     go.classList.toggle('is-busy', st.busy || st.running || !ready);
-    $('rcGoLabel').textContent = label || (st.running ? 'ĐANG XUẤT…' : (!st.read ? 'CHƯA ĐỌC TIMELINE' : (n ? 'XUẤT ' + n + ' CLIP' : 'CHƯA CHỌN CLIP')));
-    $('rcGoSub').textContent = MODES[st.prefs.mode] + (st.prefs.mode === 'both' ? ' · raw/ rồi edited/' : '');
+    $('rcGoLabel').textContent = label || (st.running ? 'ĐANG XUẤT…' : (!st.read ? (st.busy ? 'ĐANG ĐỌC…' : 'MỞ MỘT SEQUENCE') : (n ? 'XUẤT ' + n + ' CLIP' : 'CHƯA CHỌN CLIP')));
+    var sub = MODES[st.prefs.mode] + (st.prefs.mode === 'both' ? ' · raw/ rồi edited/' : '');
+    if (st.read && !st.busy && !st.running && st.dest && !st.dest.ok) sub = 'Chưa có thư mục xuất — xem mục Thư mục xuất';
+    $('rcGoSub').textContent = sub;
     $('rcCancel').style.display = (st.running || st.busy) ? '' : 'none';
   }
 
@@ -579,10 +648,10 @@
   function paintSeq() {
     var r = st.read;
     $('rcDot').className = 'wf-dot ' + (r ? 'ok' : 'err');
-    $('rcState').textContent = r ? 'ĐÃ ĐỌC' : 'CHƯA ĐỌC TIMELINE';
     var name = $('rcSeqName');
-    name.textContent = r ? r.seqName : 'Mở sequence cần cắt rồi bấm Đọc timeline';
+    name.textContent = r ? r.seqName : 'Mở một sequence trong Premiere';
     name.classList.toggle('is-empty', !r);
+    $('rcDetailToggle').style.display = r ? '' : 'none';
     var meta = $('rcSeqMeta');
     meta.textContent = r ? [(r.width || r.info.width) + '×' + (r.height || r.info.height), (r.fps ? r.fps.toFixed(3).replace(/\.?0+$/, '') : '?') + ' fps', r.read && r.read.xml ? 'XML ✓' : 'không có XML'].join(' · ') : '';
     var notes = $('rcNotes');
@@ -811,6 +880,7 @@
   function showProgress(on, text, frac) {
     $('rcProgress').style.display = on ? '' : 'none';
     if (!on) return;
+    $('rcBar').style.display = '';
     $('rcProgText').textContent = text || '';
     $('rcBarFill').style.width = Math.round(Math.max(0, Math.min(1, frac || 0)) * 100) + '%';
   }
@@ -853,7 +923,7 @@
     $('rcRetry').style.display = anyFailed ? '' : 'none';
     st.retry = anyFailed ? retry : null;
     var allOk = results.length && results.every(function (r) { return r.skipped || (!r.error && !r.failed); });
-    setStatus(allOk ? '✅ Xuất xong.' : '⚠ Xuất xong nhưng có lỗi — xem bên dưới.', allOk ? '' : 'warn');
+    setStatus(allOk ? '' : 'Xuất xong nhưng có lỗi — xem báo cáo.', allOk ? '' : 'warn');
   }
 
   // ── Khởi động ───────────────────────────────────────────────────────────
@@ -867,7 +937,17 @@
   function init() {
     if (!$('tab-rawcut') || typeof RCC === 'undefined') return;
     st.prefs = loadPrefs();
-    $('rcRead').addEventListener('click', onRead);
+    $('rcRead').addEventListener('click', function () { onRead(); });
+    // Chi tiết / Thêm cài đặt: luôn thu gọn khi mở plugin (không nhớ).
+    function collapser(btnId, bodyId, label, titleId) {
+      $(btnId).addEventListener('click', function () {
+        var b = $(bodyId), open = b.style.display === 'none';
+        b.style.display = open ? '' : 'none';
+        $(titleId || btnId).textContent = (open ? '▾ ' : '▸ ') + label;
+      });
+    }
+    collapser('rcDetailToggle', 'rcDetail', 'Chi tiết');
+    collapser('rcMoreToggle', 'rcMoreBody', 'THÊM CÀI ĐẶT', 'rcMoreTitle');
     document.querySelectorAll('#rcModes .rsz-seg').forEach(function (b) {
       b.addEventListener('click', async function () {
         if (st.running || st.busy) return;
@@ -917,7 +997,11 @@
     });
     bindKeyboard('rcDiagOut');
     var tabBtn = document.querySelector('.tab-btn[data-tab="rawcut"]');
-    if (tabBtn) tabBtn.addEventListener('click', function () { if (!Object.keys(st.presets).length) loadPresets(); });
+    if (tabBtn) tabBtn.addEventListener('click', function () {
+      if (!Object.keys(st.presets).length) loadPresets();
+      setTimeout(watchTick, 50);   // mở tab là đọc ngay
+    });
+    setInterval(watchTick, WATCH_MS);
     paintAll();
   }
 

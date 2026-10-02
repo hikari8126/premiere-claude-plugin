@@ -1820,17 +1820,20 @@
   <div class="rsz-root">
     <div class="rsz-scroll">
 
-      <div class="rsz-src">
-        <div class="rsz-src-line">
+      <!-- Sequence: tự đọc khi mở tab / khi timeline đổi. Chi tiết kỹ thuật mặc định ẩn. -->
+      <div class="rc-seq">
+        <div class="rc-seq-top">
           <span class="wf-dot err" id="rcDot"></span>
-          <span id="rcState" class="rsz-state">CHƯA ĐỌC TIMELINE</span>
-          <span class="wf-spacer"></span>
-          <div class="wf-btn wf-btn-sm" id="rcRead" role="button">⟳ Đọc timeline</div>
+          <div class="rc-seq-name is-empty" id="rcSeqName">Mở một sequence trong Premiere</div>
+          <div class="rc-icon-btn" id="rcRead" role="button"><span data-ic="rotate_right" data-ic-size="12"></span></div>
         </div>
-        <div class="rsz-src-name is-empty" id="rcSeqName">Mở sequence cần cắt rồi bấm Đọc timeline</div>
-        <div class="rc-meta" id="rcSeqMeta"></div>
+        <div class="rc-seq-sub" id="rcState"></div>
         <div class="rc-env" id="rcEnv"></div>
-        <div class="rc-notes" id="rcNotes"></div>
+        <div class="rsz-link rc-more" id="rcDetailToggle" role="button" style="display:none">▸ Chi tiết</div>
+        <div class="rc-detail" id="rcDetail" style="display:none">
+          <div class="rc-meta" id="rcSeqMeta"></div>
+          <div class="rc-notes" id="rcNotes"></div>
+        </div>
       </div>
 
       <div class="rsz-modes" id="rcModes">
@@ -1863,55 +1866,64 @@
         <div class="rsz-link rc-showdead" id="rcShowDead" role="button" style="display:none"></div>
       </div>
 
-      <div class="rc-card" id="rcRenderCard" style="display:none">
-        <div class="rc-card-head"><span class="rc-card-title">TIMELINE RENDER</span></div>
-        <div class="rc-field">
-          <span class="rc-label">Master track</span>
-          <select id="rcMaster" class="vg-select rc-select"></select>
+      <!-- Hai thẻ cùng hàng khi panel đủ rộng, hẹp thì tự xuống hàng (flex-wrap). -->
+      <div class="rc-pair">
+        <div class="rc-card" id="rcRenderCard" style="display:none">
+          <div class="rc-card-head"><span class="rc-card-title">TIMELINE RENDER</span></div>
+          <div class="rc-field">
+            <span class="rc-label">Master track</span>
+            <select id="rcMaster" class="vg-select rc-select rc-select-sm"></select>
+          </div>
+          <div class="rc-sub">Track hình có trong bản render</div>
+          <div class="rsz-chips" id="rcVTracks"></div>
         </div>
-        <div class="rc-sub">Track hình có trong bản render</div>
-        <div class="rsz-chips" id="rcVTracks"></div>
-      </div>
-
-      <div class="rc-card" id="rcAudioCard" style="display:none">
-        <div class="rc-card-head"><span class="rc-card-title">AUDIO</span></div>
-        <div class="rc-toggle" id="rcAudioMix" role="button"><span class="rc-tick"></span>MP3 voice-over dài bằng sequence</div>
-        <div class="rc-sub">File MP3 riêng cho từng track</div>
-        <div class="rsz-chips" id="rcAudioPer"></div>
-        <div id="rcHearWrap">
-          <div class="rc-sub">Tiếng giữ trong clip edited/</div>
-          <div class="rsz-chips" id="rcAudioHear"></div>
-        </div>
-      </div>
-
-      <div class="rc-card" id="rcQualCard">
-        <div class="rc-card-head"><span class="rc-card-title">CHẤT LƯỢNG</span></div>
-        <div class="rc-field">
-          <span class="rc-label">CRF (1 = gần như gốc)</span>
-          <div class="rsz-stepper">
-            <div class="rsz-step" id="rcCrfMinus" role="button">−</div>
-            <span class="rsz-step-val" id="rcCrfVal">1</span>
-            <div class="rsz-step" id="rcCrfPlus" role="button">+</div>
+        <div class="rc-card" id="rcAudioCard" style="display:none">
+          <div class="rc-card-head"><span class="rc-card-title">AUDIO</span></div>
+          <div class="rc-toggle" id="rcAudioMix" role="button"><span class="rc-tick"></span>MP3 voice-over dài bằng sequence</div>
+          <div class="rc-sub">File MP3 riêng cho từng track</div>
+          <div class="rsz-chips" id="rcAudioPer"></div>
+          <div id="rcHearWrap">
+            <div class="rc-sub">Tiếng giữ trong clip edited/</div>
+            <div class="rsz-chips" id="rcAudioHear"></div>
           </div>
         </div>
-        <div class="rc-field">
-          <span class="rc-label">Độ phân giải</span>
-          <select id="rcScale" class="vg-select rc-select rc-select-sm"></select>
+      </div>
+
+      <!-- Thêm cài đặt: luôn thu gọn mỗi lần mở tab. -->
+      <div class="rc-card rc-more-card" id="rcQualCard">
+        <div class="rc-card-head rc-collapse" id="rcMoreToggle" role="button">
+          <span class="rc-card-title" id="rcMoreTitle">▸ THÊM CÀI ĐẶT</span>
+          <span class="wf-spacer"></span>
+          <span class="rc-count" id="rcMoreSum"></span>
         </div>
-        <div class="rc-field">
-          <span class="rc-label">Frame rate</span>
-          <select id="rcFps" class="vg-select rc-select rc-select-sm"></select>
-        </div>
-        <div class="rc-warn" id="rcFpsNote"></div>
-        <div class="rc-toggle" id="rcTrans" role="button"><span class="rc-tick"></span>Tách cross-dissolve thành 2 clip (Timeline Render)</div>
-        <div class="rc-toggle" id="rcResume" role="button"><span class="rc-tick"></span>Bỏ qua clip đã có sẵn trong thư mục</div>
-        <div class="rc-field rc-presets">
-          <select id="rcPreset" class="vg-select rc-select"></select>
-        </div>
-        <div class="rc-field rc-presets">
-          <input type="text" id="rcPresetName" class="vg-select rc-input" placeholder="Tên preset" />
-          <div class="wf-btn wf-btn-sm" id="rcPresetSave" role="button">Lưu</div>
-          <div class="wf-btn wf-btn-sm wf-btn-danger" id="rcPresetDel" role="button">Xoá</div>
+        <div id="rcMoreBody" style="display:none">
+          <div class="rc-field">
+            <span class="rc-label">CRF (1 = gần như gốc)</span>
+            <div class="rsz-stepper">
+              <div class="rsz-step" id="rcCrfMinus" role="button">−</div>
+              <span class="rsz-step-val" id="rcCrfVal">1</span>
+              <div class="rsz-step" id="rcCrfPlus" role="button">+</div>
+            </div>
+          </div>
+          <div class="rc-field">
+            <span class="rc-label">Độ phân giải</span>
+            <select id="rcScale" class="vg-select rc-select rc-select-sm"></select>
+          </div>
+          <div class="rc-field">
+            <span class="rc-label">Frame rate</span>
+            <select id="rcFps" class="vg-select rc-select rc-select-sm"></select>
+          </div>
+          <div class="rc-warn" id="rcFpsNote"></div>
+          <div class="rc-toggle" id="rcTrans" role="button"><span class="rc-tick"></span>Tách cross-dissolve thành 2 clip (Timeline Render)</div>
+          <div class="rc-toggle" id="rcResume" role="button"><span class="rc-tick"></span>Bỏ qua clip đã có sẵn trong thư mục</div>
+          <div class="rc-field rc-presets">
+            <select id="rcPreset" class="vg-select rc-select"></select>
+          </div>
+          <div class="rc-field rc-presets">
+            <input type="text" id="rcPresetName" class="vg-select rc-input" placeholder="Tên preset" />
+            <div class="wf-btn wf-btn-sm" id="rcPresetSave" role="button">Lưu</div>
+            <div class="wf-btn wf-btn-sm wf-btn-danger" id="rcPresetDel" role="button">Xoá</div>
+          </div>
         </div>
       </div>
 
@@ -1923,21 +1935,6 @@
         </div>
       </div>
 
-      <div class="rsz-go" id="rcGo" role="button">
-        <span id="rcGoLabel" class="rsz-go-label">CHƯA ĐỌC TIMELINE</span>
-        <span id="rcGoSub" class="rsz-go-sub">Both · raw/ rồi edited/</span>
-      </div>
-      <div class="rc-cancel-wrap"><div class="wf-btn wf-btn-sm wf-btn-danger" id="rcCancel" role="button" style="display:none">■ Dừng</div></div>
-
-      <div class="rc-live">
-        <div class="rc-pixel" id="rcPixel" data-size="36" style="display:none"></div>
-        <div class="rc-progress" id="rcProgress" style="display:none">
-          <div class="rc-bar"><div class="rc-bar-fill" id="rcBarFill"></div></div>
-          <div class="rc-prog-text" id="rcProgText"></div>
-        </div>
-      </div>
-
-      <div id="rcStatus" class="rsz-status"></div>
       <div class="rsz-outs" id="rcReport"></div>
       <div class="rc-actions" id="rcActions" style="display:none">
         <div class="wf-btn wf-btn-sm" id="rcOpenRaw" role="button"><span data-ic="folder_open" data-ic-size="11"></span> raw/</div>
@@ -1954,6 +1951,25 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- Chân trang cố định: trạng thái + nút XUẤT luôn thấy, không bị cuộn mất. -->
+    <div class="rc-foot">
+      <div class="rc-live" id="rcLive">
+        <div class="rc-pixel" id="rcPixel" data-size="36" style="display:none"></div>
+        <div class="rc-progress" id="rcProgress" style="display:none">
+          <div class="rc-bar" id="rcBar"><div class="rc-bar-fill" id="rcBarFill"></div></div>
+          <div class="rc-prog-text" id="rcProgText"></div>
+        </div>
+      </div>
+      <div id="rcStatus" class="rc-status"></div>
+      <div class="rc-foot-row">
+        <div class="rsz-go" id="rcGo" role="button">
+          <span id="rcGoLabel" class="rsz-go-label">ĐANG ĐỌC…</span>
+          <span id="rcGoSub" class="rsz-go-sub">Both · raw/ rồi edited/</span>
+        </div>
+        <div class="wf-btn wf-btn-danger rc-stop" id="rcCancel" role="button" style="display:none">■ Dừng</div>
+      </div>
     </div>
   </div>
 </div>
