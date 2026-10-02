@@ -3,9 +3,9 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## v5.14.0-beta.1 / bridge server 1.22.0-beta.1 — 2026-10-02 (chưa release)
+## v5.14.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
 
-> **Cần bridge ≥ 1.22.0** (Bridge app mới khi ship) cho mục Đổi tên source. Bridge cũ → plugin báo rõ.
+> **Cần Bridge app 3.18** (server 1.22.0) cho mục Đổi tên source. Bridge cũ → plugin báo rõ cần cập nhật.
 
 ### ✨ Tab Watch — Đổi tên source hàng loạt
 - Chọn clip / bin ở Project panel → **Lấy clip đang chọn** → bấm kiểu tên **Giữ số gốc** (mặc định) / **Đánh số lại** (không phải gõ; **Tự đặt mẫu…** khi cần) → bảng xem trước tên cũ → tên mới theo mẫu (`{bin}` tên bin, `{n}` số thứ tự tự đệm 0 tối thiểu 2 chữ số, `{name}` tên cũ; đuôi giữ nguyên), sắp tự nhiên A→Z, ↑↓ đổi thứ tự. **`{num}`** giữ số gốc khi tên gốc là số hoặc `<bin> số` (`41.MOV`, `Senyue 41` → `Senyue_41`), tên khác (`IMG_4821`…) lấy số mới **nối tiếp sau số lớn nhất được giữ của cùng bin** (không có thì từ ô Bắt đầu từ), cả bin đệm 0 cùng độ dài; bảng ghi rõ "giữ số gốc" / "số mới"; chạy lại trên file đã đổi thì giữ nguyên. Tên bản copy (`Copy of 1`, `1 copy`, `1 copy 2`, `1 (2)`) giữ số nếu chưa file nào giữ số đó, không thì lấy số mới ("bản copy của 1 · số mới"); hai tên thật trùng số → dòng đầu giữ, dòng sau số mới ("trùng số 41"), không chặn lượt.
