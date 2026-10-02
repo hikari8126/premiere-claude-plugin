@@ -8756,6 +8756,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var resultCards = [];
     var ts = genTimestamp();
     var userSuffix = safeFileStr(userFilename);
+    var failMsg = null;   // speaker lỗi giữa chừng → vẫn giữ các speaker đã gen (đã trả credit, VG2)
     try {
       for (var i = 0; i < active.length; i++) {
         var sp = active[i];
@@ -8763,21 +8764,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var spName = spVoice + (userSuffix ? '_' + userSuffix : '') + '_' + ts + (active.length > 1 ? '-' + (i + 1) : '');
         piSetBtn(els.btnGenerate, 'rotate_right', sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...', '#ffffff', 14);
         setStatus('Generating ' + sp.voiceName + '...', false);
-        var resp = await postJsonVG('/tts/generate', {
-          apiKey: ELEVENLABS_KEY,
-          voiceId: sp.voiceId,
-          modelId: els.modelSelect.value,
-          text: VG_SPEAKER_TEXTS[sp.id],
-          filename: spName,
-          variations: numVar,
-          outputFormat: outputFmt,
-          settings: getTtsSettings(),
-          languageCode: getLangCode(),
-          outputDir: '', // always temp (11Lab temp); only move to the chosen folder on Import
-        });
-        if (!resp.ok) throw new Error(sp.voiceName + ': ' + (resp.error || 'failed'));
+        var resp;
+        try {
+          resp = await postJsonVG('/tts/generate', {
+            apiKey: ELEVENLABS_KEY,
+            voiceId: sp.voiceId,
+            modelId: els.modelSelect.value,
+            text: VG_SPEAKER_TEXTS[sp.id],
+            filename: spName,
+            variations: numVar,
+            outputFormat: outputFmt,
+            settings: getTtsSettings(),
+            languageCode: getLangCode(),
+            outputDir: '', // always temp (11Lab temp); only move to the chosen folder on Import
+          });
+          if (!resp.ok) throw new Error(resp.error || 'failed');
+        } catch (eSp) { failMsg = sp.voiceName + ': ' + eSp.message; break; }
         resultCards.push({ speaker: sp, variations: resp.variations || [] });
       }
+      if (!resultCards.length) throw new Error(failMsg || 'failed');
       renderMultiResults(resultCards);
       // Multi-speaker cũng phải vào history, nếu không gen lại là mất sạch output.
       // Chỉ lưu danh sách file phẳng: cấu trúc theo speaker không nằm trong
@@ -8792,7 +8797,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         active.map(function (a) { return a.text || ''; }).join(' / '),
         { mode: 'tts', outputs: flat, multi: true });
       vgHistNavReset();
-      setStatus('✓ Generated ' + active.length + ' speakers', true);
+      if (failMsg) setStatus('✗ ' + failMsg + ' — đã giữ ' + resultCards.length + '/' + active.length + ' speaker gen xong (có trong Gần đây)', false);
+      else setStatus('✓ Generated ' + active.length + ' speakers', true);
     } catch(e) {
       setStatus('✗ ' + e.message, false);
     } finally {
@@ -8898,7 +8904,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       els.resultSection.hidden = false;
       els.importStatus.textContent = '';
       els.importStatus.className = 'ac-manualStatus';
-      setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+      if (resp.errors && resp.errors.length) {
+        setStatus('⚠ Variation ' + resp.errors[0].variation + ' lỗi: ' + resp.errors[0].error
+          + ' — đã giữ ' + lastVariations.length + ' bản gen xong', false);
+      } else {
+        setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+      }
       // Chỉ TTS single-speaker: SFX/Music không có voice, còn multi-speaker đã
       // return sớm ở trên (generateMultiSpeaker) nên không bao giờ tới đây.
       if (currentMode === 'tts') {

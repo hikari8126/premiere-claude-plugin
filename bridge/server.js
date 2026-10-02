@@ -7,6 +7,7 @@ const path = require('path');
 const os   = require('os');
 const autosubLog = require('./autosub-log');   // ghi report mỗi lần auto sub
 const elevenV4 = require('./eleven-v4.js');      // Eleven v4: TTS hoặc Text to Dialogue
+const { collectVariations } = require('./variations.js');  // lỗi variation sau không bỏ variation đã gen
 
 const app  = express();
 const PORT = Number(process.env.PORT) || 3030;
@@ -1071,8 +1072,7 @@ async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVar
     ? outputDir.trim()
     : getTempDir();
   ensureDir(saveDir);
-  const results = [];
-  for (let v = 1; v <= numVariations; v++) {
+  const { results, errors } = await collectVariations(numVariations, async (v) => {
     const reqBody = Object.assign({}, body);
     if (applySeed) reqBody.seed = Math.floor(Math.random() * 1e9);
 
@@ -1084,14 +1084,15 @@ async function generateAndSave(kind, apiKey, urlPath, body, baseFilename, numVar
     const fpath = path.join(saveDir, fname);
     fs.writeFileSync(fpath, result.buffer);
     console.log('[' + kind + '] v' + v + ' saved', result.buffer.length, 'bytes →', fpath);
-    results.push({
+    return {
       audioPath:  fpath,
       previewUrl: '/tts/audio/' + encodeURIComponent(fname),
       sizeBytes:  result.buffer.length,
       filename:   fname,
-    });
-  }
-  return { variations: results, saveDir };
+    };
+  });
+  if (errors.length) console.warn('[' + kind + '] variation lỗi (giữ phần đã gen):', errors.map(e => 'v' + e.variation + ': ' + e.error).join('; '));
+  return { variations: results, saveDir, errors };
 }
 
 app.post('/tts/generate', async (req, res) => {
@@ -1114,9 +1115,8 @@ app.post('/tts/generate', async (req, res) => {
       const saveDir = (outputDir && typeof outputDir === 'string' && outputDir.trim()) ? outputDir.trim() : getTempDir();
       ensureDir(saveDir);
       const request = (m, u, b, bin) => elevenLabsRequest(apiKey, m, u, b, bin);
-      const results = [];
       let via = null;
-      for (let v = 1; v <= numVariations; v++) {
+      const { results, errors } = await collectVariations(numVariations, async (v) => {
         const r = await elevenV4.generateV4(request, { voiceId, modelId, text, settings, languageCode,
           outputFormat, seed: Math.floor(Math.random() * 1e9) });
         via = r.via;
@@ -1124,10 +1124,10 @@ app.post('/tts/generate', async (req, res) => {
         const fpath = path.join(saveDir, fname);
         fs.writeFileSync(fpath, r.buffer);
         console.log('[tts/v4] v' + v + ' via ' + r.via + (r.chunks > 1 ? ' (' + r.chunks + ' đoạn)' : '') + ' →', fpath);
-        results.push({ audioPath: fpath, previewUrl: '/tts/audio/' + encodeURIComponent(fname),
-          sizeBytes: r.buffer.length, filename: fname });
-      }
-      return res.json({ ok: true, variations: results, saveDir, via });
+        return { audioPath: fpath, previewUrl: '/tts/audio/' + encodeURIComponent(fname),
+          sizeBytes: r.buffer.length, filename: fname };
+      });
+      return res.json({ ok: true, variations: results, saveDir, via, errors });
     }
 
     let urlPath = '/v1/text-to-speech/' + voiceId;
@@ -1149,7 +1149,7 @@ app.post('/tts/generate', async (req, res) => {
 
     console.log('[tts/generate]', text.length, 'chars, voice:', voiceId, 'model:', body.model_id, 'fmt:', outputFormat || 'default', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
     const out = await generateAndSave('tts', apiKey, urlPath, body, baseFilename, numVariations, !isV3, outputDir);
-    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[tts/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -1178,7 +1178,7 @@ app.post('/sfx/generate', async (req, res) => {
     if (outputFormat) sfxUrl += '?output_format=' + encodeURIComponent(outputFormat);
     console.log('[sfx/generate]', text, '|', body.duration_seconds + 's', 'fmt:', outputFormat || 'default', '| variations:', numVariations, outputDir ? '→ ' + outputDir : '→ temp');
     const out = await generateAndSave('sfx', apiKey, sfxUrl, body, baseFilename, numVariations, false, outputDir);
-    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[sfx/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
@@ -1244,7 +1244,7 @@ app.post('/music/generate', async (req, res) => {
     }
 
     const out = await generateAndSave('music', apiKey, '/v1/music', body, baseFilename, numVariations, false, outputDir);
-    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir });
+    res.json({ ok: true, variations: out.variations, saveDir: out.saveDir, errors: out.errors });
   } catch (err) {
     console.error('[music/generate]', err.message);
     res.status(500).json({ ok: false, error: err.message });
