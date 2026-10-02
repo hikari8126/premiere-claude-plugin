@@ -132,3 +132,15 @@ test('cleanupBackups removes batch folders older than the limit', () => {
   assert.ok(!fs.existsSync(old));
   assert.ok(fs.existsSync(fresh));
 });
+
+test('planRows flags files in a read-only folder before anything is touched', () => {
+  const d = tmpDir();
+  const a = put(d, 'a.mov');
+  fs.chmodSync(d, 0o500);
+  try {
+    const r = ops.planRows([{ oldPath: a, newName: 'b.mov' }, { oldPath: a, newName: 'a.mov' }]);
+    assert.ok(/chỉ đọc/.test(r[0].error), r[0].error);
+    assert.strictEqual(r[1].same, true, 'unchanged rows are not errors');
+    assert.strictEqual(r[1].error, '');
+  } finally { fs.chmodSync(d, 0o700); }
+});

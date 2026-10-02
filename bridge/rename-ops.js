@@ -31,6 +31,17 @@ function nameError(name) {
 }
 
 function statOrNull(p) { try { return fs.statSync(p); } catch (e) { return null; } }
+
+// Thư mục chỉ đọc (vd Shared drive Google Drive mà tài khoản chỉ có quyền xem: dr-x)
+// → đổi tên chắc chắn EACCES. Báo ngay ở bước xem trước thay vì lúc bấm chạy.
+const RO_MSG = 'Thư mục chỉ đọc — không có quyền sửa (Google Drive chỉ xem?)';
+function dirWritable(dir, cache) {
+  if (cache && dir in cache) return cache[dir];
+  let ok = true;
+  try { fs.accessSync(dir, fs.constants.W_OK); } catch (e) { ok = false; }
+  if (cache) cache[dir] = ok;
+  return ok;
+}
 function sameFile(a, b) {
   const x = statOrNull(a), y = statOrNull(b);
   return !!(x && y && x.dev === y.dev && x.ino === y.ino);
@@ -40,6 +51,7 @@ function sameFile(a, b) {
 // Dòng lỗi giữ nguyên chỗ, nên đích trùng file của dòng lỗi vẫn tính là trùng —
 // lặp tới khi ổn định (mỗi vòng chỉ thêm lỗi, nên dừng sau ≤ rows.length vòng).
 function planRows(rows) {
+  const wcache = {};
   const out = (rows || []).map(r => {
     const oldPath = String(r.oldPath || '');
     const newName = nfc(r.newName).trim();
@@ -50,6 +62,7 @@ function planRows(rows) {
     o.error = nameError(newName);
     o.newPath = path.join(path.dirname(oldPath), newName);
     o.same = !o.error && o.newPath === oldPath;
+    if (!o.error && !o.same && !dirWritable(path.dirname(oldPath), wcache)) o.error = RO_MSG;
     return o;
   });
 
@@ -109,7 +122,7 @@ function applyRenames(pairs) {
       if (!exists(s.oldPath)) return fail('File gốc không còn: ' + path.basename(s.oldPath));
       if (exists(s.tmp)) return fail('Tên tạm đã tồn tại: ' + s.tmp);
       fs.renameSync(s.oldPath, s.tmp); s.at = 'tmp';
-    } catch (e) { return fail('Không đổi tên được ' + path.basename(s.oldPath) + ': ' + e.message); }
+    } catch (e) { return fail('Không đổi tên được ' + path.basename(s.oldPath) + ': ' + (e.code === 'EACCES' || e.code === 'EPERM' ? RO_MSG : e.message)); }
   }
   for (const s of st) {
     try {

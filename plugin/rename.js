@@ -397,6 +397,7 @@
     });
     var c = counts();
     var on = rn.preview.length;
+    $('rnDropErr').style.display = c.errs && !rn.busy && !rn.done ? '' : 'none';
     $('rnAll').textContent = on === rn.rows.length ? 'Bỏ chọn hết' : 'Chọn hết';
     $('rnSummary').textContent = (on === rn.rows.length ? rn.rows.length + ' file' : on + '/' + rn.rows.length + ' file được chọn')
       + (rn.skipped.length ? ' · bỏ qua ' + rn.skipped.length : '')
@@ -673,6 +674,11 @@
     $('rnClose').addEventListener('click', closeModal);
     $('rnGo').addEventListener('click', run);
     $('rnRescan').addEventListener('click', function () { if (!rn.busy && !rn.done) schedulePlan(true); });
+    $('rnDropErr').addEventListener('click', function () {
+      if (rn.busy || rn.done) return;
+      rn.rows.forEach(function (r, i) { var pi = rn.pidx[i]; if (pi >= 0 && rowError(pi)) r.checked = false; });
+      refresh();
+    });
     $('rnAll').addEventListener('click', function () {
       if (rn.busy || rn.done) return;
       var on = rn.preview.length !== rn.rows.length;
