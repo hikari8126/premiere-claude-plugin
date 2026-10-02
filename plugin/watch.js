@@ -106,7 +106,7 @@
       // 404 ở /watch/* nghĩa là bridge cũ hơn 1.16.0 — endpoint chưa tồn tại,
       // Express trả HTML nên r.json() ném và rơi vào nhánh offline.
       setStatusUI('err', r.offline
-        ? 'Bridge offline hoặc cũ hơn 1.16.0 — cập nhật Bridge app'
+        ? window.BRIDGE_OFFLINE_MSG + ' (hoặc Bridge cũ hơn 1.16.0 — cập nhật Bridge app)'
         : ('Lỗi: ' + r.error));
       return false;
     }
@@ -139,7 +139,7 @@
     var r = await api('GET', '/watch/poll');
     if (!r.ok) {
       setStatusUI('err', r.offline
-        ? 'Bridge offline hoặc cũ hơn 1.16.0'
+        ? window.BRIDGE_OFFLINE_MSG + ' (hoặc Bridge cũ hơn 1.16.0)'
         : ('Lỗi: ' + r.error));
       return;
     }

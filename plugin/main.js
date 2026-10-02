@@ -1030,6 +1030,31 @@ var _vbWarn   = document.getElementById('versionBarBridgeWarn');
 function versionBarSetText(bridgeVer) {
   if (_vbText) _vbText.textContent = PLUGIN_VERSION + ' · Bridge ' + (bridgeVer || '...');
 }
+
+// Một câu báo bridge offline dùng chung cho mọi tab (S11).
+var BRIDGE_OFFLINE_MSG = 'Bridge chưa chạy — mở app Claude Bridge trên menu bar rồi thử lại';
+// Lỗi mạng tới bridge (fetch/XHR hỏng) → câu chung; lỗi khác giữ nguyên.
+function bridgeErrText(e) {
+  var m = String((e && e.message) || e || '');
+  return /failed to fetch|network ?error|networkerror|load failed|ECONNREFUSED|^bridge offline$/i.test(m) ? BRIDGE_OFFLINE_MSG : m;
+}
+window.BRIDGE_OFFLINE_MSG = BRIDGE_OFFLINE_MSG;
+window.bridgeErrText = bridgeErrText;
+
+// Trạng thái bridge + phiên Claude CLI hiện ở version bar (luôn thấy), không còn chỉ
+// trong tab Claude đã ẩn (S2). state: connected | connecting | warn | offline.
+var _vbDot    = document.getElementById('versionBarDot');
+var _vbStatus = document.getElementById('versionBarStatus');
+function versionBarSetStatus(state, text) {
+  if (_vbDot) _vbDot.className = 'vb-dot' + (state ? ' is-' + state : '');
+  if (!_vbStatus) return;
+  // Đã có nhãn đỏ "Cần Bridge ≥…" thì không lặp thêm chữ.
+  var show = (state === 'warn' || state === 'offline') && !(_vbWarn && _vbWarn.style.display !== 'none');
+  _vbStatus.style.display = show ? '' : 'none';
+  _vbStatus.className = 'version-bar-status' + (state === 'offline' ? ' is-err' : ' is-warn');
+  _vbStatus.textContent = show ? '⚠ ' + text : '';
+  if (state === 'offline') versionBarSetText('—');
+}
 versionBarSetText(); // initial — bridge version filled in when health check returns
 
 // Plugin update is surfaced via a single notification: the #pluginUpdateBanner
@@ -1048,18 +1073,13 @@ setInterval(checkPluginUpdate, 5 * 60 * 1000); // auto re-check every 5 min — 
 
 // ── Bridge health ──────────────────────────────────────────────────────────
 
-var REQUIRED_BRIDGE = '1.15.0'; // Plugin v5.6.0+ cần bridge ≥1.15.0 (trang Auto: /notify, /autoset/names, /autoset/voicedir — thiếu là trang Auto 404)
+// Bridge tối thiểu cho mọi tab của bản này: 1.22.0 (Bridge app 3.18) — Đổi tên source
+// (/rename/*), RAW 1.21, Resize/Voice Gen v4 1.20… Báo ngay khi mở panel thay vì đợi
+// người dùng bấm nút mới thấy 404 (S4).
+var REQUIRED_BRIDGE = '1.22.0';
+var REQUIRED_BRIDGE_APP = '3.18';
 
-// Compare semver strings: returns -1/0/1
-function compareVersions(a, b) {
-  var pa = (a || '0').split('.').map(Number);
-  var pb = (b || '0').split('.').map(Number);
-  for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
-    var diff = (pa[i] || 0) - (pb[i] || 0);
-    if (diff !== 0) return diff > 0 ? 1 : -1;
-  }
-  return 0;
-}
+// compareVersions(a, b) → -1/0/1 nằm ở plugin/ver-compare.js (hiểu -beta.N, S4).
 var bridgeHealth = null;
 
 // ── Đăng nhập Claude CLI từ plugin ─────────────────────────────────────────
@@ -1110,11 +1130,12 @@ function cliLoginFlow(onStatus, onDone) {
 window.cliLoginFlow = cliLoginFlow;
 
 (function() {
-  var bar = document.getElementById('status-bar');
-  if (!bar) return;
-  bar.addEventListener('click', function() {
-    if (!cliNeedsLogin) return;
-    cliLoginFlow(function(t) { setStatus('warn', t); });
+  [document.getElementById('status-bar'), document.getElementById('versionBarStatus')].forEach(function (bar) {
+    if (!bar) return;
+    bar.addEventListener('click', function() {
+      if (!cliNeedsLogin) return;
+      cliLoginFlow(function(t) { setStatus('warn', t); });
+    });
   });
 })();
 
@@ -1139,7 +1160,8 @@ function checkBridge() {
         if (_vbWarn) _vbWarn.style.display = bridgeTooOld ? '' : 'none';
 
         if (bridgeTooOld) {
-          setStatus('warn', 'Bridge v' + bVer + ' too old — update Bridge app (need ≥' + REQUIRED_BRIDGE + ')');
+          if (_vbWarn) _vbWarn.textContent = '⚠ Cần Bridge ≥' + REQUIRED_BRIDGE + ' (app ' + REQUIRED_BRIDGE_APP + ')';
+          setStatus('warn', 'Bridge v' + bVer + ' quá cũ — cập nhật Claude Bridge app ' + REQUIRED_BRIDGE_APP + ' (cần ≥' + REQUIRED_BRIDGE + ')');
           return;
         }
         // Phiên OAuth của CLI hết hạn giữa chừng → mọi tính năng AI hỏng. Báo sớm
@@ -1160,8 +1182,8 @@ function checkBridge() {
       setStatus('offline', 'Bridge error: ' + xhr.status);
     }
   };
-  xhr.onerror   = function() { setStatus('offline', 'Bridge offline — run start.command'); };
-  xhr.ontimeout = function() { setStatus('offline', 'Bridge timeout — is it running?'); };
+  xhr.onerror   = function() { setStatus('offline', BRIDGE_OFFLINE_MSG); };
+  xhr.ontimeout = function() { setStatus('offline', 'Bridge không trả lời (quá 4s) — thử Khởi động lại Bridge trên menu bar'); };
   xhr.send();
 }
 
@@ -1171,6 +1193,7 @@ function setStatus(state, text) {
                       : state === 'warn' ? 'warn'
                       : '';
   statusText.textContent = text;
+  versionBarSetStatus(state, text);
 }
 
 // ── Plugin auto-update ─────────────────────────────────────────────────────
@@ -1215,6 +1238,9 @@ function showPluginUpdateBanner(latestVersion, downloadUrl, notes) {
   // bản đầy đủ vẫn nằm trong GitHub release notes.
   if (notesEl) {
     var note = String(notes || '').trim();
+    // Dòng "CẦN BRIDGE …" hay nằm cuối ghi chú → cắt 260 ký tự là mất (S4). Kéo lên đầu.
+    var need = note.match(/(?:CẦN|KHÔNG cần)[^.;]*BRIDGE[^.;]*/i);
+    if (need) note = '⚠ ' + need[0].trim() + ' · ' + note.replace(need[0], '').replace(/\s+([.;])/g, '$1').trim();
     if (note.length > 260) note = note.slice(0, 257) + '…';
     notesEl.textContent = note ? '✦ ' + note : '';
     notesEl.hidden = !note;
@@ -1243,7 +1269,7 @@ function showPluginUpdateBanner(latestVersion, downloadUrl, notes) {
       } catch(e) {}
     };
     xhr2.onerror = function() {
-      msg.textContent = '✗ Bridge offline';
+      msg.textContent = '✗ ' + BRIDGE_OFFLINE_MSG;
       updateBtn.disabled = false;
       updateBtn.textContent = 'Retry';
     };
@@ -5044,7 +5070,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var raBtn = $('sacRunAnywayBtn');
       if (raBtn) raBtn.style.display = (sacValidatePassed && !sacVoiceReady && matched >= 0) ? 'flex' : 'none';
     } catch(e) {
-      sacSetVoiceInfo('❌ Bridge offline: ' + e.message);
+      sacSetVoiceInfo('❌ ' + bridgeErrText(e));
     } finally {
       // MUST always clear: an align error (whisper exit != 0, bridge offline)
       // used to leave the flag stuck, so every later voice action just replied
@@ -5242,7 +5268,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
       sacUpdateRunVisibility();
     } catch(e) {
-      status.textContent = '❌ Bridge offline: ' + e.message;
+      status.textContent = '❌ ' + bridgeErrText(e);
       sacValidatePassed = false;
       sacUpdateRunVisibility();
     } finally {
@@ -5573,7 +5599,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         }
       });
     }).catch(function(e) {
-      return { ok: false, error: 'Bridge offline: ' + e.message };
+      return { ok: false, error: bridgeErrText(e) };
     });
   }
 
@@ -6820,7 +6846,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (typeof window.SubtextScanTracks === 'function') await window.SubtextScanTracks();
       autoSubStatus('✓ Sequence .' + job.idx + ' đang mở · script đã nạp — tick track voice rồi bấm "AI ngắt câu" (tuỳ chọn) rồi "Tạo Sub".');
     } catch (e) {
-      autoSubStatus('✗ ' + e.message);
+      autoSubStatus('✗ ' + bridgeErrText(e));
     }
   }
 
@@ -6920,7 +6946,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try {
       body.textContent = (await autoBuildConfirmLines()).join('\n');
     } catch (e) {
-      body.textContent = '✗ ' + e.message;
+      body.textContent = '✗ ' + bridgeErrText(e);
       return false;
     }
     return true;
@@ -7015,7 +7041,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
       await autoStage3(voiced);
     } catch (e) {
-      autoStatus('✗ ' + e.message);
+      autoStatus('✗ ' + bridgeErrText(e));
       autoNotify('Autocut — lỗi', e.message);
     } finally {
       autoRunning = false;
@@ -7833,7 +7859,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       sacRes.placed = placed;
 
     } catch(e) {
-      status.textContent = '❌ ' + e.message;
+      status.textContent = '❌ ' + bridgeErrText(e);
       console.error('[SAC] sacRunAutoCut error:', e);
       sacRes.error = e.message;
     } finally {
@@ -8768,7 +8794,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           else reject(new Error(data.error || ('HTTP ' + xhr.status)));
         } catch(e) { reject(new Error('Invalid response: ' + xhr.responseText.slice(0,200))); }
       };
-      xhr.onerror = function() { reject(new Error('Bridge offline')); };
+      xhr.onerror = function() { reject(new Error(BRIDGE_OFFLINE_MSG)); };
       xhr.ontimeout = function() { reject(new Error('Bridge timeout (' + (longCall ? '10' : '2') + ' min)')); };
       xhr.send(JSON.stringify(body));
     });
@@ -8855,7 +8881,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (failMsg) setStatus('✗ ' + failMsg + ' — đã giữ ' + resultCards.length + '/' + active.length + ' speaker gen xong (có trong Gần đây)', false);
       else setStatus('✓ Generated ' + active.length + ' speakers', true);
     } catch(e) {
-      setStatus('✗ ' + e.message, false);
+      setStatus('✗ ' + bridgeErrText(e), false);
     } finally {
       els.btnGenerate.disabled = false;
       piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
@@ -8973,7 +8999,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
       vgHistNavReset();
     } catch(e) {
-      setStatus('✗ ' + e.message, false);
+      setStatus('✗ ' + bridgeErrText(e), false);
     } finally {
       els.btnGenerate.disabled = false;
       piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
@@ -10550,7 +10576,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       vcxRevealPreview();
     } catch (e) {
       vcxInputPath = '';
-      if (info) info.textContent = '✗ ' + e.message;
+      if (info) info.textContent = '✗ ' + bridgeErrText(e);
       vcxRevealPreview();
       console.error('[vcx] getSelection', e);
     } finally {
@@ -10600,7 +10626,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       vcxRevealPreview();
     } catch (e) {
       vcxInputPath = '';
-      if (info) info.textContent = '✗ ' + e.message;
+      if (info) info.textContent = '✗ ' + bridgeErrText(e);
       vcxRevealPreview();
       console.error('[vcx] browse', e);
     }
@@ -10671,7 +10697,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (vgRight) vgRight.style.display = ''; // re-show right column (bị ẩn ở tab Create)
       setS('is-ok', '✓ Xong — nghe thử & Lưu/Import ở khu kết quả bên dưới');
     } catch (e) {
-      setS('is-err', '✗ ' + e.message);
+      setS('is-err', '✗ ' + bridgeErrText(e));
       console.error('[vcx] convert', e);
     } finally {
       if (vcxConvertBtnEl) vcxConvertBtnEl.disabled = false;
@@ -11091,7 +11117,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           console.log('[vcGetClip] concat result:', resp.audioPath);
         } catch(e) {
           vcSelectedFilePath = '';
-          if (vcClipInfo) vcClipInfo.textContent = '✗ ' + e.message;
+          if (vcClipInfo) vcClipInfo.textContent = '✗ ' + bridgeErrText(e);
           console.error('[vcGetClip]', e);
         } finally {
           vcGetClip.disabled = false;
@@ -11118,7 +11144,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           vcRefreshCloneSteps(); // reveal Step 2 (Clone button)
         } catch(e) {
           vcSelectedFilePath = '';
-          if (vcFileInfo) vcFileInfo.textContent = '✗ ' + e.message;
+          if (vcFileInfo) vcFileInfo.textContent = '✗ ' + bridgeErrText(e);
           vcRefreshCloneSteps();
         }
       });
@@ -11148,7 +11174,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           // Reload voice list so new voice appears in dropdown
           setTimeout(function() { loadVoices(); }, 1500);
         } catch(e) {
-          showVcStatus(vcCloneStatus, '✗ ' + e.message, false);
+          showVcStatus(vcCloneStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcCloneSubmit.disabled = false;
           piSetBtn(vcCloneSubmit, 'check', 'CREATE VOICE', '#ffffff', 14);
@@ -11202,7 +11228,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           // Show save section
           if (vcDesignSaveSec) vcDesignSaveSec.hidden = false;
         } catch(e) {
-          showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
+          showVcStatus(vcDesignStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcDesignPreview.disabled = false;
           piSetBtn(vcDesignPreview, 'play', 'PREVIEW VOICE', '#ffffff', 13);
@@ -11289,7 +11315,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           if (vcDesignSaveSec) vcDesignSaveSec.hidden = true;
           setTimeout(function() { loadVoices(); }, 1500);
         } catch(e) {
-          showVcStatus(vcDesignStatus, '✗ ' + e.message, false);
+          showVcStatus(vcDesignStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcDesignSave.disabled = false;
           piSetBtn(vcDesignSave, 'check', 'SAVE VOICE', '#ffffff', 13);
@@ -13225,7 +13251,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stBusy = false; stAbort = null;
       if (b) b.classList.remove('is-cancel');
       if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ.');
-      else stStatus('❌ ' + e.message);
+      else stStatus('❌ ' + bridgeErrText(e));
       stResetOrganize();
     }
   }
@@ -13315,7 +13341,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stResetOrganize(); // xong → về trạng thái đầu cho lần sau
     } catch (e) {
       if (e && (e.name === 'AbortError' || /abort/i.test(e.message || ''))) stStatus('⏹ Đã huỷ tạo phụ đề.');
-      else stStatus('❌ ' + e.message);
+      else stStatus('❌ ' + bridgeErrText(e));
     } finally {
       stBusy = false; stAbort = null;
       if (b) b.classList.remove('is-cancel');
@@ -13369,7 +13395,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       stSetBtn('closed_captioning', 'Tạo Sub');
       stStatus('✅ ' + (d.ai ? 'AI' : 'Luật') + ' đã ngắt ' + d.lines.length + ' dòng — sửa trong ô nếu cần (mỗi dòng = 1 câu phụ đề) rồi bấm Tạo Sub.');
     } catch (e) {
-      stStatus('❌ ' + e.message);
+      stStatus('❌ ' + bridgeErrText(e));
     } finally {
       stBusy = false;
     }

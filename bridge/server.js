@@ -1613,15 +1613,9 @@ app.post('/tts/reveal', async (req, res) => {
 });
 
 // ── Version comparison helper ──────────────────────────────────────────────
+// Hiểu hậu tố -beta.N (S4): "5.15.1-beta.1".split('.').map(Number) cũ ra NaN → so sai.
 function isNewer(a, b) {
-  const pa = String(a).replace(/^v/, '').split('.').map(Number);
-  const pb = String(b).replace(/^v/, '').split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const va = pa[i] || 0, vb = pb[i] || 0;
-    if (va > vb) return true;
-    if (va < vb) return false;
-  }
-  return false;
+  return require('./ver-compare.js').compareVersions(a, b) > 0;
 }
 
 // ── POST /plugin/check-update — compare plugin version against Gist ────────

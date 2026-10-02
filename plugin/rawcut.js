@@ -92,7 +92,7 @@
       catch (e) { return { ok: false, error: r.status === 404 ? 'Bridge chưa có Raw-cutter — cập nhật Claude Bridge.' : 'Bridge trả về lỗi (' + r.status + ')' }; }
     } catch (e) {
       if (signal && signal.aborted) return { ok: false, aborted: true, error: 'Đã dừng.' };
-      return { ok: false, error: 'Không kết nối được Bridge (localhost:3030) — mở Claude Bridge.' };
+      return { ok: false, error: window.BRIDGE_OFFLINE_MSG };
     }
   }
   function bridgeHasRawcut() {

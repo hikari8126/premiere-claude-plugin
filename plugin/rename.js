@@ -782,7 +782,7 @@
         + (rn.journal.aep && rn.journal.aep.length ? ' · ' + rn.journal.aep.length + ' file AE' : ''));
     } else {
       undo.style.display = 'none';
-      if (r.offline) lastLine('Bridge chưa chạy', true);
+      if (r.offline) lastLine(window.BRIDGE_OFFLINE_MSG, true);
     }
   }
 

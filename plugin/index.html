@@ -9,10 +9,13 @@
 
 <!-- ── VERSION BAR — always visible, all tabs ── -->
 <div id="versionBar" class="version-bar">
+  <span id="versionBarDot" class="vb-dot is-connecting"></span>
   <span id="versionBarText" class="version-bar-text"></span>
   <span id="versionBarBridgeWarn" class="version-bar-warn" style="display:none">
     ⚠ Cần update Bridge
   </span>
+  <!-- S2: bridge offline / hết phiên Claude CLI (bấm để đăng nhập) — luôn thấy ở mọi tab -->
+  <span id="versionBarStatus" class="version-bar-status" role="button" style="display:none"></span>
   <span class="version-bar-spacer"></span>
   <div class="vb-icon-btn" id="settings-btn" role="button" title="Settings (API key)"><span data-ic="gear" data-ic-size="15"></span></div>
 </div>
@@ -2101,6 +2104,7 @@
 <script src="color-wheel.js"></script>
 <script src="vg-seq.js"></script>
 <script src="st-script.js"></script>
+<script src="ver-compare.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
 <script src="rename-core.js"></script>
