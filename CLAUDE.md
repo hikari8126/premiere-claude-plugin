@@ -8,10 +8,11 @@
 
 ## Tổng quan
 
-Plugin 3-in-1 tích hợp thẳng vào Adobe Premiere Pro:
+Plugin tích hợp thẳng vào Adobe Premiere Pro:
 - **Claude AI Chat** — trò chuyện với Claude để edit timeline
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
+- **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
 
 **Version hiện tại:** 5.6.1  
 **Yêu cầu hệ điều hành:** macOS (Apple Silicon hoặc Intel)
@@ -31,6 +32,7 @@ Adobe Premiere Pro
   Bridge cũng tích hợp:
   ├── ElevenLabs REST API  (TTS / SFX / Music)
   └── Whisper CLI          (Speech-to-Text cho Autocut)
+  └── xmlcut.py (Python)   (engine Raw Cut — bridge/rawcut-engine/, cần python3 ≥3.8 + ffmpeg)
 ```
 
 ---
@@ -335,6 +337,16 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/watch/config` | GET/POST | Đọc/ghi danh sách watch của project hiện tại |
 | `/watch/scan-now` | POST | Đối chiếu một watch: đẩy file đã có sẵn về hàng đợi để plugin so với project |
 | `/watch/browse` | GET | Liệt kê thư mục con (mặc định mở ở cấp cha của thư mục chứa .prproj) |
+| `/rawcut/status` | GET | Raw-cutter: python3 / ffmpeg / engine `xmlcut.py` có sẵn chưa |
+| `/rawcut/scan` | POST | Lưu dump + FCP XML cạnh .prproj, engine đọc cut list (`--manifest-only`, `half: source\|render`) |
+| `/rawcut/export` | POST | SSE: engine cắt vào thư mục xuất (raw/ hoặc edited/ + `renderDir`); đóng request = Dừng |
+| `/rawcut/dest` | POST | Thư mục xuất `<Sản phẩm>/Output/ACT/<vN>/raw\|edited` theo SAMX_WORKSPACE, version đọc từ tên sequence |
+| `/rawcut/render-cache` | POST | Thư mục cache cho Premiere render từng cut (+ dọn bản > 7 ngày, dung lượng trống) |
+| `/rawcut/render-cache/clean` | POST | Xoá cache render sau lượt xuất sạch |
+| `/rawcut/render-preset` | POST | Preset H.264 "Match Source" đã chỉnh bitrate theo CRF |
+| `/rawcut/presets` | POST | Liệt kê / lưu / xoá preset chất lượng |
+| `/rawcut/stat` · `/rawcut/unlink` | POST | Kiểm tra / xoá file render trong cache (chỉ trong cache) |
+| `/rawcut/open` | POST | Mở thư mục xuất trong Finder |
 
 ### Lệnh dev thường dùng
 

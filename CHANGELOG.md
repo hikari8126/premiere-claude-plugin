@@ -3,6 +3,25 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.12.0 / bridge app 3.17 (server 1.21.0) — 2026-10-02
+
+> **Cần Bridge app 3.17** (python3 ≥ 3.8 + ffmpeg) cho tab RAW. Các tab khác không cần bridge mới.
+
+### ✨ Tab RAW — port Raw-cutter 3.93 (của mill2nn) sang UXP
+- Cắt từng cut của timeline ra file riêng + `clips.csv` / `manifest.json` / MP3 voice-over. **Source Render** (cắt từ file gốc → `raw/`), **Timeline Render** (Premiere render từng cut kèm màu/title/effect → `edited/`), **Both**.
+- Engine `xmlcut.py` 3.93 vendored ở `bridge/rawcut-engine/` (không sửa), bridge chạy qua `/rawcut/*` (scan, export SSE, dest, render-cache, render-preset, presets, stat/unlink, open). `host.jsx` viết lại bằng UXP: dump sequence đúng schema cũ, FCP XML qua `ProjectConverter` (≥ 26.3; 25.x đọc bằng dump, nest bị bỏ qua), render từng cut bằng `EncoderManager.exportSequence` + preset "Match Source" chỉnh bitrate theo CRF.
+- Thư mục xuất theo quy ước `SAMX_WORKSPACE/<Sản phẩm>/Output/ACT/<vN>/raw|edited`, version đọc từ tên sequence; chặn 2 sequence ghi chung một version. Tự khớp sản phẩm khi tên khác nhau giữa SAMX và ổ team: theo tên sequence (`CurvyFlex2.0 vid14.1` → `CurvyFlex 2.0`) rồi theo tên gốc bỏ version (`CurvyFlex (BEVA …)`); nhiều ứng viên thì không đoán. Ô chọn sản phẩm có tìm kiếm.
+- Tự đọc sequence khi mở tab, tự cập nhật khi đổi sequence / sửa timeline (fingerprint, chờ yên 2s). Chống timeline bị sửa trước khi render. Ẩn tạm text & MOGRT có chữ (kể cả trong nest) + tắt tiếng caption khi render, xong bật lại. Retry = chạy lại với `--resume` (manifest giữ đủ dòng).
+- Nhân vật pixel 18×18 báo tiến trình; nút XUẤT dính đáy; chi tiết kỹ thuật + chất lượng thu gọn.
+- **Đo trên Premiere 25.6.5:** đặt out rồi in trong CÙNG transaction thì mất out (render hỏng từ cut 2) → đặt từng điểm một transaction. XHR của UXP chỉ bắn `readystatechange` 1 lần → nghe `onprogress` để tiến độ chạy. UXP không hỗ trợ CSS `:empty` → ẩn ô trống bằng JS. `<select>` đổi giá trị khi lăn chuột → master track / độ phân giải / preset thành chip.
+
+### ✨ Settings — vòng màu chọn màu giao diện
+- Bấm "+" ở Màu giao diện: vòng màu (ảnh dựng sẵn `plugin/color-wheel.js`, chấm đánh dấu là div), thanh Độ sáng, mã hex; xem trực tiếp, Áp dụng lưu thành ô màu riêng, Huỷ trả về màu cũ. UXP canvas không có `drawImage`/`getImageData` và vẽ lại mỗi lần kéo bị lộ hình dở → dùng ảnh.
+
+### 🛠 Dev
+- `dev.sh` + **Claude Bridge DEV.app** (menu bar): bản DEV (plugin `…-dev`, bridge repo ở :3035) chạy song song bản cài, tự reload khi sửa code.
+- `install.sh` kiểm tra python3 (không còn phụ thuộc bước Whisper).
+
 ## v5.11.0 / bridge app 3.16 (server 1.20.0) — 2026-10-01
 
 > **Cần Bridge app 3.16** cho Eleven v4 và nhạc lưu vào BGM/AI. Tab Resize và sửa import không cần bridge mới.

@@ -57,6 +57,7 @@ cp    bridge/*.js               "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/package.json       "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/.env.example       "${APP_DIR}/Contents/Resources/server/.env.example"
 cp -r bridge/node_modules       "${APP_DIR}/Contents/Resources/server/"
+cp -r bridge/rawcut-engine      "${APP_DIR}/Contents/Resources/server/"
 
 echo "  ✅ server.js + node_modules bundled (no npm install needed)"
 
@@ -72,6 +73,13 @@ if [ -n "$MISSING" ]; then
   exit 1
 fi
 echo "  ✅ Local require() đầy đủ trong bundle"
+
+# Engine Raw-cutter là file .py — bước kiểm tra require ở trên không thấy nó.
+if [ ! -s "${APP_DIR}/Contents/Resources/server/rawcut-engine/xmlcut.py" ]; then
+  echo "  ❌ Bundle thiếu rawcut-engine/xmlcut.py — tab Raw-cutter sẽ không chạy. Dừng build."
+  exit 1
+fi
+echo "  ✅ Engine Raw-cutter có trong bundle"
 
 # Smoke test: actually run the bundled server.js so runtime require() failures
 # (the kind `node --check` can't see) fail the BUILD, not the teammate's machine.
@@ -110,7 +118,7 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
   <key>CFBundleVersion</key>
     <string>3.6</string>
   <key>CFBundleShortVersionString</key>
-    <string>3.16</string>
+    <string>3.17</string>
   <key>PluginVersion</key>
     <string>${PLUGIN_VERSION}</string>
   <key>CFBundlePackageType</key>

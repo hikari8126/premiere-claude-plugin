@@ -237,10 +237,11 @@ function piRenderAccentUI() {
     addBtn.addEventListener('click', function () {
       if (!row) return;
       var show = row.hasAttribute('hidden');
-      if (show) { row.removeAttribute('hidden'); if (hexIn) { hexIn.value = current; try { hexIn.focus(); } catch (e) {} } }
-      else row.setAttribute('hidden', '');
+      if (show) { row.removeAttribute('hidden'); if (hexIn) hexIn.value = current; cwOpen(current); }
+      else cwCancel();
     });
   }
+  cwWire();
   if (hexIn && !hexIn.__wired) {
     hexIn.__wired = true;
     hexIn.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
@@ -267,6 +268,128 @@ function piAccentApplyHex() {
   piRenderAccentUI();
 }
 window.piRenderAccentUI = piRenderAccentUI;
+
+// ── Vòng màu (color wheel) ───────────────────────────────────────────────────
+// UXP canvas 2D không có drawImage / getImageData / conic gradient (đo 2026-10-02), và vẽ lại 180
+// lát quạt mỗi lần kéo thì UXP hiện hình vẽ dở → vòng màu là ảnh dựng sẵn (color-wheel.js), chấm
+// đánh dấu + lớp tối là div; màu tính thẳng từ toạ độ chuột (HSV: góc = tông, bán kính = độ đậm,
+// thanh Độ sáng = V). Kéo tới đâu cả plugin đổi màu tới đó;
+// Áp dụng = lưu thành ô màu riêng, Huỷ = trả về màu lúc mở.
+var CW = { h: 270, s: 0.66, v: 0.97, orig: '', drag: '', lastApply: 0 };
+function cwHsvToHex(h, s, v) {
+  var c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c, r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; } else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  function hx(n) { var t = Math.round((n + m) * 255).toString(16); return t.length === 1 ? '0' + t : t; }
+  return '#' + hx(r) + hx(g) + hx(b);
+}
+function cwHexToHsv(hex) {
+  var rgb = piHexToRgb(hex);
+  if (!rgb) return null;
+  var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+  if (d) {
+    if (mx === r) h = 60 * (((g - b) / d) % 6); else if (mx === g) h = 60 * ((b - r) / d + 2); else h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+  return { h: h, s: mx ? d / mx : 0, v: mx };
+}
+function cwHex() { return cwHsvToHex(CW.h, CW.s, CW.v); }
+// Vòng màu là ảnh dựng sẵn (color-wheel.js). Khi kéo chỉ dời chấm + đổi độ mờ lớp tối — không vẽ lại.
+function cwDraw() {
+  var st = document.getElementById('cwStack'), dot = document.getElementById('cwDot'), dark = document.getElementById('cwDark');
+  var W = (st && st.clientWidth) || 150, R = W / 2 - 1, a = CW.h * Math.PI / 180;
+  if (dot) { dot.style.left = Math.round(W / 2 + Math.cos(a) * CW.s * R) + 'px'; dot.style.top = Math.round(W / 2 + Math.sin(a) * CW.s * R) + 'px'; }
+  if (dark) dark.style.opacity = String(Math.max(0, Math.min(1, 1 - CW.v)).toFixed(3));
+  var bc = document.getElementById('cwBright');
+  if (bc && bc.getContext) {
+    var b = bc.getContext('2d'), BW = bc.width, BH = bc.height;
+    var gl = b.createLinearGradient(0, 0, BW, 0);
+    gl.addColorStop(0, '#000000'); gl.addColorStop(1, cwHsvToHex(CW.h, CW.s, 1));
+    b.clearRect(0, 0, BW, BH); b.fillStyle = gl; b.fillRect(0, 2, BW, BH - 4);
+    var bx = Math.max(2, Math.min(BW - 2, CW.v * BW));
+    b.fillStyle = '#ffffff'; b.fillRect(bx - 2, 0, 4, BH);
+    b.strokeStyle = 'rgba(0,0,0,0.6)'; b.lineWidth = 1; b.strokeRect(bx - 2.5, 0.5, 5, BH - 1);
+  }
+  var pv = document.getElementById('cwPreview'); if (pv) pv.style.background = cwHex();
+}
+// Gộp các lần vẽ khi kéo: tối đa một lần mỗi ~16ms.
+var cwPending = false;
+function cwDrawSoon() {
+  if (cwPending) return;
+  cwPending = true;
+  setTimeout(function () { cwPending = false; cwDraw(); }, 16);
+}
+function cwSync(live) {
+  var hex = cwHex(), hexIn = document.getElementById('accentHex');
+  if (hexIn) hexIn.value = hex;
+  if (live) cwDrawSoon(); else cwDraw();
+  var now = Date.now();
+  if (live && now - CW.lastApply > 60) { CW.lastApply = now; piApplyAccent(hex); }
+}
+// Toạ độ chuột trong phần tử: offsetX nếu UXP có, không thì clientX − mép trái của phần tử.
+function cwLocal(e, el) {
+  // Lớp con phủ kín (ảnh, lớp tối) cùng gốc toạ độ với khung → offsetX dùng được; chấm thì không.
+  var t = e.target, sameOrigin = t === el || (t && t.parentNode === el && t.id !== 'cwDot');
+  if (sameOrigin && typeof e.offsetX === 'number' && typeof e.offsetY === 'number') return { x: e.offsetX, y: e.offsetY };
+  var r = el.getBoundingClientRect();
+  var left = r.left != null ? r.left : (r.x != null ? r.x : r._x), top = r.top != null ? r.top : (r.y != null ? r.y : r._y);
+  return { x: e.clientX - left, y: e.clientY - top };
+}
+function cwPick(e) {
+  var el = document.getElementById(CW.drag === 'v' ? 'cwBright' : 'cwStack');
+  if (!el) return;
+  var p = cwLocal(e, el), dispW = el.clientWidth || el.width;
+  if (CW.drag === 'v') {
+    CW.v = Math.max(0, Math.min(1, p.x / dispW));
+  } else {
+    var R = dispW / 2, dx = p.x - R, dy = p.y - R;
+    CW.h = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    CW.s = Math.max(0, Math.min(1, Math.sqrt(dx * dx + dy * dy) / (R - 1)));
+  }
+  cwSync(true);
+}
+function cwOpen(hex) {
+  CW.orig = String(hex || '#a855f7');
+  var hsv = cwHexToHsv(CW.orig) || { h: 270, s: 0.66, v: 0.97 };
+  CW.h = hsv.h; CW.s = hsv.s; CW.v = hsv.v;
+  // Vẽ lại khi khung đã hiện: lúc còn ẩn thì clientWidth = 0 / UXP bỏ qua canvas thanh độ sáng.
+  cwSync(false);
+  setTimeout(cwDraw, 30);
+  setTimeout(cwDraw, 200);
+}
+function cwCancel() {
+  var row = document.getElementById('accentCustomRow');
+  if (CW.orig) piApplyAccent(CW.orig);
+  if (row) row.setAttribute('hidden', '');
+  piRenderAccentUI();
+}
+function cwWire() {
+  var wc = document.getElementById('cwStack'), bc = document.getElementById('cwBright'), cancel = document.getElementById('cwCancel');
+  if (!wc || wc.__wired) return;
+  wc.__wired = true;
+  var img = document.getElementById('cwImg');
+  if (img && typeof PI_COLOR_WHEEL_PNG === 'string') img.src = PI_COLOR_WHEEL_PNG;
+  wc.addEventListener('mousedown', function (e) { CW.drag = 'hs'; cwPick(e); e.preventDefault(); });
+  if (bc) bc.addEventListener('mousedown', function (e) { CW.drag = 'v'; cwPick(e); e.preventDefault(); });
+  document.addEventListener('mousemove', function (e) {
+    if (!CW.drag) return;
+    // Lỡ mất sự kiện thả chuột (thả ngoài panel…) → không còn nút nào giữ thì thôi kéo, khỏi đổi màu lung tung.
+    if (typeof e.buttons === 'number' && e.buttons === 0) { CW.drag = ''; return; }
+    cwPick(e);
+  });
+  document.addEventListener('mouseup', function () {
+    if (!CW.drag) return;
+    CW.drag = '';
+    piApplyAccent(cwHex());   // lần cuối (bỏ qua giới hạn 60ms)
+  });
+  if (cancel) cancel.addEventListener('click', cwCancel);
+  var hexIn = document.getElementById('accentHex');
+  if (hexIn) hexIn.addEventListener('input', function () {
+    var v = String(hexIn.value || '').trim(); if (v && v[0] !== '#') v = '#' + v;
+    var hsv = /^#[0-9a-fA-F]{6}$/.test(v) ? cwHexToHsv(v) : null;
+    if (hsv) { CW.h = hsv.h; CW.s = hsv.s; CW.v = hsv.v; cwDrawSoon(); piApplyAccent(v); }
+  });
+}
 
 // Render placeholders now + a couple of deferred passes (UXP's DOMContentLoaded
 // is unreliable; main.js runs at body end so the DOM is already parsed).
@@ -793,7 +916,7 @@ async function registerTimelineEvents() {
 }
 
 // ── Version ────────────────────────────────────────────────────────────────
-var PLUGIN_VERSION = 'v5.11.0';  // Voice Gen: Eleven v4 (mặc định) + v3; v4 có Stability/Similarity, gợi ý retrain clone cũ. Tab RESIZE (port từ 1-Click Resizer): chọn sequence ở Project panel → nhân bản sang 9:16 / 4:5 / 1:1 (GG), 9:16⇄4:5 (FB), 2:3 (PIN), đổi khung + tên, về bin nguồn, canh text/MOGRT theo guide từng ratio; nút Chẩn đoán để dò API. Voice Gen: import/timeline nhận clip theo ĐƯỜNG DẪN file (getMediaFilePath) — hết đặt nhầm clip cũ trùng tên; nhạc (mode Music) lưu chọn sẵn <sản phẩm>/BGM/AI. CẦN BRIDGE ≥1.20.0 (Bridge app 3.16). v5.10.1 — Autocut: paste CSV (kèm header text_overlay/footage_name/shot_start) vào ô bảng → đọc y như nút ＋ CSV, nhận cả CSV lẫn TSV từ Google Sheet, ghi đè bảng. KHÔNG cần bridge mới. v5.10.0 — Watch: file mới không tự import nữa — hiện bảng duyệt, bấm Import thì import theo mẻ mỗi bin. Tạo Sub: nút riêng "AI ngắt câu" (chỉ chia script, không Whisper) để sửa tay; nút chính "Tạo Sub" chạy full pipeline, hoặc chỉ Whisper canh giờ giữ đúng 1 dòng = 1 cue nếu đã ngắt trước. Autocut: thẻ thiếu source ẩn khi Clear, tự validate lại sau khi Watch import. CẦN BRIDGE ≥1.19.0 cho keepLines (Bridge app 3.15). v5.9.1 — Autocut — Tìm trong Watch Folder: đếm giây lúc chờ, timeout 90s, báo khi bridge chưa quét hết (hạn 45s). CẦN BRIDGE ≥1.18.2 (quét bất đồng bộ, không còn treo bridge trên Google Drive). v5.9.0 — Gộp 3: (1) Fix DỨT ĐIỂM ô tìm voice clone nuốt chữ — .elv-list height cố định + debounce lọc + khôi phục caret (gốc là reflow do lọc, không phải keyboard). (2) Autocut nút ＋CSV nạp script từ file CSV (map text_overlay→script, shot_start-shot_end→time, footage_name→source bỏ đuôi video; parser plugin/csv-parse.js + test; giữ nguyên paste Google Sheet). (3) Voice Gen: 2 nút icon sắp xếp list voice clone (thời gian tạo / tên, bấm đảo chiều; localStorage elv_sort_mode; elv-sort.js + test). KHÔNG cần bridge mới. v5.8.2 — Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
+var PLUGIN_VERSION = 'v5.12.0';  // Tab RAW (port Raw-cutter 3.93 của mill2nn): cắt từng cut của timeline ra file riêng + clips.csv/manifest.json; Source Render → raw/, Timeline Render (Premiere render từng cut) → edited/, Both; thư mục <Sản phẩm>/Output/ACT/<vN>/ theo SAMX_WORKSPACE; MP3 voice-over/từng track; CRF/scale/fps/preset; chống timeline bị sửa; Retry. Tự đọc sequence + tự cập nhật khi timeline đổi; tự khớp sản phẩm khi tên khác nhau; ẩn text & MOGRT khi render; nhân vật pixel báo tiến trình. Settings: vòng màu chọn màu giao diện. CẦN BRIDGE ≥1.21.0 (Bridge app 3.17, python3 ≥3.8 + ffmpeg). v5.11.0 — Voice Gen: Eleven v4 (mặc định) + v3; v4 có Stability/Similarity, gợi ý retrain clone cũ. Tab RESIZE (port từ 1-Click Resizer): chọn sequence ở Project panel → nhân bản sang 9:16 / 4:5 / 1:1 (GG), 9:16⇄4:5 (FB), 2:3 (PIN), đổi khung + tên, về bin nguồn, canh text/MOGRT theo guide từng ratio; nút Chẩn đoán để dò API. Voice Gen: import/timeline nhận clip theo ĐƯỜNG DẪN file (getMediaFilePath) — hết đặt nhầm clip cũ trùng tên; nhạc (mode Music) lưu chọn sẵn <sản phẩm>/BGM/AI. CẦN BRIDGE ≥1.20.0 (Bridge app 3.16). v5.10.1 — Autocut: paste CSV (kèm header text_overlay/footage_name/shot_start) vào ô bảng → đọc y như nút ＋ CSV, nhận cả CSV lẫn TSV từ Google Sheet, ghi đè bảng. KHÔNG cần bridge mới. v5.10.0 — Watch: file mới không tự import nữa — hiện bảng duyệt, bấm Import thì import theo mẻ mỗi bin. Tạo Sub: nút riêng "AI ngắt câu" (chỉ chia script, không Whisper) để sửa tay; nút chính "Tạo Sub" chạy full pipeline, hoặc chỉ Whisper canh giờ giữ đúng 1 dòng = 1 cue nếu đã ngắt trước. Autocut: thẻ thiếu source ẩn khi Clear, tự validate lại sau khi Watch import. CẦN BRIDGE ≥1.19.0 cho keepLines (Bridge app 3.15). v5.9.1 — Autocut — Tìm trong Watch Folder: đếm giây lúc chờ, timeout 90s, báo khi bridge chưa quét hết (hạn 45s). CẦN BRIDGE ≥1.18.2 (quét bất đồng bộ, không còn treo bridge trên Google Drive). v5.9.0 — Gộp 3: (1) Fix DỨT ĐIỂM ô tìm voice clone nuốt chữ — .elv-list height cố định + debounce lọc + khôi phục caret (gốc là reflow do lọc, không phải keyboard). (2) Autocut nút ＋CSV nạp script từ file CSV (map text_overlay→script, shot_start-shot_end→time, footage_name→source bỏ đuôi video; parser plugin/csv-parse.js + test; giữ nguyên paste Google Sheet). (3) Voice Gen: 2 nút icon sắp xếp list voice clone (thời gian tạo / tên, bấm đảo chiều; localStorage elv_sort_mode; elv-sort.js + test). KHÔNG cần bridge mới. v5.8.2 — Autocut — Tìm trong Watch Folder: ghép bin theo tên thư mục trước (không cần AI), AI hỏng vẫn giữ phần đã ghép; Claude CLI hết phiên đăng nhập thì báo rõ "chạy claude login" thay vì "không trả về JSON array"; checkbox cùng dòng với tên file. Đăng nhập Claude CLI từ plugin: thanh trạng thái cảnh báo khi phiên OAuth hết hạn (bấm để đăng nhập), bảng tìm source có nút "Đăng nhập Claude" — bridge mở Terminal chạy claude auth login, plugin poll /auth/status rồi tự chạy lại. CẦN BRIDGE ≥1.18.1 (Bridge app 3.13). v5.8.1 — Autocut: validate báo thiếu source → thẻ "Tìm trong Watch Folder": bridge quét thư mục sản phẩm + thư mục các watch, khớp tên theo đủ 4 lượt của sacMatchBinItem (kể cả kiểu "Higg 33" = thư mục Higg / clip 33), model ghép thư mục với bin có thật, bảng duyệt sửa bin + tick file (khớp gần đúng không tick sẵn), clip khớp kiểu thư mục+số vào bin con mang tên thư mục; xong tạo watch + import theo mẻ + validate lại. Watch: nút Đối chiếu có bảng xem lại trước khi import, import theo mẻ mỗi bin một lần thay vì từng file. Voice Gen: thanh "Lần gen i/N" chỉ đếm trong phiên. CẦN BRIDGE ≥1.18.0 (Bridge app 3.12). v5.8.0 — Watch Folder: tab mới theo dõi nhiều thư mục, tự import file mới vào bin đã chọn (lọc theo loại file + regex, mirror subfolder thành bin con, nút Đối chiếu so thư mục với project). Bridge chỉ quét khi panel mở; đóng panel thì ghi snapshot, mở lại quét bù nên không bỏ lỡ file. Chọn thư mục mở sẵn ở thư mục sản phẩm (cấp cha của thư mục chứa .prproj) vì UXP getFolder không nhận đường dẫn. CẦN BRIDGE ≥1.16.0 cho tab Watch. Voice Gen: history lưu theo LẦN GEN thay vì cặp voice+script — gen lại không còn làm mất output cũ; mỗi mục có nghe/Import/Mở lại/Nạp script, trùng voice+script thì đánh số lượt; khu kết quả thêm thanh điều hướng lần gen; multi-speaker và Voice Changer cũng vào history; sidebar phải nới 232→260px. v5.7.1 — Voice Gen: history "Gần đây" lọc theo voice dùng được với profile đang active — voice custom/clone gắn chặt với API key của profile tạo ra nó, 25 voice mặc định thì key nào cũng dùng được; mỗi mục lưu thêm profileId. Cap 20 tính cho TẮNG profile để profile gen nhiều không đẩy bay history của profile khác. v5.7.0 — Voice Gen: section "Gần đây" trên sidebar phải — 3 lần gen TTS gần nhất (tên voice + đoạn script), click đổi voice, nút "Nạp script" đè lại script (xác nhận 2 bước "Ghi đè?"), "Xem thêm" giãn tối đa 20. Lưu ở localStorage vg_voice_history, chỉ single-speaker TTS. Nhãn Profile nằm cùng hàng với chip đổi profile. KHÔNG cần bridge mới (vẫn Bridge app 3.10 / server 1.15.0). v5.6.5 — Autocut: sửa lỗi đính voice từ folder — Whisper crash (FileNotFoundError trong inspect.py) vì spawn với cwd không tồn tại, và sau lỗi thì nút voice kẹt mãi ở "Đang xử lý voice" (cờ sacVoiceBusy không reset khi align thất bại). CẦN BRIDGE APP ≥3.10: bản 3.9 thiếu autoset-names.js trong bundle nên bridge crash lúc khởi động rồi restart vô hạn, làm app treo khi bấm "Khởi động lại Bridge". CẦN BRIDGE ≥1.15.0. Voice Gen: chip quick switch profile chuyển thành section "Profile" riêng trên cùng sidebar phải (5.6.3 nhét trong mode bar nên bị bóp còn mỗi icon + 1 ký tự). v5.6.3 — chip quick switch profile API key (xoay vòng qua các profile CÓ key, mờ khi <2 profile dùng được); nút ⚙ trên cùng mở thẳng settings của tab đang mở (autocut→Autocut, voicegen→Voice Gen, subtext→General). v5.6.2 — CẦN BRIDGE ≥1.15.0. Tạo Sub: thêm toggle bật/tắt tự động lưu SRT (mặc định BẬT), lưu trạng thái qua localStorage; BẬT = như 5.6.1 (.srt tự lưu cạnh file VO, tên theo version sequence); TẮT = mở hộp thoại Save, chọn thư mục + tên, nhớ thư mục vào vg_last_save_folder, Cancel huỷ không tạo file. stResolveOutputPath() rẽ nhánh theo stSrtAutoSaveOn(). v5.6.1 — CẦN BRIDGE ≥1.15.0. Trang Auto: popup confirm đủ 3 video, nút Huỷ (dừng giữa 2 video), nút Xoá sạch cả bộ, tab bám theo video pipeline đang xử lý, dừng hẳn khi validate lỗi và nhảy về video đó; trang Auto Sub thay trang success (mượn .st-app, tab .0/.1/.2 tự đổi sequence + nạp script). Fix: panel Manual trống trơn, timeline không có hình (sacSourceMap không lưu theo job), 3 video bị ghi đè thành video cuối, Blocks không đổi theo tab. Gỡ Parse cutsheet AI.
 // v5.5.0 — CẦN BRIDGE ≥1.14.0. Gộp Voice Changer + Tạo Sub fix. Tạo Sub: fix ghép audio — clip đổi tốc độ (speed) cắt đúng đoạn nguồn rồi atempo về đúng độ dài timeline (hết mất đầu câu/dính đoạn đã trim); clip chồng lớp (nhạc nền/SFX) TRỘN đúng vị trí thay vì nối đuôi; nút Clear session; chống nhầm script cũ (không ghi đè khi đang sửa + cảnh báo đỏ khớp <40%); cảnh báo đỏ bridge cũ; menu bar app đơn sắc + "Kiểm tra thành phần". Voice Changer (5.4.x): card thứ 3 tab Create — đổi giọng từ clip timeline (render vùng chọn qua exportSequence, chỉ track clip đã chọn, loại BGM/SFX) hoặc file upload sang giọng đích ElevenLabs STS; nút Nghe thử bản gộp; bridge POST /voice/change, /media/extract-audio, GET /media/audio-preset. v5.3.2: fix ô tìm voice clone; v5.3.1: import voice vào track trống hẳn; Music v2 + audio reference.
 // v5.2.2 — Fix Tạo Sub: .srt lưu CẠNH file VO hiện tại (theo dirname media của clip đang chọn → tự đi theo khi re-link sang ổ khác), không còn bám "thư mục lưu gần nhất" cũ; đặt tên .srt theo version của sequence (vd "v21.0.srt", fallback tên sequence → timestamp); nếu thư mục ghi hỏng (NAS chỉ-đọc/đã unmount) → hỏi chọn thư mục khác rồi thử lại.
 // v5.2.1 — Tên file voice: nhớ phần tên do user đặt theo từng project → gợi ý "{phần user} - {voice đang chọn}". Fix move-to-bin trên máy khác: cast root sang FolderItem (tạo bin ở gốc luôn ném → clip nằm lại bin đang chọn) + mode "tạo voice" dùng đúng bin đã chọn thay vì mặc định Voice Over.

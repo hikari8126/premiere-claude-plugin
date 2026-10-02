@@ -3021,7 +3021,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.20.0';  // Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.21.0';  // Raw-cutter: /rawcut/status|scan|export(SSE)|render-cache|render-cache/clean|render-preset, engine xmlcut.py 3.93 vendored ở rawcut-engine/ (cần python3 ≥3.8 + ffmpeg). Prior 1.20.0: Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {
@@ -3046,6 +3046,7 @@ app.get('/health', (_req, res) => {
       transcribe:  true,    // /transcribe endpoint
       align:       true,    // /align endpoint
       hostKey:     process.platform === 'darwin', // /host-key (AppleScript copy/paste)
+      rawcut:      fs.existsSync(path.join(__dirname, 'rawcut-engine', 'xmlcut.py')), // /rawcut/* (Raw-cutter)
     },
     whisper: {
       bin:   WHISPER_BIN,
@@ -3602,6 +3603,275 @@ Chỉ trả về JSON array, không markdown, không giải thích thêm:
       ok: false, error: e.message, cliAuth: !!e.cliAuth,
       suggestions: folders.filter(f => byName[f.folder]).map(named),
     });
+  }
+});
+
+// ── Raw-cutter: cắt từng cut của timeline ra file riêng ───────────────────
+// Engine xmlcut.py (Raw-cutter 3.93 của mill2nn, vendored ở rawcut-engine/). Plugin đọc
+// timeline + render từng cut trong Premiere; bridge lưu lần đọc, chạy engine (ffmpeg) và
+// stream tiến độ. Both = plugin gọi /rawcut/export 2 lần (raw/ rồi edited/ + renderDir).
+const rcArgs   = require('./rawcut-args.js');
+const rcProto  = require('./rawcut-protocol.js');
+const rcRunner = require('./rawcut-runner.js');
+const rcReads  = require('./rawcut-reads.js');
+const rcCache  = require('./rawcut-cache.js');
+const rcEpr    = require('./rawcut-epr.js');
+const rcPy     = require('./rawcut-python.js');
+const rcDest   = require('./rawcut-dest.js');
+const RC_ENGINE = path.join(__dirname, 'rawcut-engine', 'xmlcut.py');
+const RC_TMP    = path.join(os.tmpdir(), 'xmlcut-panel');
+const RC_CACHE  = process.env.RAWCUT_CACHE || rcCache.DEFAULT_ROOT;
+const RC_SCAN_KEYS   = ['videoTrack', 'crf', 'fps', 'scale', 'vcodec', 'audioPerTrack', 'audio', 'audioTracks', 'renderAudio', 'transitions', 'remap', 'sizeProbe', 'noProbe'];
+const RC_EXPORT_KEYS = RC_SCAN_KEYS.concat(['ext', 'resume']);
+
+let rcPyCache = null;
+let rcScanSeq = 0;
+function rcPython() {
+  if (!rcPyCache || !rcPyCache.ok) rcPyCache = rcPy.findPython();
+  return rcPyCache;
+}
+function rcEngineVersion() {
+  try {
+    const m = /^VERSION = "([^"]+)"/m.exec(fs.readFileSync(RC_ENGINE, 'utf8').slice(0, 20000));
+    return m ? m[1] : '';
+  } catch (e) { return ''; }
+}
+function rcPick(o, keys) {
+  const r = {};
+  o = o || {};
+  for (const k of keys) if (o[k] !== undefined) r[k] = o[k];
+  return r;
+}
+function rcAbs(p) { return typeof p === 'string' && path.isAbsolute(p); }
+function rcMtime(p) { try { return fs.statSync(p).mtimeMs; } catch (e) { return 0; } }
+
+// ── GET /rawcut/status ── → {ok, python, ffmpeg:{ok}, engine:{path,exists,version}}
+app.get('/rawcut/status', (_req, res) => {
+  const py = rcPython();
+  let ffOk = false;
+  try { ffOk = require('child_process').spawnSync('ffmpeg', ['-version'], { env: cleanEnv(), timeout: 5000 }).status === 0; } catch (e) {}
+  const exists = fs.existsSync(RC_ENGINE);
+  res.json({ ok: py.ok && ffOk && exists, python: py, ffmpeg: { ok: ffOk }, engine: { path: RC_ENGINE, exists, version: rcEngineVersion() } });
+});
+
+// ── POST /rawcut/scan ── {projectPath, sequenceName, dump, xmlPath?} | {read}, half, options
+//    → {ok, read, half, manifest, notes, warnings} | {ok:true, noCuts:true, ...}
+app.post('/rawcut/scan', async (req, res) => {
+  const b = req.body || {};
+  const reuse = b.read && rcAbs(b.read.json) && fs.existsSync(b.read.json);
+  if (!reuse && (!b.dump || typeof b.dump !== 'object')) return res.status(400).json({ ok: false, error: 'Thiếu dữ liệu sequence (dump)' });
+  if (!b.sequenceName) return res.status(400).json({ ok: false, error: 'Thiếu tên sequence' });
+  if (b.xmlPath && !rcAbs(b.xmlPath)) return res.status(400).json({ ok: false, error: 'xmlPath phải là đường dẫn tuyệt đối' });
+  const py = rcPython();
+  if (!py.ok) return res.status(500).json({ ok: false, error: 'Không tìm thấy python3 ≥3.8 — ' + py.tried.join('; ') });
+  try {
+    const read = reuse
+      ? { json: b.read.json, xml: (b.read.xml && fs.existsSync(b.read.xml)) ? b.read.xml : null }
+      : rcReads.saveRead({ projectPath: b.projectPath, sequenceName: b.sequenceName, dump: b.dump, xmlPath: b.xmlPath || null });
+    const half = b.half === 'render' ? 'render' : 'source';
+    // Mỗi lần scan một thư mục mới: engine từ chối --manifest-only vào thư mục đã có export,
+    // và engine vừa bị Dừng có thể còn ghi vào thư mục cũ thêm ~1.5s.
+    const dir = path.join(RC_TMP, (half === 'render' ? 'scan-edited-' : 'scan-') + Date.now() + '-' + (++rcScanSeq));
+    fs.mkdirSync(dir, { recursive: true });
+    const args = rcArgs.buildArgs(Object.assign(rcPick(b.options, RC_SCAN_KEYS), {
+      script: RC_ENGINE, xml: read.xml, sequenceName: b.sequenceName, dump: read.json, out: dir,
+      manifestOnly: true, renderPlanned: half === 'render',
+    }));
+    const notes = [], warnings = [];
+    const job = rcRunner.runEngine({
+      bin: py.bin, args, cwd: path.dirname(RC_ENGINE),
+      onEvent: ev => { if (ev.type === 'note') notes.push(ev.text); else if (ev.type === 'warn') warnings.push(ev.text); },
+    });
+    // Plugin bấm Dừng (đóng request) → giết engine + ffprobe (file Drive chưa tải có thể treo lâu).
+    let finished = false;
+    res.on('close', () => { if (!finished) job.cancel(); });
+    const r = await job.done;
+    finished = true;
+    if (r.cancelled) return;
+    if (r.code !== 0) {
+      const st = rcProto.parseStderr(r.stderr);
+      if (st.noCuts) return res.json({ ok: true, noCuts: true, read, half, notes, warnings });
+      return res.status(500).json({ ok: false, error: 'Engine lỗi khi đọc (mã ' + r.code + '): ' + (r.spawnError || st.tail), read });
+    }
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    fs.rmSync(dir, { recursive: true, force: true });
+    res.json({ ok: true, read, half, manifest, notes, warnings });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /rawcut/export (SSE) ── {read, sequenceName, out, renderDir?, pick?, options}
+//    data:{type:'event',ev} … data:{type:'end',code,signal,cancelled,built,lock,tail,manifest}
+//    Đóng request = Cancel (giết cả process group của engine).
+app.post('/rawcut/export', async (req, res) => {
+  const b = req.body || {};
+  const read = b.read || {};
+  if (!rcAbs(read.json) || !fs.existsSync(read.json)) return res.status(400).json({ ok: false, error: 'Lần đọc timeline không còn — bấm Đọc timeline lại' });
+  if (!rcAbs(b.out)) return res.status(400).json({ ok: false, error: 'Thiếu thư mục xuất (đường dẫn tuyệt đối)' });
+  if (b.renderDir && (!rcAbs(b.renderDir) || !fs.existsSync(b.renderDir))) return res.status(400).json({ ok: false, error: 'Thư mục render không tồn tại' });
+  const py = rcPython();
+  if (!py.ok) return res.status(500).json({ ok: false, error: 'Không tìm thấy python3 ≥3.8' });
+
+  let args, pickFile = null;
+  try {
+    fs.mkdirSync(RC_TMP, { recursive: true });
+    if (Array.isArray(b.pick)) {
+      pickFile = path.join(RC_TMP, 'pick-' + Date.now() + '-' + process.pid + '.txt');
+      fs.writeFileSync(pickFile, '# Raw-cutter pick list\n# one cut_id or "TYPE INDEX IN OUT" per line\n' + b.pick.map(String).join('\n') + '\n');
+    }
+    const xml = (read.xml && fs.existsSync(read.xml)) ? read.xml : null;
+    args = rcArgs.buildArgs(Object.assign(rcPick(b.options, RC_EXPORT_KEYS), {
+      script: RC_ENGINE, xml, sequenceName: b.sequenceName, dump: read.json, out: b.out,
+      renderDir: b.renderDir || null, pick: pickFile,
+    }));
+    const rep = path.join(b.out, 'report');
+    fs.mkdirSync(rep, { recursive: true });
+    fs.copyFileSync(read.json, path.join(rep, path.basename(read.json)));
+    if (xml) fs.copyFileSync(xml, path.join(rep, path.basename(xml)));
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e.message });
+  }
+
+  const manPath = path.join(b.out, 'manifest.json');
+  const before = rcMtime(manPath);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  const send = obj => { try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch (e) {} };
+  const hb = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 10000);
+  let finished = false;
+  const job = rcRunner.runEngine({ bin: py.bin, args, cwd: path.dirname(RC_ENGINE), onEvent: ev => send({ type: 'event', ev }) });
+  res.on('close', () => { if (!finished) job.cancel(); });
+  const r = await job.done;
+  finished = true;
+  clearInterval(hb);
+  if (pickFile) { try { fs.unlinkSync(pickFile); } catch (e) {} }
+  const st = rcProto.parseStderr(r.stderr);
+  const after = rcMtime(manPath);
+  const built = after > 0 && after !== before; // Cancel bằng signal không ghi manifest
+  let manifest = null;
+  if (built) { try { manifest = JSON.parse(fs.readFileSync(manPath, 'utf8')); } catch (e) {} }
+  try {
+    fs.writeFileSync(path.join(b.out, 'report', 'bridge-log.txt'),
+      '$ ' + [py.bin].concat(args).join(' ') + '\n\n' + r.stdout + '\n--- stderr ---\n' + r.stderr);
+  } catch (e) {}
+  send({ type: 'end', code: r.code, signal: r.signal, cancelled: r.cancelled, built, lock: st.lock, tail: st.tail, spawnError: r.spawnError || null, manifest });
+  try { res.write('data: [DONE]\n\n'); res.end(); } catch (e) {}
+});
+
+// ── POST /rawcut/render-cache ── {out} → {ok, dir, pruned, freeBytes, files}
+app.post('/rawcut/render-cache', (req, res) => {
+  const out = (req.body || {}).out;
+  if (!rcAbs(out)) return res.status(400).json({ ok: false, error: 'Thiếu thư mục xuất' });
+  try {
+    fs.mkdirSync(RC_CACHE, { recursive: true });
+    const pruned = rcCache.pruneCache(RC_CACHE, rcCache.MAX_AGE_MS, Date.now());
+    const dir = rcCache.renderCacheDir(out, RC_CACHE);
+    fs.mkdirSync(dir, { recursive: true });
+    res.json({ ok: true, dir, pruned, freeBytes: rcCache.freeBytes(dir), files: fs.readdirSync(dir).filter(n => !n.startsWith('.')) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /rawcut/render-cache/clean ── {dir} — chỉ xoá trong cache render
+app.post('/rawcut/render-cache/clean', (req, res) => {
+  const dir = (req.body || {}).dir;
+  if (!rcAbs(dir) || !rcCache.isUnder(RC_CACHE, dir)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được thư mục trong cache render' });
+  try { fs.rmSync(dir, { recursive: true, force: true }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rawcut/render-preset ── {dir, mbps} → {ok, path, stockPath, stock, bitrate?, warning?}
+//    Không ghi được bản sửa → vẫn ok, trả preset gốc + warning (render vẫn chạy được).
+app.post('/rawcut/render-preset', (req, res) => {
+  const b = req.body || {};
+  const stock = rcEpr.findStockPreset();
+  if (!stock.found) return res.status(500).json({ ok: false, error: 'Không tìm thấy preset H.264 "Match Source" trong Premiere / Media Encoder', tried: stock.tried });
+  if (!(Number(b.mbps) > 0) || !rcAbs(b.dir)) return res.json({ ok: true, path: stock.found, stockPath: stock.found, stock: true });
+  const w = rcEpr.writeRenderPreset({ destDir: b.dir, mbps: Number(b.mbps), basePath: stock.found });
+  if (!w.ok) return res.json({ ok: true, path: stock.found, stockPath: stock.found, stock: true, warning: w.error });
+  res.json({ ok: true, path: w.path, stockPath: stock.found, stock: false, bitrate: { target: w.target, max: w.max, min: w.min, pass: w.pass, capped: w.capped } });
+});
+
+// ── POST /rawcut/presets ── {action:'list'|'save'|'delete', name?, crf?, fps?, scale?}
+//    → {ok, presets:{name:{crf,fps,scale,...}}, path?} — engine giữ presets.json ở
+//    ~/Library/Application Support/Raw-cutter/ (chung với bản CEP nếu máy từng cài).
+app.post('/rawcut/presets', async (req, res) => {
+  const b = req.body || {};
+  const py = rcPython();
+  if (!py.ok) return res.status(500).json({ ok: false, error: 'Không tìm thấy python3 ≥3.8' });
+  const name = String(b.name || '').trim();
+  let extra;
+  if (b.action === 'save') {
+    if (!name) return res.status(400).json({ ok: false, error: 'Thiếu tên preset' });
+    extra = ['--save-preset', name, '--presets-only'];
+    if (b.crf != null) extra.push('--crf', String(b.crf));
+    if (b.fps) extra.push('--fps', String(b.fps));
+    if (b.scale != null) extra.push('--scale', String(b.scale));
+  } else if (b.action === 'delete') {
+    if (!name) return res.status(400).json({ ok: false, error: 'Thiếu tên preset' });
+    extra = ['--delete-preset', name, '--presets-only'];
+  } else {
+    extra = ['--list-presets-json'];
+  }
+  try {
+    const r = await rcRunner.runEngine({ bin: py.bin, args: [RC_ENGINE].concat(extra), cwd: path.dirname(RC_ENGINE) }).done;
+    const lines = String(r.stdout || '').split('\n').map(x => x.trim()).filter(Boolean);
+    let out = null;
+    for (let i = lines.length - 1; i >= 0 && !out; i--) { try { out = JSON.parse(lines[i]); } catch (e) {} }
+    if (!out) return res.status(500).json({ ok: false, error: 'Engine không trả preset: ' + rcProto.parseStderr(r.stderr).tail });
+    if (out.ok === undefined) out.ok = !out.error;
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── POST /rawcut/stat ── {path} (trong cache render) → {ok, exists, size}
+//    Plugin không stat được đường dẫn ngoài sandbox UXP — hỏi bridge file render đã ghi chưa.
+app.post('/rawcut/stat', (req, res) => {
+  const p = (req.body || {}).path;
+  if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ hỏi được file trong cache render' });
+  try { const st = fs.statSync(p); res.json({ ok: true, exists: true, size: st.size }); }
+  catch (e) { res.json({ ok: true, exists: false, size: 0 }); }
+});
+
+// ── POST /rawcut/unlink ── {path} (trong cache render) → {ok} — xoá render cũ trước khi
+//    Premiere ghi lại cùng tên (tránh Premiere tự đổi tên / đọc nhầm file cũ).
+app.post('/rawcut/unlink', (req, res) => {
+  const p = (req.body || {}).path;
+  if (!rcAbs(p) || !rcCache.isUnder(RC_CACHE, p)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được file trong cache render' });
+  try { fs.rmSync(p, { force: true }); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rawcut/open ── {dir} → mở thư mục trong Finder
+app.post('/rawcut/open', (req, res) => {
+  const dir = (req.body || {}).dir;
+  if (!rcAbs(dir) || !fs.existsSync(dir)) return res.status(400).json({ ok: false, error: 'Thư mục không tồn tại' });
+  try { spawn('open', [dir], { detached: true, stdio: 'ignore' }).unref(); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── POST /rawcut/dest ── {projectPath, sequenceName, sequenceId?, mode?:'source'|'render'|'both',
+//    chosen?: thư mục user chọn cho project này, productPick?: sản phẩm chọn từ menu cho project này}
+//    → {ok:true, version, said, route:'samx'|'matched'|'picked'|'chosen-product'|'free', product, act,
+//       dirs:{raw, edited}, versionDir, samx, products, notes} | {ok:false, why, version, samx, products, needPick?, taken?}
+//    Từ chối là câu trả lời bình thường (HTTP 200); 400 chỉ khi thiếu projectPath/sequenceName.
+app.post('/rawcut/dest', (req, res) => {
+  const b = req.body || {};
+  if (!b.projectPath || !b.sequenceName) return res.status(400).json({ ok: false, error: 'Thiếu projectPath hoặc sequenceName' });
+  try {
+    const r = rcDest.resolveDest({
+      projectPath: String(b.projectPath), sequenceName: String(b.sequenceName), sequenceId: b.sequenceId ? String(b.sequenceId) : '',
+      mode: b.mode, chosen: b.chosen ? String(b.chosen) : '', productPick: b.productPick ? String(b.productPick) : '', walk: !!b.walk,
+    });
+    res.json(Object.assign({}, r));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
