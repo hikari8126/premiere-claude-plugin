@@ -10,7 +10,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var logEl = $('clLog'), emptyEl = $('clEmpty'), input = $('message-input'), sendEl = $('send-btn');
-  var inputRow = $('clInputRow'), stateEl = $('clState'), seqEl = $('clSeqName'), clearEl = $('clClear');
+  var stateEl = $('clState'), seqEl = $('clSeqName'), clearEl = $('clClear');
   if (!logEl || !input || !sendEl) return;
 
   var HISTORY_KEY = 'cl_history_v1', SHORTCUT_KEY = 'claude-shortcuts';
@@ -272,26 +272,27 @@
   }
 
   // ── Ô lệnh ──────────────────────────────────────────────────────────────────
-  // UXP đo scrollHeight của textarea không ổn → cao theo số dòng (tối đa 6).
+  // UXP đo scrollHeight của textarea không ổn → cao theo số dòng (tối đa 6):
+  // 18px/dòng + padding 14 + viền 2 (box-sizing: border-box).
   function resizeInput() {
     var lines = String(input.value || '').split('\n').length;
-    input.style.height = (Math.min(6, Math.max(1, lines)) * 18) + 'px';
+    input.style.height = (Math.min(6, Math.max(1, lines)) * 18 + 16) + 'px';
     setSendMode();
   }
   function setSendMode() {
     if (busy) {
       sendEl.className = 'cl-send is-stop';
       sendEl.setAttribute('aria-label', 'Dừng');
-      sendEl.innerHTML = pluginIconSVG('stop', 10, '#e5e5e5');
+      sendEl.innerHTML = pluginIconSVG('stop', 11, '#e5e5e5');
     } else {
       sendEl.className = 'cl-send' + (String(input.value || '').trim() ? '' : ' is-empty');
       sendEl.setAttribute('aria-label', 'Gửi');
-      sendEl.innerHTML = pluginIconSVG('arrow_right', 12, '#ffffff');
+      sendEl.innerHTML = pluginIconSVG('arrow_right', 14, '#ffffff');
     }
   }
   input.addEventListener('input', resizeInput);
-  input.addEventListener('focus', function () { window.claimKeyboard(); inputRow.classList.add('is-focus'); });
-  input.addEventListener('blur', function () { window.releaseKeyboard(); inputRow.classList.remove('is-focus'); });
+  input.addEventListener('focus', window.claimKeyboard);
+  input.addEventListener('blur', window.releaseKeyboard);
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });

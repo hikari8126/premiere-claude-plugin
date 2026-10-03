@@ -165,8 +165,10 @@ var CLAWD = (function () {
 
   // crop {x,y,w,h}: chỉ vẽ một phần khung (icon tab bỏ phần trời trống cho Clawd to hơn).
   // Gộp ô cùng màu liền nhau trên một hàng thành một <rect> cho nhẹ DOM.
-  function toSvg(frame, width, crop) {
+  // palette: ghi đè màu theo ký tự (vd Clawd âm bản trên nền cam: { O: '#1a1a1a', K: '#D97757' }).
+  function toSvg(frame, width, crop, palette) {
     var c = crop || { x: 0, y: 0, w: W, h: H };
+    var pal = palette || COLORS;
     var out = [];
     for (var y = 0; y < frame.length; y++) {
       var row = frame[y], x = 0;
@@ -174,7 +176,7 @@ var CLAWD = (function () {
         var ch = row.charAt(x), x0 = x;
         while (x < row.length && row.charAt(x) === ch) x++;
         if (ch === '.') continue;
-        out.push('<rect x="' + x0 + '" y="' + y + '" width="' + (x - x0) + '" height="1" fill="' + COLORS[ch] + '"/>');
+        out.push('<rect x="' + x0 + '" y="' + y + '" width="' + (x - x0) + '" height="1" fill="' + (pal[ch] || COLORS[ch]) + '"/>');
       }
     }
     var w = width || 24, h = Math.round(w * c.h / c.w);

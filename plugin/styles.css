@@ -308,20 +308,20 @@ body {
 .cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cl-state.is-error { color: #f87171; }
 .cl-state.is-done { color: #34d399; }
-.cl-input {
-  display: flex; align-items: flex-end; gap: 8px;
-  border: 1px solid #3d3d3d; border-radius: 9px; background: #151515;
-  padding: 6px 6px 6px 10px;
-}
-.cl-input.is-focus { border-color: var(--cl); }
+/* Ô lệnh: chính textarea mang nền + viền (UXP bỏ qua background:transparent / border:none
+   trên textarea và vẽ ô gốc nền đen, viền focus xanh) — nút gửi đứng cạnh, không lồng khung. */
+.cl-input { display: flex; align-items: flex-end; gap: 6px; }
 #message-input {
-  flex: 1 1 auto; min-width: 0; background: transparent; border: none; outline: none; resize: none;
-  color: var(--text); font-family: inherit; font-size: 12.5px; line-height: 18px;
-  height: 18px; padding: 2px 0;
+  flex: 1 1 auto; min-width: 0;
+  background: #141414; color: var(--text);
+  border: 1px solid #3d3d3d; border-radius: 9px; outline: none; resize: none;
+  font-family: inherit; font-size: 12.5px; font-style: normal; line-height: 18px;
+  padding: 7px 10px; height: 34px; box-sizing: border-box;
 }
-#message-input::placeholder { color: #8a8a8a; }
+#message-input:focus { border-color: var(--cl); background: #121212; }
+#message-input::placeholder { color: #8a8a8a; font-style: normal; }
 .cl-send {
-  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; background: var(--cl);
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; background: var(--cl);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .cl-send:hover { background: var(--cl-hover); }
