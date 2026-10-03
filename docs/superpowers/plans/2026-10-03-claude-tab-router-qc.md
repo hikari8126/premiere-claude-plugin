@@ -23,7 +23,14 @@
   `refreshTimeline` → `window.ClaudeTabSetSeq`. Lệnh mẫu ở màn trống chỉ gồm việc đã chạy được (Voice Gen script/SFX,
   Autocut) — thêm "tạo bộ NAV", "soát lỗi" khi Phase C/D xong. Đã chạy thật trong bản DEV (Opus 5.5 → action ✓).
 - ✅ Model Opus 5.5 cho mọi lời gọi (`bridge/claude-model.js`), CLI ≥ 2.1.280.
+- ✅ Chỉnh UI theo review: Clawd vẽ lại theo dáng gốc Claude Code, 5 cảnh (idle/think/**work**/done/fail);
+  nút tab kiểu "Clawd đứng riêng" (không nền, vạch ngăn, vạch cam dưới chân); ô lệnh `[ô][+][gửi]` theo
+  kiểu sizer của Voice Gen. **Bài học UXP:** textarea có sẵn margin 6px, không chịu `height`; flex `gap`
+  không được hỗ trợ (dùng margin); `background: transparent` / `border: none` trên textarea bị bỏ qua.
 - ⏳ Phase B (whitelist + prompt mới), C (tạo bộ NAV), D (soát lỗi), E (version).
+- ➕ Thêm vào Phase E: bộ cài + Bridge app tự nâng Claude CLI khi < 2.1.280 (Opus 5.5 cần); thêm lệnh mẫu
+  "tạo bộ NAV" / "soát lỗi" vào màn trống khi C/D xong; claude-tab.js nối `qc_run` / `create_set` vào cảnh
+  Clawd `work`.
 
 ## Quyết định đã chốt (2026-10-03)
 
