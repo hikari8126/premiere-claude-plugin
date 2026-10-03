@@ -264,7 +264,7 @@ body {
 /* Dòng sequence đang mở */
 .cl-seq {
   flex: 0 0 auto; display: flex; align-items: center;
-  padding: 7px 12px; border-bottom: 1px solid #262626;
+  padding: 7px 12px; background: #1f1f1f; border-bottom: 1px solid #3a3a3a;   /* dải tên sequence tách rõ khỏi nhật ký */
   font-size: 11px; color: var(--cl-dim);
 }
 .cl-seqName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
