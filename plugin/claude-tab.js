@@ -13,7 +13,7 @@
   var stateEl = $('clState'), seqEl = $('clSeqName'), clearEl = $('clClear');
   if (!logEl || !input || !sendEl) return;
 
-  var HISTORY_KEY = 'cl_history_v1', SHORTCUT_KEY = 'claude-shortcuts', MODE_KEY = 'cl_mode';
+  var HISTORY_KEY = 'cl_history_v1', MODE_KEY = 'cl_mode';
 
   // ── Chế độ: 'command' (Lệnh — giao việc, ngắn) | 'free' (Hỏi tự do — research) ─────
   var mode = 'command';
@@ -175,7 +175,7 @@
     row.textContent = a.action + '…';
     var r;
     try { r = await ppExecuteAction(a); } catch (e) { r = { ok: false, error: e.message }; }
-    if (r && r.ok) { row.className = 'cl-act is-ok'; row.textContent = (r.data && r.data.message) || a.action; }
+    if (r && r.ok) { row.className = 'cl-act is-ok'; row.textContent = (r.data && r.data.message) || a.action; learnAct(a); }
     else { row.className = 'cl-act is-error'; row.textContent = a.action + ': ' + ((r && r.error) || 'lỗi'); }
     return { cls: row.className.replace('cl-act ', ''), text: row.textContent };
   }
@@ -232,6 +232,7 @@
         btns.remove();
         box.querySelectorAll('.cl-mv').forEach(function (l) { l.style.pointerEvents = 'none'; });
         setClawd('work', 'Đang chuyển…');
+        learnAct(a);
         PTOOLS.move(res.items, sel, function (i, n) { row.textContent = 'Đang chuyển ' + (i + 1) + '/' + n + '…'; }).then(function (out) {
           var bad = out.failed.length;
           row.className = 'cl-act ' + (bad ? 'is-error' : 'is-ok');
@@ -317,6 +318,7 @@
           var q = {}; for (var k in p) q[k] = p[k]; q.skip = 'bỏ chọn'; return q;
         });
         setClawd('work', 'Đang resize…');
+        learnAct(a);
         var done = 0;
         try {
           var res = await window.ResizeAPI.run(a.platform, plan, function (r) { if (!r.skip && !r.error) row.textContent = 'Đã tạo ' + (++done) + '/' + keep.length + '…'; });
@@ -359,6 +361,7 @@
       setClawd('idle', 'Chờ bro xác nhận');
       pickList(box, lines, function (k) { return 'Chuẩn bị RAW (' + k + ')'; }, async function (sel) {
         setClawd('work', 'Đang đọc timeline…');
+        learnAct(a);
         try {
           var r = await window.RawcutAPI.prepare(sel.map(function (l) { return l.seq; }), a.mode);
           row.className = 'cl-act is-ok';
@@ -447,13 +450,17 @@
     return list.length ? list.map(function (v) { return v.voice_id + ': ' + v.label; }).join('\n') : null;
   }
 
-  function send() {
-    var cmd = String(input.value || '').trim();
-    if (!cmd || busy) return;
-    input.value = '';
-    resizeInput();
+  // opts: {text, mode, via:'button'|'flow'} — bấm nút / bước quy trình gửi thẳng, không qua ô lệnh.
+  // Trả Promise → rec của lệnh khi xong (quy trình chờ để chạy bước tiếp).
+  function send(opts) {
+    opts = opts || {};
+    var cmd = String(opts.text != null ? opts.text : (input.value || '')).trim();
+    if (!cmd || busy || (flow && opts.via !== 'flow')) return Promise.resolve(null);
+    if (opts.text == null) { input.value = ''; resizeInput(); }
+    var doneCb, donePromise = new Promise(function (r) { doneCb = r; });
+    if (!opts.via) learnCmd(cmd, CLC.vars(seqNameNow()));
 
-    var entry = makeEntry(cmd, false), sentMode = mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
+    var entry = makeEntry(cmd, false), sentMode = opts.mode || mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
     setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
     entry.reply.textContent = sentMode === 'free' ? 'Đang tìm hiểu…' : 'Đang hiểu ý…';
@@ -546,9 +553,12 @@
         if (failed) setClawd('fail', 'Có bước lỗi', 'is-error');
         else if (!waiting) setClawd('done', 'Xong', 'is-done');
       }
+      if (!aborted && fullText) showRemember(entry, rec, CLC.parseRemember(fullText));
       history = CLLOG.pushHistory(history, rec);
       saveHistory();
+      if (!opts.via) maybeSuggest(entry);
       scrollEnd();
+      doneCb(rec);
     }
 
     xhr.open('POST', BRIDGE_URL + '/chat', true);
@@ -564,7 +574,7 @@
     // Kèm đường dẫn project (cho đọc file) + bản chụp bin/item (cho tool đọc project — bridge trả
     // lời từ đây, không hỏi ngược plugin giữa chừng: UXP kẹt request khi stream /chat còn mở).
     Promise.all([projectPath(), PTOOLS.snapshot()]).then(function (got) {
-      var pp = got[0], snap = got[1];
+      var pp = got[0], snap = got[1], learn = CLSTORE.learn();
       if (busy && busy.aborted) return;
       xhr.send(JSON.stringify({
         messages: CLLOG.toMessages(history).concat([{ role: 'user', content: cmd }]),
@@ -574,12 +584,16 @@
         timelineContext: timelineContext,
         model: CLAUDE_MODEL,
         apiKey: ANTHROPIC_KEY || undefined,
-        voiceContext: voiceContextFor(cmd) || undefined
+        voiceContext: voiceContextFor(cmd) || undefined,
+        notes: CLSTORE.get().notes || undefined,
+        projectFacts: (learn.facts && snap) ? (CLC.projectFacts(snap, seqNameNow()) || undefined) : undefined
       }));
     });
+    return donePromise;
   }
 
   function stop() {
+    if (flow) flow.aborted = true;
     if (!busy) return;
     busy.aborted = true;
     try { busy.xhr.abort(); } catch (e) {}
@@ -597,7 +611,7 @@
     setSendMode();
   }
   function setSendMode() {
-    if (busy) {
+    if (busy || flow) {
       sendEl.className = 'cl-send is-stop';
       sendEl.setAttribute('aria-label', 'Dừng');
       sendEl.innerHTML = pluginIconSVG('stop', 11, '#e5e5e5');
@@ -613,7 +627,7 @@
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
-  sendEl.addEventListener('click', function () { if (busy) stop(); else send(); });
+  sendEl.addEventListener('click', function () { if (busy || flow) stop(); else send(); });
 
   function fill(text) {
     input.value = text;
@@ -655,38 +669,164 @@
     setClawd('idle');
   });
 
-  // ── Nút lệnh tự tạo ([{name, prompt}] — giữ khoá cũ của tab chat) ────────────
-  var chipsEl = $('quick-actions'), addEl = $('add-shortcut-btn'), formEl = $('clScForm');
-  function loadShortcuts() {
-    try { var a = JSON.parse(localStorage.getItem(SHORTCUT_KEY) || '[]'); return Array.isArray(a) ? a : []; }
-    catch (e) { return []; }
+  // ── Tự học: thói quen + gợi ý lưu nút, Claude đề xuất ghi nhớ ────────────────
+  function seqNameNow() { return (timelineContext && timelineContext.sequenceName) || ''; }
+  function learnCmd(cmd, v) {
+    if (!CLSTORE.learn().suggest) return;
+    CLSTORE.setHabits(CLC.recordCmd(CLSTORE.habits(), cmd, v, Date.now()));
   }
-  function saveShortcuts(arr) { try { localStorage.setItem(SHORTCUT_KEY, JSON.stringify(arr)); } catch (e) {} }
+  function learnAct(a) {
+    if (!CLSTORE.learn().suggest || (flow && !flow.learn)) return;   // quy trình đã lưu → không học lại
+    CLSTORE.setHabits(CLC.recordAction(CLSTORE.habits(), a, Date.now()));
+  }
+  var shownSuggest = {};
+  function learnCard(entry, title, text, yes, onYes, onNo) {
+    var box = document.createElement('div');
+    box.className = 'cl-learn';
+    box.appendChild(document.createTextNode(title));
+    var t = document.createElement('div');
+    t.className = 'cl-learnText';
+    t.textContent = text;
+    box.appendChild(t);
+    var btns = document.createElement('div');
+    btns.className = 'cl-askBtns';
+    btns.innerHTML = '<div class="cl-btn cl-btn--primary" role="button"></div><div class="cl-btn" role="button">Thôi</div>';
+    btns.children[0].textContent = yes;
+    btns.children[0].addEventListener('click', function () { box.textContent = onYes(); box.className = 'cl-act is-ok'; });
+    btns.children[1].addEventListener('click', function () { box.remove(); if (onNo) onNo(); });
+    box.appendChild(btns);
+    entry.result.appendChild(box);
+    scrollEnd();
+  }
+  function maybeSuggest(entry) {
+    if (!CLSTORE.learn().suggest) return;
+    var sg = CLC.suggest(CLSTORE.habits(), CLSTORE.get());
+    if (!sg || shownSuggest[sg.key]) return;
+    shownSuggest[sg.key] = 1;
+    var isFlow = sg.kind === 'flow';
+    learnCard(entry,
+      isFlow ? 'Gợi ý: bro hay làm liền mấy việc này (' + sg.n + ' lần). Lưu thành quy trình một nút?'
+             : 'Gợi ý: bro gõ lệnh này ' + sg.n + ' lần rồi. Lưu thành nút?',
+      isFlow ? sg.steps.map(CLC.stepLabel).join('  →  ') : sg.text,
+      isFlow ? 'Lưu quy trình' : 'Lưu nút',
+      function () {
+        var d = CLSTORE.get();
+        d.buttons.push(isFlow ? { name: CLC.suggestName(sg), kind: 'flow', steps: sg.steps }
+                              : { name: CLC.suggestName(sg), kind: 'prompt', mode: 'command', prompt: sg.text });
+        CLSTORE.set(d);
+        return 'Đã lưu nút “' + CLC.suggestName(sg) + '” — đổi tên / sửa ở ⚙';
+      },
+      function () { CLSTORE.setHabits(CLC.decline(CLSTORE.habits(), sg.key)); });
+  }
+  function showRemember(entry, rec, lines) {
+    lines.forEach(function (line) {
+      learnCard(entry, 'Claude muốn nhớ vào ghi chú của bro:', line, 'Nhớ', function () {
+        var d = CLSTORE.get(), r = CLC.addNote(d.notes, line);
+        if (r.ok) { d.notes = r.notes; CLSTORE.set(d); }
+        var msg = r.ok ? 'Đã nhớ: ' + line : 'Không nhớ được: ' + (r.error || 'trống');
+        rec.acts.push({ cls: r.ok ? 'is-ok' : 'is-error', text: msg });
+        saveHistory();
+        return msg;
+      });
+    });
+  }
+
+  // ── Quy trình: chạy lần lượt các bước, bước cần xác nhận thì chờ bro bấm ─────
+  var flow = null;   // { aborted, learn }
+  function waitAsk(rec, idx) {
+    return new Promise(function (res) {
+      var t = setInterval(function () {
+        var a = rec.acts[idx];
+        if ((flow && flow.aborted) || !a || a.cls !== 'is-ask') { clearInterval(t); res(a ? a.cls : 'is-skip'); }
+      }, 300);
+    });
+  }
+  async function runFlow(b) {
+    if (busy || flow) return;
+    var v = CLC.vars(seqNameNow());
+    var title = CLC.fill(b.name, v).text;
+    flow = { aborted: false, learn: false };
+    setSendMode();
+    var entry = makeEntry(title, false);
+    var rec = { cmd: title, raw: '', acts: [], at: Date.now(), mode: 'command', flow: true };
+    entry.meta.hidden = false;
+    entry.meta.textContent = 'Quy trình · ' + b.steps.length + ' bước';
+    syncEmpty();
+    var items = null, stopped = '';
+    for (var i = 0; i < b.steps.length && !stopped; i++) {
+      if (flow.aborted) { stopped = 'Đã dừng ở bước ' + (i + 1) + '.'; break; }
+      var st = b.steps[i], label = (i + 1) + '. ' + CLC.stepLabel(st);
+      if (st.scope === 'set' && !items) items = await PTOOLS.snapshot();
+      var sa = CLC.stepAction(st, { vars: v, items: items || [] });
+      if (sa.error) { addAct(entry, 'is-error', label + ': ' + sa.error); rec.acts.push({ cls: 'is-error', text: label + ': ' + sa.error }); stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.'; break; }
+      if (sa.prompt) {                                 // bước hỏi Claude → một mục lệnh riêng
+        addAct(entry, 'is-ok', label);
+        rec.acts.push({ cls: 'is-ok', text: label });
+        flow.learn = false;
+        var r = await send({ text: sa.prompt, mode: 'command', via: 'flow' });
+        if (!r) { stopped = 'Không gửi được bước ' + (i + 1) + '.'; break; }
+        for (var k = 0; k < r.acts.length; k++) if (r.acts[k].cls === 'is-ask') await waitAsk(r, k);
+        if (r.err || r.acts.some(function (a) { return a.cls === 'is-error'; })) { stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.'; break; }
+        if (i < b.steps.length - 1) {                  // các bước sau nối vào mục mới, đứng dưới câu trả lời
+          entry = makeEntry(title + ' (tiếp)', false);
+          entry.meta.hidden = false; entry.meta.textContent = 'Quy trình · từ bước ' + (i + 2);
+        }
+        continue;
+      }
+      var chk = CLA.check(sa.action);
+      if (!chk.ok) { addAct(entry, 'is-error', label + ': ' + chk.error); rec.acts.push({ cls: 'is-error', text: label + ': ' + chk.error }); stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.'; break; }
+      addAct(entry, 'is-wait', label);
+      scrollEnd();
+      if (chk.mode === 'confirm') {
+        var idx = rec.acts.length;
+        rec.acts.push({ cls: 'is-ask', text: label });
+        var first = askConfirm(entry, rec, idx, chk.action);
+        if (rec.acts[idx].cls === 'is-ask' && first.cls !== 'is-ask') rec.acts[idx] = first;
+        var res = await waitAsk(rec, idx);
+        if (res === 'is-error') stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.';
+      } else {
+        setClawd('work', 'Bước ' + (i + 1) + '/' + b.steps.length + '…');
+        var row = addAct(entry, 'is-run', chk.action.action + '…');
+        var out = await runOne(row, chk.action);
+        rec.acts.push(out);
+        if (out.cls === 'is-error') stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.';
+      }
+      if (typeof refreshTimeline === 'function') refreshTimeline();
+    }
+    if (stopped) { addAct(entry, 'is-skip', stopped); rec.acts.push({ cls: 'is-skip', text: stopped }); }
+    var bad = rec.acts.some(function (a) { return a.cls === 'is-error'; });
+    setClawd(bad ? 'fail' : 'done', bad ? 'Quy trình có bước lỗi' : 'Xong quy trình', bad ? 'is-error' : 'is-done');
+    history = CLLOG.pushHistory(history, rec);
+    saveHistory();
+    flow = null;
+    setSendMode();
+    scrollEnd();
+  }
+
+  // ── Nút lệnh / quy trình dưới ô lệnh (dữ liệu ở CLSTORE — sửa ở trang ⚙ Tuỳ biến) ──
+  var chipsEl = $('quick-actions'), addEl = $('add-shortcut-btn'), formEl = $('clScForm');
+  function runButton(b) {
+    if (busy || flow) return;
+    if (b.kind === 'flow') { runFlow(b); return; }
+    var f = CLC.fill(b.prompt, CLC.vars(seqNameNow()));
+    if (f.missing.length) {                           // chưa có biến → điền vào ô cho bro sửa
+      fill(f.text);
+      setClawd('idle', 'Chưa biết ' + f.missing.map(function (k) { return '{' + k + '}'; }).join(', ') + ' — sửa lệnh rồi gửi');
+      return;
+    }
+    send({ text: f.text, mode: b.mode, via: 'button' });
+  }
   function renderShortcuts() {
     chipsEl.innerHTML = '';
-    var list = loadShortcuts();
+    var list = CLSTORE.get().buttons;
     chipsEl.hidden = !list.length;
-    list.forEach(function (sc, idx) {
+    list.forEach(function (b) {
       var chip = document.createElement('div');
-      chip.className = 'cl-chip';
+      chip.className = 'cl-chip' + (b.kind === 'flow' ? ' is-flow' : '');
       chip.setAttribute('role', 'button');
-      chip.textContent = sc.name;
-      var armTimer = null;
-      chip.addEventListener('click', function () {
-        if (chip.classList.contains('is-armed')) {           // đang hỏi xoá → xoá
-          var arr = loadShortcuts(); arr.splice(idx, 1); saveShortcuts(arr); renderShortcuts();
-          return;
-        }
-        fill(sc.prompt);
-      });
-      // Chuột phải → hỏi xoá ngay trên nút, 3s không bấm thì thôi.
-      chip.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        chip.classList.add('is-armed');
-        chip.textContent = 'Xoá “' + sc.name + '”?';
-        clearTimeout(armTimer);
-        armTimer = setTimeout(function () { chip.classList.remove('is-armed'); chip.textContent = sc.name; }, 3000);
-      });
+      chip.textContent = (b.kind === 'flow' ? '▸▸ ' : '') + b.name;
+      chip.addEventListener('click', function () { runButton(b); });
+      chip.addEventListener('contextmenu', function (e) { e.preventDefault(); window.ClaudeCustomUI.open(); });
       chipsEl.appendChild(chip);
     });
   }
@@ -703,7 +843,8 @@
     setFormOpen(formEl.hidden);
     if (!formEl.hidden) {
       scName.value = '';
-      scPrompt.value = String(input.value || '').trim();   // đang gõ dở lệnh nào → gợi ý lưu luôn
+      // đang gõ dở lệnh nào → gợi ý lưu luôn, số bộ đang mở đổi thành {bộ}
+      scPrompt.value = CLC.cmdTemplate(String(input.value || '').trim(), CLC.vars(seqNameNow()));
       scName.focus();
     }
   });
@@ -712,16 +853,16 @@
     var name = scName.value.trim(), prompt = scPrompt.value.trim();
     if (!name) { scName.focus(); return; }
     if (!prompt) { scPrompt.focus(); return; }
-    var arr = loadShortcuts();
-    arr.push({ name: name, prompt: prompt });
-    saveShortcuts(arr);
-    renderShortcuts();
+    var d = CLSTORE.get();
+    d.buttons.push({ name: name, kind: 'prompt', mode: mode, prompt: prompt });
+    CLSTORE.set(d);
     setFormOpen(false);
   });
 
   // ── Khởi động ───────────────────────────────────────────────────────────────
   setMode(mode);
   renderShortcuts();
+  CLSTORE.onChange(renderShortcuts);
   renderPast();
   resizeInput();
   setClawd('idle');

@@ -89,6 +89,8 @@
         <div class="cl-modeOpt" role="button" data-mode="command">Lệnh</div>
         <div class="cl-modeOpt" role="button" data-mode="free">Hỏi tự do</div>
       </div>
+      <!-- ⚙ Tuỳ biến: nút / quy trình / ghi chú / xuất nhập / tự học (cl-custom-ui.js) -->
+      <div class="cl-gear" id="clGear" role="button" aria-label="Tuỳ biến">⚙</div>
     </div>
     <!-- [ô lệnh] [+ lưu thành nút] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
          (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
@@ -110,6 +112,8 @@
     </div>
     <div class="cl-chips" id="quick-actions" hidden></div>
   </div>
+  <!-- Trang Tuỳ biến — thay chỗ nhật ký + ô lệnh khi mở (cl-custom-ui.js vẽ) -->
+  <div class="cl-page" id="clCustom" hidden></div>
 </div><!-- /tab-claude -->
 
   <!-- Settings popup — overlay chung, mở từ ⚙ trên version bar (main.js gắn vào <body>) -->
@@ -2104,6 +2108,7 @@
 <script src="clawd-pixel.js"></script>
 <script src="claude-log.js"></script>
 <script src="claude-actions.js"></script>
+<script src="cl-custom.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
 <script src="rename-core.js"></script>
@@ -2116,6 +2121,7 @@
 <script src="rawcut.js"></script>
 <script src="bin-core.js"></script>
 <script src="premiere-tools.js"></script>
+<script src="cl-custom-ui.js"></script>
 <script src="claude-tab.js"></script>
 </body>
 </html>

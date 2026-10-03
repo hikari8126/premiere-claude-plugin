@@ -69,3 +69,9 @@ test("seqLabel + fmtDur + thinkingText", () => {
   assert.strictEqual(L.thinkingText(12), "Clawd đang nghĩ… 12s");
   assert.strictEqual(L.thinkingText(75), "Clawd đang nghĩ… 1:15");
 });
+
+test("renderReply ẩn khối remember", () => {
+  const CLLOG2 = require("../../plugin/claude-log.js");
+  const html = CLLOG2.renderReply("Ok bro.\n```remember\nBin voice tên VO\n```");
+  assert.ok(!/Bin voice/.test(html) && /Ok bro/.test(html));
+});

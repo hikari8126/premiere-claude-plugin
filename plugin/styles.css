@@ -4757,3 +4757,55 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .vg-save-seqNote { font-size: 11px; color: var(--accent-light); background: var(--accent-a15);
   border: 1px solid var(--accent-a30); border-radius: 5px; padding: 5px 8px; margin: 2px 0 8px; line-height: 1.4; word-break: break-word; }
 .vg-save-seqNote[hidden] { display: none; }
+
+/* ── Tab Claude: tuỳ biến (cl-custom-ui.js) ─────────────────── */
+.cl-gear { flex: 0 0 auto; margin: 0 0 5px 6px; width: 22px; height: 22px; border-radius: 6px; color: var(--cl-dim); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; }
+.cl-gear:hover { color: var(--cl); background: var(--cl-a08); }
+#tab-claude.is-custom .cl-seq, #tab-claude.is-custom .cl-log, #tab-claude.is-custom .cl-dock { display: none; }
+.cl-page { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 0 0 14px; }
+.cl-page[hidden] { display: none; }
+.cu-hd { display: flex; align-items: center; padding: 8px 12px; background: #1f1f1f; border-bottom: 1px solid #3a3a3a; }
+.cu-back { font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; }
+.cu-back:hover { color: var(--cl); }
+.cu-sp, .cu-grow { flex: 1 1 auto; }
+.cl-btn.is-on { border-color: var(--cl); color: var(--cl); }
+.cl-btn.is-armed { border-color: #f87171; color: #fca5a5; }
+.cu-sec { padding: 12px 12px 4px; border-bottom: 1px solid #2c2c2c; }
+.cu-lbl { font-size: 11px; color: var(--cl-dim); margin-bottom: 7px; }
+.cu-hint { font-size: 10.5px; color: #777; margin: 4px 0 8px; line-height: 1.45; }
+.cu-msg { font-size: 11px; color: #34d399; padding: 8px 12px 0; }
+.cu-err { font-size: 11px; color: #f87171; }
+.cu-item { display: flex; align-items: flex-start; padding: 6px 8px; border: 1px solid #2e2e2e; border-radius: 6px; margin-bottom: 5px; }
+.cu-ic { flex: 0 0 auto; width: 18px; color: #777; font-size: 11px; padding-top: 1px; }
+.cu-ic.is-flow { color: var(--cl); }
+.cu-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cu-name { font-size: 12px; color: var(--text); }
+.cu-sub { font-size: 10.5px; color: var(--cl-dim); font-family: Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cu-tools { flex: 0 0 auto; display: flex; margin-left: 6px; }
+.cu-tool { font-size: 10.5px; color: #8a8a8a; padding: 1px 5px; border-radius: 4px; cursor: pointer; }
+.cu-tool:hover { color: var(--cl); background: var(--cl-a08); }
+.cu-tool.is-armed { color: #fca5a5; }
+.cu-row-btns { display: flex; align-items: center; margin: 4px 0 6px; }
+.cu-right { justify-content: flex-end; }
+.cu-edit { border: 1px solid var(--cl); border-radius: 6px; padding: 8px; margin-bottom: 6px; display: flex; flex-direction: column; }
+.cu-edit > * + * { margin-top: 6px; }
+.cu-in, .cu-ta { background: #151515; border: 1px solid #3d3d3d; border-radius: 6px; color: var(--text); font-family: inherit; font-size: 12px; padding: 5px 8px; outline: none; resize: none; margin: 0; }
+.cu-in:focus, .cu-ta:focus { border-color: var(--cl); }
+.cu-sel { font-size: 11px; margin: 0 0 4px; }
+.cu-step { display: flex; align-items: center; font-size: 11px; color: #c9c9c9; padding: 3px 0; border-bottom: 1px solid #262626; }
+.cu-stepN { flex: 0 0 auto; width: 16px; color: var(--cl); font-weight: 600; }
+.cu-stepT { flex: 1 1 auto; min-width: 0; font-family: Menlo, monospace; font-size: 10.5px; }
+.cu-add { border: 1px dashed #3a3a3a; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; align-items: flex-start; }
+.cu-params { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; }
+.cu-count { font-size: 10px; color: #666; text-align: right; margin-top: 2px; }
+.cu-notes { width: 100%; box-sizing: border-box; }
+.cu-tog { display: flex; align-items: flex-start; padding: 4px 0; cursor: pointer; }
+.cu-tog.is-on .cl-mvTick { background: var(--cl); border-color: var(--cl); }
+.cu-io { margin: 8px 12px 0; padding: 8px; border: 1px solid #333; border-radius: 6px; display: flex; flex-direction: column; align-items: flex-start; }
+.cu-io > * + * { margin-top: 6px; }
+/* Nút quy trình dưới ô lệnh + thẻ gợi ý / ghi nhớ trong nhật ký */
+.cl-chip.is-flow { border-color: rgba(217,119,87,0.55); color: #f0b49d; }
+.cl-learn { margin: 6px 0 0 14px; padding: 7px 9px; border: 1px dashed rgba(217,119,87,0.5); border-radius: 6px; font-size: 11.5px; color: #e8c39e; }
+.cl-learnText { color: var(--text); margin: 2px 0 6px; font-family: Menlo, monospace; font-size: 10.5px; }
+.cl-act.is-wait { color: #6f6f6f; }
+.cl-act.is-wait::before { content: '· '; }

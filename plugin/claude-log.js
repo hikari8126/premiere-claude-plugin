@@ -36,7 +36,7 @@ var CLLOG = (function () {
   // tiêu đề (#..###), gạch đầu dòng, danh sách số, đậm, `code`, link (bấm mở trình duyệt).
   // Chỉ còn khối actions → chuỗi rỗng.
   function renderReply(text) {
-    var t = String(text || '').replace(/```actions[\s\S]*?(```|$)/g, '').trim();
+    var t = String(text || '').replace(/```(actions|remember)[\s\S]*?(```|$)/g, '').trim();
     if (!t) return '';
     var blocks = [];
     t = t.replace(/```\w*\n?([\s\S]*?)```/g, function (m, code, at, all) {

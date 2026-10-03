@@ -9,7 +9,7 @@
 ## Tổng quan
 
 Plugin tích hợp thẳng vào Adobe Premiere Pro:
-- **Tab Claude (Clawd)** — chế độ **Lệnh**: Claude (Opus 5.5) hiểu ý rồi điều phối các tab (mở tab, đẩy script/SFX sang Voice Gen, sắp bảng Autocut, **Resize**, chuẩn bị **RAW**), xem bin/item trong project (MCP premiere) và đề xuất chuyển item / sắp bin voice — mọi thay đổi project đều qua thẻ xem trước + bấm xác nhận; chế độ **Hỏi tự do**: research (tìm web, đọc file trong thư mục sản phẩm). Nhật ký 20 lệnh gần nhất
+- **Tab Claude (Clawd)** — chế độ **Lệnh**: Claude (Opus 5.5) hiểu ý rồi điều phối các tab (mở tab, đẩy script/SFX sang Voice Gen, sắp bảng Autocut, **Resize**, chuẩn bị **RAW**), xem bin/item trong project (MCP premiere) và đề xuất chuyển item / sắp bin voice — mọi thay đổi project đều qua thẻ xem trước + bấm xác nhận; chế độ **Hỏi tự do**: research (tìm web, đọc file trong thư mục sản phẩm). Nhật ký 20 lệnh gần nhất. **⚙ Tuỳ biến** theo từng member: nút lệnh có biến `{bộ}`, quy trình nhiều bước, ghi chú riêng gửi kèm mọi lệnh, xuất/nhập `.json`; **tự học**: gợi ý lưu nút khi lặp lại, Claude đề xuất ghi nhớ, đọc quy ước bin/tên từ project
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
@@ -321,7 +321,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | Endpoint | Method | Mô tả |
 |----------|--------|-------|
 | `/health` | GET | Kiểm tra bridge + mode (api-key / cli) |
-| `/chat` | POST | Tab Claude (SSE): `mode` command (giao việc cho tab) / free (Hỏi tự do — research); đọc file thư mục project + tìm web, chặn chạy lệnh/sửa file |
+| `/chat` | POST | Tab Claude (SSE): `mode` command (giao việc cho tab) / free (Hỏi tự do — research); đọc file thư mục project + tìm web, chặn chạy lệnh/sửa file; `notes` (ghi chú member) + `projectFacts` (quy ước project) nối cuối prompt |
 | `/open-url` | POST | Mở link http(s) trong câu trả lời tab Claude bằng trình duyệt mặc định |
 | `/chat/tool-call` | POST | MCP premiere gọi tool đọc project (project_bins / list_bin / find_items) — trả lời từ bản chụp bin/item plugin gửi kèm `/chat` |
 | `/tts` | POST | ElevenLabs TTS |

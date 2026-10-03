@@ -31,9 +31,9 @@ test("chế độ: Lệnh ngắn, Hỏi tự do research có nguồn", () => {
   assert.match(FREE_PROMPT, /chế độ "Hỏi tự do"/);
   assert.match(FREE_PROMPT, /tìm trên web/);
   assert.match(FREE_PROMPT, /\[tên\]\(url\)/);
-  assert.strictEqual(promptFor("free"), FREE_PROMPT);
-  assert.strictEqual(promptFor("command"), SYSTEM_PROMPT);
-  assert.strictEqual(promptFor(undefined), SYSTEM_PROMPT);
+  assert.ok(promptFor("free").startsWith(FREE_PROMPT));
+  assert.ok(promptFor("command").startsWith(SYSTEM_PROMPT));
+  assert.ok(promptFor(undefined).startsWith(SYSTEM_PROMPT));
 });
 
 test("prompt mô tả tool đọc project + quy ước bin voice; tool khớp MCP premiere", () => {
@@ -52,4 +52,15 @@ test("prompt mô tả luồng resize (GG/FB/PIN, tên bản mới) + RAW (raw/ e
     assert.match(p, /Output\/ACT\/<vN>\/raw\//);
     assert.match(p, /tự bấm XUẤT/);
   }
+});
+
+test("prompt dạy khối remember; ghi chú + quy ước project nối cuối, cắt độ dài", () => {
+  const { memberContext } = require("../chat-prompt.js");
+  assert.match(promptFor("command"), /```remember/);
+  assert.match(promptFor("free"), /```remember/);
+  assert.strictEqual(memberContext("", ""), "");
+  const m = memberContext("Voice tên VO", "- Sản phẩm: AeriSoft");
+  assert.match(m, /Ghi chú riêng của bro[\s\S]*Voice tên VO/);
+  assert.match(m, /Quy ước plugin đọc được[\s\S]*AeriSoft/);
+  assert.ok(memberContext("x".repeat(5000), "").length < 1700);
 });

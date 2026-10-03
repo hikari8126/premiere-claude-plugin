@@ -44,7 +44,15 @@
 - ✅ **Điều phối Resize + RAW**: action `resize {platform, items?, ratios?}` (window.ResizeAPI: plan → thẻ → run) và
   `rawcut {mode, items?}` (window.RawcutAPI.prepare: 1 sequence → mở lên timeline, ≥2 → hàng loạt ghim; KHÔNG tự
   bấm Xuất). Chạy thật DEV: resize 3 seq FB 39 → 4x5 FB (thẻ chờ) ✓, RAW source 3 seq ✓ (thẻ chờ).
-- ⏳ Sửa thẻ gợi ý màn trống (user muốn làm cùng), rồi C (tạo bộ NAV), D (soát lỗi), E (version).
+- ❌ **Phase C (tạo bộ NAV) — user BỎ 2026-10-03** ("sẽ tối ưu kiểu khác").
+- ⏸ **Phase D (soát lỗi)** tạm dừng — đã dò API trên DEV: `TrackItem.isDisabled`, `ClipProjectItem.isOffline`,
+  `Sequence.setPlayerPosition`, `getTimebase` (ticks/frame) đều có; `getTrackItems(1, true)` trả thêm ô trống (null);
+  item MOGRT/graphic không cast được ClipProjectItem. Code Task 10/11 trong plan cũ phải viết lại theo claude-tab.js mới.
+- ✅ **Tuỳ biến theo member + tự học (mức 1–3)** (user đổi hướng 2026-10-03, mockup đã duyệt): `plugin/cl-custom.js`
+  (CLC thuần + test), `plugin/cl-custom-ui.js` (CLSTORE + trang ⚙), claude-tab.js (nút/quy trình, chạy quy trình,
+  thẻ gợi ý, thẻ Nhớ), bridge `memberContext` + REMEMBER_DOC. v5.17.0-beta.1 / bridge 1.24.0-beta.1. Đã chạy thật DEV:
+  trang ⚙, quy trình 2 bước (chờ xác nhận → Bỏ qua → xong), Claude trả ```remember → Nhớ → vào ghi chú, projectFacts.
+- ⏳ Màn trống (lệnh mẫu theo chế độ) chưa sửa; mức tự học 4 (gom chuẩn team) để sau.
   User từng nói sẽ gửi luồng Resize chi tiết — hiện dùng đúng hành vi tab Resize.
 - ➕ Thêm vào Phase E: bộ cài + Bridge app tự nâng Claude CLI khi < 2.1.280 (Opus 5.5 cần); thêm lệnh mẫu
   "tạo bộ NAV" / "soát lỗi" vào màn trống khi C/D xong; claude-tab.js nối `qc_run` / `create_set` vào cảnh

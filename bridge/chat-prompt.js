@@ -87,6 +87,23 @@ nhịp dựng, nhạc, xu hướng quảng cáo theo nền tảng, cách làm tr
 
 ${ACTIONS_DOC}`;
 
-function promptFor(mode) { return mode === 'free' ? FREE_PROMPT : SYSTEM_PROMPT; }
+const REMEMBER_DOC = `Ghi nhớ lâu dài: khi bro sửa bạn hoặc nói một thói quen/quy ước dùng mãi về sau (vd "bin voice
+của tôi tên VO", "tôi luôn resize FB trước"), thêm một khối — plugin hỏi bro có lưu vào ghi chú không:
+\`\`\`remember
+<một dòng ngắn, viết như ghi chú của bro>
+\`\`\`
+Không dùng cho chuyện của riêng lệnh này hay điều đã có trong ghi chú.`;
 
-module.exports = { SYSTEM_PROMPT, FREE_PROMPT, promptFor };
+function promptFor(mode) { return (mode === 'free' ? FREE_PROMPT : SYSTEM_PROMPT) + '\n\n' + REMEMBER_DOC; }
+
+// Ghi chú riêng của member + quy ước plugin đọc từ project đang mở → nối cuối prompt.
+function memberContext(notes, facts) {
+  let out = '';
+  const n = String(notes || '').slice(0, 1500).trim();
+  const f = String(facts || '').slice(0, 1200).trim();
+  if (n) out += `\n\n[Ghi chú riêng của bro — luôn làm theo, trừ khi bro nói khác trong lệnh]\n${n}`;
+  if (f) out += `\n\n[Quy ước plugin đọc được từ project đang mở]\n${f}`;
+  return out;
+}
+
+module.exports = { SYSTEM_PROMPT, FREE_PROMPT, REMEMBER_DOC, promptFor, memberContext };

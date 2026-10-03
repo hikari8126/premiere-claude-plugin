@@ -3,6 +3,31 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.17.0-beta.1 / bridge server 1.24.0-beta.1 — 2026-10-03 (chưa release)
+
+> Tab Claude (Clawd) + tuỳ biến theo từng member + tự học. Cần bridge 1.24.0-beta.1 (ghi chú + quy ước project gửi kèm prompt; bridge cũ bỏ qua, các phần khác vẫn chạy).
+
+### ✨ Tab Claude (Clawd)
+- Tab nhỏ đầu trang 1, Clawd 5 cảnh (idle/think/work/done/fail). Gõ lệnh → Claude trả lời ngắn + khối ```actions theo whitelist (`plugin/claude-actions.js`) → các tab làm việc.
+- Action: `open_tab`, `voicegen_script` / `voicegen_sfx` (gen tốn credit → hỏi), `autocut_load`, `get_timeline_info`, `move_items` / `fix_voice_bins` (thẻ tick, bấm Chuyển), `resize {platform, items?, ratios?}`, `rawcut {mode, items?}` (chuẩn bị tab RAW, bro tự bấm XUẤT). Gỡ các action sửa timeline kiểu ExtendScript.
+- Chế độ **Hỏi tự do**: research web + đọc file thư mục project/sản phẩm (CLI chặn Bash/Edit/Write). MCP `premiere` (project_bins / list_bin / find_items) trả lời từ bản chụp bin plugin gửi kèm — UXP kẹt request tới bridge khi stream /chat còn mở nên không hỏi ngược plugin giữa lượt.
+- Model Opus 5.5 cho mọi lời gọi (CLI ≥ 2.1.280).
+
+### ✨ Tuỳ biến theo từng member (⚙ cạnh "Lệnh | Hỏi tự do")
+- **Nút lệnh**: tên + lệnh + chế độ; biến `{bộ}` `{sequence}` `{sản phẩm}` lấy từ tên sequence đang mở (`vid40.0` → 40). Bấm là gửi luôn; thiếu biến thì điền vào ô cho sửa. Nút `+` cạnh ô lệnh lưu lệnh đang gõ (số bộ tự đổi thành `{bộ}`).
+- **Quy trình** (▸▸): nhiều bước chạy liền — Resize (nền tảng, ratio, sequence đang mở / cả bộ `{bộ}`), RAW, Soát bin voice, Mở tab, Hỏi Claude. Bước cần xác nhận thì dừng chờ bấm; bước lỗi thì dừng cả chuỗi; nút gửi thành nút Dừng.
+- **Ghi chú của tôi** (≤1500 ký tự) gửi kèm mọi lệnh.
+- **Xuất / Nhập** `.json` (`app: claude-tab-custom`): chọn phần xuất; nhập Gộp (bỏ trùng) hoặc Thay thế.
+- Dữ liệu: localStorage `cl_custom_v1` (nút lệnh cũ `claude-shortcuts` tự chuyển sang), `cl_habits_v1`, `cl_learn_v1`. Logic thuần `plugin/cl-custom.js` (CLC, có test), trang ở `plugin/cl-custom-ui.js`.
+
+### ✨ Tự học
+- **Thói quen**: gõ một lệnh 3 lần (khác số bộ vẫn tính là một) → thẻ "Lưu thành nút?"; làm 2 việc liền nhau trong 45 phút, 3 lần (vd resize → RAW) → "Lưu thành quy trình?". "Thôi" là không hỏi lại. Bật/tắt + Quên hết ở ⚙.
+- **Ghi nhớ**: Claude thêm khối ```remember khi bro sửa nó / nói thói quen lâu dài → thẻ "Nhớ" đưa dòng đó vào ghi chú.
+- **Quy ước project**: mỗi lệnh gửi kèm bin voice, bin sequence (số bộ thay bằng `{bộ}`), tên sequence mẫu, các bộ đã có — đọc từ bản chụp project.
+
+### Ghi chú kỹ thuật
+- Phase "tạo bộ NAV" trong plan bỏ (user sẽ tối ưu kiểu khác); soát lỗi trước khi xuất tạm dừng — API đã dò: `TrackItem.isDisabled`, `ClipProjectItem.isOffline`, `Sequence.setPlayerPosition` đều có; `getTrackItems(1, true)` trả thêm ô trống (null) chứ không phải clip tắt.
+
 ## v5.16.0-beta.1 / bridge server 1.23.0-beta.1 — 2026-10-03 (chưa release)
 
 > QC đợt 2 — thay đổi giao diện đã duyệt. Cần bridge 1.23.0-beta.1 cho VG8 (lỗi tiếng Việt), ST4 (Huỷ dừng Whisper), ST7 (hỏi ghi đè); bridge cũ thì các phần đó chạy như trước.
