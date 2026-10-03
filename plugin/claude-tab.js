@@ -13,7 +13,51 @@
   var stateEl = $('clState'), seqEl = $('clSeqName'), clearEl = $('clClear');
   if (!logEl || !input || !sendEl) return;
 
-  var HISTORY_KEY = 'cl_history_v1', SHORTCUT_KEY = 'claude-shortcuts';
+  var HISTORY_KEY = 'cl_history_v1', SHORTCUT_KEY = 'claude-shortcuts', MODE_KEY = 'cl_mode';
+
+  // ── Chế độ: 'command' (Lệnh — giao việc, ngắn) | 'free' (Hỏi tự do — research) ─────
+  var mode = 'command';
+  try { if (localStorage.getItem(MODE_KEY) === 'free') mode = 'free'; } catch (e) {}
+  var PLACEHOLDER = { command: 'Gõ lệnh… (Enter để gửi)', free: 'Hỏi gì cũng được… (Enter để gửi)' };
+  function setMode(m) {
+    mode = m === 'free' ? 'free' : 'command';
+    try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+    document.querySelectorAll('#clMode .cl-modeOpt').forEach(function (o) { o.classList.toggle('is-on', o.getAttribute('data-mode') === mode); });
+    input.setAttribute('placeholder', PLACEHOLDER[mode]);
+  }
+  document.querySelectorAll('#clMode .cl-modeOpt').forEach(function (o) {
+    o.addEventListener('click', function () { setMode(o.getAttribute('data-mode')); });
+  });
+
+  // Công cụ Claude đang dùng → chữ trạng thái + đếm cho dòng phụ của mục lệnh.
+  function toolStatus(name, detail) {
+    var d = detail ? ': ' + String(detail).slice(0, 40) : '';
+    if (name === 'WebSearch') return 'Đang tìm trên web' + d;
+    if (name === 'WebFetch')  return 'Đang đọc trang' + (detail ? ': ' + String(detail).replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : '');
+    if (name === 'Read')      return 'Đang đọc file' + d;
+    if (name === 'Glob' || name === 'Grep') return 'Đang tìm file…';
+    return 'Đang dùng ' + name + '…';
+  }
+  function metaText(m, tools) {
+    var parts = [];
+    if (tools && tools.web) parts.push('tìm web ' + tools.web + ' lần');
+    if (tools && tools.page) parts.push('đọc ' + tools.page + ' trang');
+    if (tools && tools.find) parts.push('tìm file ' + tools.find + ' lần');
+    if (tools && tools.file) parts.push('đọc ' + tools.file + ' file');
+    return { mode: m === 'free' ? 'Hỏi tự do' : '', tools: parts.join(' · ') };
+  }
+  function setMeta(entry, m, tools) {
+    var mt = metaText(m, tools);
+    if (!mt.mode && !mt.tools) { entry.meta.hidden = true; return; }
+    entry.meta.hidden = false;
+    entry.meta.innerHTML = (mt.mode ? '<span class="cl-metaMode">' + mt.mode + '</span>' : '') +
+      (mt.mode && mt.tools ? ' · ' : '') + CLLOG.esc(mt.tools);
+  }
+
+  async function projectPath() {
+    try { var p = await getActiveProject(); return (p && typeof p.path === 'string') ? p.path : ''; }
+    catch (e) { return ''; }
+  }
 
   // ── Clawd: icon tab (khung cắt), đậu trên ô lệnh, giữa màn trống ──────────────
   // Cảnh: idle (thở + chớp mắt) · think (chờ Claude) · work (chạy action) · done · fail.
@@ -81,13 +125,16 @@
     c.className = 'cl-cmd';
     c.innerHTML = '<span class="cl-chev">›</span><span class="cl-cmdText"></span>';
     c.querySelector('.cl-cmdText').textContent = cmd;
+    var meta = document.createElement('div');
+    meta.className = 'cl-meta';
+    meta.hidden = true;
     var reply = document.createElement('div');
     reply.className = 'cl-reply';
     var result = document.createElement('div');
     result.className = 'cl-result';
-    root.appendChild(c); root.appendChild(reply); root.appendChild(result);
+    root.appendChild(c); root.appendChild(meta); root.appendChild(reply); root.appendChild(result);
     logEl.appendChild(root);
-    return { root: root, reply: reply, result: result };
+    return { root: root, meta: meta, reply: reply, result: result };
   }
   function addAct(entry, cls, text) {
     var row = document.createElement('div');
@@ -101,6 +148,7 @@
   function renderPast() {
     history.forEach(function (h) {
       var e = makeEntry(h.cmd, true);
+      setMeta(e, h.mode, h.tools);
       if (h.err) { e.reply.className = 'cl-reply is-error'; e.reply.textContent = h.err; }
       else e.reply.innerHTML = CLLOG.renderReply(h.raw) || '';
       (h.acts || []).forEach(function (a) {
@@ -209,9 +257,10 @@
     input.value = '';
     resizeInput();
 
-    var entry = makeEntry(cmd, false);
+    var entry = makeEntry(cmd, false), sentMode = mode, tools = { web: 0, page: 0, find: 0, file: 0 };
+    setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
-    entry.reply.textContent = 'Đang hiểu ý…';
+    entry.reply.textContent = sentMode === 'free' ? 'Đang tìm hiểu…' : 'Đang hiểu ý…';
     syncEmpty();
     scrollEnd();
 
@@ -219,8 +268,10 @@
     setClawd('think', CLLOG.thinkingText(0));
     var xhr = new XMLHttpRequest();
     busy = { xhr: xhr, aborted: false };
+    var toolUsed = function () { return tools.web + tools.page + tools.find + tools.file > 0; };
     busy.timer = setInterval(function () {
-      if (stateEl && clawd.scene === 'think') stateEl.textContent = CLLOG.thinkingText((Date.now() - startAt) / 1000);
+      // Đang dùng tool thì giữ chữ "Đang tìm trên web…"; chưa thì đếm giây.
+      if (stateEl && clawd.scene === 'think' && !toolUsed()) stateEl.textContent = CLLOG.thinkingText((Date.now() - startAt) / 1000);
     }, 1000);
     setSendMode();
 
@@ -241,6 +292,13 @@
           var html = CLLOG.renderReply(fullText);
           if (html) { entry.reply.className = 'cl-reply'; entry.reply.innerHTML = html; }
           scrollEnd();
+        } else if (ev.type === 'tool_use') {
+          if (ev.name === 'WebSearch') tools.web++;
+          else if (ev.name === 'WebFetch') tools.page++;
+          else if (ev.name === 'Read') tools.file++;
+          else if (ev.name === 'Glob' || ev.name === 'Grep') tools.find++;
+          setMeta(entry, sentMode, tools);
+          setClawd('think', toolStatus(ev.name, ev.detail));
         } else if (ev.type === 'rate_limit') {
           rate = { resetAt: ev.resetAt || null };   // CLI hay tự thử lại — chỉ hiện nếu không có chữ nào
           if (ev.resetAt) RATE_LIMIT_UNTIL = ev.resetAt;
@@ -258,7 +316,7 @@
       busy = null;
       setSendMode();
 
-      var rec = { cmd: cmd, raw: '', acts: [], at: Date.now() };
+      var rec = { cmd: cmd, raw: '', acts: [], at: Date.now(), mode: sentMode, tools: tools };
       if (aborted) {
         entry.reply.className = 'cl-reply is-pending';
         entry.reply.textContent = 'Đã dừng.';
@@ -294,21 +352,26 @@
 
     xhr.open('POST', BRIDGE_URL + '/chat', true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.timeout = 300000;
+    xhr.timeout = sentMode === 'free' ? 600000 : 300000;     // research có thể tìm web vài phút
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 3 || xhr.readyState === 4) parseSSE();
       if (xhr.readyState === 4) finish();
     };
     xhr.onerror = finish;
-    xhr.ontimeout = function () { errText = 'Bridge không trả lời sau 5 phút.'; finish(); };
+    xhr.ontimeout = function () { errText = 'Bridge không trả lời sau ' + (sentMode === 'free' ? 10 : 5) + ' phút.'; finish(); };
     xhr.onabort = finish;
-    xhr.send(JSON.stringify({
-      messages: CLLOG.toMessages(history).concat([{ role: 'user', content: cmd }]),
-      timelineContext: timelineContext,
-      model: CLAUDE_MODEL,
-      apiKey: ANTHROPIC_KEY || undefined,
-      voiceContext: voiceContextFor(cmd) || undefined
-    }));
+    projectPath().then(function (pp) {
+      if (busy && busy.aborted) return;
+      xhr.send(JSON.stringify({
+        messages: CLLOG.toMessages(history).concat([{ role: 'user', content: cmd }]),
+        mode: sentMode,
+        projectPath: pp || undefined,
+        timelineContext: timelineContext,
+        model: CLAUDE_MODEL,
+        apiKey: ANTHROPIC_KEY || undefined,
+        voiceContext: voiceContextFor(cmd) || undefined
+      }));
+    });
   }
 
   function stop() {
@@ -352,9 +415,18 @@
     resizeInput();
     input.focus();
   }
-  // Lệnh mẫu ở màn trống
+  // Lệnh mẫu ở màn trống + link trong câu trả lời (mở trình duyệt qua bridge /open-url)
   logEl.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest ? e.target.closest('[data-fill]') : null;
+    var t = e.target;
+    var link = t && t.closest ? t.closest('.cl-link') : null;
+    if (link) {
+      var x = new XMLHttpRequest();
+      x.open('POST', BRIDGE_URL + '/open-url', true);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.send(JSON.stringify({ url: link.getAttribute('data-href') }));
+      return;
+    }
+    var ex = t && t.closest ? t.closest('[data-fill]') : null;
     if (ex) fill(ex.getAttribute('data-fill'));
   });
 
@@ -443,6 +515,7 @@
   });
 
   // ── Khởi động ───────────────────────────────────────────────────────────────
+  setMode(mode);
   renderShortcuts();
   renderPast();
   resizeInput();

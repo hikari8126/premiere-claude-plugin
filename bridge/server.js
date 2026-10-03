@@ -87,7 +87,8 @@ function cleanEnv() {
 }
 
 // ── System prompt tab Claude (điều phối các tab qua action) — xem chat-prompt.js ──
-const { SYSTEM_PROMPT } = require('./chat-prompt.js');
+const { promptFor } = require('./chat-prompt.js');
+const chatCli = require('./chat-cli.js');
 
 // ── POST /chat — streaming SSE ─────────────────────────────────────────────
 app.post('/chat', async (req, res) => {
@@ -97,13 +98,16 @@ app.post('/chat', async (req, res) => {
   res.flushHeaders();
 
   const { messages = [], timelineContext, model, apiKey, voiceContext } = req.body;
+  // mode: 'command' (Lệnh — giao việc, trả lời ngắn) | 'free' (Hỏi tự do — research).
+  // projectPath: .prproj đang mở → Claude được đọc thư mục project + thư mục sản phẩm.
+  const opts = { mode: req.body.mode === 'free' ? 'free' : 'command', projectPath: req.body.projectPath || '' };
 
   // Per-request key takes priority over env key (so plugin can supply user's key)
   const effectiveKey = apiKey || API_KEY;
   if (effectiveKey) {
-    await chatViaApiKey(req, res, messages, timelineContext, model, effectiveKey, voiceContext);
+    await chatViaApiKey(req, res, messages, timelineContext, model, effectiveKey, voiceContext, opts);
   } else {
-    await chatViaCLI(req, res, messages, timelineContext, voiceContext);
+    await chatViaCLI(req, res, messages, timelineContext, voiceContext, opts);
   }
 });
 
@@ -151,11 +155,12 @@ function cliVersion() {
 function cliModelArgs() { return claudeModel.cliModelArgs(cliVersion(), DEFAULT_MODEL); }
 
 // ── Mode A: Direct Anthropic API key ──────────────────────────────────────
-async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey, voiceContext) {
+async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey, voiceContext, opts) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: apiKey });
+  const free = opts && opts.mode === 'free';
 
-  let systemContent = SYSTEM_PROMPT;
+  let systemContent = promptFor(opts && opts.mode);
   if (timelineContext) systemContent += `\n\n[Current Timeline]\n${JSON.stringify(timelineContext, null, 2)}`;
   if (voiceContext)    systemContent += `\n\n── Available ElevenLabs Voices ──\nWhen the user asks you to pick a voice or generate speech, choose the most appropriate voiceId from this list:\n${voiceContext}\nUse the voiceId (the part before the colon) in your voicegen_script action.`;
 
@@ -163,21 +168,31 @@ async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey,
   console.log(`[chat] model: ${useModel}, messages: ${messages.length}`);
 
   try {
-    // effort 'low': tab Claude chỉ hiểu ý → action, câu trả lời ngắn.
-    const stream = client.beta.messages.stream(claudeModel.apiParams({
-      model:    useModel,
-      effort:   'low',
-      system:   systemContent,
-      messages: messages.map(toAnthropicMessage),
-    }));
-
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        send(res, { type: 'text', content: event.delta.text });
+    // Lệnh: effort 'low' (hiểu ý → action, trả lời ngắn). Hỏi tự do: 'medium' + tìm web phía
+    // server (web_search / web_fetch). Không có tool đọc file ở chế độ API key.
+    const convo = messages.map(toAnthropicMessage);
+    const params = claudeModel.apiParams({
+      model: useModel, effort: free ? 'medium' : 'low', system: systemContent, messages: convo,
+    });
+    if (free) params.tools = [
+      { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
+      { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 },
+    ];
+    // Tool phía server có thể dừng giữa chừng (stop_reason 'pause_turn') → gửi lại để chạy tiếp.
+    for (let turn = 0; turn < 4; turn++) {
+      const stream = client.beta.messages.stream(params);
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+          send(res, { type: 'text', content: event.delta.text });
+        } else if (event.type === 'content_block_start' && event.content_block?.type === 'server_tool_use') {
+          send(res, { type: 'tool_use', name: event.content_block.name === 'web_fetch' ? 'WebFetch' : 'WebSearch' });
+        }
       }
+      const final = await stream.finalMessage();
+      if (final.stop_reason === 'refusal') claudeModel.textOf(final);   // ném lỗi tiếng Việt
+      if (final.stop_reason !== 'pause_turn') break;
+      params.messages = convo.concat([{ role: 'assistant', content: final.content }]);
     }
-    const final = await stream.finalMessage();
-    if (final.stop_reason === 'refusal') claudeModel.textOf(final);   // ném lỗi tiếng Việt
     send(res, { type: 'done' });
   } catch (err) {
     send(res, { type: 'error', content: `API Error: ${err.message}` });
@@ -239,7 +254,7 @@ function imagePartToToken(p, tmpDir, idx) {
 }
 
 // ── Mode B: claude CLI subprocess (OAuth subscription) ───────────────────
-function chatViaCLI(req, res, messages, timelineContext, voiceContext) {
+function chatViaCLI(req, res, messages, timelineContext, voiceContext, opts) {
   return new Promise((resolve) => {
     // CRITICAL: write attachments INSIDE bridge dir so Claude Code CLI can
     // read them (its sandbox is rooted at its cwd). OS tmpdir (/var/folders/...)
@@ -250,7 +265,7 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext) {
     const tmpDir = fs.mkdtempSync(path.join(attachRoot, 'turn-'));
     const cleanupTmp = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} };
 
-    let prompt = SYSTEM_PROMPT;
+    let prompt = promptFor(opts && opts.mode);
     if (timelineContext) prompt += `\n\n[Current Timeline]\n${JSON.stringify(timelineContext, null, 2)}`;
     if (voiceContext)    prompt += `\n\n── Available ElevenLabs Voices ──\nWhen the user asks you to pick a voice or generate speech, choose the most appropriate voiceId from this list:\n${voiceContext}\nUse the voiceId (the part before the colon) in your voicegen_script action.`;
     prompt += '\n\n';
@@ -260,20 +275,11 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext) {
     }
     prompt += 'Assistant:';
 
-    // Spawn claude with cwd = bridgeDir so @<path> tokens that point inside
-    // bridge/.attachments/ are within its sandbox and don't require permission.
-    // --add-dir explicitly whitelists the attachments folder for read access.
-    const proc = spawn('claude', [
-      '--print',
-      '--output-format', 'stream-json',
-      '--verbose',
-      '--add-dir', attachRoot,
-      '--permission-mode', 'bypassPermissions',
-      ...cliModelArgs(),
-      // Tab Claude chỉ hiểu ý → action: không cần chạy lệnh / sửa file / lên web. Chặn cho
-      // nhanh và an toàn (Read giữ lại cho @ảnh đính kèm).
-      '--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent',
-    ], {
+    // cwd = bridgeDir; được đọc thư mục đính kèm + thư mục project/sản phẩm, tìm web; chặn
+    // chạy lệnh / sửa file (CLI chạy bypassPermissions — xem chat-cli.js).
+    const proc = spawn('claude', chatCli.chatArgs({
+      attachRoot, projectPath: opts && opts.projectPath, modelArgs: cliModelArgs(),
+    }), {
       cwd: bridgeDir,
       env: cleanEnv()
     });
@@ -309,11 +315,14 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext) {
           if (ev.type === 'assistant' && ev.message?.content) {
             for (const block of ev.message.content) {
               if (block.type === 'text') {
-                send(res, { type: 'text', content: block.text });
+                // Mỗi lượt assistant (trước/sau khi dùng tool) là một block riêng → ngăn đoạn.
+                send(res, { type: 'text', content: (textReceived ? '\n\n' : '') + block.text });
                 textReceived = true;
               } else if (block.type === 'tool_use') {
-                console.log(`[cli]   tool_use: ${block.name}`);
-                send(res, { type: 'tool_use', name: block.name });
+                const inp = block.input || {};
+                const detail = inp.query || inp.url || inp.pattern || (inp.file_path ? path.basename(inp.file_path) : '');
+                console.log(`[cli]   tool_use: ${block.name} ${detail}`);
+                send(res, { type: 'tool_use', name: block.name, detail: String(detail).slice(0, 80) });
               }
             }
           }
@@ -3107,6 +3116,17 @@ app.post('/notify', (req, res) => {
       console.error('[notify] osascript lỗi:', msg);
       return res.status(500).json({ ok: false, error: msg });
     }
+    res.json({ ok: true });
+  });
+});
+
+// ── POST /open-url — mở link (nguồn trong câu trả lời tab Claude) bằng trình duyệt mặc định.
+// Chỉ http/https; không đi qua shell (execFile) nên URL không chèn được lệnh.
+app.post('/open-url', (req, res) => {
+  const url = String((req.body && req.body.url) || '');
+  if (!/^https?:\/\/[^\s]+$/i.test(url) || url.length > 2000) return res.status(400).json({ ok: false, error: 'link không hợp lệ' });
+  require('child_process').execFile('open', [url], err => {
+    if (err) return res.status(500).json({ ok: false, error: err.message });
     res.json({ ok: true });
   });
 });

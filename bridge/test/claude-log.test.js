@@ -4,10 +4,34 @@ const assert = require("node:assert");
 const L = require("../../plugin/claude-log.js");
 
 test("renderReply ẩn khối actions (cả khối chưa đóng khi đang stream), escape HTML", () => {
-  assert.strictEqual(L.renderReply('Đã đẩy script.\n```actions\n[{"action":"x"}]\n```'), "Đã đẩy script.");
-  assert.strictEqual(L.renderReply('OK\n```actions\n[{"act'), "OK");
+  assert.strictEqual(L.renderReply('Đã đẩy script.\n```actions\n[{"action":"x"}]\n```'), "<div>Đã đẩy script.</div>");
+  assert.strictEqual(L.renderReply('OK\n```actions\n[{"act'), "<div>OK</div>");
   assert.strictEqual(L.renderReply("```actions\n[]\n```"), "");
-  assert.strictEqual(L.renderReply("<b>x</b> **đậm** `code`\ndòng 2"), "&lt;b&gt;x&lt;/b&gt; <strong>đậm</strong> <code>code</code><br>dòng 2");
+  assert.strictEqual(L.renderReply("<b>x</b> **đậm** `code`\ndòng 2"), "<div>&lt;b&gt;x&lt;/b&gt; <strong>đậm</strong> <code>code</code></div><div>dòng 2</div>");
+});
+
+test("renderReply: tiêu đề, gạch đầu dòng, danh sách số, đoạn trống, khối code", () => {
+  const h = L.renderReply("## Ý tưởng hình ảnh\n- Tông **ấm**\n* cận tay\n1. Hook\n2) CTA\n\n\nKết\n```\na < b\n```");
+  assert.strictEqual(h,
+    '<div class="cl-h">Ý tưởng hình ảnh</div>' +
+    '<div class="cl-li"><span class="cl-bul">•</span><span class="cl-liText">Tông <strong>ấm</strong></span></div>' +
+    '<div class="cl-li"><span class="cl-bul">•</span><span class="cl-liText">cận tay</span></div>' +
+    '<div class="cl-li"><span class="cl-bul">1.</span><span class="cl-liText">Hook</span></div>' +
+    '<div class="cl-li"><span class="cl-bul">2.</span><span class="cl-liText">CTA</span></div>' +
+    '<div class="cl-gap"></div><div>Kết</div><pre><code>a &lt; b</code></pre>');
+});
+
+test("renderReply: link markdown + link trần thành span bấm được; chỉ http(s); không lồng nhau", () => {
+  const h = L.renderReply("Xem [Pinterest](https://pinterest.com/x?a=1&b=2) và https://www.example.com/a/very/long/path/that/keeps/going/on/and/on.");
+  assert.match(h, /<span class="cl-link" role="link" data-href="https:\/\/pinterest.com\/x\?a=1&amp;b=2">Pinterest<\/span>/);
+  assert.match(h, /data-href="https:\/\/www.example.com\/a\/very\/long\/path\/that\/keeps\/going\/on\/and\/on">example\.com\/a\/very\/long\/path\/that\/keeps\/…<\/span>\.<\/div>$/, "dấu chấm cuối câu nằm ngoài link");
+  assert.ok(!/cl-link/.test(L.renderReply("[x](javascript:alert(1))")), "javascript: không thành link (chỉ là chữ)");
+  assert.strictEqual((h.match(/cl-link/g) || []).length, 2);
+});
+
+test("renderReply: *nghiêng*, không đụng a*b*c hay **đậm**", () => {
+  assert.strictEqual(L.renderReply('Chữ: *"Đoán xem?"* và **đậm**'), '<div>Chữ: <em>"Đoán xem?"</em> và <strong>đậm</strong></div>');
+  assert.strictEqual(L.renderReply("2*3*4"), "<div>2*3*4</div>");
 });
 
 test("pushHistory giữ 20 lệnh mới nhất, không sửa mảng gốc", () => {
@@ -20,6 +44,13 @@ test("pushHistory giữ 20 lệnh mới nhất, không sửa mảng gốc", () =
   L.pushHistory(base, { cmd: "b" });
   assert.strictEqual(base.length, 1);
   assert.deepStrictEqual(L.pushHistory(null, { cmd: "x" }), [{ cmd: "x" }]);
+});
+
+test("toMessages: tối đa 8 lệnh gần nhất (hoặc theo max)", () => {
+  const list = []; for (let i = 0; i < 12; i++) list.push({ cmd: "c" + i, raw: "r" + i });
+  assert.strictEqual(L.toMessages(list).length, 16);
+  assert.strictEqual(L.toMessages(list)[0].content, "c4");
+  assert.strictEqual(L.toMessages(list, 2).length, 4);
 });
 
 test("toMessages: mỗi lệnh xong = 2 lượt, bỏ lệnh lỗi/chưa có trả lời", () => {

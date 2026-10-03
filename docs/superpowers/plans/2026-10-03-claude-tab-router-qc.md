@@ -32,6 +32,11 @@
   CLI chat `--disallowedTools` (Bash/Edit/Write/Web…), gỡ nhánh cut/move/trim/set_volume/add_marker/add_subtitle.
   `create_set` / `qc_run` CHƯA vào whitelist + prompt — thêm ở C/D (kèm test chat-prompt). Đã chạy thật trên DEV:
   mở tab RAW ✓, "gen luôn" → hỏi → "Chỉ đẩy script" ✓ (không gen), lệnh cắt clip → báo chưa hỗ trợ, không action.
+- ✅ **Mở tool + chế độ "Hỏi tự do"** (user yêu cầu): CLI chat mở WebSearch/WebFetch + Read/Glob/Grep (thư mục
+  .prproj + thư mục sản phẩm, ≥3 cấp), vẫn chặn Bash/Edit/Write (`bridge/chat-cli.js`); nút gạt Lệnh | Hỏi tự do
+  (`cl_mode`); prompt FREE_PROMPT (research, có nguồn, vẫn giao việc khi được bảo); API key: web_search/web_fetch phía
+  server + pause_turn; render tiêu đề/danh sách/link/nghiêng; link mở qua `/open-url`; ngữ cảnh 8 lệnh gần nhất.
+  Chạy thật DEV: research áo giữ nhiệt → tìm web 3 lần, 5 tiêu đề, 10 link ✓; "file voice bộ 39" → liệt kê đúng ✓.
 - ⏳ Sửa thẻ gợi ý màn trống (user muốn làm cùng), rồi C (tạo bộ NAV), D (soát lỗi), E (version).
 - ➕ Thêm vào Phase E: bộ cài + Bridge app tự nâng Claude CLI khi < 2.1.280 (Opus 5.5 cần); thêm lệnh mẫu
   "tạo bộ NAV" / "soát lỗi" vào màn trống khi C/D xong; claude-tab.js nối `qc_run` / `create_set` vào cảnh

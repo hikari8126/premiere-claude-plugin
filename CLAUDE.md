@@ -9,7 +9,7 @@
 ## Tổng quan
 
 Plugin tích hợp thẳng vào Adobe Premiere Pro:
-- **Tab Claude (Clawd)** — gõ lệnh, Claude (Opus 5.5) hiểu ý rồi điều phối các tab (đẩy script sang Voice Gen, sắp bảng Autocut…); nhật ký 20 lệnh gần nhất
+- **Tab Claude (Clawd)** — chế độ **Lệnh**: Claude (Opus 5.5) hiểu ý rồi điều phối các tab (mở tab, đẩy script/SFX sang Voice Gen, sắp bảng Autocut); chế độ **Hỏi tự do**: research (tìm web, đọc file trong thư mục sản phẩm). Nhật ký 20 lệnh gần nhất
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
@@ -321,7 +321,8 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | Endpoint | Method | Mô tả |
 |----------|--------|-------|
 | `/health` | GET | Kiểm tra bridge + mode (api-key / cli) |
-| `/chat` | POST | Stream chat với Claude (SSE) |
+| `/chat` | POST | Tab Claude (SSE): `mode` command (giao việc cho tab) / free (Hỏi tự do — research); đọc file thư mục project + tìm web, chặn chạy lệnh/sửa file |
+| `/open-url` | POST | Mở link http(s) trong câu trả lời tab Claude bằng trình duyệt mặc định |
 | `/tts` | POST | ElevenLabs TTS |
 | `/tts/voices` | POST | Lấy danh sách voices |
 | `/tts/sfx` | POST | ElevenLabs Sound FX |

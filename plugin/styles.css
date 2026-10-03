@@ -294,6 +294,19 @@ body {
 .cl-reply pre { background: #111; border-radius: 6px; padding: 8px; margin: 6px 0; overflow-x: auto; }
 .cl-reply pre code { background: none; padding: 0; }
 .cl-reply strong { color: var(--text); font-weight: 600; }
+.cl-reply em { font-style: italic; color: #dedede; }
+/* Câu trả lời dài (Hỏi tự do): tiêu đề, danh sách, link */
+.cl-h { font-weight: 600; color: var(--text); font-size: 12.5px; margin: 8px 0 3px; }
+.cl-h:first-child { margin-top: 0; }
+.cl-li { display: flex; margin: 2px 0; }
+.cl-bul { flex: 0 0 auto; min-width: 14px; color: var(--cl); margin-right: 4px; }
+.cl-liText { flex: 1 1 auto; min-width: 0; }
+.cl-gap { height: 6px; }
+.cl-link { color: #f0a283; text-decoration: underline; cursor: pointer; word-break: break-all; }
+.cl-link:hover { color: #ffc2a8; }
+/* Dòng phụ dưới lệnh: chế độ + công cụ đã dùng */
+.cl-meta { margin: 2px 0 0 14px; font-size: 10.5px; color: var(--cl-dim); }
+.cl-meta .cl-metaMode { color: #f0b49c; }
 /* Kết quả action: thụt vào, hairline 1px bên trái */
 .cl-result { margin: 6px 0 0 14px; padding-left: 10px; border-left: 1px solid #3a3a3a; display: flex; flex-direction: column; }
 .cl-act + .cl-act { margin-top: 3px; }
@@ -329,8 +342,15 @@ body {
 .cl-dock { flex: 0 0 auto; padding: 0 10px 10px; background: #1e1e1e; border-top: 1px solid #2c2c2c; }
 .cl-perch { display: flex; align-items: flex-end; height: 30px; padding-left: 4px; }  /* Clawd đậu trên mép trái ô lệnh */
 .cl-perchClawd { display: flex; align-items: flex-end; margin: 0 6px -1px 0; }
-.cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-state { flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cl-state.is-error { color: #f87171; }
+/* Nút gạt chế độ: Lệnh | Hỏi tự do */
+.cl-mode { flex: 0 0 auto; display: flex; margin: 0 0 5px 8px; padding: 2px; border-radius: 7px; background: #141414; }
+.cl-modeOpt { font-size: 11px; padding: 2px 9px; border-radius: 5px; color: var(--cl-dim); cursor: pointer; }
+.cl-modeOpt + .cl-modeOpt { margin-left: 2px; }
+.cl-modeOpt:hover { color: var(--text); }
+.cl-modeOpt.is-on { background: #2f2f2f; color: var(--text); }
+.cl-modeOpt.is-on[data-mode="free"] { background: var(--cl-a25); color: #f0b49c; }
 .cl-state.is-done { color: #34d399; }
 /* Hàng ô lệnh: [ô] [+] [gửi], cùng cao 36px, canh đáy (ô cao lên khi nhiều dòng). */
 .cl-input { display: flex; align-items: flex-end; }

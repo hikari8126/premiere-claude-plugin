@@ -82,7 +82,14 @@
   </div>
 
   <div class="cl-dock">
-    <div class="cl-perch"><span class="cl-perchClawd" id="clawdDock"></span><span class="cl-state" id="clState">Sẵn sàng</span></div>
+    <div class="cl-perch">
+      <span class="cl-perchClawd" id="clawdDock"></span><span class="cl-state" id="clState">Sẵn sàng</span>
+      <!-- Lệnh: giao việc cho tab, trả lời ngắn · Hỏi tự do: research (tìm web, đọc file), trả lời dài -->
+      <div class="cl-mode" id="clMode">
+        <div class="cl-modeOpt" role="button" data-mode="command">Lệnh</div>
+        <div class="cl-modeOpt" role="button" data-mode="free">Hỏi tự do</div>
+      </div>
+    </div>
     <!-- [ô lệnh] [+ lưu thành nút] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
          (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
     <div class="cl-input">
