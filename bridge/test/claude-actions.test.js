@@ -10,7 +10,14 @@ test("parse nhiều khối ```actions, bỏ khối JSON hỏng / phần tử kh�
 });
 
 test("danh sách action cho phép", () => {
-  assert.deepStrictEqual(CLA.ACTIONS.sort(), ["autocut_load", "get_timeline_info", "open_tab", "voicegen_script", "voicegen_sfx"]);
+  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["autocut_load", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "voicegen_script", "voicegen_sfx"]);
+});
+
+test("move_items / fix_voice_bins luôn hỏi xác nhận; move_items cần item + to", () => {
+  assert.strictEqual(CLA.check({ action: "move_items", moves: [{ item: "Voice Over ▸ 40.0 - A.mp3", to: "Voice Over / 40x" }] }).mode, "confirm");
+  assert.match(CLA.check({ action: "move_items", moves: [] }).error, /moves/);
+  assert.match(CLA.check({ action: "move_items", moves: [{ item: "x" }] }).error, /item và to/);
+  assert.strictEqual(CLA.check({ action: "fix_voice_bins" }).mode, "confirm");
 });
 
 test("voicegen_script / sfx: autoGenerate=true → confirm (tốn credit), không thì auto; thiếu text → lỗi", () => {

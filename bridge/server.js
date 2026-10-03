@@ -89,6 +89,32 @@ function cleanEnv() {
 // ── System prompt tab Claude (điều phối các tab qua action) — xem chat-prompt.js ──
 const { promptFor } = require('./chat-prompt.js');
 const chatCli = require('./chat-cli.js');
+const premiereMcp = require('./premiere-mcp.js');
+
+// ── Tool Premiere cho tab Claude ──────────────────────────────────────────────
+// Plugin gửi kèm mỗi lượt /chat bản chụp danh sách bin/item (project) → bridge giữ theo chatId;
+// Claude gọi tool đọc project (qua MCP premiere hoặc vòng lặp API key) thì trả lời ngay từ bản
+// chụp — không hỏi ngược plugin (UXP kẹt request khi stream /chat còn mở). Xem project-tools.js.
+const projectTools = require('./project-tools.js');
+const chatSessions = new Map();   // chatId → { items }
+function openChatSession(items) {
+  const id = require('crypto').randomBytes(8).toString('hex');
+  chatSessions.set(id, { items });
+  return id;
+}
+function runProjectTool(chatId, name, input) {
+  const ss = chatSessions.get(chatId);
+  const t0 = Date.now();
+  const r = projectTools.runTool(ss && ss.items, name, input);
+  console.log(`[tool] ${chatId} ${name} ${JSON.stringify(input || {}).slice(0, 60)} → ${r.ok ? 'ok' : 'LỖI'} ${Date.now() - t0}ms ${r.text.length} ký tự`);
+  return r;
+}
+// MCP premiere (tiến trình con của Claude CLI) gọi vào đây.
+app.post('/chat/tool-call', (req, res) => {
+  const { chatId, name, input } = req.body || {};
+  if (!premiereMcp.TOOLS.some(t => t.name === name)) return res.status(400).json({ ok: false, error: 'tool lạ: ' + name });
+  res.json(runProjectTool(chatId, name, input));
+});
 
 // ── POST /chat — streaming SSE ─────────────────────────────────────────────
 app.post('/chat', async (req, res) => {
@@ -101,6 +127,12 @@ app.post('/chat', async (req, res) => {
   // mode: 'command' (Lệnh — giao việc, trả lời ngắn) | 'free' (Hỏi tự do — research).
   // projectPath: .prproj đang mở → Claude được đọc thư mục project + thư mục sản phẩm.
   const opts = { mode: req.body.mode === 'free' ? 'free' : 'command', projectPath: req.body.projectPath || '' };
+  // Bản chụp bin/item của project (plugin mới gửi kèm) → bật tool đọc project cho lượt này.
+  const items = projectTools.sanitize(req.body.project);
+  if (items) {
+    opts.chatId = openChatSession(items);
+    res.on('close', () => chatSessions.delete(opts.chatId));
+  }
 
   // Per-request key takes priority over env key (so plugin can supply user's key)
   const effectiveKey = apiKey || API_KEY;
@@ -170,16 +202,18 @@ async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey,
   try {
     // Lệnh: effort 'low' (hiểu ý → action, trả lời ngắn). Hỏi tự do: 'medium' + tìm web phía
     // server (web_search / web_fetch). Không có tool đọc file ở chế độ API key.
-    const convo = messages.map(toAnthropicMessage);
     const params = claudeModel.apiParams({
-      model: useModel, effort: free ? 'medium' : 'low', system: systemContent, messages: convo,
+      model: useModel, effort: free ? 'medium' : 'low', system: systemContent, messages: messages.map(toAnthropicMessage),
     });
-    if (free) params.tools = [
+    const tools = [];
+    if (opts && opts.chatId) premiereMcp.TOOLS.forEach(t => tools.push({ name: t.name, description: t.description, input_schema: t.inputSchema }));
+    if (free) tools.push(
       { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
-      { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 },
-    ];
-    // Tool phía server có thể dừng giữa chừng (stop_reason 'pause_turn') → gửi lại để chạy tiếp.
-    for (let turn = 0; turn < 4; turn++) {
+      { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 });
+    if (tools.length) params.tools = tools;
+    // Vòng lặp tool: tool Premiere (client) → hỏi plugin rồi gửi tool_result; tool web phía
+    // server có thể dừng giữa chừng (pause_turn) → gửi lại để chạy tiếp.
+    for (let turn = 0; turn < 10; turn++) {
       const stream = client.beta.messages.stream(params);
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
@@ -190,8 +224,20 @@ async function chatViaApiKey(req, res, messages, timelineContext, model, apiKey,
       }
       const final = await stream.finalMessage();
       if (final.stop_reason === 'refusal') claudeModel.textOf(final);   // ném lỗi tiếng Việt
+      if (final.stop_reason === 'tool_use') {
+        const results = [];
+        for (const b of final.content) {
+          if (b.type !== 'tool_use') continue;
+          const r = runProjectTool(opts.chatId, b.name, b.input);
+          send(res, { type: 'tool_use', name: 'mcp__premiere__' + b.name, detail: (b.input && (b.input.path || b.input.text)) || '' });
+          results.push({ type: 'tool_result', tool_use_id: b.id, content: r.text || '(trống)', is_error: !r.ok });
+        }
+        params.messages = params.messages.concat([{ role: 'assistant', content: final.content }, { role: 'user', content: results }]);
+        send(res, { type: 'text', content: '\n\n' });
+        continue;
+      }
       if (final.stop_reason !== 'pause_turn') break;
-      params.messages = convo.concat([{ role: 'assistant', content: final.content }]);
+      params.messages = params.messages.concat([{ role: 'assistant', content: final.content }]);
     }
     send(res, { type: 'done' });
   } catch (err) {
@@ -277,8 +323,17 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext, opts) {
 
     // cwd = bridgeDir; được đọc thư mục đính kèm + thư mục project/sản phẩm, tìm web; chặn
     // chạy lệnh / sửa file (CLI chạy bypassPermissions — xem chat-cli.js).
+    // MCP premiere: tool đọc bin/item trong project, chạy qua plugin của lượt chat này.
+    let mcpConfigPath = '';
+    if (opts && opts.chatId) {
+      mcpConfigPath = path.join(tmpDir, 'mcp.json');
+      fs.writeFileSync(mcpConfigPath, JSON.stringify(chatCli.mcpConfig({
+        nodePath: process.execPath, scriptPath: path.join(__dirname, 'premiere-mcp.js'),
+        bridgeUrl: 'http://127.0.0.1:' + PORT, chatId: opts.chatId,
+      })));
+    }
     const proc = spawn('claude', chatCli.chatArgs({
-      attachRoot, projectPath: opts && opts.projectPath, modelArgs: cliModelArgs(),
+      attachRoot, projectPath: opts && opts.projectPath, modelArgs: cliModelArgs(), mcpConfigPath,
     }), {
       cwd: bridgeDir,
       env: cleanEnv()

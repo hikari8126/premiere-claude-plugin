@@ -321,6 +321,19 @@ body {
 .cl-act.is-skip { color: var(--cl-dim); }
 .cl-act.is-skip::before { content: '– '; }
 .cl-askBtns { display: flex; margin-top: 6px; }
+/* Thẻ xem trước chuyển item */
+.cl-moves { margin-top: 4px; }
+.cl-mv { display: flex; padding: 4px 6px; margin: 0 -6px; border-radius: 5px; cursor: pointer; }
+.cl-mv:hover { background: rgba(255,255,255,0.04); }
+.cl-mvTick { flex: 0 0 auto; width: 12px; height: 12px; margin: 2px 8px 0 0; border-radius: 3px; border: 1px solid #555; box-sizing: border-box; }
+.cl-mv.is-on .cl-mvTick { background: var(--cl); border-color: var(--cl); }
+.cl-mvBody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cl-mvName { font-size: 11.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-mvPath { font-size: 10.5px; color: var(--cl-dim); }
+.cl-mv.is-bad { cursor: default; opacity: 0.6; }
+.cl-mv.is-bad .cl-mvTick { border-style: dashed; }
+.cl-mv.is-bad .cl-mvPath { color: #e0a070; }
+.cl-btn.is-disabled { opacity: 0.4; pointer-events: none; }
 .cl-rate { margin-top: 2px; font-size: 11.5px; color: #f59e0b; }
 .cl-rate .cl-rateCd { font-family: Menlo, monospace; color: var(--text); }
 

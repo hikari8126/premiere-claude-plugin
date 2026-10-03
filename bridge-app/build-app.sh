@@ -54,6 +54,8 @@ echo "  📦 Bundling bridge server + node_modules..."
 # autoset-names.js got left out of v3.9, which made the bundled bridge crash on
 # boot (MODULE_NOT_FOUND) and put the app in an endless restart loop.
 cp    bridge/*.js               "${APP_DIR}/Contents/Resources/server/"
+# Logic đọc bin dùng chung plugin ↔ bridge (project-tools.js require './bin-core.js', fallback ../plugin)
+cp    plugin/bin-core.js        "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/package.json       "${APP_DIR}/Contents/Resources/server/"
 cp    bridge/.env.example       "${APP_DIR}/Contents/Resources/server/.env.example"
 cp -r bridge/node_modules       "${APP_DIR}/Contents/Resources/server/"

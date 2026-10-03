@@ -31,7 +31,12 @@
 
   // Công cụ Claude đang dùng → chữ trạng thái + đếm cho dòng phụ của mục lệnh.
   function toolStatus(name, detail) {
+    name = String(name || '').replace(/^mcp__premiere__/, '');
+    if (detail && typeof detail === 'object') detail = detail.path || detail.text || '';
     var d = detail ? ': ' + String(detail).slice(0, 40) : '';
+    if (name === 'project_bins') return 'Đang xem cây bin…';
+    if (name === 'list_bin')     return 'Đang xem bin' + (d || ' gốc');
+    if (name === 'find_items')   return 'Đang tìm item' + d;
     if (name === 'WebSearch') return 'Đang tìm trên web' + d;
     if (name === 'WebFetch')  return 'Đang đọc trang' + (detail ? ': ' + String(detail).replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : '');
     if (name === 'Read')      return 'Đang đọc file' + d;
@@ -40,6 +45,7 @@
   }
   function metaText(m, tools) {
     var parts = [];
+    if (tools && tools.proj) parts.push('xem project ' + tools.proj + ' lần');
     if (tools && tools.web) parts.push('tìm web ' + tools.web + ' lần');
     if (tools && tools.page) parts.push('đọc ' + tools.page + ' trang');
     if (tools && tools.find) parts.push('tìm file ' + tools.find + ' lần');
@@ -179,7 +185,76 @@
     return { q: 'Gen ' + what + ' luôn? Tốn credit ElevenLabs.', yes: 'Gen luôn', no: a.action === 'voicegen_sfx' ? 'Chỉ đẩy prompt' : 'Chỉ đẩy script' };
   }
 
+  // Thẻ xem trước chuyển item: mỗi dòng "tên / bin cũ → bin mới", bấm dòng để bỏ chọn; dòng
+  // lỗi (không còn trong project, trùng tên, đã đúng bin) hiện mờ kèm lý do, không chuyển.
+  function askMoves(entry, rec, idx, a) {
+    var voice = a.action === 'fix_voice_bins';
+    var row = addAct(entry, 'is-run', voice ? 'Đang soát bin voice…' : 'Đang đối chiếu với project…');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    (voice ? PTOOLS.planVoice() : PTOOLS.resolve(a.moves)).then(function (res) {
+      var rows = res.rows;
+      if (!rows.length) {
+        box.remove(); row.className = 'cl-act is-ok';
+        row.textContent = voice ? 'Không có voice nào nằm sai bin' : 'Không có gì cần chuyển';
+        save('is-ok', row.textContent); setClawd('done', 'Xong', 'is-done');
+        return;
+      }
+      var good = rows.filter(function (r) { return !r.error; }).length;
+      row.className = 'cl-act is-ask';
+      row.textContent = good ? 'Chuyển ' + good + ' item? Bấm dòng để bỏ chọn.' : 'Không chuyển được item nào (xem lý do bên dưới).';
+      save('is-ask', row.textContent);
+      rows.forEach(function (r) {
+        var line = document.createElement('div');
+        line.className = 'cl-mv' + (r.error ? ' is-bad' : ' is-on');
+        line.innerHTML = '<span class="cl-mvTick"></span><span class="cl-mvBody"><span class="cl-mvName"></span><span class="cl-mvPath"></span></span>';
+        line.querySelector('.cl-mvName').textContent = r.name;
+        line.querySelector('.cl-mvPath').textContent = r.error ? r.from + ' — ' + r.error : r.from + '  →  ' + r.to;
+        if (!r.error) line.addEventListener('click', function () { line.classList.toggle('is-on'); syncBtn(); });
+        r._line = line;
+        box.appendChild(line);
+      });
+      var btns = document.createElement('div');
+      btns.className = 'cl-askBtns';
+      btns.innerHTML = '<div class="cl-btn cl-btn--primary" role="button"></div><div class="cl-btn" role="button">Bỏ qua</div>';
+      var go = btns.children[0];
+      box.appendChild(btns);
+      function picked() { return rows.filter(function (r) { return !r.error && r._line.classList.contains('is-on'); }); }
+      function syncBtn() { var n = picked().length; go.textContent = 'Chuyển ' + n + ' item'; go.classList.toggle('is-disabled', !n); }
+      syncBtn();
+      if (!good) go.remove();
+      setClawd('idle', 'Chờ bro xác nhận');
+      go.addEventListener('click', function () {
+        var sel = picked();
+        if (!sel.length) return;
+        btns.remove();
+        box.querySelectorAll('.cl-mv').forEach(function (l) { l.style.pointerEvents = 'none'; });
+        setClawd('work', 'Đang chuyển…');
+        PTOOLS.move(res.items, sel, function (i, n) { row.textContent = 'Đang chuyển ' + (i + 1) + '/' + n + '…'; }).then(function (out) {
+          var bad = out.failed.length;
+          row.className = 'cl-act ' + (bad ? 'is-error' : 'is-ok');
+          row.textContent = 'Đã chuyển ' + out.done + '/' + sel.length + ' item' + (bad ? ' — lỗi: ' + out.failed.join('; ') : '');
+          save(bad ? 'is-error' : 'is-ok', row.textContent);
+          setClawd(bad ? 'fail' : 'done', bad ? 'Có item lỗi' : 'Xong', bad ? 'is-error' : 'is-done');
+        });
+      });
+      btns.children[1].addEventListener('click', function () {
+        box.remove(); row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua — không chuyển gì';
+        save('is-skip', row.textContent); setClawd('idle');
+      });
+      scrollEnd();
+    }).catch(function (e) {
+      box.remove(); row.className = 'cl-act is-error'; row.textContent = 'Không đọc được project: ' + e.message;
+      save('is-error', row.textContent); setClawd('fail', 'Lỗi', 'is-error');
+    });
+    setClawd('think', voice ? 'Đang soát bin voice…' : 'Đang đối chiếu…');
+    return { cls: 'is-ask', text: voice ? 'Soát bin voice' : 'Chuyển item' };
+  }
+
   function askConfirm(entry, rec, idx, a) {
+    if (a.action === 'move_items' || a.action === 'fix_voice_bins') return askMoves(entry, rec, idx, a);
     var lb = askLabel(a);
     var row = addAct(entry, 'is-ask', lb.q);
     var btns = document.createElement('div');
@@ -257,7 +332,7 @@
     input.value = '';
     resizeInput();
 
-    var entry = makeEntry(cmd, false), sentMode = mode, tools = { web: 0, page: 0, find: 0, file: 0 };
+    var entry = makeEntry(cmd, false), sentMode = mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
     setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
     entry.reply.textContent = sentMode === 'free' ? 'Đang tìm hiểu…' : 'Đang hiểu ý…';
@@ -268,7 +343,7 @@
     setClawd('think', CLLOG.thinkingText(0));
     var xhr = new XMLHttpRequest();
     busy = { xhr: xhr, aborted: false };
-    var toolUsed = function () { return tools.web + tools.page + tools.find + tools.file > 0; };
+    var toolUsed = function () { return tools.proj + tools.web + tools.page + tools.find + tools.file > 0; };
     busy.timer = setInterval(function () {
       // Đang dùng tool thì giữ chữ "Đang tìm trên web…"; chưa thì đếm giây.
       if (stateEl && clawd.scene === 'think' && !toolUsed()) stateEl.textContent = CLLOG.thinkingText((Date.now() - startAt) / 1000);
@@ -277,10 +352,14 @@
 
     var fullText = '', lastLen = 0, errText = '', rate = null, finished = false;
 
+    // Chỉ xử lý tới hết dòng cuối đã đủ — dòng SSE bị cắt giữa hai lần nhận phải chờ lần sau
+    // (bỏ đi là mất cả sự kiện — chữ trả lời, tool, lỗi).
     function parseSSE() {
       var text = xhr.responseText || '';
-      var chunk = text.slice(lastLen);
-      lastLen = text.length;
+      var end = text.lastIndexOf('\n');
+      if (end < lastLen) return;
+      var chunk = text.slice(lastLen, end + 1);
+      lastLen = end + 1;
       chunk.split('\n').forEach(function (line) {
         if (line.indexOf('data: ') !== 0) return;
         var raw = line.slice(6);
@@ -293,7 +372,8 @@
           if (html) { entry.reply.className = 'cl-reply'; entry.reply.innerHTML = html; }
           scrollEnd();
         } else if (ev.type === 'tool_use') {
-          if (ev.name === 'WebSearch') tools.web++;
+          if (/^mcp__premiere__/.test(ev.name)) tools.proj++;   // bridge trả lời từ bản chụp gửi kèm
+          else if (ev.name === 'WebSearch') tools.web++;
           else if (ev.name === 'WebFetch') tools.page++;
           else if (ev.name === 'Read') tools.file++;
           else if (ev.name === 'Glob' || ev.name === 'Grep') tools.find++;
@@ -360,11 +440,15 @@
     xhr.onerror = finish;
     xhr.ontimeout = function () { errText = 'Bridge không trả lời sau ' + (sentMode === 'free' ? 10 : 5) + ' phút.'; finish(); };
     xhr.onabort = finish;
-    projectPath().then(function (pp) {
+    // Kèm đường dẫn project (cho đọc file) + bản chụp bin/item (cho tool đọc project — bridge trả
+    // lời từ đây, không hỏi ngược plugin giữa chừng: UXP kẹt request khi stream /chat còn mở).
+    Promise.all([projectPath(), PTOOLS.snapshot()]).then(function (got) {
+      var pp = got[0], snap = got[1];
       if (busy && busy.aborted) return;
       xhr.send(JSON.stringify({
         messages: CLLOG.toMessages(history).concat([{ role: 'user', content: cmd }]),
         mode: sentMode,
+        project: snap || undefined,
         projectPath: pp || undefined,
         timelineContext: timelineContext,
         model: CLAUDE_MODEL,

@@ -1,6 +1,6 @@
 // plugin/claude-actions.js — whitelist action Claude được gọi trong tab Claude (global CLA).
 // Claude chỉ "hiểu ý" → khối ```actions; plugin đối chiếu danh sách này trước khi chạy.
-// mode 'auto' = chạy luôn; 'confirm' = hiện nút hỏi trước (việc tốn credit / đổi project).
+// mode 'auto' = chạy luôn; 'confirm' = hỏi trước (việc tốn credit / thay đổi project).
 // Danh sách phải khớp prompt ở bridge/chat-prompt.js — test chat-prompt.test.js kiểm hai chiều.
 
 var CLA = (function () {
@@ -36,7 +36,19 @@ var CLA = (function () {
     autocut_load: function (a) {
       if (!Array.isArray(a.rows) || !a.rows.length) return { error: 'thiếu rows' };
       return { mode: 'auto' };
-    }
+    },
+    // Chuyển item giữa các bin — item lấy nguyên chuỗi "<bin> ▸ <tên>" từ tool list_bin/find_items.
+    // Luôn qua thẻ xem trước + bấm xác nhận.
+    move_items: function (a) {
+      if (!Array.isArray(a.moves) || !a.moves.length) return { error: 'thiếu danh sách moves' };
+      for (var i = 0; i < a.moves.length; i++) {
+        var m = a.moves[i] || {};
+        if (!m.item || !m.to) return { error: 'mỗi dòng moves cần item và to' };
+      }
+      return { mode: 'confirm' };
+    },
+    // Plugin tự quét: voice "N.x - …" nằm sai bin / ngoài "Voice Over / Nx" → thẻ xem trước.
+    fix_voice_bins: function () { return { mode: 'confirm' }; }
   };
 
   function check(action) {

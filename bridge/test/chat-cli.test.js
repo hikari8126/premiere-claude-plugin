@@ -30,3 +30,13 @@ test("chatArgs: add-dir cho đính kèm + project, model trước danh sách ch�
   assert.deepStrictEqual(dirs, ["/b/att", "/Users/a/P/Edit", "/Users/a/P"]);
   assert.ok(a.indexOf("--model") < a.indexOf("--disallowedTools"));
 });
+
+test("MCP premiere: cấu hình + cờ --strict-mcp-config, đặt trước danh sách chặn", () => {
+  const cfg = C.mcpConfig({ nodePath: "/n", scriptPath: "/b/premiere-mcp.js", bridgeUrl: "http://127.0.0.1:3030", chatId: "c1" });
+  assert.deepStrictEqual(cfg, { mcpServers: { premiere: { command: "/n", args: ["/b/premiere-mcp.js"], env: { PREMIERE_BRIDGE_URL: "http://127.0.0.1:3030", PREMIERE_CHAT_ID: "c1" } } } });
+  const a = C.chatArgs({ attachRoot: "/b/att", mcpConfigPath: "/tmp/mcp.json" });
+  const i = a.indexOf("--mcp-config");
+  assert.deepStrictEqual(a.slice(i, i + 3), ["--mcp-config", "/tmp/mcp.json", "--strict-mcp-config"]);
+  assert.ok(i < a.indexOf("--disallowedTools"));
+  assert.ok(!C.chatArgs({}).includes("--mcp-config"), "không có đường dẫn thì không nạp");
+});

@@ -35,3 +35,12 @@ test("chế độ: Lệnh ngắn, Hỏi tự do research có nguồn", () => {
   assert.strictEqual(promptFor("command"), SYSTEM_PROMPT);
   assert.strictEqual(promptFor(undefined), SYSTEM_PROMPT);
 });
+
+test("prompt mô tả tool đọc project + quy ước bin voice; tool khớp MCP premiere", () => {
+  const { TOOLS } = require("../premiere-mcp.js");
+  for (const p of [SYSTEM_PROMPT, FREE_PROMPT]) {
+    for (const tl of TOOLS) assert.ok(p.includes(tl.name), tl.name);
+    assert.match(p, /Voice Over \/ Nx/);
+    assert.match(p, /▸/);
+  }
+});
