@@ -236,12 +236,29 @@ body {
    chính — phần còn lại theo nền tối chung của plugin. */
 :root { --cl: #D97757; --cl-hover: #c4653f; --cl-a08: rgba(217,119,87,0.08); --cl-a25: rgba(217,119,87,0.25); --cl-dim: #8f8f8f; }
 
-/* Nút tab: hẹp, chỉ có Clawd */
-.tab-btn.tab-btn--claude { flex: 0 0 auto; width: 36px; padding: 0; }
-.tab-btn--claude .tab-clawd { display: flex; align-items: center; justify-content: center; height: 100%; padding-top: 2px; }
-.tab-btn.tab-btn--claude.active { background: var(--bg); box-shadow: 0 -2px 8px var(--cl-a25); }
-.tab-btn.tab-btn--claude.active::before { background: var(--cl); box-shadow: 0 0 8px var(--cl-a25); }
-.tab-btn.tab-btn--claude:hover:not(.active) { background: var(--cl-a08); }
+/* Nút tab Claude (phương án C): không nền, không dáng tab — Clawd đứng riêng, vạch ngăn
+   1px bên phải; đang mở thì có vạch cam phát sáng dưới chân. ::before (vốn là vạch trên
+   của tab active) dùng làm vạch ngăn, ::after làm vạch chân. */
+.tab-btn.tab-btn--claude,
+.tab-btn.tab-btn--claude.active,
+.tab-btn.tab-btn--claude:hover:not(.active) {
+  flex: 0 0 auto; width: 40px; margin-right: 8px; padding: 0;
+  background: none; box-shadow: none; overflow: visible;
+  display: flex; align-items: center; justify-content: center;
+}
+/* Khung cắt chừa 4 hàng trống trên đầu cho cú nhảy → nhấc lên để thân Clawd ngang hàng chữ các tab */
+.tab-btn--claude .tab-clawd { display: flex; align-items: center; justify-content: center; margin-top: -11px; }
+.tab-btn.tab-btn--claude::before,
+.tab-btn.tab-btn--claude.active::before {
+  content: ''; position: absolute; left: auto; right: -5px; top: 50%; height: 18px; width: 1px;
+  margin-top: -12px; background: #343434; border-radius: 0; box-shadow: none;
+}
+.tab-btn.tab-btn--claude::after {
+  content: ''; position: absolute; left: 11px; right: 11px; bottom: 2px; height: 3px; border-radius: 2px;
+  background: transparent; transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+.tab-btn.tab-btn--claude:hover:not(.active)::after { background: var(--cl-a25); }
+.tab-btn.tab-btn--claude.active::after { background: var(--cl); box-shadow: 0 0 8px rgba(217,119,87,0.7); }
 
 /* Dòng sequence đang mở */
 .cl-seq {

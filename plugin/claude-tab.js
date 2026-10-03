@@ -28,7 +28,7 @@
   }
   function drawClawd() {
     var sc = clawd.scene, i = clawd.tick;
-    drawInto('clawdTabIcon', sc, i, 22, CLAWD.TAB_CROP);
+    drawInto('clawdTabIcon', sc, i, 28, CLAWD.TAB_CROP);
     drawInto('clawdDock', sc, i, 32);
     if (emptyEl && !emptyEl.hidden) drawInto('clawdHero', sc, i, 88);
   }
