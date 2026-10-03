@@ -15,23 +15,22 @@
 
   var HISTORY_KEY = 'cl_history_v1', SHORTCUT_KEY = 'claude-shortcuts';
 
-  // ── Clawd: icon tab 16px, đậu trên ô lệnh 24px, giữa màn trống 56px ──────────
+  // ── Clawd: icon tab (khung cắt), đậu trên ô lệnh, giữa màn trống ──────────────
+  // Cảnh: idle (thở + chớp mắt) · think (chờ Claude) · work (chạy action) · done · fail.
   var clawd = { scene: 'idle', tick: 0, until: 0, drawn: {} };
-  function drawInto(id, scene, frameIdx, width) {
+  function drawInto(id, scene, frameIdx, width, crop) {
     var el = $(id);
     if (!el) return;
     var frames = CLAWD.frames(scene), key = scene + ':' + (frameIdx % frames.length);
     if (clawd.drawn[id] === key) return;          // khung không đổi → không vẽ lại DOM
     clawd.drawn[id] = key;
-    el.innerHTML = CLAWD.toSvg(frames[frameIdx % frames.length], width);
+    el.innerHTML = CLAWD.toSvg(frames[frameIdx % frames.length], width, crop);
   }
   function drawClawd() {
     var sc = clawd.scene, i = clawd.tick;
-    // Rảnh: chớp mắt một nhịp mỗi ~4s.
-    if (sc === 'idle' && i % 16 === 15) sc = 'blink';
-    drawInto('clawdTabIcon', sc, i, 16);
-    drawInto('clawdDock', sc, i, 24);
-    if (emptyEl && !emptyEl.hidden) drawInto('clawdHero', sc, i, 56);
+    drawInto('clawdTabIcon', sc, i, 22, CLAWD.TAB_CROP);
+    drawInto('clawdDock', sc, i, 32);
+    if (emptyEl && !emptyEl.hidden) drawInto('clawdHero', sc, i, 88);
   }
   setInterval(function () {
     clawd.tick++;
@@ -39,10 +38,11 @@
     drawClawd();
   }, 250);
 
-  // scene: idle | think | done | fail. done/fail tự về idle sau vài giây.
+  // scene: idle | think | work | done | fail. done/fail diễn hết ~2 vòng rồi về idle.
   function setClawd(scene, text, cls) {
+    if (clawd.scene !== scene) clawd.tick = 0;    // cảnh mới chạy từ khung đầu (vd nhún lấy đà trước khi nhảy)
     clawd.scene = scene;
-    clawd.until = (scene === 'done' || scene === 'fail') ? Date.now() + 2600 : 0;
+    clawd.until = (scene === 'done' || scene === 'fail') ? Date.now() + CLAWD.frames(scene).length * 250 * 2 : 0;
     if (stateEl) {
       stateEl.textContent = text || (scene === 'idle' ? 'Sẵn sàng' : stateEl.textContent);
       stateEl.className = 'cl-state' + (cls ? ' ' + cls : '');
@@ -234,7 +234,7 @@
         if (!CLLOG.renderReply(fullText)) entry.reply.textContent = '';
         var actions = parseActions(fullText);
         if (actions.length) {
-          setClawd('think', 'Đang làm…');
+          setClawd('work', 'Đang làm…');
           rec.acts = await runActions(entry, actions);
           if (typeof refreshTimeline === 'function') refreshTimeline();
         }

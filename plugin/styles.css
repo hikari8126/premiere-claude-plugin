@@ -237,7 +237,7 @@ body {
 :root { --cl: #D97757; --cl-hover: #c4653f; --cl-a08: rgba(217,119,87,0.08); --cl-a25: rgba(217,119,87,0.25); --cl-dim: #8f8f8f; }
 
 /* Nút tab: hẹp, chỉ có Clawd */
-.tab-btn.tab-btn--claude { flex: 0 0 auto; width: 32px; padding: 0; }
+.tab-btn.tab-btn--claude { flex: 0 0 auto; width: 36px; padding: 0; }
 .tab-btn--claude .tab-clawd { display: flex; align-items: center; justify-content: center; height: 100%; padding-top: 2px; }
 .tab-btn.tab-btn--claude.active { background: var(--bg); box-shadow: 0 -2px 8px var(--cl-a25); }
 .tab-btn.tab-btn--claude.active::before { background: var(--cl); box-shadow: 0 0 8px var(--cl-a25); }
@@ -294,17 +294,18 @@ body {
 .cl-emptyTitle { font-size: 14px; font-weight: 600; color: var(--text); }
 .cl-emptySub { font-size: 11.5px; color: var(--cl-dim); margin: 3px 0 14px; }
 .cl-examples { width: 100%; max-width: 340px; border: 1px solid #2e2e2e; border-radius: 8px; overflow: hidden; text-align: left; }
-.cl-ex { display: flex; flex-direction: column; padding: 8px 11px; border-top: 1px solid #292929; cursor: pointer; }
-.cl-ex:first-child { border-top: none; }
+/* .cl-examples .cl-ex thắng div[role="button"] (inline-flex + căn giữa) */
+.cl-examples .cl-ex { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 8px 11px; border-top: 1px solid #292929; cursor: pointer; }
+.cl-examples .cl-ex:first-child { border-top: none; }
 .cl-ex:hover { background: var(--cl-a08); }
 .cl-exCmd { display: flex; gap: 6px; font-size: 12px; color: var(--text); }
 .cl-exSub { font-size: 11px; color: var(--cl-dim); margin: 2px 0 0 13px; }
 
 /* Ô lệnh — Clawd đậu trên mép */
 .cl-dock { flex: 0 0 auto; padding: 0 10px 10px; background: #1e1e1e; border-top: 1px solid #2c2c2c; }
-.cl-perch { display: flex; align-items: flex-end; gap: 7px; height: 28px; padding-left: 4px; }
+.cl-perch { display: flex; align-items: flex-end; gap: 6px; height: 30px; padding-left: 2px; }
 .cl-perchClawd { display: flex; align-items: flex-end; margin-bottom: -1px; }
-.cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cl-state.is-error { color: #f87171; }
 .cl-state.is-done { color: #34d399; }
 .cl-input {
