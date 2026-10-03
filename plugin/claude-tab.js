@@ -318,10 +318,11 @@
           var q = {}; for (var k in p) q[k] = p[k]; q.skip = 'bỏ chọn'; return q;
         });
         setClawd('work', 'Đang resize…');
+        row.className = 'cl-act is-run'; row.textContent = 'Đang resize 0/' + keep.length + '…';
         learnAct(a);
         var done = 0;
         try {
-          var res = await window.ResizeAPI.run(a.platform, plan, function (r) { if (!r.skip && !r.error) row.textContent = 'Đã tạo ' + (++done) + '/' + keep.length + '…'; });
+          var res = await window.ResizeAPI.run(a.platform, plan, function (r) { if (!r.skip && !r.error) row.textContent = 'Đã tạo ' + (++done) + '/' + keep.length + '…'; else if (r.hung) row.textContent = r.error; });
           var made = res.results.filter(function (r) { return !r.error && !r.skip; }).length;
           var errs = res.results.filter(function (r) { return r.error; });
           row.className = 'cl-act ' + (errs.length ? 'is-error' : 'is-ok');

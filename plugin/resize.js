@@ -39,6 +39,16 @@
 
   function $(id) { return document.getElementById(id); }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // Đồng hồ canh: lệnh Premiere đôi khi không bao giờ trả về (lượt resize đứng mãi, không báo
+  // lỗi). Mỗi bước ghi tên + giờ bắt đầu; runResize thấy một bước quá STEP_LIMIT_MS thì dừng lượt
+  // và báo đúng bước đó. ResizeAPI.status() để dò khi cần.
+  var STEP_LIMIT_MS = 60000;
+  var rzStepNow = { step: '', since: 0 };
+  function rzStep(label) {
+    rzStepNow = { step: label, since: Date.now() };
+    console.log('[Resize] ' + label);
+  }
   async function un(v) { return (v && typeof v.then === 'function') ? await v : v; }
   async function awaitArray(v) {
     v = await un(v);
@@ -321,6 +331,7 @@
       var clips = await getClipItems(track);
       for (var c = 0; c < clips.length; c++) {
         var clip = clips[c];
+        rzStep('canh text V' + (vt + 1) + ' clip ' + (c + 1) + '/' + clips.length);
         try {
           if (RSZ.isLogoName(await nameOf(clip))) continue;
           var comps = await componentsOf(clip);
@@ -351,16 +362,20 @@
     var out = { ratio: tgtRatio, src: job.name };
     var dup = null;
     try {
+      rzStep(name + ' · nhân bản');
       dup = await cloneSequence(project, job.seq);
       if (!dup) { out.error = 'Không nhân bản được sequence'; return out; }
       // Đổi tên TRƯỚC để bản dở dang (nếu khung lỗi) vẫn mang tên dễ nhận ra.
+      rzStep(name + ' · đổi tên');
       try { await renameSeq(project, dup, name); } catch (e) { console.warn('[Resize] đổi tên lỗi:', e && e.message); }
       out.name = name;
+      rzStep(name + ' · đổi khung ' + tgt.w + '×' + tgt.h);
       if (!(await setFrameSize(project, dup, tgt.w, tgt.h))) {
         out.error = 'Premiere không nhận frame size ' + tgt.w + '×' + tgt.h;
         out.orphan = name;
         return out;
       }
+      rzStep(name + ' · chuyển bin');
       try { out.bin = await moveToBin(project, dup, job.bin, job.binId); }
       catch (e2) { out.binError = e2 && e2.message; }
       var lay = await layoutClips(project, dup, prefs.bgTrack, prefs.guide[tgtRatio], tgt.h);
@@ -421,6 +436,21 @@
 
   var DUP_SKIP = 'đã có sequence cùng tên — bỏ qua (xoá bản cũ nếu muốn tạo lại)';
 
+  function withWatchdog(work, p) {
+    return new Promise(function (resolve) {
+      var t = setInterval(function () {
+        var waited = Date.now() - rzStepNow.since;
+        if (waited < STEP_LIMIT_MS) return;
+        clearInterval(t);
+        console.warn('[Resize] KẸT ở bước "' + rzStepNow.step + '" sau ' + Math.round(waited / 1000) + 's');
+        resolve({ src: p.src, ratio: p.ratio, name: p.name, hung: true, orphan: p.name,
+                  error: 'Premiere không phản hồi ở bước "' + rzStepNow.step + '" (' + Math.round(waited / 1000) + 's) — đã dừng lượt; kiểm tra bản dở dang rồi chạy lại' });
+      }, 1000);
+      work.then(function (r) { clearInterval(t); resolve(r); },
+                function (e) { clearInterval(t); resolve({ src: p.src, ratio: p.ratio, name: p.name, error: String((e && e.message) || e) }); });
+    });
+  }
+
   async function runResize(platform, plan, prefs, onRow) {
     var project = await getActiveProject();
     var results = [];
@@ -431,8 +461,16 @@
         var rd = { src: p.src, ratio: p.ratio, name: p.name, skip: p.exists ? DUP_SKIP : 'trùng tên với bản khác trong lượt này — bỏ qua' };
         results.push(rd); onRow(rd); continue;
       }
-      var r = await makeVariant(project, p.job, p.ratio, platform, prefs);
+      rzStep(p.name + ' · bắt đầu');
+      var r = await withWatchdog(makeVariant(project, p.job, p.ratio, platform, prefs), p);
       results.push(r); onRow(r);
+      if (r.hung) {                                  // Premiere kẹt → không chạy tiếp các bản sau
+        for (var k = i + 1; k < plan.length; k++) {
+          var q = plan[k], rs = { src: q.src, ratio: q.ratio, name: q.name, skip: 'chưa chạy — lượt dừng vì Premiere không phản hồi' };
+          results.push(rs); onRow(rs);
+        }
+        break;
+      }
     }
     rszState.seqByItemId = null;   // project vừa có thêm sequence
     return { ok: true, results: results };
@@ -909,6 +947,7 @@
       if (!RSZ.PLATFORM_TARGETS[platform]) return Promise.resolve({ ok: false, error: 'nền tảng "' + platform + '" không có (GG / FB / PIN)' });
       return planResize(platform, wanted && wanted.length ? wanted : RSZ.PLATFORM_TARGETS[platform], seqs);
     },
+    status: function () { return { busy: rszState.busy, step: rzStepNow.step, seconds: rzStepNow.since ? Math.round((Date.now() - rzStepNow.since) / 1000) : 0 }; },
     run: async function (platform, plan, onRow) {
       if (rszState.busy) throw new Error('tab Resize đang chạy lượt khác');
       clearPending();
