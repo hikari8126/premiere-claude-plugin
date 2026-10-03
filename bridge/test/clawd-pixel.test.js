@@ -49,11 +49,16 @@ test("done: có khung bật nhảy (thân cao hơn bình thường) và lấp l�
   assert.ok(fr.some(f => f.join("").includes("Y")), "lấp lánh");
 });
 
-test("fail: giọt mồ hôi rơi xuống qua các khung; tay buông quá đáy thân", () => {
+test("fail: giọt mồ hôi rơi xuống qua các khung; tay rũ chéo xuống, vẫn dính hông", () => {
   const fr = CLAWD.frames("fail");
   const dropTop = fr.map(f => rowsWith(f, "B")[0]);
   for (let i = 1; i < dropTop.length; i++) assert.ok(dropTop[i] > dropTop[i - 1], "giọt rơi xuống");
-  assert.match(fr[0][17], /^....O.*O....$/, "tay chạm hàng đáy");
+  const f = fr[0];
+  // thân lún 1px → hông ở hàng 14; tay trái: cột 5 (hàng 14-15) → cột 4 (hàng 15-16)
+  assert.strictEqual(f[14].slice(4, 7), ".OO", "vai trái dính thân");
+  assert.strictEqual(f[15].slice(4, 7), "OOO", "tay trái chĩa ra");
+  assert.strictEqual(f[16].slice(4, 6), "O.", "bàn tay trái rủ xuống ngoài cùng, tách thân 1px");
+  assert.strictEqual(f[16].slice(18, 20), ".O", "tay phải đối xứng");
 });
 
 test("toSvg gộp pixel, viewBox theo khung cắt, đủ màu", () => {

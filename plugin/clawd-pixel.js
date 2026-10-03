@@ -64,10 +64,12 @@ var CLAWD = (function () {
       if (pose === 'side') rect(g, ax, top + 4, 2, 2, 'O');
       if (pose === 'up')   { rect(g, ax, top - 2, 2, 4, 'O'); px(g, side < 0 ? ax : ax + 1, top - 3, 'O'); }
       if (pose === 'mid')  { rect(g, ax, top + 2, 2, 2, 'O'); px(g, side < 0 ? ax - 1 : ax + 2, top + 2, 'O'); }   // vung ngang ngực
-      // Buông thõng: nối ở vai, sợi 1px cách thân 1px, rủ quá đáy thân một pixel
+      // Buông thõng: mẩu tay 2px vẫn dính hông nhưng chĩa chéo xuống dưới-ra ngoài
+      var inX = side < 0 ? ax + 1 : ax, outX = side < 0 ? ax : ax + 1;
       if (pose === 'down') {
-        px(g, side < 0 ? ax + 1 : ax, top + 4, 'O');
-        rect(g, side < 0 ? ax : ax + 1, top + 4, 1, 5, 'O');
+        px(g, inX, top + 5, 'O');
+        px(g, inX, top + 6, 'O'); px(g, outX, top + 6, 'O');
+        px(g, outX, top + 7, 'O');
       }
     }
     var a = o.arms || 'side';
