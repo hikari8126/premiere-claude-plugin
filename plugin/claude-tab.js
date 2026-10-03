@@ -4,7 +4,7 @@
 // ppExecuteAction (main.js) cho các tab làm việc. Mỗi lệnh là một mục trong nhật ký:
 // "› lệnh", câu trả lời, kết quả từng action. Lưu 20 lệnh gần nhất (localStorage
 // cl_history_v1) làm ngữ cảnh + để mở lại panel vẫn thấy. Hàm thuần ở claude-log.js
-// và clawd-pixel.js (có test). Dùng global của main.js: BRIDGE_URL, CLAUDE_MODEL,
+// và clawd-pixel.js (có test); whitelist action ở claude-actions.js (CLA). Dùng global của main.js: BRIDGE_URL, CLAUDE_MODEL,
 // ANTHROPIC_KEY, timelineContext, ppExecuteAction, refreshTimeline, BRIDGE_OFFLINE_MSG,
 // pluginIconSVG.
 (function () {
@@ -103,34 +103,79 @@
       var e = makeEntry(h.cmd, true);
       if (h.err) { e.reply.className = 'cl-reply is-error'; e.reply.textContent = h.err; }
       else e.reply.innerHTML = CLLOG.renderReply(h.raw) || '';
-      (h.acts || []).forEach(function (a) { addAct(e, a.cls, a.text); });
+      (h.acts || []).forEach(function (a) {
+        // Việc còn chờ xác nhận lúc đóng panel → coi như đã bỏ qua, không hỏi lại.
+        if (a.cls === 'is-ask') addAct(e, 'is-skip', a.text + ' — bỏ qua');
+        else addAct(e, a.cls, a.text);
+      });
     });
     syncEmpty();
     scrollEnd();
   }
 
   // ── Action trong câu trả lời ────────────────────────────────────────────────
-  function parseActions(text) {
-    var out = [], re = /```actions\s*([\s\S]*?)```/g, m;
-    while ((m = re.exec(String(text || ''))) !== null) {
-      try { var p = JSON.parse(m[1].trim()); out = out.concat(Array.isArray(p) ? p : [p]); }
-      catch (e) { /* khối hỏng → bỏ */ }
-    }
-    return out;
+  // Mỗi action qua whitelist CLA.check. mode 'confirm' (gen tốn credit) → hỏi ngay trong
+  // mục lệnh; bấm nút nào thì cập nhật dòng kết quả + lịch sử (rec.acts[i]).
+  async function runOne(row, a) {
+    row.className = 'cl-act is-run';
+    row.textContent = a.action + '…';
+    var r;
+    try { r = await ppExecuteAction(a); } catch (e) { r = { ok: false, error: e.message }; }
+    if (r && r.ok) { row.className = 'cl-act is-ok'; row.textContent = (r.data && r.data.message) || a.action; }
+    else { row.className = 'cl-act is-error'; row.textContent = a.action + ': ' + ((r && r.error) || 'lỗi'); }
+    return { cls: row.className.replace('cl-act ', ''), text: row.textContent };
   }
-  async function runActions(entry, actions) {
-    var acts = [];
-    for (var i = 0; i < actions.length; i++) {
-      var a = actions[i];
-      var row = addAct(entry, 'is-run', a.action + '…');
-      scrollEnd();
-      var r;
-      try { r = await ppExecuteAction(a); } catch (e) { r = { ok: false, error: e.message }; }
-      if (r && r.ok) { row.className = 'cl-act is-ok'; row.textContent = (r.data && r.data.message) || a.action; }
-      else { row.className = 'cl-act is-error'; row.textContent = a.action + ': ' + ((r && r.error) || 'lỗi'); }
-      acts.push({ cls: row.className.replace('cl-act ', ''), text: row.textContent });
+
+  function askLabel(a) {
+    var what = a.action === 'voicegen_sfx' ? 'SFX' : 'voice';
+    return { q: 'Gen ' + what + ' luôn? Tốn credit ElevenLabs.', yes: 'Gen luôn', no: a.action === 'voicegen_sfx' ? 'Chỉ đẩy prompt' : 'Chỉ đẩy script' };
+  }
+
+  function askConfirm(entry, rec, idx, a) {
+    var lb = askLabel(a);
+    var row = addAct(entry, 'is-ask', lb.q);
+    var btns = document.createElement('div');
+    btns.className = 'cl-askBtns';
+    btns.innerHTML = '<div class="cl-btn cl-btn--primary" role="button"></div><div class="cl-btn" role="button"></div>';
+    btns.children[0].textContent = lb.yes;
+    btns.children[1].textContent = lb.no;
+    entry.result.appendChild(btns);
+    setClawd('idle', 'Chờ bro xác nhận');
+    function pick(gen) {
+      btns.remove();
+      var run = {}; for (var k in a) run[k] = a[k];
+      run.autoGenerate = gen;
+      setClawd('work', 'Đang làm…');
+      runOne(row, run).then(function (res) {
+        rec.acts[idx] = res;
+        saveHistory();
+        setClawd(res.cls === 'is-error' ? 'fail' : 'done', res.cls === 'is-error' ? 'Lỗi' : 'Xong', res.cls === 'is-error' ? 'is-error' : 'is-done');
+      });
     }
-    return acts;
+    btns.children[0].addEventListener('click', function () { pick(true); });
+    btns.children[1].addEventListener('click', function () { pick(false); });
+    return { cls: 'is-ask', text: lb.q };
+  }
+
+  // Trả về true nếu còn việc chờ xác nhận (Clawd đứng chờ thay vì báo Xong).
+  async function runActions(entry, actions, rec) {
+    var waiting = false;
+    for (var i = 0; i < actions.length; i++) {
+      var chk = CLA.check(actions[i]);
+      if (!chk.ok) {
+        addAct(entry, 'is-error', chk.error);
+        rec.acts.push({ cls: 'is-error', text: chk.error });
+      } else if (chk.mode === 'confirm') {
+        rec.acts.push(askConfirm(entry, rec, rec.acts.length, chk.action));
+        waiting = true;
+      } else {
+        var row = addAct(entry, 'is-run', chk.action.action + '…');
+        scrollEnd();
+        rec.acts.push(await runOne(row, chk.action));
+      }
+      scrollEnd();
+    }
+    return waiting;
   }
 
   // ── Gói Claude tạm hết lượt ─────────────────────────────────────────────────
@@ -232,14 +277,15 @@
       } else {
         rec.raw = fullText;
         if (!CLLOG.renderReply(fullText)) entry.reply.textContent = '';
-        var actions = parseActions(fullText);
+        var actions = CLA.parse(fullText), waiting = false;
         if (actions.length) {
           setClawd('work', 'Đang làm…');
-          rec.acts = await runActions(entry, actions);
+          waiting = await runActions(entry, actions, rec);
           if (typeof refreshTimeline === 'function') refreshTimeline();
         }
         var failed = rec.acts.some(function (a) { return a.cls === 'is-error'; });
-        setClawd(failed ? 'fail' : 'done', failed ? 'Có bước lỗi' : 'Xong', failed ? 'is-error' : 'is-done');
+        if (failed) setClawd('fail', 'Có bước lỗi', 'is-error');
+        else if (!waiting) setClawd('done', 'Xong', 'is-done');
       }
       history = CLLOG.pushHistory(history, rec);
       saveHistory();

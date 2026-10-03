@@ -686,30 +686,30 @@ async function ppGetTimelineInfo() {
   }
 }
 
+// Chạy một action của tab Claude. Action đã qua whitelist CLA.check (claude-actions.js);
+// các action sửa timeline kiểu cũ (cut/move/trim/set_volume…) đã gỡ — setter kiểu
+// ExtendScript không chạy trên UXP.
 async function ppExecuteAction(actionObj) {
   var action = actionObj.action;
   try {
     if (action === 'get_timeline_info') return await ppGetTimelineInfo();
 
+    if (action === 'open_tab') {
+      if (typeof window.tabOpen !== 'function') return { ok: false, error: 'không mở được tab' };
+      window.tabOpen(actionObj.tab);
+      return { ok: true, data: { message: 'Đã mở tab ' + ((window.CLA && CLA.TAB_NAMES[actionObj.tab]) || actionObj.tab) } };
+    }
+
     // Push script/sfx text to Voice Gen tab (cross-tab communication)
     if (action === 'voicegen_script') {
-      if (typeof window.VoiceGenPushScript === 'function') {
-        window.VoiceGenPushScript(
-          actionObj.text || '',
-          actionObj.voiceId || null,
-          !!actionObj.autoGenerate
-        );
-      }
-      return { ok: true, data: { message: 'Script pushed to Voice Gen tab' } };
+      if (typeof window.VoiceGenPushScript !== 'function') return { ok: false, error: 'tab Voice Gen chưa sẵn sàng' };
+      window.VoiceGenPushScript(actionObj.text || '', actionObj.voiceId || null, !!actionObj.autoGenerate);
+      return { ok: true, data: { message: actionObj.autoGenerate ? 'Đã đẩy script sang Voice Gen và bắt đầu gen' : 'Đã đẩy script sang Voice Gen' } };
     }
     if (action === 'voicegen_sfx') {
-      if (typeof window.VoiceGenPushSFX === 'function') {
-        window.VoiceGenPushSFX(
-          actionObj.text || '',
-          !!actionObj.autoGenerate
-        );
-      }
-      return { ok: true, data: { message: 'SFX prompt pushed to Voice Gen tab' } };
+      if (typeof window.VoiceGenPushSFX !== 'function') return { ok: false, error: 'tab Voice Gen chưa sẵn sàng' };
+      window.VoiceGenPushSFX(actionObj.text || '', !!actionObj.autoGenerate);
+      return { ok: true, data: { message: actionObj.autoGenerate ? 'Đã đẩy prompt SFX sang Voice Gen và bắt đầu gen' : 'Đã đẩy prompt SFX sang Voice Gen' } };
     }
 
     // Push an organized cutsheet into the Autocut tab's spreadsheet.
@@ -733,159 +733,10 @@ async function ppExecuteAction(actionObj) {
         return { text: String(text).trim(), time: String(time).trim(), src: String(src).trim() };
       });
       if (typeof window.AutocutPushRows === 'function') window.AutocutPushRows(rows);
-      return { ok: true, data: { message: 'Loaded ' + rows.length + ' rows into Autocut tab' } };
+      return { ok: true, data: { message: 'Đã nạp ' + rows.length + ' dòng vào bảng Autocut' } };
     }
 
-    var seq = await getActiveSequence();
-
-    if (action === 'cut_clip') {
-      // trackType: 'audio' or 'video' (default video). audioIndex/videoIndex maps to track.
-      var trackType  = (actionObj.trackType || 'video').toLowerCase();
-      var trackIdx   = actionObj.trackIndex || 0;
-      var atSec      = Number(actionObj.time || 0);
-      var trackObj   = trackType === 'audio'
-        ? await seq.getAudioTrack(trackIdx)
-        : await seq.getVideoTrack(trackIdx);
-      if (!trackObj) throw new Error(trackType + ' track ' + trackIdx + ' not found');
-
-      // Find the trackItem that contains atSec on its timeline range (inline async probe)
-      async function clipStart(item) {
-        try { var gs = await item.getStart(); return (gs && gs.seconds) || 0; } catch(e) { return 0; }
-      }
-      async function clipDur(item) {
-        try {
-          var gs = await item.getStart();
-          var ge = await item.getEnd();
-          return ((ge && ge.seconds) || 0) - ((gs && gs.seconds) || 0);
-        } catch(e) { return 0; }
-      }
-      var items = await getClipItems(trackObj);
-      var target = null;
-      console.log('[cut_clip] scanning', items.length, 'items on', trackType, 'track', trackIdx, 'for time', atSec);
-      for (var i = 0; i < items.length; i++) {
-        var s = await clipStart(items[i]);
-        var d = await clipDur(items[i]);
-        console.log('[cut_clip]   [' + i + '] "' + (items[i].name || '?') + '" start=' + s + ' dur=' + d);
-        if (atSec > s + 0.001 && atSec < s + d - 0.001) {
-          target = { item: items[i], startSec: s, durSec: d };
-          break;
-        }
-      }
-      if (!target) throw new Error('No ' + trackType + ' clip on track ' + trackIdx + ' contains time ' + atSec + 's');
-
-      // Try multiple razor approaches — UXP API varies
-      var atTick = ppro.TickTime.createWithSeconds(atSec);
-      var project = await getActiveProject();
-      var razorDone = false;
-
-      // Approach 1: sequence-level razor methods
-      try {
-        if (typeof seq.razor === 'function') {
-          var r = seq.razor(atTick);
-          if (r && typeof r.then === 'function') await r;
-          razorDone = true;
-        } else if (typeof seq.razorAll === 'function') {
-          var ra = seq.razorAll(atTick);
-          if (ra && typeof ra.then === 'function') await ra;
-          razorDone = true;
-        }
-      } catch(e) { console.warn('[cut_clip] razor() failed:', e.message); }
-
-      // Approach 2: SequenceEditor createRazorAction (if exists)
-      if (!razorDone && ppro.SequenceEditor) {
-        try {
-          var editor = ppro.SequenceEditor.getEditor(seq);
-          if (editor && typeof editor.createRazorAction === 'function') {
-            await project.lockedAccess(function() {
-              project.executeTransaction(function(action) {
-                action.addAction(editor.createRazorAction(atTick));
-              }, 'Razor at ' + atSec + 's');
-            });
-            razorDone = true;
-          } else if (editor && typeof editor.createRazorAtTimeAction === 'function') {
-            await project.lockedAccess(function() {
-              project.executeTransaction(function(action) {
-                action.addAction(editor.createRazorAtTimeAction(atTick));
-              }, 'Razor at ' + atSec + 's');
-            });
-            razorDone = true;
-          }
-        } catch(e) { console.warn('[cut_clip] editor.createRazorAction failed:', e.message); }
-      }
-
-      // Approach 3: trackItem split (if available)
-      if (!razorDone) {
-        try {
-          if (typeof target.item.createSplitAction === 'function') {
-            await project.lockedAccess(function() {
-              project.executeTransaction(function(action) {
-                action.addAction(target.item.createSplitAction(atTick));
-              }, 'Split at ' + atSec + 's');
-            });
-            razorDone = true;
-          }
-        } catch(e) { console.warn('[cut_clip] split failed:', e.message); }
-      }
-
-      if (!razorDone) {
-        // No razor API available — dump what we know
-        var seqMethods = [];
-        for (var k in seq) if (typeof seq[k] === 'function' && /razor|split|cut/i.test(k)) seqMethods.push(k);
-        var edMethods = [];
-        if (ppro.SequenceEditor) {
-          try {
-            var ed = ppro.SequenceEditor.getEditor(seq);
-            for (var k2 in ed) if (typeof ed[k2] === 'function' && /razor|split|cut/i.test(k2)) edMethods.push(k2);
-          } catch(e) {}
-        }
-        throw new Error('No razor API in this Premiere version. Tried: seq.razor, editor.createRazorAction, item.createSplitAction. seq methods found: [' + seqMethods.join(',') + '], editor methods: [' + edMethods.join(',') + ']');
-      }
-      return { ok: true, data: { message: 'Razor cut ' + trackType + ' track ' + trackIdx + ' at ' + atSec + 's' } };
-    }
-    if (action === 'add_marker') {
-      var m = await seq.markers.createMarker(secToTicks(actionObj.time));
-      if (actionObj.name) m.name = actionObj.name;
-      return { ok: true, data: { message: 'Marker "' + actionObj.name + '" added at ' + actionObj.time + 's' } };
-    }
-    if (action === 'add_subtitle') {
-      var ct     = collectionToArray(seq.captionTracks);
-      var ctrack = ct[actionObj.captionTrackIndex || 0];
-      if (!ctrack) throw new Error('No caption track found. Create one in Premiere first.');
-      var clipEl = await ctrack.createCaption(
-        { ticks: secToTicks(actionObj.startTime) },
-        { ticks: secToTicks(actionObj.endTime) });
-      if (clipEl) clipEl.text = actionObj.text;
-      return { ok: true, data: { message: 'Subtitle added: "' + actionObj.text + '"' } };
-    }
-    if (action === 'set_volume') {
-      var atrack = collectionToArray(seq.audioTracks)[actionObj.trackIndex];
-      var aclip  = atrack && collectionToArray(atrack.clips)[actionObj.clipIndex];
-      if (!aclip) throw new Error('Audio clip not found');
-      var comps = collectionToArray(aclip.audioComponents);
-      for (var i = 0; i < comps.length; i++) {
-        if (comps[i].displayName === 'Volume') {
-          comps[i].properties.getPropertyByDisplayName('Level').setValue(actionObj.volumeDb, true);
-          break;
-        }
-      }
-      return { ok: true, data: { message: 'Volume set to ' + actionObj.volumeDb + 'dB' } };
-    }
-    if (action === 'move_clip') {
-      var mvtrack = collectionToArray(seq.videoTracks)[actionObj.trackIndex];
-      var mvclip  = mvtrack && collectionToArray(mvtrack.clips)[actionObj.clipIndex];
-      if (!mvclip) throw new Error('Clip not found');
-      mvclip.start = { ticks: secToTicks(actionObj.newStart) };
-      return { ok: true, data: { message: 'Clip moved to ' + actionObj.newStart + 's' } };
-    }
-    if (action === 'trim_clip') {
-      var tmtrack = collectionToArray(seq.videoTracks)[actionObj.trackIndex];
-      var tmclip  = tmtrack && collectionToArray(tmtrack.clips)[actionObj.clipIndex];
-      if (!tmclip) throw new Error('Clip not found');
-      if (actionObj.newIn  != null) tmclip.inPoint  = { ticks: secToTicks(actionObj.newIn) };
-      if (actionObj.newOut != null) tmclip.outPoint = { ticks: secToTicks(actionObj.newOut) };
-      return { ok: true, data: { message: 'Clip trimmed' } };
-    }
-    return { ok: false, error: 'Unknown action: ' + action };
+    return { ok: false, error: 'action "' + action + '" không hỗ trợ' };
   } catch(e) { return { ok: false, error: e.message }; }
 }
 

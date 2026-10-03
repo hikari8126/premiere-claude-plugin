@@ -27,7 +27,12 @@
   nút tab kiểu "Clawd đứng riêng" (không nền, vạch ngăn, vạch cam dưới chân); ô lệnh `[ô][+][gửi]` theo
   kiểu sizer của Voice Gen. **Bài học UXP:** textarea có sẵn margin 6px, không chịu `height`; flex `gap`
   không được hỗ trợ (dùng margin); `background: transparent` / `border: none` trên textarea bị bỏ qua.
-- ⏳ Phase B (whitelist + prompt mới), C (tạo bộ NAV), D (soát lỗi), E (version).
+- ✅ **Phase B** — `plugin/claude-actions.js` (whitelist: get_timeline_info, open_tab, voicegen_script, voicegen_sfx,
+  autocut_load; gen tốn credit → hỏi ngay trong mục lệnh), `bridge/chat-prompt.js` (prompt điều phối tiếng Việt),
+  CLI chat `--disallowedTools` (Bash/Edit/Write/Web…), gỡ nhánh cut/move/trim/set_volume/add_marker/add_subtitle.
+  `create_set` / `qc_run` CHƯA vào whitelist + prompt — thêm ở C/D (kèm test chat-prompt). Đã chạy thật trên DEV:
+  mở tab RAW ✓, "gen luôn" → hỏi → "Chỉ đẩy script" ✓ (không gen), lệnh cắt clip → báo chưa hỗ trợ, không action.
+- ⏳ Sửa thẻ gợi ý màn trống (user muốn làm cùng), rồi C (tạo bộ NAV), D (soát lỗi), E (version).
 - ➕ Thêm vào Phase E: bộ cài + Bridge app tự nâng Claude CLI khi < 2.1.280 (Opus 5.5 cần); thêm lệnh mẫu
   "tạo bộ NAV" / "soát lỗi" vào màn trống khi C/D xong; claude-tab.js nối `qc_run` / `create_set` vào cảnh
   Clawd `work`.

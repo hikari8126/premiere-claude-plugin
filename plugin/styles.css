@@ -303,6 +303,11 @@ body {
 .cl-act.is-run::before { content: '… '; color: var(--cl); }
 .cl-act.is-error { color: #f87171; }
 .cl-act.is-error::before { content: '✗ '; }
+.cl-act.is-ask { color: #e8c39e; }
+.cl-act.is-ask::before { content: '? '; color: var(--cl); font-weight: 700; }
+.cl-act.is-skip { color: var(--cl-dim); }
+.cl-act.is-skip::before { content: '– '; }
+.cl-askBtns { display: flex; margin-top: 6px; }
 .cl-rate { margin-top: 2px; font-size: 11.5px; color: #f59e0b; }
 .cl-rate .cl-rateCd { font-family: Menlo, monospace; color: var(--text); }
 
