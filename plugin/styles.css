@@ -320,25 +320,40 @@ body {
 
 /* Ô lệnh — Clawd đậu trên mép */
 .cl-dock { flex: 0 0 auto; padding: 0 10px 10px; background: #1e1e1e; border-top: 1px solid #2c2c2c; }
-.cl-perch { display: flex; align-items: flex-end; gap: 6px; height: 30px; padding-left: 2px; }
+.cl-perch { display: flex; align-items: flex-end; gap: 6px; height: 30px; padding-left: 46px; }  /* Clawd đậu trên mép trái ô lệnh (sau nút + 36px + gap 6px) */
 .cl-perchClawd { display: flex; align-items: flex-end; margin-bottom: -1px; }
 .cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cl-state.is-error { color: #f87171; }
 .cl-state.is-done { color: #34d399; }
-/* Ô lệnh: chính textarea mang nền + viền (UXP bỏ qua background:transparent / border:none
-   trên textarea và vẽ ô gốc nền đen, viền focus xanh) — nút gửi đứng cạnh, không lồng khung. */
+/* Hàng ô lệnh: [+] [ô] [gửi], cùng cao 36px, canh đáy (ô cao lên khi nhiều dòng). */
 .cl-input { display: flex; align-items: flex-end; gap: 6px; }
-#message-input {
-  flex: 1 1 auto; min-width: 0;
-  background: #141414; color: var(--text);
-  border: 1px solid #3d3d3d; border-radius: 9px; outline: none; resize: none;
-  font-family: inherit; font-size: 12.5px; font-style: normal; line-height: 18px;
-  padding: 7px 10px; height: 34px; box-sizing: border-box;
+/* Ô lệnh kiểu Voice Gen: cl-sizer (div thường, cùng font/padding) quyết định chiều cao,
+   textarea phủ tuyệt đối lên — UXP không chịu height đặt cho textarea (vẽ cao gấp đôi). */
+.cl-field { position: relative; flex: 1 1 auto; min-width: 0; min-height: 36px; }
+.cl-sizer, #message-input {
+  font-family: inherit; font-size: 12.5px; line-height: 18px;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; box-sizing: border-box;
 }
-#message-input:focus { border-color: var(--cl); background: #121212; }
-#message-input::placeholder { color: #8a8a8a; font-style: normal; }
+.cl-sizer {
+  width: 100%; min-height: 36px; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word;
+  max-height: 126px; overflow: hidden;            /* tối đa 6 dòng, quá thì textarea tự cuộn */
+  color: transparent; pointer-events: none; user-select: none;
+}
+#message-input {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; min-height: 0; overflow-y: auto;
+  background: rgba(0,0,0,0.35); color: var(--text); border-color: #3d3d3d;
+  resize: none; outline: none;
+}
+#message-input:focus { border-color: var(--cl); background: rgba(0,0,0,0.45); }
+#message-input::placeholder { color: #8a8a8a; }
+.cl-plus {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; border: 1px solid #3d3d3d;
+  color: var(--cl-dim); font-size: 18px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cl-plus:hover, .cl-plus.is-open { border-color: var(--cl); color: var(--cl); }
 .cl-send {
-  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; background: var(--cl);
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; background: var(--cl);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .cl-send:hover { background: var(--cl-hover); }
@@ -348,13 +363,13 @@ body {
 
 /* Nút lệnh tự tạo */
 .cl-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.cl-chips[hidden] { display: none; }
 .cl-chip {
   border: 1px solid #333; border-radius: 11px; padding: 2px 9px;
   font-size: 11px; color: #a3a3a3; cursor: pointer; white-space: nowrap;
 }
 .cl-chip:hover { border-color: var(--cl); color: var(--text); }
 .cl-chip.is-armed { border-color: #f87171; color: #fca5a5; }
-.cl-chipAdd { padding: 2px 8px; color: var(--cl-dim); }
 .cl-scForm { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .cl-scForm[hidden] { display: none; }
 .cl-scName, .cl-scPrompt {

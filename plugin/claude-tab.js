@@ -272,11 +272,14 @@
   }
 
   // ── Ô lệnh ──────────────────────────────────────────────────────────────────
-  // UXP đo scrollHeight của textarea không ổn → cao theo số dòng (tối đa 6):
-  // 18px/dòng + padding 14 + viền 2 (box-sizing: border-box).
+  // Chiều cao ô = div #clSizer chứa cùng chữ (kiểu Voice Gen) — UXP không chịu height
+  // của textarea. Dòng cuối rỗng (vừa Shift+Enter) thêm ' ' để sizer tính cả dòng đó.
+  var sizerEl = $('clSizer'), fieldEl = $('clField');
   function resizeInput() {
-    var lines = String(input.value || '').split('\n').length;
-    input.style.height = (Math.min(6, Math.max(1, lines)) * 18 + 16) + 'px';
+    var v = String(input.value || '');
+    sizerEl.textContent = (v || ' ') + (/\n$/.test(v) ? ' ' : '');
+    // UXP đôi khi vẽ textarea tuyệt đối lệch tới khi có relayout — ép relayout như vgReflow.
+    fieldEl.style.display = 'none'; void fieldEl.offsetHeight; fieldEl.style.display = '';
     setSendMode();
   }
   function setSendMode() {
@@ -337,8 +340,10 @@
   }
   function saveShortcuts(arr) { try { localStorage.setItem(SHORTCUT_KEY, JSON.stringify(arr)); } catch (e) {} }
   function renderShortcuts() {
-    chipsEl.querySelectorAll('.cl-chip:not(.cl-chipAdd)').forEach(function (n) { n.remove(); });
-    loadShortcuts().forEach(function (sc, idx) {
+    chipsEl.innerHTML = '';
+    var list = loadShortcuts();
+    chipsEl.hidden = !list.length;
+    list.forEach(function (sc, idx) {
       var chip = document.createElement('div');
       chip.className = 'cl-chip';
       chip.setAttribute('role', 'button');
@@ -359,7 +364,7 @@
         clearTimeout(armTimer);
         armTimer = setTimeout(function () { chip.classList.remove('is-armed'); chip.textContent = sc.name; }, 3000);
       });
-      chipsEl.insertBefore(chip, addEl);
+      chipsEl.appendChild(chip);
     });
   }
   var scName = $('clScName'), scPrompt = $('clScPrompt');
@@ -367,15 +372,19 @@
     el.addEventListener('focus', window.claimKeyboard);
     el.addEventListener('blur', window.releaseKeyboard);
   });
+  function setFormOpen(open) {
+    formEl.hidden = !open;
+    addEl.classList.toggle('is-open', open);
+  }
   addEl.addEventListener('click', function () {
-    formEl.hidden = !formEl.hidden;
+    setFormOpen(formEl.hidden);
     if (!formEl.hidden) {
       scName.value = '';
       scPrompt.value = String(input.value || '').trim();   // đang gõ dở lệnh nào → gợi ý lưu luôn
       scName.focus();
     }
   });
-  $('clScCancel').addEventListener('click', function () { formEl.hidden = true; });
+  $('clScCancel').addEventListener('click', function () { setFormOpen(false); });
   $('clScSave').addEventListener('click', function () {
     var name = scName.value.trim(), prompt = scPrompt.value.trim();
     if (!name) { scName.focus(); return; }
@@ -384,7 +393,7 @@
     arr.push({ name: name, prompt: prompt });
     saveShortcuts(arr);
     renderShortcuts();
-    formEl.hidden = true;
+    setFormOpen(false);
   });
 
   // ── Khởi động ───────────────────────────────────────────────────────────────

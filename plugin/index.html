@@ -83,8 +83,14 @@
 
   <div class="cl-dock">
     <div class="cl-perch"><span class="cl-perchClawd" id="clawdDock"></span><span class="cl-state" id="clState">Sẵn sàng</span></div>
-    <div class="cl-input" id="clInputRow">
-      <textarea id="message-input" rows="1" placeholder="Gõ lệnh… (Enter gửi, Shift+Enter xuống dòng)"></textarea>
+    <!-- [+ thêm nút lệnh] [ô lệnh] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
+         (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
+    <div class="cl-input">
+      <div class="cl-plus" id="add-shortcut-btn" role="button" aria-label="Lưu lệnh thành nút">+</div>
+      <div class="cl-field" id="clField">
+        <div class="cl-sizer" id="clSizer" aria-hidden="true"></div>
+        <textarea id="message-input" rows="1" spellcheck="false" placeholder="Gõ lệnh… (Enter để gửi)"></textarea>
+      </div>
       <div class="cl-send" id="send-btn" role="button" aria-label="Gửi"></div>
     </div>
     <div class="cl-scForm" id="clScForm" hidden>
@@ -95,9 +101,7 @@
         <div class="cl-btn cl-btn--primary" id="clScSave" role="button">Lưu nút</div>
       </div>
     </div>
-    <div class="cl-chips" id="quick-actions">
-      <div class="cl-chip cl-chipAdd" id="add-shortcut-btn" role="button" aria-label="Thêm nút lệnh">+</div>
-    </div>
+    <div class="cl-chips" id="quick-actions" hidden></div>
   </div>
 </div><!-- /tab-claude -->
 
