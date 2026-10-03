@@ -83,14 +83,14 @@
 
   <div class="cl-dock">
     <div class="cl-perch"><span class="cl-perchClawd" id="clawdDock"></span><span class="cl-state" id="clState">Sẵn sàng</span></div>
-    <!-- [+ thêm nút lệnh] [ô lệnh] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
+    <!-- [ô lệnh] [+ lưu thành nút] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
          (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
     <div class="cl-input">
-      <div class="cl-plus" id="add-shortcut-btn" role="button" aria-label="Lưu lệnh thành nút">+</div>
       <div class="cl-field" id="clField">
         <div class="cl-sizer" id="clSizer" aria-hidden="true"></div>
         <textarea id="message-input" rows="1" spellcheck="false" placeholder="Gõ lệnh… (Enter để gửi)"></textarea>
       </div>
+      <div class="cl-plus" id="add-shortcut-btn" role="button" aria-label="Lưu lệnh thành nút">+</div>
       <div class="cl-send" id="send-btn" role="button" aria-label="Gửi"></div>
     </div>
     <div class="cl-scForm" id="clScForm" hidden>

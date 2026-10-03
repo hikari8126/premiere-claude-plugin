@@ -233,7 +233,8 @@ body {
 
 /* ══ Tab Claude (Clawd) ═══════════════════════════════════════════════════
    Ô lệnh + nhật ký lệnh. Màu cam Claude (--cl) chỉ dùng cho Clawd, dấu ›, nút
-   chính — phần còn lại theo nền tối chung của plugin. */
+   chính — phần còn lại theo nền tối chung của plugin.
+   UXP KHÔNG hỗ trợ flex `gap` → khoảng cách giữa phần tử dùng margin. */
 :root { --cl: #D97757; --cl-hover: #c4653f; --cl-a08: rgba(217,119,87,0.08); --cl-a25: rgba(217,119,87,0.25); --cl-dim: #8f8f8f; }
 
 /* Nút tab Claude (phương án C): không nền, không dáng tab — Clawd đứng riêng, vạch ngăn
@@ -262,12 +263,12 @@ body {
 
 /* Dòng sequence đang mở */
 .cl-seq {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  flex: 0 0 auto; display: flex; align-items: center;
   padding: 7px 12px; border-bottom: 1px solid #262626;
   font-size: 11px; color: var(--cl-dim);
 }
 .cl-seqName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cl-clear { flex: 0 0 auto; color: var(--cl-dim); cursor: pointer; padding: 1px 6px; border-radius: 4px; }
+.cl-clear { flex: 0 0 auto; margin-left: 8px; color: var(--cl-dim); cursor: pointer; padding: 1px 6px; border-radius: 4px; }
 .cl-clear:hover { color: var(--cl); background: var(--cl-a08); }
 .cl-clear.is-armed { color: #fca5a5; }
 .cl-clear[hidden] { display: none; }
@@ -283,8 +284,8 @@ body {
 
 .cl-entry { margin-bottom: 16px; flex: 0 0 auto; }
 .cl-entry.is-past { opacity: 0.72; }
-.cl-cmd { display: flex; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.45; white-space: pre-wrap; }
-.cl-chev { color: var(--cl); font-weight: 700; flex: 0 0 auto; }
+.cl-cmd { display: flex; font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.45; white-space: pre-wrap; }
+.cl-chev { color: var(--cl); font-weight: 700; flex: 0 0 auto; margin-right: 6px; }
 .cl-cmdText { flex: 1 1 auto; min-width: 0; }
 .cl-reply { margin: 4px 0 0 14px; font-size: 12px; line-height: 1.55; color: #c9c9c9; }
 .cl-reply.is-pending { color: var(--cl-dim); }
@@ -294,7 +295,8 @@ body {
 .cl-reply pre code { background: none; padding: 0; }
 .cl-reply strong { color: var(--text); font-weight: 600; }
 /* Kết quả action: thụt vào, hairline 1px bên trái */
-.cl-result { margin: 6px 0 0 14px; padding-left: 10px; border-left: 1px solid #3a3a3a; display: flex; flex-direction: column; gap: 3px; }
+.cl-result { margin: 6px 0 0 14px; padding-left: 10px; border-left: 1px solid #3a3a3a; display: flex; flex-direction: column; }
+.cl-act + .cl-act { margin-top: 3px; }
 .cl-result:empty { display: none; }
 .cl-act { font-size: 11.5px; color: #b5b5b5; }
 .cl-act.is-ok::before { content: '✓ '; color: #34d399; }
@@ -315,18 +317,18 @@ body {
 .cl-examples .cl-ex { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 8px 11px; border-top: 1px solid #292929; cursor: pointer; }
 .cl-examples .cl-ex:first-child { border-top: none; }
 .cl-ex:hover { background: var(--cl-a08); }
-.cl-exCmd { display: flex; gap: 6px; font-size: 12px; color: var(--text); }
+.cl-exCmd { display: flex; font-size: 12px; color: var(--text); }
 .cl-exSub { font-size: 11px; color: var(--cl-dim); margin: 2px 0 0 13px; }
 
 /* Ô lệnh — Clawd đậu trên mép */
 .cl-dock { flex: 0 0 auto; padding: 0 10px 10px; background: #1e1e1e; border-top: 1px solid #2c2c2c; }
-.cl-perch { display: flex; align-items: flex-end; gap: 6px; height: 30px; padding-left: 46px; }  /* Clawd đậu trên mép trái ô lệnh (sau nút + 36px + gap 6px) */
-.cl-perchClawd { display: flex; align-items: flex-end; margin-bottom: -1px; }
+.cl-perch { display: flex; align-items: flex-end; height: 30px; padding-left: 4px; }  /* Clawd đậu trên mép trái ô lệnh */
+.cl-perchClawd { display: flex; align-items: flex-end; margin: 0 6px -1px 0; }
 .cl-state { font-size: 11px; color: var(--cl-dim); padding-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cl-state.is-error { color: #f87171; }
 .cl-state.is-done { color: #34d399; }
-/* Hàng ô lệnh: [+] [ô] [gửi], cùng cao 36px, canh đáy (ô cao lên khi nhiều dòng). */
-.cl-input { display: flex; align-items: flex-end; gap: 6px; }
+/* Hàng ô lệnh: [ô] [+] [gửi], cùng cao 36px, canh đáy (ô cao lên khi nhiều dòng). */
+.cl-input { display: flex; align-items: flex-end; }
 /* Ô lệnh kiểu Voice Gen: cl-sizer (div thường, cùng font/padding) quyết định chiều cao,
    textarea phủ tuyệt đối lên — UXP không chịu height đặt cho textarea (vẽ cao gấp đôi). */
 .cl-field { position: relative; flex: 1 1 auto; min-width: 0; min-height: 36px; }
@@ -343,17 +345,18 @@ body {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; min-height: 0; overflow-y: auto;
   background: rgba(0,0,0,0.35); color: var(--text); border-color: #3d3d3d;
   resize: none; outline: none;
+  margin: 0;                                       /* UXP cho textarea sẵn margin 6px → lệch, đè nút gửi */
 }
 #message-input:focus { border-color: var(--cl); background: rgba(0,0,0,0.45); }
 #message-input::placeholder { color: #8a8a8a; }
 .cl-plus {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; border: 1px solid #3d3d3d;
+  flex: 0 0 auto; width: 36px; height: 36px; margin-left: 6px; border-radius: 9px; border: 1px solid #3d3d3d;
   color: var(--cl-dim); font-size: 18px; line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .cl-plus:hover, .cl-plus.is-open { border-color: var(--cl); color: var(--cl); }
 .cl-send {
-  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; background: var(--cl);
+  flex: 0 0 auto; width: 36px; height: 36px; margin-left: 6px; border-radius: 9px; background: var(--cl);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 .cl-send:hover { background: var(--cl-hover); }
@@ -362,22 +365,24 @@ body {
 .cl-send.is-stop:hover { background: #4a4a4a; }
 
 /* Nút lệnh tự tạo */
-.cl-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.cl-chips { display: flex; flex-wrap: wrap; margin-top: 8px; }
 .cl-chips[hidden] { display: none; }
 .cl-chip {
-  border: 1px solid #333; border-radius: 11px; padding: 2px 9px;
+  border: 1px solid #333; border-radius: 11px; padding: 2px 9px; margin: 0 5px 5px 0;
   font-size: 11px; color: #a3a3a3; cursor: pointer; white-space: nowrap;
 }
 .cl-chip:hover { border-color: var(--cl); color: var(--text); }
 .cl-chip.is-armed { border-color: #f87171; color: #fca5a5; }
-.cl-scForm { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.cl-scForm { margin-top: 8px; display: flex; flex-direction: column; }
+.cl-scForm > * + * { margin-top: 6px; }
 .cl-scForm[hidden] { display: none; }
 .cl-scName, .cl-scPrompt {
   background: #151515; border: 1px solid #3d3d3d; border-radius: 6px; color: var(--text);
   font-family: inherit; font-size: 12px; padding: 5px 8px; outline: none; resize: none;
 }
 .cl-scName:focus, .cl-scPrompt:focus { border-color: var(--cl); }
-.cl-scActions { display: flex; justify-content: flex-end; gap: 6px; }
+.cl-scActions { display: flex; justify-content: flex-end; }
+.cl-btn + .cl-btn { margin-left: 6px; }
 .cl-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid #3d3d3d; color: #c9c9c9; cursor: pointer; }
 .cl-btn:hover { border-color: #555; }
 .cl-btn--primary { background: var(--cl); border-color: var(--cl); color: #1a1a1a; font-weight: 600; }
