@@ -268,6 +268,9 @@
         if (!st.bulk || st.bulk.sig !== sig) await enterBulk(sel, sig);
         return;
       }
+      // Danh sách tab Claude đưa sang (ghim): bỏ chọn ở Project panel không xoá; chọn đúng
+      // 1 sequence (hoặc một bộ ≥2 khác ở trên) mới thoát.
+      if (st.bulk && st.bulk.pinned && sel.length !== 1) return;
       if (st.bulk) exitBulk();
       var s = await RCP.stamp(true);
       if (!s.ok) {
@@ -376,10 +379,10 @@
     st.view = st.prefs.mode === 'both' ? (st.view || 'source') : st.prefs.mode;
     paintAll();
   }
-  async function enterBulk(seqs, sig) {
+  async function enterBulk(seqs, sig, pinned) {
     var keep = {};
     if (st.bulk) st.bulk.items.forEach(function (it) { keep[it.id] = it; });
-    st.bulk = { sig: sig, active: 0, items: seqs.map(function (q) {
+    st.bulk = { sig: sig, active: 0, pinned: !!pinned, items: seqs.map(function (q) {
       var id = RCP.guidOf(q), old = keep[id];
       return old || { seq: q, id: id, name: String(q.name || ''), label: verLabel(q.name), read: null, dest: null,
                       unpicked: { source: {}, render: {} }, include: true, status: 'wait', error: '' };
@@ -1377,4 +1380,28 @@
   }
 
   init();
+
+  // ── Cho tab Claude điều phối (claude-tab.js) ──────────────────────────
+  // Chuẩn bị tab RAW cho các sequence tab Claude chọn: đặt mode, 1 sequence → mở lên timeline
+  // (tab tự đọc), ≥ 2 → hàng loạt ghim + đọc hết. KHÔNG tự bấm Xuất — việc nặng, người dùng
+  // xem lại thư mục xuất / clip rồi bấm XUẤT trong tab RAW.
+  window.RawcutAPI = {
+    modes: MODES,
+    prepare: async function (seqs, mode) {
+      if (st.busy || st.running) throw new Error('tab RAW đang chạy lượt khác');
+      if (!seqs || !seqs.length) throw new Error('chưa có sequence nào');
+      if (mode && MODES[mode] && mode !== st.prefs.mode) { st.prefs.mode = mode; savePrefs(); paintModes(); }
+      if (typeof window.tabOpen === 'function') window.tabOpen('rawcut');
+      if (seqs.length === 1) {
+        if (st.bulk) exitBulk();
+        var ok = await RCP.activate(seqs[0]);
+        if (!ok) throw new Error('không mở được sequence lên timeline');
+        setTimeout(watchTick, 50);
+        return { count: 1 };
+      }
+      await enterBulk(seqs, seqs.map(function (q) { return RCP.guidOf(q); }).join(','), true);
+      var nOk = st.bulk ? st.bulk.items.filter(function (it) { return it.status === 'ok'; }).length : 0;
+      return { count: seqs.length, ready: nOk };
+    }
+  };
 })();

@@ -10,7 +10,23 @@ test("parse nhiều khối ```actions, bỏ khối JSON hỏng / phần tử kh�
 });
 
 test("danh sách action cho phép", () => {
-  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["autocut_load", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "voicegen_script", "voicegen_sfx"]);
+  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["autocut_load", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "rawcut", "resize", "voicegen_script", "voicegen_sfx"]);
+});
+
+test("resize: nền tảng GG/FB/PIN, ratio chuẩn hoá về khoá tab Resize, luôn hỏi xác nhận", () => {
+  const r = CLA.check({ action: "resize", platform: "FB", ratios: ["9:16", "4x5", "4-5"], items: ["Sequence / FB / 39x ▸ A vid39.0"] });
+  assert.strictEqual(r.mode, "confirm");
+  assert.deepStrictEqual(r.action.ratios, ["9-16", "4-5"]);
+  assert.deepStrictEqual(CLA.check({ action: "resize", platform: "GG" }).action.items, []);
+  assert.match(CLA.check({ action: "resize", platform: "TT" }).error, /GG, FB hoặc PIN/);
+  assert.match(CLA.check({ action: "resize", platform: "GG", ratios: ["16:9"] }).error, /16:9/);
+  assert.match(CLA.check({ action: "resize", platform: "GG", items: "x" }).error, /danh sách/);
+});
+
+test("rawcut: mode source/render/both, luôn hỏi xác nhận", () => {
+  assert.strictEqual(CLA.check({ action: "rawcut", mode: "both", items: [] }).mode, "confirm");
+  assert.deepStrictEqual(CLA.check({ action: "rawcut", mode: "source" }).action.items, []);
+  assert.match(CLA.check({ action: "rawcut", mode: "raw" }).error, /source, render hoặc both/);
 });
 
 test("move_items / fix_voice_bins luôn hỏi xác nhận; move_items cần item + to", () => {

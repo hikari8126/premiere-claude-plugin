@@ -76,3 +76,18 @@ test("resolveMoves: khớp item theo bin + tên; báo lỗi rõ khi không có /
   assert.match(r[3].error, /đúng bin/);
   assert.match(r[4].error, /bin đích/);
 });
+
+test("resolveSeqRefs: chỉ nhận sequence, báo lỗi rõ", () => {
+  const S = (path, name) => ({ path, name, isFolder: false, mediaType: "sequence" });
+  const items = project.concat([S("Sequence / FB / 39x", "AeriSoft vid39.0 [c.a] [b]"), S("Sequence / FB / 39x", "dup"), S("Sequence / FB / 39x", "dup")]);
+  const r = B.resolveSeqRefs(items, [
+    "Sequence / FB / 39x ▸ AeriSoft vid39.0 [c.a] [b]",
+    "Voice Over / 40x ▸ 40.2 - Audrey.mp3",
+    "Sequence / FB / 39x ▸ dup",
+    "Sequence ▸ không có",
+  ]);
+  assert.strictEqual(r[0].index, items.length - 3);
+  assert.match(r[1].error, /không phải sequence/);
+  assert.match(r[2].error, /trùng tên/);
+  assert.match(r[3].error, /không tìm thấy/);
+});

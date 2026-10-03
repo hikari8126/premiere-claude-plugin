@@ -40,6 +40,22 @@ var PTOOLS = (function () {
     return { items: items, rows: BINC.resolveMoves(items, plan.map(function (p) { return { item: p.ref, to: p.to }; })) };
   }
 
+  // Ref sequence (tab Claude) → { seqs: [Sequence], rows: [{ref, name, error}] }. Danh sách trống
+  // → seqs rỗng: tab Resize/RAW tự lấy sequence đang chọn ở Project panel / đang mở.
+  async function sequencesFor(refs) {
+    if (!refs || !refs.length) return { seqs: [], rows: [] };
+    var items = await projectItems(true);
+    var rows = BINC.resolveSeqRefs(items, refs), seqs = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.error) continue;
+      var sq = null;
+      try { sq = await window.ResizeAPI.seqFromItem(items[r.index].item); } catch (e) {}
+      if (sq) seqs.push(sq); else r.error = 'không mở được sequence';
+    }
+    return { seqs: seqs, rows: rows };
+  }
+
   // Chuyển các dòng đã chọn (rows từ resolve/planVoice). onStep(i, total) để cập nhật nút.
   async function move(items, rows, onStep) {
     var proj = await getActiveProject(), done = 0, failed = [];
@@ -54,6 +70,6 @@ var PTOOLS = (function () {
     return { done: done, failed: failed };
   }
 
-  return { snapshot: snapshot, resolve: resolve, planVoice: planVoice, move: move, invalidate: invalidate };
+  return { snapshot: snapshot, sequencesFor: sequencesFor, resolve: resolve, planVoice: planVoice, move: move, invalidate: invalidate };
 })();
 window.PTOOLS = PTOOLS;

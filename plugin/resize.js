@@ -390,9 +390,10 @@
   }
 
   // R3: lập kế hoạch (chưa đụng project) để xem trước + đánh dấu tên trùng.
-  async function planResize(platform, wanted) {
+  // seqs: danh sách Sequence truyền thẳng (tab Claude) — bỏ trống thì lấy selection / timeline.
+  async function planResize(platform, wanted, seqs) {
     var project = await getActiveProject();
-    var src = await resolveSources(project);
+    var src = (seqs && seqs.length) ? { seqs: seqs, from: 'claude' } : await resolveSources(project);
     if (!src.seqs.length) return { ok: false, error: 'Chưa chọn hoặc mở sequence nào' };
     var jobs = await snapshotJobs(project, src.seqs);
     var plan = [];
@@ -893,4 +894,27 @@
   }
 
   init();
+
+  // ── Cho tab Claude điều phối (claude-tab.js) ──────────────────────────
+  // Cùng các bước của nút RESIZE: plan (xem trước, đánh dấu trùng tên) → run (tạo thật).
+  // prefs (track nền, guide text) lấy theo cài đặt tab Resize hiện tại.
+  window.ResizeAPI = {
+    platforms: RSZ.PLATFORM_TARGETS,
+    seqFromItem: async function (item) {
+      var project = await getActiveProject(), cp = null;
+      try { cp = ppro.ClipProjectItem.cast(item); } catch (e) {}
+      return seqFromProjectItem(project, item, cp);
+    },
+    plan: function (platform, wanted, seqs) {
+      if (!RSZ.PLATFORM_TARGETS[platform]) return Promise.resolve({ ok: false, error: 'nền tảng "' + platform + '" không có (GG / FB / PIN)' });
+      return planResize(platform, wanted && wanted.length ? wanted : RSZ.PLATFORM_TARGETS[platform], seqs);
+    },
+    run: async function (platform, plan, onRow) {
+      if (rszState.busy) throw new Error('tab Resize đang chạy lượt khác');
+      clearPending();
+      setBusy(true);
+      try { return await runResize(platform, plan, rszState.prefs, onRow || function () {}); }
+      finally { setBusy(false); refreshSource(true); }
+    }
+  };
 })();

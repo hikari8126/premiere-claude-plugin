@@ -118,7 +118,23 @@ var BINC = (function () {
     });
   }
 
-  return { SEP: SEP, norm: norm, isVoiceRoot: isVoiceRoot, samePath: samePath, under: under, refOf: refOf, parseRef: parseRef,
+  // Tham chiếu sequence (từ list_bin / find_items) → dòng đã đối chiếu: [{ref, name, index, error}].
+  // Chỉ nhận item loại sequence; không có / trùng tên trong cùng bin → báo lỗi.
+  function resolveSeqRefs(items, refs) {
+    return (refs || []).map(function (ref) {
+      var r = parseRef(ref), row = { ref: refOf({ path: r.path, name: r.name }), name: r.name, index: -1, error: '' };
+      if (!r.name) { row.error = 'thiếu tên sequence'; return row; }
+      var idx = [];
+      items.forEach(function (it, i) { if (!it.isFolder && norm(it.name) === norm(r.name) && samePath(it.path, r.path)) idx.push(i); });
+      if (!idx.length) row.error = 'không tìm thấy trong project';
+      else if (idx.length > 1) row.error = 'có ' + idx.length + ' item trùng tên trong cùng bin';
+      else if (items[idx[0]].mediaType !== 'sequence') row.error = 'không phải sequence';
+      else row.index = idx[0];
+      return row;
+    });
+  }
+
+  return { SEP: SEP, norm: norm, resolveSeqRefs: resolveSeqRefs, isVoiceRoot: isVoiceRoot, samePath: samePath, under: under, refOf: refOf, parseRef: parseRef,
            binTree: binTree, listBin: listBin, findItems: findItems, voiceTarget: voiceTarget,
            planVoiceMoves: planVoiceMoves, resolveMoves: resolveMoves };
 })();

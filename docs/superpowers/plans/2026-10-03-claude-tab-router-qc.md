@@ -37,7 +37,15 @@
   (`cl_mode`); prompt FREE_PROMPT (research, có nguồn, vẫn giao việc khi được bảo); API key: web_search/web_fetch phía
   server + pause_turn; render tiêu đề/danh sách/link/nghiêng; link mở qua `/open-url`; ngữ cảnh 8 lệnh gần nhất.
   Chạy thật DEV: research áo giữ nhiệt → tìm web 3 lần, 5 tiêu đề, 10 link ✓; "file voice bộ 39" → liệt kê đúng ✓.
+- ✅ **Claude xem project + chuyển item** (user yêu cầu "linh hoạt"): MCP premiere (`bridge/premiere-mcp.js`, stdio) với
+  tool đọc project_bins / list_bin / find_items; plugin gửi kèm `/chat` bản chụp bin/item → bridge trả lời
+  (`project-tools.js`). **Bài học UXP:** request plugin → bridge bị xếp hàng khi stream /chat còn mở → không được
+  hỏi ngược plugin giữa lượt. Action move_items + fix_voice_bins (thẻ tick, bấm Chuyển).
+- ✅ **Điều phối Resize + RAW**: action `resize {platform, items?, ratios?}` (window.ResizeAPI: plan → thẻ → run) và
+  `rawcut {mode, items?}` (window.RawcutAPI.prepare: 1 sequence → mở lên timeline, ≥2 → hàng loạt ghim; KHÔNG tự
+  bấm Xuất). Chạy thật DEV: resize 3 seq FB 39 → 4x5 FB (thẻ chờ) ✓, RAW source 3 seq ✓ (thẻ chờ).
 - ⏳ Sửa thẻ gợi ý màn trống (user muốn làm cùng), rồi C (tạo bộ NAV), D (soát lỗi), E (version).
+  User từng nói sẽ gửi luồng Resize chi tiết — hiện dùng đúng hành vi tab Resize.
 - ➕ Thêm vào Phase E: bộ cài + Bridge app tự nâng Claude CLI khi < 2.1.280 (Opus 5.5 cần); thêm lệnh mẫu
   "tạo bộ NAV" / "soát lỗi" vào màn trống khi C/D xong; claude-tab.js nối `qc_run` / `create_set` vào cảnh
   Clawd `work`.

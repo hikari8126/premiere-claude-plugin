@@ -8,6 +8,14 @@ var CLA = (function () {
   var TAB_NAMES = { voicegen: 'Voice Gen', autocut: 'Autocut', subtext: 'Tạo Sub', unnest: 'Un-nest',
                     watch: 'Watch', resize: 'Resize', rawcut: 'RAW' };
 
+  var PLATFORMS = ['GG', 'FB', 'PIN'];
+  // "9:16" / "9x16" / "9-16" → khoá ratio của tab Resize ("9-16").
+  function normRatio(v) {
+    var m = String(v || '').trim().match(/^(\d+)\s*[:x×\-\/]\s*(\d+)$/i);
+    var k = m ? m[1] + '-' + m[2] : '';
+    return ['9-16', '4-5', '1-1', '2-3'].indexOf(k) >= 0 ? k : '';
+  }
+
   function parse(text) {
     var out = [], re = /```actions\s*([\s\S]*?)```/g, m;
     while ((m = re.exec(String(text || ''))) !== null) {
@@ -48,7 +56,29 @@ var CLA = (function () {
       return { mode: 'confirm' };
     },
     // Plugin tự quét: voice "N.x - …" nằm sai bin / ngoài "Voice Over / Nx" → thẻ xem trước.
-    fix_voice_bins: function () { return { mode: 'confirm' }; }
+    fix_voice_bins: function () { return { mode: 'confirm' }; },
+    // Nhân bản sequence sang ratio khác (tab Resize). items: ref "<bin> ▸ <tên sequence>";
+    // trống = sequence đang chọn ở Project panel / đang mở. ratios trống = mọi ratio của nền tảng.
+    resize: function (a) {
+      if (PLATFORMS.indexOf(a.platform) < 0) return { error: 'platform phải là GG, FB hoặc PIN' };
+      if (a.items != null && !Array.isArray(a.items)) return { error: 'items phải là danh sách' };
+      var rs = [];
+      for (var i = 0; i < (a.ratios || []).length; i++) {
+        var k = normRatio(a.ratios[i]);
+        if (!k) return { error: 'ratio "' + a.ratios[i] + '" không có (9:16, 4:5, 1:1, 2:3)' };
+        if (rs.indexOf(k) < 0) rs.push(k);
+      }
+      a.ratios = rs;
+      a.items = a.items || [];
+      return { mode: 'confirm' };
+    },
+    // Chuẩn bị tab RAW (xuất từng cut). mode: source (raw/) | render (edited/) | both.
+    rawcut: function (a) {
+      if (['source', 'render', 'both'].indexOf(a.mode) < 0) return { error: 'mode phải là source, render hoặc both' };
+      if (a.items != null && !Array.isArray(a.items)) return { error: 'items phải là danh sách' };
+      a.items = a.items || [];
+      return { mode: 'confirm' };
+    }
   };
 
   function check(action) {

@@ -25,6 +25,20 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
 - fix_voice_bins {}
     Plugin tự soát cả project: voice có số phiên bản ("40.0 - <tên voice>") nằm sai bin / ngoài bin
     chuẩn → bảng xem trước để chuyển về "Voice Over / 40x". Dùng khi bro hỏi đúng việc này.
+- resize {platform, items?, ratios?}
+    Nhân bản sequence sang khung khác (tab Resize): đổi frame size, canh text/MOGRT theo guide,
+    bản mới nằm cùng bin với nguồn, tên = tên nguồn bỏ đuôi ratio cũ + " 4x5 FB" (ratio + nền tảng).
+    platform: GG (Google: 9:16 / 4:5 / 1:1) · FB (Facebook: 9:16 / 4:5) · PIN (Pinterest: 2:3).
+    ratios (tuỳ chọn) lọc bớt, vd ["4:5"]; ratio trùng ratio nguồn tự bỏ. Nguồn phải là 9:16 / 4:5 / 1:1.
+    items = ref "<bin> ▸ <tên sequence>" (tìm bằng find_items / list_bin, loại "(sequence)");
+    bỏ trống = sequence bro đang chọn ở Project panel / đang mở. Plugin hiện danh sách bản sẽ tạo
+    (trùng tên thì bỏ qua), bro bấm Tạo mới chạy.
+- rawcut {mode, items?}
+    Chuẩn bị tab RAW xuất từng cut của timeline ra file riêng (+ clips.csv, manifest.json):
+    mode: source (cắt từ file gốc → <Sản phẩm>/Output/ACT/<vN>/raw/) · render (Premiere render từng
+    cut kèm màu/text/effect → .../edited/) · both. vN lấy từ tên sequence (vd "vid39.1" → v39.1).
+    items như resize (bỏ trống = đang chọn / đang mở). Plugin mở tab RAW, đọc sẵn timeline; bro xem
+    lại rồi tự bấm XUẤT trong tab RAW — nói rõ là chưa xuất.
 
 Cách gọi action — thêm đúng một khối:
 \`\`\`actions

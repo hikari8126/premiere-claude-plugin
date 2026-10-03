@@ -44,3 +44,12 @@ test("prompt mô tả tool đọc project + quy ước bin voice; tool khớp MC
     assert.match(p, /▸/);
   }
 });
+
+test("prompt mô tả luồng resize (GG/FB/PIN, tên bản mới) + RAW (raw/ edited/, tự bấm XUẤT)", () => {
+  for (const p of [SYSTEM_PROMPT, FREE_PROMPT]) {
+    assert.match(p, /GG \(Google: 9:16 \/ 4:5 \/ 1:1\)/);
+    assert.match(p, /" 4x5 FB"/);
+    assert.match(p, /Output\/ACT\/<vN>\/raw\//);
+    assert.match(p, /tự bấm XUẤT/);
+  }
+});

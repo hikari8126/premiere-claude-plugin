@@ -253,8 +253,129 @@
     return { cls: 'is-ask', text: voice ? 'Soát bin voice' : 'Chuyển item' };
   }
 
+  // ── Thẻ chung: danh sách dòng (bấm để bỏ chọn) + nút chính / Bỏ qua ───────────────
+  // lines: [{name, sub, bad}] — dòng bad hiện mờ, không chọn được. Trả { picked(), go, btns }.
+  function pickList(box, lines, goLabel, onGo, onSkip) {
+    lines.forEach(function (ln) {
+      var line = document.createElement('div');
+      line.className = 'cl-mv' + (ln.bad ? ' is-bad' : ' is-on');
+      line.innerHTML = '<span class="cl-mvTick"></span><span class="cl-mvBody"><span class="cl-mvName"></span><span class="cl-mvPath"></span></span>';
+      line.querySelector('.cl-mvName').textContent = ln.name;
+      line.querySelector('.cl-mvPath').textContent = ln.sub || '';
+      if (!ln.bad) line.addEventListener('click', function () { line.classList.toggle('is-on'); sync(); });
+      ln._line = line;
+      box.appendChild(line);
+    });
+    var btns = document.createElement('div');
+    btns.className = 'cl-askBtns';
+    btns.innerHTML = '<div class="cl-btn cl-btn--primary" role="button"></div><div class="cl-btn" role="button">Bỏ qua</div>';
+    var go = btns.children[0];
+    box.appendChild(btns);
+    function picked() { return lines.filter(function (ln) { return !ln.bad && ln._line.classList.contains('is-on'); }); }
+    function sync() { var n = picked().length; go.textContent = goLabel(n); go.classList.toggle('is-disabled', !n); }
+    sync();
+    if (!lines.some(function (ln) { return !ln.bad; })) go.remove();
+    go.addEventListener('click', function () {
+      var sel = picked();
+      if (!sel.length) return;
+      btns.remove();
+      box.querySelectorAll('.cl-mv').forEach(function (l) { l.style.pointerEvents = 'none'; });
+      onGo(sel);
+    });
+    btns.children[1].addEventListener('click', function () { box.remove(); onSkip(); });
+    scrollEnd();
+  }
+
+  // Resize: xem trước đúng như nút RESIZE của tab Resize (tên bản mới, trùng tên bỏ qua) → Tạo.
+  function askResize(entry, rec, idx, a) {
+    var row = addAct(entry, 'is-run', 'Đang lập danh sách resize ' + a.platform + '…');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    function fail(msg) { box.remove(); row.className = 'cl-act is-error'; row.textContent = msg; save('is-error', msg); setClawd('fail', 'Lỗi', 'is-error'); }
+    if (!window.ResizeAPI) { fail('Tab Resize chưa sẵn sàng'); return { cls: 'is-error', text: 'Tab Resize chưa sẵn sàng' }; }
+    PTOOLS.sequencesFor(a.items).then(async function (src) {
+      if (a.items.length && !src.seqs.length) return fail('Không tìm thấy sequence: ' + src.rows.map(function (r) { return r.name + ' (' + r.error + ')'; }).join('; '));
+      var pl = await window.ResizeAPI.plan(a.platform, a.ratios, src.seqs);
+      if (!pl.ok) return fail(pl.error);
+      var lines = src.rows.filter(function (r) { return r.error; }).map(function (r) { return { name: r.name, sub: r.error, bad: true }; });
+      pl.plan.forEach(function (p) {
+        if (p.skip) lines.push({ name: p.src, sub: p.skip, bad: true });
+        else if (p.exists || p.dupInPlan) lines.push({ name: p.name, sub: p.exists ? 'đã có sequence cùng tên — bỏ qua' : 'trùng tên trong lượt này', bad: true });
+        else lines.push({ name: p.name, sub: 'từ ' + p.src, plan: p });
+      });
+      var n = lines.filter(function (l) { return !l.bad; }).length;
+      row.className = 'cl-act is-ask';
+      row.textContent = n ? 'Resize ' + a.platform + ': tạo ' + n + ' bản? Bấm dòng để bỏ chọn.' : 'Không có bản nào để tạo.';
+      save('is-ask', row.textContent);
+      setClawd('idle', 'Chờ bro xác nhận');
+      pickList(box, lines, function (k) { return 'Tạo ' + k + ' bản'; }, async function (sel) {
+        var keep = sel.map(function (l) { return l.plan; });
+        var plan = pl.plan.map(function (p) {
+          if (p.skip || p.exists || p.dupInPlan || keep.indexOf(p) >= 0) return p;
+          var q = {}; for (var k in p) q[k] = p[k]; q.skip = 'bỏ chọn'; return q;
+        });
+        setClawd('work', 'Đang resize…');
+        var done = 0;
+        try {
+          var res = await window.ResizeAPI.run(a.platform, plan, function (r) { if (!r.skip && !r.error) row.textContent = 'Đã tạo ' + (++done) + '/' + keep.length + '…'; });
+          var made = res.results.filter(function (r) { return !r.error && !r.skip; }).length;
+          var errs = res.results.filter(function (r) { return r.error; });
+          row.className = 'cl-act ' + (errs.length ? 'is-error' : 'is-ok');
+          row.textContent = 'Đã tạo ' + made + ' bản ' + a.platform + (errs.length ? ' — lỗi: ' + errs.map(function (r) { return r.name + ': ' + r.error; }).join('; ') : '');
+        } catch (e) { row.className = 'cl-act is-error'; row.textContent = 'Resize lỗi: ' + e.message; }
+        save(row.className.replace('cl-act ', ''), row.textContent);
+        var bad = row.classList.contains('is-error');
+        setClawd(bad ? 'fail' : 'done', bad ? 'Có bản lỗi' : 'Xong', bad ? 'is-error' : 'is-done');
+      }, function () { row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua — không resize'; save('is-skip', row.textContent); setClawd('idle'); });
+    }).catch(function (e) { fail('Resize lỗi: ' + e.message); });
+    setClawd('think', 'Đang lập danh sách…');
+    return { cls: 'is-ask', text: 'Resize ' + a.platform };
+  }
+
+  // RAW: chuẩn bị tab RAW (mode + sequence) — nút XUẤT vẫn để người dùng bấm trong tab RAW.
+  function askRaw(entry, rec, idx, a) {
+    var modeName = (window.RawcutAPI && window.RawcutAPI.modes[a.mode]) || a.mode;
+    var row = addAct(entry, 'is-run', 'Đang tìm sequence cho RAW…');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    function fail(msg) { box.remove(); row.className = 'cl-act is-error'; row.textContent = msg; save('is-error', msg); setClawd('fail', 'Lỗi', 'is-error'); }
+    if (!window.RawcutAPI) { fail('Tab RAW chưa sẵn sàng'); return { cls: 'is-error', text: 'Tab RAW chưa sẵn sàng' }; }
+    PTOOLS.sequencesFor(a.items).then(async function (src) {
+      var seqs = src.seqs;
+      if (!a.items.length) {                        // không chỉ định → đang chọn ở Project panel, rồi timeline
+        try { seqs = await RCP.selectedSequences(); } catch (e) { seqs = []; }
+        if (!seqs.length) { try { var s = await getActiveSequence(); if (s) seqs = [s]; } catch (e2) {} }
+      }
+      if (!seqs.length) return fail(a.items.length ? 'Không tìm thấy sequence: ' + src.rows.map(function (r) { return r.name + ' (' + r.error + ')'; }).join('; ') : 'Chưa chọn / mở sequence nào');
+      var lines = seqs.map(function (q) { return { name: String(q.name || ''), sub: modeName, seq: q }; })
+        .concat(src.rows.filter(function (r) { return r.error; }).map(function (r) { return { name: r.name, sub: r.error, bad: true }; }));
+      row.className = 'cl-act is-ask';
+      row.textContent = 'RAW · ' + modeName + ' · ' + seqs.length + ' sequence. Mở tab RAW đọc sẵn, bro xem rồi bấm XUẤT.';
+      save('is-ask', row.textContent);
+      setClawd('idle', 'Chờ bro xác nhận');
+      pickList(box, lines, function (k) { return 'Chuẩn bị RAW (' + k + ')'; }, async function (sel) {
+        setClawd('work', 'Đang đọc timeline…');
+        try {
+          var r = await window.RawcutAPI.prepare(sel.map(function (l) { return l.seq; }), a.mode);
+          row.className = 'cl-act is-ok';
+          row.textContent = 'Đã chuẩn bị tab RAW (' + modeName + ', ' + r.count + ' sequence' + (r.ready != null && r.ready < r.count ? ', ' + (r.count - r.ready) + ' chưa xuất được' : '') + ') — bấm XUẤT trong tab RAW';
+          setClawd('done', 'Xong', 'is-done');
+        } catch (e) { row.className = 'cl-act is-error'; row.textContent = 'RAW lỗi: ' + e.message; setClawd('fail', 'Lỗi', 'is-error'); }
+        save(row.className.replace('cl-act ', ''), row.textContent);
+      }, function () { row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua'; save('is-skip', row.textContent); setClawd('idle'); });
+    }).catch(function (e) { fail('RAW lỗi: ' + e.message); });
+    setClawd('think', 'Đang tìm sequence…');
+    return { cls: 'is-ask', text: 'RAW ' + modeName };
+  }
+
   function askConfirm(entry, rec, idx, a) {
     if (a.action === 'move_items' || a.action === 'fix_voice_bins') return askMoves(entry, rec, idx, a);
+    if (a.action === 'resize') return askResize(entry, rec, idx, a);
+    if (a.action === 'rawcut') return askRaw(entry, rec, idx, a);
     var lb = askLabel(a);
     var row = addAct(entry, 'is-ask', lb.q);
     var btns = document.createElement('div');
