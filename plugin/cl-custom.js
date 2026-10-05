@@ -44,7 +44,7 @@ var CLC = (function () {
   var FL = (typeof FLE !== 'undefined') ? FLE : (function () { try { return require('./flow-engine.js'); } catch (e) { return null; } })();
   // Danh sách khối khi ráp (khối gộp cũ bin_set / pin_order / app_set / resize / rawcut* vẫn chạy được
   // cho dữ liệu cũ nhưng không còn trong danh sách — đã đổi thành chuỗi khối đơn).
-  var BUILDER_TYPES = ['platform', 'bin_make', 'seq_make', 'seq_clone', 'seq_resize', 'seq_move', 'raw_export', 'fix_voice_bins', 'wait', 'prompt', 'open_tab'];
+  var BUILDER_TYPES = ['platform', 'bin_make', 'seq_make', 'seq_clone', 'seq_resize', 'seq_move', 'render', 'raw_export', 'fix_voice_bins', 'wait', 'prompt', 'open_tab'];
   function isEngine(t) { return !!(FL && FL.isType(t)); }
   function typeLabel(t) { return isEngine(t) ? FL.TYPES[t].label : (SPEC[t] ? SPEC[t].label : t); }
   function typeDesc(t) {
@@ -194,7 +194,7 @@ var CLC = (function () {
   // Lựa chọn cho một ô (popover "+" / bấm chip): [{value, text, on}]
   function slotOptions(s, slot) {
     if (slot === 'type') return BUILDER_TYPES.map(function (t) { return { value: t, text: typeLabel(t), desc: typeDesc(t), on: t === s.type }; });
-    if (slot === 'platform') return PLATFORM_OF[s.type].map(function (p) { return { value: p, text: p, on: p === s.platform }; });
+    if (slot === 'platform') return (PLATFORM_OF[s.type] || []).map(function (p) { return { value: p, text: p, on: p === s.platform }; });
     if (slot === 'ratios') return RATIOS.map(function (r) { return { value: r, text: RATIO_LABEL[r], on: s.ratios.indexOf(r) >= 0 }; });
     if (slot === 'mode') return RAW_MODES.map(function (m) { return { value: m, text: RAW_LABEL[m], on: m === s.mode }; });
     if (slot === 'tab') return TABS.map(function (t) { return { value: t, text: TAB_LABEL[t], on: t === s.tab }; });

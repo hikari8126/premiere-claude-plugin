@@ -710,6 +710,7 @@
         var res = await runResize(mode, pend.plan, rszState.prefs, addRow);
         var made = res.results.filter(function (r) { return !r.error && !r.skip; }).length;
         var bad = res.results.length - made;
+        if (made) pend.plan.forEach(function (p) { window.actLog && window.actLog('resize', 'resize', p.src, { platform: mode, ratios: rszState.prefs && rszState.prefs.ratios }); });
         setStatus(pend.count + ' sequence nguồn · tạo ' + made + ' bản' + (bad ? ' · ' + bad + ' lỗi/bỏ qua' : ''));
       } catch (e) {
         setStatus('Lỗi: ' + ((e && e.message) || e));

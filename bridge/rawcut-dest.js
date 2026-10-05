@@ -379,6 +379,15 @@ function baseLeadProducts(names, below) {
   return hits;
 }
 
+// Bỏ version ở đuôi CẢ HAI phía rồi so chữ+số: thư mục "EaseMotions 2" → sản phẩm "EaseMotions",
+// "NavieLift" → "NavieLift 2.0". Chỉ thư mục không phải thư mục làm việc chung.
+function tailProducts(names, below) {
+  const strip = s => alnumKey(nameKey(s).replace(VERSION_TAIL_RE, ''));
+  const keys = below.filter(b => !GENERIC_FOLDER_RE.test(nameKey(b))).map(strip).filter(k => k.length >= 4);
+  if (!keys.length) return [];
+  return names.filter(n => keys.indexOf(strip(n)) >= 0);
+}
+
 function sharedLead(name, below) {
   const nk = nameKey(name);
   let best = 0;
@@ -445,6 +454,18 @@ function productRoute(projectPath, productPick, opts, seqName) {
       const base = baseLeadProducts(names, below);
       if (base.length === 1) { auto = base[0]; by = 'base'; }
       else multi = seqHit.length > 1 ? seqHit : base;
+    }
+  }
+  // Còn trượt: thư mục mang version ở đuôi mà sản phẩm thì không ("EaseMotions 2" ↔ "EaseMotions"),
+  // hoặc chỉ tên file .prproj gọi tên sản phẩm ("…/Template/Editing File/SolviEase.prproj").
+  if (!auto && !multi.length && matches.length < 2 && lead.length < 2) {
+    const tail = tailProducts(names, below);
+    if (tail.length === 1) { auto = tail[0]; by = 'tail'; }
+    else if (tail.length > 1) multi = tail;
+    else {
+      const file = path.basename(pp).replace(/\.prproj$/i, '');
+      const fh = nameProducts(names, [file]);
+      if (fh.length === 1) { auto = fh[0]; by = 'file'; } else if (fh.length > 1) multi = fh;
     }
   }
   // ⚠️ Sản phẩm đã chọn mà SAMX_WORKSPACE không còn → `gone`, từ chối chứ không lặng lẽ
@@ -735,6 +756,10 @@ function resolveDest(o, env) {
   } else if (own) {
     res.samx = path.dirname(own);
     res.products = samxProducts(res.samx);
+  } else {
+    // Không đoán được gì vẫn đưa danh sách sản phẩm để menu chọn tay hiện ra.
+    const cs = samxRoute(pp, env).samx || cloudSamx(env);
+    if (cs) { res.samx = cs; res.products = samxProducts(cs); }
   }
   const whys = [];
   let product = '', kind = '', free = false, fromProject = false, whose = '';
@@ -759,6 +784,9 @@ function resolveDest(o, env) {
     else if (r.pick) { res.route = 'picked'; product = r.product; whose = 'Sản phẩm đã chọn cho project này, '; }
     else if (r.auto) { res.route = 'matched'; res.matchedBy = r.by; product = r.product; whose = 'Sản phẩm khớp với project đang mở, '; }
     else { res.needPick = true; whys.push(unmatchedWhy(r)); }
+  } else if (o.productPick && res.products.indexOf(String(o.productPick)) >= 0) {
+    fromProject = true; res.route = 'picked';
+    product = path.join(res.samx, String(o.productPick)); whose = 'Sản phẩm đã chọn cho project này, ';
   } else {
     res.needPick = true;
     whys.push(sharedDrivesOf(pp).length

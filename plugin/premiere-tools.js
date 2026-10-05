@@ -25,7 +25,59 @@ var PTOOLS = (function () {
   async function snapshot() {
     try {
       var items = await projectItems(true);
-      return items.map(function (it) { return { name: it.name, path: it.path || '', isFolder: !!it.isFolder, mediaType: it.mediaType || '' }; });
+      var out = items.map(function (it) { return { name: it.name, path: it.path || '', isFolder: !!it.isFolder, mediaType: it.mediaType || '' }; });
+      try { await learnProfile(out); } catch (e2) {}
+      return out;
+    } catch (e) { return null; }
+  }
+
+  // Hồ sơ quy ước của project (proj-profile.js): quét mỗi lần chụp, lưu theo project. Project chưa
+  // có gì để học (mới tạo) → dùng hồ sơ đã lưu lần trước, không có thì mặc định.
+  var PROFILE_LS = 'clw_proj_profile_v1';
+  async function learnProfile(items) {
+    if (typeof PPF === 'undefined') return;
+    var proj = await getActiveProject(), key = proj && proj.path;
+    if (key && typeof key.then === 'function') key = await key;
+    key = String(key || '');
+    var store = {};
+    try { store = JSON.parse(localStorage.getItem(PROFILE_LS) || '{}') || {}; } catch (e) {}
+    var p = PPF.scan(items), sig = PPF.signature(items), old = key ? store[key] : null;
+    // Claude đã xem cấu trúc này rồi → dùng lại, không hỏi nữa.
+    if (old && old.ai && old.v === 3 && old.sig === sig) { PPF.use(old); return; }   // v3: luôn có tóm tắt
+    p.sig = sig;
+    if (p.learned && key) save(store, key, p);
+    else if (old) p = old;
+    PPF.use(p);
+    // Mỗi project hỏi Claude một lần (tóm tắt quy ước + sửa chỗ luật không chắc); chạy nền, không chặn bản chụp.
+    if (key && PPF.hasWork(items) && !aiBusy[key]) {
+      aiBusy[key] = 1;
+      scanState = { busy: true, name: String(key).split('/').pop().replace(/\.prproj$/i, '') };
+      fire();
+      askAI(items, p).then(function (np) {
+        if (!np) return;
+        np.sig = sig;
+        var st2 = {};
+        try { st2 = JSON.parse(localStorage.getItem(PROFILE_LS) || '{}') || {}; } catch (e) {}
+        save(st2, key, np);
+        PPF.use(np);
+        try { window.dispatchEvent(new Event('ppf-profile')); } catch (e) {}
+      }).finally(function () { delete aiBusy[key]; scanState = { busy: false }; fire(); });
+    }
+  }
+  var aiBusy = {}, scanState = { busy: false };
+  function fire() { try { window.dispatchEvent(new Event('ppf-scan')); } catch (e) {} }
+  function scanning() { return scanState; }
+  function save(store, key, p) {
+    store[key] = p;
+    try { localStorage.setItem(PROFILE_LS, JSON.stringify(store)); } catch (e) {}
+  }
+  async function askAI(items, p) {
+    try {
+      var r = await fetch(BRIDGE_URL + '/project/profile-ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(PPF.aiRequest(items, p))
+      }).then(function (x) { return x.json(); });
+      return r && r.ok ? PPF.mergeAI(p, r.profile, items) : null;   // lỗi (offline, hết phiên) → giữ của luật
     } catch (e) { return null; }
   }
 
@@ -70,6 +122,6 @@ var PTOOLS = (function () {
     return { done: done, failed: failed };
   }
 
-  return { snapshot: snapshot, sequencesFor: sequencesFor, resolve: resolve, planVoice: planVoice, move: move, invalidate: invalidate };
+  return { scanning: scanning, snapshot: snapshot, sequencesFor: sequencesFor, resolve: resolve, planVoice: planVoice, move: move, invalidate: invalidate };
 })();
 window.PTOOLS = PTOOLS;

@@ -126,6 +126,26 @@
     }
   } catch (e) { console.warn('[cl-dash] seed v5:', e && e.message); }
 
+  // Đợt 6 (2026-10-05): quy trình dựng sẵn FB / GG / PIN / APP thêm "Chờ bro" (đặt video vào khung) + "Render"
+  // (xuất .mp4 tự vào thư mục giao như bộ trước). Chỉ thêm khi quy trình chưa có Render.
+  var SEED6 = 'cl_seed_v6';
+  var SEED6_WAIT = { FB: 'Soát lại bản resize bộ {bộ} rồi bấm Tiếp tục để render',
+                     GG: 'Đặt video vào khung GG dọc / ngang / vuông bộ {bộ} rồi bấm Tiếp tục để render',
+                     PIN: 'Soát lại bản PIN 2x3 bộ {bộ} rồi bấm Tiếp tục để render',
+                     APP: 'Đặt video vào khung AppLovin bộ {bộ} rồi bấm Tiếp tục để render' };
+  try {
+    if (!localStorage.getItem(SEED6)) {
+      var d6 = CLSTORE.get();
+      Object.keys(SEED6_WAIT).forEach(function (name) {
+        var cur = d6.buttons.filter(function (b) { return b.kind === 'flow' && b.name === name; })[0];
+        if (!cur || cur.steps.some(function (x) { return x.type === 'render'; })) return;
+        cur.steps = cur.steps.concat([{ type: 'wait', text: SEED6_WAIT[name] }, { type: 'render', src: { k: 'video' } }]).slice(0, 12);
+      });
+      CLSTORE.set(d6);
+      localStorage.setItem(SEED6, '1');
+    }
+  } catch (e) { console.warn('[cl-dash] seed v6:', e && e.message); }
+
   // ── Project đã biết + hàng đợi nhiều project (cl-queue.js) ───────────────
   // Mỗi 4s xem project active: đổi thì ghi vào danh sách (đường dẫn + tên). Hàng đợi chạy lần lượt:
   // Project.open(path) (đang mở → chuyển ngay; đang đóng → mở ra) → quy trình chế độ tự chạy → việc kế;
@@ -145,7 +165,140 @@
     if (p && p !== activePath) {
       activePath = p;
       lsSet(PKEY, CLQ.seeProject(projects(), p, Date.now()));
+      scanProfile();
     }
+  }
+  // Quét quy ước project (FB = Facebook, bin Google / v1 / {bộ}x…) khi đổi project — tự lưu, chỉ báo khi lạ.
+  async function scanProfile() {
+    try { await PTOOLS.snapshot(); } catch (e) {}
+    try { if (dash.offsetParent !== null || dash.childNodes.length) render(); } catch (e) {}
+  }
+  window.addEventListener('ppf-profile', function () { try { render(); } catch (e) {} autoSuggest(); });
+
+  // ── Claude gợi ý quy trình (cl-suggest.js) ──────────────────────────────────
+  // Tự hỏi khi: quét project xong, hoặc nhật ký việc làm tay có chuỗi lặp mới. Member gõ "Nhờ Claude ráp…"
+  // thì hỏi ngay. Gợi ý chỉ hiện khi xem trước không lỗi; bấm Dùng / Thay / Bỏ qua — không gì tự lưu.
+  var sug = { busy: false, err: '', text: '', focus: false, undo: null, timer: null };
+  function sugSig() {
+    var pf = (typeof PPF !== 'undefined') ? PPF.current() : {};
+    var pats = ACTLOG.patterns(ACTLOG.load(), activePath).map(function (p) { return p.steps.join('>') + p.support; }).join('|');
+    var flows = CLSTORE.get().buttons.filter(function (b) { return b.kind === 'flow'; }).map(function (b) { return b.name; }).join(',');
+    return (pf.sig || '').length + ':' + CLSUG.stepsHash([pf.sig || '', pats, flows]);
+  }
+  function autoSuggest() {
+    clearTimeout(sug.timer);
+    sug.timer = setTimeout(function () {
+      if (!activePath || sug.busy || (PTOOLS.scanning && PTOOLS.scanning().busy)) return;
+      if (CLSUG.askedSig(activePath) === sugSig()) return;          // đã hỏi với đúng dữ liệu này
+      askSuggest('scan', '');
+    }, 4000);
+  }
+  window.addEventListener('act-log', autoSuggest);
+  async function askSuggest(mode, text) {
+    if (sug.busy) return;
+    sug.busy = true; sug.err = ''; safeRender();
+    var proj = activePath, sig = sugSig();
+    try {
+      var items = (await PTOOLS.snapshot()) || [];
+      var flows = CLSTORE.get().buttons.filter(function (b) { return b.kind === 'flow'; });
+      var pf = (typeof PPF !== 'undefined') ? PPF.current() : null;
+      var r = await fetch(BRIDGE_URL + '/flow/suggest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(CLSUG.request(items, { mode: mode, text: text, flows: flows, log: ACTLOG.digest(ACTLOG.load(), proj),
+                                                   profile: pf ? { alias: pf.alias, bins: pf.bins, note: pf.aiNote || '' } : null }))
+      }).then(function (x) { return x.json(); });
+      if (!r || !r.ok) throw new Error(r && r.cliAuth ? 'Claude CLI hết phiên — chạy claude login' : ((r && r.error) || 'Claude không trả lời'));
+      var checked = (r.suggestions || []).map(function (g) { var c = CLSUG.check(items, g, flows); c.src = mode; return c; });
+      var good = checked.filter(function (c) { return !c.error; });
+      CLSUG.add(proj, good, mode === 'scan' ? sig : null);
+      if (mode === 'ask') {
+        if (good.length) sug.text = '';
+        else sug.err = checked.length ? 'Claude ráp chưa chạy được ở project này (' + checked[0].error + ') — thử nói rõ hơn.' : 'Claude chưa ráp được quy trình nào.';
+      }
+    } catch (e) { sug.err = e.message || 'lỗi'; if (mode === 'scan') CLSUG.add(proj, [], sig); }
+    sug.busy = false; safeRender();
+  }
+  function safeRender() { if (!sug.focus) { try { render(); } catch (e) {} } }
+  function sugSection() {
+    var list = activePath ? CLSUG.pending(activePath) : [];
+    var box = el('div', 'cd-box cd-sugBox');
+    var hd = el('div', 'cd-boxHd');
+    hd.appendChild(el('span', 'cd-boxT', '✦ Claude gợi ý quy trình'));
+    box.appendChild(hd);
+    // Nhờ Claude ráp
+    var row = el('div', 'cd-askRow');
+    var inp = el('input', 'cu-in cd-askIn');
+    inp.placeholder = 'Nhờ Claude ráp, vd: làm GG rồi xuất RAW cả bộ';
+    inp.value = sug.text;
+    inp.addEventListener('focus', function () { sug.focus = true; window.claimKeyboard && window.claimKeyboard(); });
+    inp.addEventListener('blur', function () { sug.focus = false; window.releaseKeyboard && window.releaseKeyboard(); });
+    inp.addEventListener('input', function () { sug.text = inp.value; });
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && sug.text.trim()) { sug.focus = false; askSuggest('ask', sug.text.trim()); } });
+    row.appendChild(inp);
+    row.appendChild(btn(sug.busy ? 'Đang nghĩ…' : 'Ráp', 'cl-btn--primary', function () {
+      if (!sug.busy && sug.text.trim()) { sug.focus = false; askSuggest('ask', sug.text.trim()); }
+    }));
+    box.appendChild(row);
+    if (sug.busy) box.appendChild(el('div', 'cd-fix', '✦ Claude đang xem project + việc bro hay làm…'));
+    if (sug.err) box.appendChild(el('div', 'cd-fix is-bad', sug.err));
+    if (sug.undo) {
+      var u = el('div', 'cd-fix is-ok', '✓ Đã thay quy trình "' + sug.undo.name + '". ');
+      var ul = el('span', 'cd-link', 'Hoàn tác');
+      ul.setAttribute('role', 'button');
+      ul.addEventListener('click', function () {
+        var d = CLSTORE.get(), cur = d.buttons.filter(function (b) { return b.id === sug.undo.id; })[0];
+        if (cur) { cur.steps = sug.undo.steps; CLSTORE.set(d); }
+        sug.undo = null; render();
+      });
+      u.appendChild(ul);
+      box.appendChild(u);
+    }
+    if (!list.length && !sug.busy && !sug.err) box.appendChild(el('div', 'cd-boxEmpty', 'Chưa có gợi ý. Claude tự gợi ý khi thấy bro làm một chuỗi việc lặp lại ở 3 bộ trở lên.'));
+    list.forEach(function (g) {
+      var c = el('div', 'cd-card cd-suggest');
+      c.appendChild(el('div', 'cd-sgT', g.name + (g.replaces ? '  ·  thay "' + g.replaces + '"' : '')));
+      if (g.why) c.appendChild(el('div', 'cd-dim cd-sgWhy', g.why));
+      c.appendChild(el('div', 'cd-dim', g.steps.map(function (x) { return CLC.chips(x).map(function (ch) { return ch.text; }).join(' · '); }).join('  →  ')));
+      var r2 = el('div', 'cl-askBtns');
+      if (g.replaces) r2.appendChild(btn('Thay "' + g.replaces + '"', 'cl-btn--primary', function () {
+        var res = CLSUG.apply(CLSTORE.get(), g, 'replace');
+        CLSTORE.set(res.data); CLSUG.drop(activePath, g.hash, true);
+        if (res.undo) sug.undo = { id: res.undo.id, steps: res.undo.steps, name: g.replaces };
+        render();
+      }));
+      r2.appendChild(btn(g.replaces ? 'Lưu thành mới' : 'Dùng', g.replaces ? '' : 'cl-btn--primary', function () {
+        CLSTORE.set(CLSUG.apply(CLSTORE.get(), g, 'new').data); CLSUG.drop(activePath, g.hash, true); render();
+      }));
+      r2.appendChild(btn('Bỏ qua', '', function () { CLSUG.drop(activePath, g.hash, true); render(); }));
+      c.appendChild(r2);
+      box.appendChild(c);
+    });
+    return box;
+  }
+
+  // Claude tự sửa khối cho project (cl-fix.js). b0 = quy trình gốc. → {flow, note, error?}
+  // Đã sửa trước đó cho project này → dùng lại ngay; không lỗi → giữ nguyên; lỗi → hỏi Claude, xem trước
+  // lại, ít lỗi hơn mới dùng.
+  var fixFailed = {};
+  async function fixFlow(project, b0, items, targets, frames) {
+    var c = CLFIX.applied(project, b0);
+    if (c !== b0) return { flow: c, note: c.fixedNote };
+    var pv = CLFIX.plan(items, b0.steps, targets, frames), n = CLFIX.errorCount(pv, items);
+    if (!n) return { flow: b0 };
+    var fk = CLFIX.key(project, b0) + '|' + n;
+    if (fixFailed[fk]) return { flow: b0, error: fixFailed[fk] };       // phiên này đã thử rồi — khỏi hỏi lại
+    try {
+      var r = await fetch(BRIDGE_URL + '/flow/fix', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(CLFIX.request(items, b0, pv))
+      }).then(function (x) { return x.json(); });
+      if (!r || !r.ok) return { flow: b0, error: (r && r.cliAuth) ? 'Claude CLI hết phiên — chạy claude login' : ((r && r.error) || 'Claude không trả lời') };
+      var acc = CLFIX.accept(items, b0, r.steps, targets, frames, n);
+      if (!acc) return { flow: b0, error: (fixFailed[fk] = 'bản Claude sửa vẫn chưa chạy được ở project này') };
+      var nt = String(r.note || '').trim() || 'đã chỉnh theo project';
+      CLFIX.remember(project, b0, { steps: acc.steps, note: nt });
+      return { flow: CLFIX.applied(project, b0), note: nt };
+    } catch (e) { return { flow: b0, error: 'không gọi được Bridge' }; }
   }
   pollProject();
   setInterval(pollProject, 4000);
@@ -177,6 +330,12 @@
           var b = CLSTORE.get().buttons.filter(function (x) { return x.id === it.flowId; })[0];
           if (!b) throw new Error('quy trình "' + it.flowName + '" đã bị xoá');
           await switchTo(it.path);
+          if (it.set && b.steps.some(function (x) { return CLC.isEngine(x.type); })) {   // chạy tự động → Claude chỉnh khối theo project trước
+            var qItems = (await PTOOLS.snapshot()) || [];
+            var qIdx = it.idxs && it.idxs.length ? it.idxs : [0, 1, 2];
+            var fx = await fixFlow(it.path, b, qItems, qIdx.map(function (n) { return { set: it.set, idx: n }; }), it.frames);
+            b = fx.flow;
+          }
           var r = await T.runFlow(b, { set: it.set, idxs: it.idxs.length ? it.idxs : null, platform: it.platform, frames: it.frames, auto: true });
           if (!r || !r.ok) { status = 'error'; msg = (r && (r.error || r.detail)) || 'lỗi'; } else msg = r.detail || 'xong';
         } catch (e) { status = 'error'; msg = (e && e.message) || String(e); }
@@ -218,13 +377,55 @@
   }
 
   // ── Bảng điều khiển ───────────────────────────────────────────────────────
+  // Đang quét project (Claude đọc bin/sequence) → cả tab là Clawd đang nghĩ; bấm Ẩn để làm việc khác.
+  var noteOpen = false, scanHidden = false, scanTimer = null, scanTick = 0;
+  function renderScan() {
+    var sc = PTOOLS.scanning();
+    var box = el('div', 'cd-scan');
+    var pic = el('div', 'cd-scanPic');
+    var fr = CLAWD.frames('think');
+    pic.innerHTML = CLAWD.toSvg(fr[scanTick % fr.length], 120);
+    box.appendChild(pic);
+    box.appendChild(el('div', 'cd-scanT', 'Clawd đang đọc project' + (sc.name ? ' ' + sc.name : '') + '…'));
+    box.appendChild(el('div', 'cd-dim cd-scanS', 'Xem bin, sequence, cách đặt tên để quy trình chạy đúng kiểu của project này. Mất khoảng 10–20 giây.'));
+    var hide = el('div', 'cl-btn cd-scanHide', 'Ẩn, làm việc khác');
+    hide.setAttribute('role', 'button');
+    hide.addEventListener('click', function () { scanHidden = true; render(); });
+    box.appendChild(hide);
+    dash.appendChild(box);
+  }
+  window.addEventListener('ppf-scan', function () {
+    var busy = PTOOLS.scanning().busy;
+    if (busy) {
+      scanHidden = false; noteOpen = false;
+      if (!scanTimer) scanTimer = setInterval(function () { scanTick++; if (!scanHidden) render(); }, 250);
+    } else { if (scanTimer) { clearInterval(scanTimer); scanTimer = null; } autoSuggest(); }
+    try { render(); } catch (e) {}
+  });
   function render() {
     dash.innerHTML = '';
+    if (PTOOLS.scanning && PTOOLS.scanning().busy && !scanHidden) { renderScan(); return; }
     var v = CLC.vars(T.seqName());
     var top = el('div', 'cd-ctx');
     top.appendChild(el('span', 'cd-sp', v['sản phẩm'] ? v['sản phẩm'] + ' · bộ ' + v['bộ'] : 'Chưa mở sequence của bộ nào'));
     if (v['sequence']) top.appendChild(el('span', 'cd-dim', 'đang mở ' + (v['sequence'].match(/vid\s*\d+\.\d+/i) || [v['sequence']])[0]));
     dash.appendChild(top);
+    if (typeof PPF !== 'undefined') {
+      var pf = PPF.current(), sm = PPF.summary(pf);
+      if (sm) dash.appendChild(el('div', 'cd-dim cd-prof', 'Quy ước project: ' + sm));
+      if (pf.aiNote) {
+        var long = pf.aiNote.length > 150;
+        var nb = el('div', 'cd-dim cd-prof', 'Claude tóm tắt: ' + (long && !noteOpen ? pf.aiNote.slice(0, pf.aiNote.lastIndexOf(' ', 150)) + '… ' : pf.aiNote + ' '));
+        if (long) {
+          var more = el('span', 'cd-link', noteOpen ? 'Thu gọn' : 'Xem thêm');
+          more.setAttribute('role', 'button');
+          more.addEventListener('click', function () { noteOpen = !noteOpen; render(); });
+          nb.appendChild(more);
+        }
+        dash.appendChild(nb);
+      }
+      (pf.warns || []).forEach(function (w) { dash.appendChild(el('div', 'cd-profWarn', '⚠ ' + w)); });
+    }
 
     var d = CLSTORE.get(), flows = d.buttons.filter(function (b) { return b.kind === 'flow'; });
     dash.appendChild(el('div', 'cd-lbl', 'Quy trình'));
@@ -309,6 +510,8 @@
     }
     dash.appendChild(qs);
 
+    dash.appendChild(sugSection());
+
     // Gợi ý Claude học được (thói quen lặp lại)
     var sg = CLSTORE.learn().suggest ? CLC.suggest(CLSTORE.habits(), d) : null;
     if (sg) {
@@ -379,11 +582,18 @@
                here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '',
                navSet: '', frames: ['9-16', '9-16', '9-16'], frameMode: 'prev', framesFrom: '', frameErr: '' };   // NAV: có sẵn mặc định trước khi đọc xong project
     st.project = st.here;
+    var b0 = b;
+    b = CLFIX.applied(st.here, b0);                    // project này đã được Claude chỉnh → dùng luôn
+    st.fixNote = b.fixedNote || ''; st.fix = st.fixNote ? 'done' : '';
     var usesSeq = b.steps.some(function (s) { return CLC.isEngine(s.type) || (s.seqs && s.seqs.length && s.seqs[0].k !== 'current'); });
     // NAV: Tạo sequence theo bộ frame → phiếu chỉ cần số bộ + bộ frame (mỗi video 9:16 / 4:5, ≥1 video 9:16)
     var navMode = b.steps.some(function (s) { return s.type === 'seq_make' && s.frame === 'set'; });
+    // PIN: cùng một bộ → bin {bộ}x; nhiều bộ trong một lượt → bin đơn "Order <ngày>" (chạy chung, không tách từng bộ)
+    var pinMode = b.steps.some(function (s) { return s.type === 'platform' && s.p === 'PIN'; });
+    function allTargets() { return groupSets().reduce(function (a, g) { return a.concat(g.idxs.map(function (n) { return { set: g.set, idx: n }; })); }, []); }
     var plats = {};
-    b.steps.forEach(function (s) { if (s.platform) plats[s.platform] = 1; });
+    // chỉ khối gộp cũ (resize / bin_set) chọn lại nền tảng ở phiếu; khối đơn có khối Nền tảng riêng ('plat' không phải nền tảng)
+    b.steps.forEach(function (s) { if (s.platform && !CLC.isEngine(s.type)) plats[s.platform] = 1; });
     st.platform = Object.keys(plats).length === 1 ? Object.keys(plats)[0] : '';
     var binStep = b.steps.filter(function (s) { return s.type === 'bin_set'; })[0];
 
@@ -610,10 +820,30 @@
       // Xem trước khối đơn cho bộ đầu tiên đã chọn (tính trên bản chụp project, chưa đụng Premiere)
       var preview = null;
       if (!other && st.items && sets.length && b.steps.some(function (x) { return CLC.isEngine(x.type); })) {
-        try { preview = FLE.planFlow(st.items, b.steps, sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; }), null, navMode ? framesMap() : null); } catch (e) { preview = null; }
+        try { preview = FLE.planFlow(st.items, b.steps, pinMode ? allTargets() : sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; }), null, navMode ? framesMap() : null); } catch (e) { preview = null; }
       }
       var setText = sets.length ? sets.map(function (g) { return g.set; }).join(', ') : (v['bộ'] || '?');
       var ss = section('Sẽ chạy');
+      // Có lỗi ở bản xem trước → Claude tự chỉnh khối theo project (một lần, chạy nền)
+      if (preview && !st.fix && st.here && CLFIX.errorCount(preview, st.items) > 0) {
+        st.fix = 'busy';
+        var fxTargets = sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; });
+        fixFlow(st.here, b0, st.items, fxTargets, navMode ? framesMap() : null).then(function (r) {
+          b = r.flow;
+          st.fix = r.note ? 'done' : 'fail'; st.fixNote = r.note || ''; st.fixErr = r.error || '';
+          draw();
+        });
+      }
+      if (st.fix === 'busy') ss.appendChild(el('div', 'cd-fix', '✦ Claude đang chỉnh quy trình cho hợp project này…'));
+      if (st.fix === 'done') {
+        var fd = el('div', 'cd-fix is-ok', '✦ Claude đã chỉnh theo project: ' + st.fixNote + ' ');
+        var undo = el('span', 'cd-link cd-dimLink', 'Dùng bản gốc');
+        undo.setAttribute('role', 'button');
+        undo.addEventListener('click', function () { CLFIX.forget(st.here, b0); b = b0; st.fix = 'off'; st.fixNote = ''; draw(); });
+        fd.appendChild(undo);
+        ss.appendChild(fd);
+      }
+      if (st.fix === 'fail' && st.fixErr) ss.appendChild(el('div', 'cd-fix is-bad', '✦ Claude chưa sửa được: ' + st.fixErr));
       b.steps.forEach(function (s, i) {
         var row = el('div', 'cu-chipRow cd-stepRow');
         row.appendChild(el('span', 'cu-stepN', String(i + 1)));
@@ -677,6 +907,10 @@
           var ns = String((live && live.value) || st.navSet || '').trim().replace(/x$/i, '');
           if (!/^\d+$/.test(ns)) return;
           sets = [{ set: ns, idxs: st.frames.map(function (f, k) { return k; }) }];
+        }
+        if (pinMode && sets.length > 1) {                               // PIN lẫn bộ: chạy CHUNG một lượt → bin đơn "Order <ngày>"
+          await T.runFlow(b, { set: sets[0].set, targets: allTargets(), platform: st.platform });
+          return;
         }
         for (var k = 0; k < sets.length; k++) {                        // từng bộ một
           await T.runFlow(b, { set: sets[k].set, idxs: sets[k].idxs, platform: st.platform, frames: navMode ? framesMap() : null });

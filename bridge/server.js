@@ -3043,7 +3043,7 @@ app.post('/music/prompt', async (req, res) => {
 });
 
 // ── GET /health ────────────────────────────────────────────────────────────
-const BRIDGE_VERSION = '1.24.0';  // beta.2: prompt tab Claude có action bin_set. beta.1: Tab Claude: /chat nhận notes (ghi chú riêng member) + projectFacts (quy ước đọc từ project) nối cuối prompt (chat-prompt.js memberContext); prompt dạy khối ```remember; mode command/free, MCP premiere, /open-url. 1.23.0-beta.1: QC đợt 2: lỗi ElevenLabs → tiếng Việt (eleven-errors.js, VG8); /superautocut/subtext dừng Whisper + không ghi file khi plugin huỷ (ST4); POST /fs/exists (ST7); isNewer hiểu -beta (ver-compare.js, S4). 1.22.1-beta.1: QC đợt 1: variation lỗi không bỏ variation đã gen, trả errors (variations.js, VG2); watch state lưu theo project byProject (W1). Fix relink .aep: AE lưu fullpath kèm ổ khởi động (/Volumes/Macintosh HD/Users/…) còn Premiere trả /Users/… → so nguyên chuỗi trượt, .aep không được relink. Giờ so theo phần sau "Shared drives/" (bỏ /Volumes/<ổ>), giữ nguyên tiền tố AE đang lưu khi thay tên file. Prior 1.22.0: Đổi tên source hàng loạt: /rename/plan|apply|revert|aep|journal|undo — rename-ops.js (đổi tên 2 pha + nhật ký ~/Library/Application Support/ClaudeBridge/rename) + aep-relink.js (sửa fullpath trong .aep RIFX, cả footage trong folder). Prior 1.21.0: Raw-cutter: /rawcut/status|scan|export(SSE)|render-cache|render-cache/clean|render-preset, engine xmlcut.py 3.93 vendored ở rawcut-engine/ (cần python3 ≥3.8 + ffmpeg). Prior 1.20.0: Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
+const BRIDGE_VERSION = '1.25.0';  // 1.25.0: tab Claude AI tự học — /project/profile-ai (Claude tóm tắt quy ước bin), /flow/fix (sửa khối theo project), /flow/suggest (gợi ý quy trình); khối Render: /render/index|stat|prepare (Output cùng gốc project, học thư mục giao bộ trước); /rawcut/dest khớp sản phẩm thêm luật version đuôi + tên .prproj, luôn trả danh sách sản phẩm. beta.2: prompt tab Claude có action bin_set. beta.1: Tab Claude: /chat nhận notes (ghi chú riêng member) + projectFacts (quy ước đọc từ project) nối cuối prompt (chat-prompt.js memberContext); prompt dạy khối ```remember; mode command/free, MCP premiere, /open-url. 1.23.0-beta.1: QC đợt 2: lỗi ElevenLabs → tiếng Việt (eleven-errors.js, VG8); /superautocut/subtext dừng Whisper + không ghi file khi plugin huỷ (ST4); POST /fs/exists (ST7); isNewer hiểu -beta (ver-compare.js, S4). 1.22.1-beta.1: QC đợt 1: variation lỗi không bỏ variation đã gen, trả errors (variations.js, VG2); watch state lưu theo project byProject (W1). Fix relink .aep: AE lưu fullpath kèm ổ khởi động (/Volumes/Macintosh HD/Users/…) còn Premiere trả /Users/… → so nguyên chuỗi trượt, .aep không được relink. Giờ so theo phần sau "Shared drives/" (bỏ /Volumes/<ổ>), giữ nguyên tiền tố AE đang lưu khi thay tên file. Prior 1.22.0: Đổi tên source hàng loạt: /rename/plan|apply|revert|aep|journal|undo — rename-ops.js (đổi tên 2 pha + nhật ký ~/Library/Application Support/ClaudeBridge/rename) + aep-relink.js (sửa fullpath trong .aep RIFX, cả footage trong folder). Prior 1.21.0: Raw-cutter: /rawcut/status|scan|export(SSE)|render-cache|render-cache/clean|render-preset, engine xmlcut.py 3.93 vendored ở rawcut-engine/ (cần python3 ≥3.8 + ffmpeg). Prior 1.20.0: Eleven v4: /tts/generate với eleven_v4* → eleven-v4.js (thử text-to-speech, bị từ chối model thì Text to Dialogue, chia đoạn ≤2000 ký tự). POST /bgm/dir: thư mục <sản phẩm>/BGM/AI cho nhạc gen (Voice Gen mode Music chọn sẵn khi lưu, bgm-dir.js). Prior 1.19.0: /superautocut/subtext nhận keepLines: 1 dòng script = 1 cue (subtextByLine), không cắt theo maxWords/maxChars/maxDur. Prior 1.18.2: find-sources quét bất đồng bộ + song song, không stat từng file, hạn 45s (bản cũ đồng bộ làm treo cả bridge trên Google Drive). Prior 1.18.1: GET /auth/status + POST /auth/login (mở Terminal chạy claude auth login), /health trả cliLoggedIn. suggest-bins ghép theo tên thư mục trước khi hỏi model; callLLM báo đúng lỗi Claude CLI (hết phiên OAuth) thay vì trả câu lỗi như câu trả lời. Prior 1.18.0:  // Watch folder: POST /watch/find-sources (tìm trên đĩa file cho source Autocut báo thiếu, gom theo thư mục) + POST /watch/suggest-bins (nhờ model ghép thư mục với bin có thật trong project). POST /watch/scan-now nhận {preview:true} — chỉ liệt kê file khớp lọc, không đẩy vào hàng đợi, để plugin đối chiếu với project rồi hỏi trước khi import. Prior 1.16.0: thêm GET /watch/browse (duyệt thư mục quanh project, vì UXP getFolder không mở được ở đường dẫn cho sẵn); scan-now đổi thành đối chiếu. Watch folder: POST /watch/session/start|stop, GET /watch/poll, POST /watch/ack, GET|POST /watch/config, POST /watch/scan-now — bridge quét thư mục theo chu kỳ, plugin import file mới vào bin. Prior 1.15.0:  // Trang Auto (bộ 3 video): POST /notify (thông báo macOS qua osascript), POST /autoset/names (dựng tên sequence/bin/voice cả bộ), POST /autoset/voicedir (tìm/tạo Voice Over/{bộ}x cạnh .prproj). Prior 1.14.0: Gộp Voice Changer + Tạo Sub fix. Voice Changer: POST /voice/change (ElevenLabs STS), POST /media/extract-audio (ffmpeg -vn → mp3), GET /media/audio-preset (.epr audio), concat-from-sequence trích đoạn -ss trước -i + -t. Tạo Sub: /superautocut/subtext ghép theo TIMELINE THẬT — resolveClipWindow() nhân in/out với speed rồi atempo (clip đổi tốc độ), adelay+amix normalize=0 đặt đúng vị trí thay concat nối đuôi (clip chồng lớp), report autosub-log + GET /autosub/logs. Prior 1.12.0: /music/generate Music v2 + audio reference; elevenLabsUpload multipart. Prior 1.11.5: /subtext trả diag; subtextGaps liệt kê lặng ≥2s.
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {
@@ -3550,6 +3550,172 @@ app.post('/watch/find-sources', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
 });
 
+// ── POST /flow/suggest ─────────────────────────────────────────────────────
+// Tab Claude: Claude GỢI Ý quy trình mới (được thêm / bớt / đổi thứ tự khối). mode: 'scan' (đọc project +
+// nhật ký việc làm tay) | 'ask' (member gõ yêu cầu). Plugin (cl-suggest.js) chuẩn hoá + xem trước,
+// lỗi thì bỏ; member bấm duyệt mới lưu.
+// Input:  { mode, text?, flows:[{name,steps}], log:{sets:[…], patterns:[…]}, profile, bins, seqs }
+// Output: { ok, suggestions:[{name, why, steps, replaces?}] }
+app.post('/flow/suggest', async (req, res) => {
+  const b = req.body || {};
+  const ask = b.mode === 'ask';
+  if (ask && !String(b.text || '').trim()) return res.json({ ok: false, error: 'chưa có yêu cầu' });
+  const log = b.log || {};
+  const prompt = `Tôi dựng video quảng cáo trong Adobe Premiere Pro, có plugin chạy "quy trình" = chuỗi khối. Mỗi khối chạy cho từng video {bộ}.{số}
+(bộ = số như 36, mỗi bộ thường có vid36.0 / 36.1 / 36.2; "FB gốc" = sequence gốc của video, tên dạng "<SP> vid36.0 [..] [..]").
+${ask ? 'Member yêu cầu: "' + String(b.text).slice(0, 1000) + '". Hãy ráp quy trình đáp ứng yêu cầu này (1 gợi ý, tối đa 2 nếu có cách khác hợp lý).'
+      : 'Hãy GỢI Ý quy trình giúp member bớt việc lặp lại mỗi bộ. Chỉ gợi ý khi thấy rõ việc lặp (từ nhật ký hoặc cấu trúc bộ trước) mà quy trình hiện có chưa làm; không có thì trả mảng rỗng. Tối đa 3 gợi ý; có thể đề xuất THAY một quy trình đang có (thêm bước còn thiếu).'}
+
+KHỐI (JSON). Khối đơn chạy tự động:
+  platform   {type:'platform', p:'FB'|'GG'|'PIN'|'APP', mode?:'new'|'resize'}  — đặt đầu quy trình; các khối sau dùng "theo nền tảng" tự học bin/tên/khung từ bộ trước
+  bin_make   {type:'bin_make', bin}
+  seq_make   {type:'seq_make', name, frame, bin}
+  seq_clone  {type:'seq_clone', src, name, bin}
+  seq_resize {type:'seq_resize', src, ratio, platform, bin}
+  seq_move   {type:'seq_move', src, bin}
+  raw_export {type:'raw_export', src, mode:'source'|'render'|'both'}
+  src  = {k:'base'} (FB gốc) | {k:'step', n} (kết quả bước n, đếm từ 1) | {k:'prev', ref} | {k:'plat'} (mọi khung nền tảng ở bộ trước) | {k:'current'}
+  ref  = {k:'base'} | {k:'match', text:'<chữ đứng ngay trước "vid" trong tên sequence>'}
+  name = {k:'plat'} | {k:'learn', ref} | {k:'tpl', text:'mẫu, biến {bộ} {số} {SP} {CO} {ED} {ngày}'}
+  bin  = {k:'plat'} | {k:'tpl', text:'A / B / {bộ}x'} | {k:'prev', ref} | {k:'step', n} | {k:'src'}
+  frame = 'set' | 'prev' | '9-16' | '4-5' | '1-1' | '16-9' | '2-3';  ratio = 'plat' | 'other' | 'prev' | '9-16' | '4-5' | '1-1' | '2-3'
+  platform (của resize) = 'plat' | 'prev' | 'GG' | 'FB' | 'PIN'
+Khối phụ (việc làm tay chưa tự động được — Voice Gen, Autocut, Tạo Sub…):
+  open_tab {type:'open_tab', tab:'voicegen'|'autocut'|'subtext'|'unnest'|'watch'|'resize'|'rawcut'}
+  wait     {type:'wait', text:'bro làm gì rồi bấm Tiếp tục'}
+  fix_voice_bins {type:'fix_voice_bins'}
+Ưu tiên khối Nền tảng + "theo nền tảng" ({k:'plat'}) thay vì ghi chữ cụ thể. Chữ cụ thể phải chép đúng bin / tên có thật dưới đây.
+Tối đa 12 khối mỗi quy trình. Tên quy trình ≤ 24 ký tự.
+
+QUY TRÌNH ĐANG CÓ:
+${(b.flows || []).map(f => '- ' + f.name + ': ' + JSON.stringify(f.steps)).join('\n') || '(chưa có)'}
+
+NHẬT KÝ VIỆC LÀM THEO BỘ (việc member đã làm, theo thứ tự):
+${(log.sets || []).join('\n') || '(chưa có)'}
+CHUỖI LẶP PLUGIN TÌM ĐƯỢC: ${(log.patterns || []).join(' | ') || '(chưa có)'}
+
+HỒ SƠ QUY ƯỚC PROJECT: ${JSON.stringify(b.profile || {})}
+
+BIN TRONG PROJECT:
+${(b.bins || []).slice(0, 250).map(x => '- ' + x).join('\n')}
+
+SEQUENCE (bin ▸ tên):
+${(b.seqs || []).slice(0, 200).map(x => '- ' + x).join('\n')}
+
+Chỉ trả JSON, không markdown:
+{"suggestions":[{"name":"…","why":"1–3 câu tiếng Việt dễ hiểu cho người không rành kỹ thuật: vì sao gợi ý, làm những gì","replaces":"<tên quy trình đang có nếu đề xuất thay, không thì ''>","steps":[…]}]}`;
+  try {
+    const out = await callLLM(prompt, { provider: b.provider, model: b.model, apiKey: b.apiKey, maxTokens: 4000 });
+    const m = String(out || '').match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('model không trả về JSON');
+    const j = JSON.parse(m[0]);
+    res.json({ ok: true, suggestions: Array.isArray(j.suggestions) ? j.suggestions.slice(0, 3) : [] });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, cliAuth: !!e.cliAuth });
+  }
+});
+
+// ── POST /flow/fix ─────────────────────────────────────────────────────────
+// Tab Claude: quy trình (chuỗi khối) chạy thử trên project báo lỗi → Claude sửa khối cho đúng quy ước
+// project này. Plugin (cl-fix.js) chuẩn hoá + xem trước lại, ít lỗi hơn mới dùng.
+// Input:  { name, steps:[…], errors:[{step,type,error}], bins:[…], seqs:['bin ▸ tên'], profile }
+// Output: { ok, steps:[…], note }
+app.post('/flow/fix', async (req, res) => {
+  const b = req.body || {};
+  const steps = Array.isArray(b.steps) ? b.steps.slice(0, 20) : [];
+  if (!steps.length) return res.json({ ok: false, error: 'quy trình trống' });
+  const prompt = `Tôi dựng video quảng cáo trong Adobe Premiere Pro. Plugin chạy "quy trình" = chuỗi khối, mỗi khối chạy cho từng video {bộ}.{số}
+(bộ = số như 36, mỗi bộ có video vid36.0 / 36.1 / 36.2). Quy trình được viết ở project khác, chạy thử ở project này thì lỗi.
+Hãy SỬA các khối BỊ LỖI cho đúng quy ước bin / tên của project này. Khối không lỗi giữ y nguyên. Giữ nguyên ý định (làm việc gì, thứ tự, số khối), chỉ đổi tham số.
+
+ĐỊNH DẠNG KHỐI (JSON):
+  platform   {type:'platform', p:'FB'|'GG'|'PIN'|'APP', mode?:'new'|'resize'}   — các khối sau "theo nền tảng" tự học bin/tên/khung
+  bin_make   {type:'bin_make', bin}
+  seq_make   {type:'seq_make', name, frame, bin}
+  seq_clone  {type:'seq_clone', src, name, bin}
+  seq_resize {type:'seq_resize', src, ratio, platform, bin}
+  seq_move   {type:'seq_move', src, bin}
+  raw_export {type:'raw_export', src, mode:'source'|'render'|'both'}
+  src  = {k:'base'} (sequence FB gốc của video) | {k:'step', n} (kết quả bước n, đếm từ 1) | {k:'prev', ref} (bản cùng loại ở bộ trước)
+         | {k:'plat'} (mọi khung của nền tảng ở bộ trước) | {k:'current'}
+  ref  = {k:'base'} | {k:'match', text:'<chữ đứng ngay trước "vid" trong tên sequence, vd "Google Vertical">'}
+  name = {k:'plat'} (theo nền tảng) | {k:'learn', ref} (học tên bộ trước) | {k:'tpl', text:'mẫu, biến {bộ} {số} {SP} {CO} {ED} {ngày}'}
+  bin  = {k:'plat'} | {k:'tpl', text:'A / B / {bộ}x'} | {k:'prev', ref} | {k:'step', n} | {k:'src'} (cùng bin nguồn)
+  frame = 'set' | 'prev' | '9-16' | '4-5' | '1-1' | '16-9' | '2-3'
+  ratio = 'plat' | 'other' | 'prev' | '9-16' | '4-5' | '1-1' | '2-3';  platform (của resize) = 'plat' | 'prev' | 'GG' | 'FB' | 'PIN'
+Ưu tiên dùng "theo nền tảng" ({k:'plat'}) khi project có khối platform — nó tự học từ bộ trước. Chữ cụ thể (tpl, match) phải chép
+đúng y như bin / tên sequence có thật ở dưới.
+
+QUY TRÌNH "${String(b.name || '').slice(0, 60)}":
+${JSON.stringify(steps)}
+
+LỖI KHI CHẠY THỬ:
+${(b.errors || []).map(e => '- bước ' + e.step + ' (' + e.type + '): ' + e.error).join('\n') || '(không rõ)'}
+
+HỒ SƠ QUY ƯỚC PROJECT (plugin đoán): ${JSON.stringify(b.profile || {})}
+
+BIN TRONG PROJECT:
+${(b.bins || []).slice(0, 250).map(x => '- ' + x).join('\n')}
+
+SEQUENCE (bin ▸ tên):
+${(b.seqs || []).slice(0, 200).map(x => '- ' + x).join('\n')}
+
+Chỉ trả JSON, không markdown:
+{"steps":[…cùng định dạng…],"note":"tối đa 2 câu ngắn (dưới 180 ký tự) tiếng Việt dễ hiểu cho người không rành kỹ thuật: đã đổi gì"}`;
+  try {
+    const out = await callLLM(prompt, { provider: b.provider, model: b.model, apiKey: b.apiKey, maxTokens: 2500 });
+    const m = String(out || '').match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('model không trả về JSON');
+    const j = JSON.parse(m[0]);
+    if (!Array.isArray(j.steps)) throw new Error('model không trả về steps');
+    res.json({ ok: true, steps: j.steps, note: String(j.note || '').slice(0, 2000) });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, cliAuth: !!e.cliAuth });
+  }
+});
+
+// ── POST /project/profile-ai ───────────────────────────────────────────────
+// Tab Claude: luật (plugin/proj-profile.js) không chắc quy ước bin của project → hỏi Claude MỘT lần.
+// Chỉ gửi TÊN bin + tên sequence (không đường dẫn đĩa, không file). Plugin tự kiểm lại kết quả
+// với project thật rồi mới dùng — ở đây chỉ trả JSON model đưa.
+// Input:  { bins: ['Facebook / v1 / 35x', …], seqs: ['Facebook / v1 / 35x ▸ SP vid35.0 [..]', …], rule: {alias, bins} }
+// Output: { ok, profile: {alias:{FB,GG,PIN,APP}, bins:{FB,GG,APP}, note} }
+app.post('/project/profile-ai', async (req, res) => {
+  const b = req.body || {};
+  const bins = (Array.isArray(b.bins) ? b.bins : []).map(String).slice(0, 250);
+  const seqs = (Array.isArray(b.seqs) ? b.seqs : []).map(String).slice(0, 250);
+  if (!bins.length && !seqs.length) return res.json({ ok: false, error: 'project trống' });
+  const prompt = `Tôi dựng video quảng cáo trong Adobe Premiere Pro. Mỗi "bộ" (số, vd 35) có 3 video vid35.0 / 35.1 / 35.2.
+Mỗi video có bản cho nhiều nền tảng: FB (Facebook/Meta), GG (Google/YouTube), PIN (Pinterest), APP (AppLovin).
+Mỗi người trong team đặt tên bin khác nhau. Đọc cấu trúc bin của project này và cho biết quy ước.
+
+BIN TRONG PROJECT:
+${bins.map(x => '- ' + x).join('\n')}
+
+SEQUENCE (bin ▸ tên):
+${seqs.map(x => '- ' + x).join('\n')}
+
+Luật đoán sẵn (có thể sai): ${JSON.stringify(b.rule || {})}
+
+Trả về:
+- "alias": chữ project dùng để gọi từng nền tảng trong bin hoặc tên sequence, chép y nguyên (vd "Facebook", "Google Ads"). Không thấy thì để "".
+- "bins": mẫu đường dẫn bin chứa sequence của từng nền tảng, nối bằng " / ", thay số bộ bằng {bộ} và số video bằng {số}
+  (vd "Facebook / v1 / {bộ}x", "Google / {bộ}x / {bộ}.{số}"). Chỉ đưa mẫu khớp bin có thật ở trên. Không chắc thì "".
+- "note": tóm tắt project bằng tiếng Việt dễ hiểu cho người không rành kỹ thuật, 2–4 câu: các nền tảng đang làm, bin chia thế nào, khung/tên sequence đặt ra sao, bộ mới nhất là bộ mấy.
+
+Chỉ trả JSON, không markdown:
+{"alias":{"FB":"","GG":"","PIN":"","APP":""},"bins":{"FB":"","GG":"","APP":""},"note":""}`;
+  try {
+    const out = await callLLM(prompt, { provider: b.provider, model: b.model, apiKey: b.apiKey, maxTokens: 800 });
+    const m = String(out || '').match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('model không trả về JSON');
+    const j = JSON.parse(m[0]);
+    res.json({ ok: true, profile: { alias: j.alias || {}, bins: j.bins || {}, note: String(j.note || '').slice(0, 2000) } });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, cliAuth: !!e.cliAuth });
+  }
+});
+
 // ── POST /watch/suggest-bins ───────────────────────────────────────────────
 // Ghép thư mục (do find-sources trả về) với bin trong project, nhờ model quyết
 // định. Chỉ ĐỀ XUẤT — plugin hiện bảng cho người dùng duyệt rồi mới tạo watch.
@@ -3822,6 +3988,75 @@ app.post('/rawcut/render-cache/clean', (req, res) => {
   if (!rcAbs(dir) || !rcCache.isUnder(RC_CACHE, dir)) return res.status(400).json({ ok: false, error: 'Chỉ xoá được thư mục trong cache render' });
   try { fs.rmSync(dir, { recursive: true, force: true }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ ok: false, error: friendlyElevenError(e.message) }); }
+});
+
+// ── Khối Render (tab Claude) ─────────────────────────────────────────────────
+// Video giao nằm ở <thư mục sản phẩm>/Videos/Output trên ổ team (Facebook/36x, Google/36x/36.0,
+// Applovin/36x, Pinterest/Order …) — soi gương bin. Plugin học chỗ đặt từ file đã render ở bộ trước.
+// Thư mục Output CÙNG GỐC với project (SAMX, ổ team hay local đều vậy — user 2026-10-05; RAW thì vẫn SAMX):
+// đi ngược từ thư mục .prproj lên, cấp đầu tiên có con tên "Output". Không thấy → <thư mục sản phẩm>/Output
+// (thư mục chứa .prproj là "Editing File" / "project"… thì lên một cấp; không thì ngay cạnh .prproj), tạo khi render. Không dừng ở gốc SAMX_WORKSPACE / Shared drives.
+function renderOutputRoot(projectPath) {
+  const pp = String(projectPath || '');
+  if (!path.isAbsolute(pp)) return '';
+  let dir = path.dirname(pp);
+  for (let i = 0; i < 5 && dir && dir !== '/'; i++) {
+    if (/^(SAMX_WORKSPACE|Shared drives)$/i.test(path.basename(dir))) break;
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch (e) { names = []; }
+    const o = names.find(n => /^output$/i.test(n));
+    if (o) return path.join(dir, o);
+    dir = path.dirname(dir);
+  }
+  const pdir = path.dirname(pp);
+  const generic = /^(projects?|project files?|editing files?|edit(ing)?|premiere|prproj|videos?)$/i.test(path.basename(pdir));
+  return path.join(generic ? path.dirname(pdir) : pdir, 'Output');
+}
+// POST /render/index {projectPath} → {ok, root, files:[{dir (tương đối, nối bằng /), name (không đuôi)}]}
+app.post('/render/index', async (req, res) => {
+  const root = renderOutputRoot((req.body || {}).projectPath);
+  if (!root) return res.json({ ok: false, error: 'Không thấy thư mục Output cạnh project (vd <sản phẩm>/Videos/Output)' });
+  const files = [];
+  const walk = async (rel, depth) => {
+    if (depth > 4 || files.length > 5000) return;
+    let ents = [];
+    try { ents = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true }); } catch (e) { return; }
+    for (const e of ents) {
+      if (e.name.charAt(0) === '.') continue;
+      const r = rel ? rel + '/' + e.name : e.name;
+      if (e.isDirectory()) { if (!(depth === 0 && /^act$/i.test(e.name))) await walk(r, depth + 1); }
+      else if (/\.(mp4|mov)$/i.test(e.name)) files.push({ dir: rel, name: e.name.replace(/\.(mp4|mov)$/i, '') });
+    }
+  };
+  await walk('', 0);
+  let dirs = [];
+  try { dirs = fs.readdirSync(root, { withFileTypes: true }).filter(e => e.isDirectory() && e.name.charAt(0) !== '.').map(e => e.name); } catch (e) {}
+  res.json({ ok: true, root, files, dirs, exists: fs.existsSync(root) });
+});
+// POST /render/stat {path} → {ok, exists, size} — chỉ file video nằm trong một thư mục "Output"
+// (/rawcut/stat chỉ cho hỏi cache RAW → khối Render chờ mãi không thấy file, bug 2026-10-05).
+app.post('/render/stat', (req, res) => {
+  const p = String((req.body || {}).path || '');
+  if (!path.isAbsolute(p) || !/\/output\//i.test(p) || !/\.(mp4|mov)$/i.test(p)) return res.status(400).json({ ok: false, error: 'Chỉ hỏi được file video trong thư mục Output' });
+  try { const st = fs.statSync(p); res.json({ ok: true, exists: true, size: st.size }); }
+  catch (e) { res.json({ ok: true, exists: false, size: 0 }); }
+});
+// POST /render/prepare {root, dir (tương đối), name} → tạo thư mục, trả {ok, file, exists, preset}
+app.post('/render/prepare', (req, res) => {
+  const b = req.body || {};
+  const root = String(b.root || '');
+  if (!root || !path.isAbsolute(root) || !/\/output$/i.test(root)) return res.json({ ok: false, error: 'thư mục Output không hợp lệ' });
+  const rel = String(b.dir || '').split('/').filter(x => x && x !== '..' && x !== '.').join('/');
+  try {
+    const dir = path.join(root, rel);
+    fs.mkdirSync(dir, { recursive: true });
+    const safe = String(b.name || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 180);
+    if (!safe) return res.json({ ok: false, error: 'thiếu tên file' });
+    const file = path.join(dir, safe + '.mp4');
+    const stock = rcEpr.findStockPreset();
+    if (!stock.found) return res.json({ ok: false, error: 'Không tìm thấy preset H.264 "Match Source" trong Premiere / Media Encoder' });
+    res.json({ ok: true, file, exists: fs.existsSync(file), preset: stock.found });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
 // ── POST /rawcut/render-preset ── {dir, mbps} → {ok, path, stockPath, stock, bitrate?, warning?}

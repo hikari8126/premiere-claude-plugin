@@ -7,6 +7,26 @@
 
 
 
+## v5.19.0 / bridge 3.21 (server 1.25.0) — 2026-10-05 · Tab Claude AI tự học + khối Render
+
+> CẦN BRIDGE APP 3.21 (endpoint mới cho Claude + Render).
+
+### ✨ AI tự học
+- **Quét project (proj-profile.js):** mở project → luật đọc chữ nền tảng (FB/Facebook/Meta, GG/Google…) + mẫu bin `{bộ}x`; mỗi project hỏi Claude một lần (`/project/profile-ai`) để tóm tắt quy ước, kết quả kiểm lại với bin thật mới dùng. Lúc đang quét: màn Clawd chiếm tab (nút Ẩn). Tóm tắt dài → Xem thêm. Lưu theo project, chỉ hỏi lại khi bin chứa sequence đổi nhiều. flow-engine / binset-core đọc hồ sơ thay chữ ghi cứng (`inPlat`, khung `GG <loại>`, FB gốc).
+- **Claude tự sửa khối (cl-fix.js, `/flow/fix`):** phiếu chạy có lỗi / bin lệch cấu trúc project → Claude sửa tham số khối lỗi, plugin xem trước lại, ít lỗi hơn mới dùng; lưu theo project + quy trình, "Dùng bản gốc" để quay lại; hàng đợi tự chạy cũng qua bước này.
+- **Gợi ý quy trình (cl-suggest.js, `/flow/suggest`):** Claude được thêm/bớt/đổi thứ tự khối; nguồn: quét project, nhật ký việc làm tay, ô "Nhờ Claude ráp…". Gợi ý lỗi xem trước / trùng → không hiện. Dùng / Thay (có Hoàn tác) / Bỏ qua — không gì tự lưu.
+- **Nhật ký việc làm (act-log.js):** `window.actLog` ở Resize, RAW, Voice Gen, Autocut, trang Auto, Tạo Sub, Un-nest, Watch, Đổi tên, quy trình Claude; chuỗi lặp ở ≥3 bộ → gợi ý.
+
+### ✨ Khối Render
+- Xuất mọi bản của video mà **bộ trước đã render** ra .mp4 (H.264 Match Source), tự vào đúng thư mục giao học từ bộ trước (`Facebook/36x`, `Google/36x/36.0`, `Applovin/36x`…). Output **cùng gốc project** (SAMX / ổ team / local); chưa có bộ nào đã render → chỗ mặc định theo nền tảng, chỉ bản giao. So tên bỏ tag người làm `[..]`, NFC (Drive). Quy trình dựng sẵn FB/GG/PIN/APP thêm **Chờ bro + Render** (seed v6).
+- **PIN:** một bộ → bin `Sequence / PIN / {bộ}x` + `Pinterest/{bộ}x`; lẫn bộ (phiếu chạy chung một lượt) → `Order <ngày>`.
+- Lỗi: chờ file render dùng `/rawcut/stat` (chỉ cho cache RAW) → plugin chờ mãi, chỉ ra 1 video → `/render/stat`.
+
+### 🐛 Sửa
+- **Nút GG bấm Chạy không có gì xảy ra (có từ 5.18.0):** phiếu chạy lấy `platform:'plat'` của khối Resize làm nền tảng → `CLC.slotOptions` đọc `PLATFORM_OF['seq_resize']` undefined → TypeError trong async, không ai bắt. Sửa gốc + chỉ khối gộp cũ mới chọn lại nền tảng + `runFlow` bắt lỗi bất ngờ, báo trong nhật ký.
+- **RAW:** tự khớp sản phẩm thêm luật thư mục có version đuôi (`EaseMotions 2` ↔ `EaseMotions`) và tên file .prproj; dropdown chọn sản phẩm luôn hiện khi chưa xác định được (kể cả project ngoài ổ chung).
+- **Voice Gen:** ô bin Settings nhận `{bộ}` (`Voice Over / {bộ}x`), cảnh báo + nút sửa khi ô ghi cứng bộ khác sequence đang mở.
+
 ## v5.18.3 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Voice Gen: bin theo bộ (tiếp)
 
 - **Vẫn lỗi sau 5.18.2:** voice bộ 36 vẫn nằm ở `Voice Over`, bin `36x` không được tạo. `vgSeqVoiceTarget` đúng (`Voice Over / 36x`) — nguyên nhân thật: import chỉ chuyển bin khi ô **"Chuyển vào bin"** bật; ô tắt → voice nằm lại bin đang chọn ở Project panel.

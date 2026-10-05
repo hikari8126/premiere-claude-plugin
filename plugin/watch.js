@@ -497,6 +497,7 @@
       renderWatches();
       wfCmpClose();
       if (okCount) api('POST', '/notify', { title: 'Watch Folder', body: 'Đã import ' + okCount + ' file' });
+      if (okCount) window.actLog && window.actLog('watch', 'watch_import', '', { files: okCount });
       if (okCount && window.sacRevalidateSources) window.sacRevalidateSources();
       return;
     }

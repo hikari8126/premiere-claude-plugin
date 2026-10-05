@@ -282,7 +282,7 @@ window.CLSTORE = CLSTORE;
     }
     if (s.src) {
       var sv = s.src.k === 'step' ? 'step:' + s.src.n : s.src.k;
-      row('Nguồn', sel((s.type === 'seq_clone' ? [['plat', 'Khung theo nền tảng (bộ trước)']] : []).concat([['base', 'FB gốc của video'], ['prev', 'Bản cùng loại ở bộ trước'], ['current', 'Đang chọn / mở']]).concat(prevSteps), sv, function (v) {
+      row('Nguồn', sel((s.type === 'seq_clone' ? [['plat', 'Khung theo nền tảng (bộ trước)']] : s.type === 'render' ? [['video', 'Mọi bản của video mà bộ trước đã render']] : []).concat([['base', 'FB gốc của video'], ['prev', 'Bản cùng loại ở bộ trước'], ['current', 'Đang chọn / mở']]).concat(prevSteps), sv, function (v) {
         set({ src: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'prev' ? { k: 'prev', ref: { k: 'match', text: '' } } : { k: v } });   // plat / base / current
       }), s.src.k === 'prev' ? refBox(s.src.ref, function (r) { set({ src: { k: 'prev', ref: r } }); }) : null);
     }

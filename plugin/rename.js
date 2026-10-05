@@ -741,6 +741,7 @@
         + (moved ? ' · chuyển ' + moved + ' clip về bin' : '') + (moveErr ? ' · chưa chuyển bin được (' + moveErr + ')' : '') + aepMsg;
       status(msg, rl.fail.length || nameErr ? 'is-warn' : 'is-ok');
       log('Đổi tên source: ' + msg.replace(/^[✓⚠] /, ''));
+      window.actLog && window.actLog('rename', 'rename', '', { mode: prefs.mode });
       rn.done = true;
     } catch (e) {
       progHide();

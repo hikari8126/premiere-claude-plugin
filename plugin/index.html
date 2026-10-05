@@ -954,7 +954,7 @@
             <input type="checkbox" id="vgMoveToVOBin" checked>
             <span class="vg-ftLabel" style="color:#e8e8e8">Chuyển vào bin sau khi import</span>
           </label>
-          <div class="setting-hint-inline">Bin nhớ riêng theo từng project. Bin chưa có sẽ được tạo.</div>
+          <div class="setting-hint-inline">Bin nhớ riêng theo từng project. Bin chưa có sẽ được tạo. Gõ {bộ} để theo sequence đang mở, vd Voice Over / {bộ}x.</div>
 
           <!-- Một dòng duy nhất — hiển thị bin của mode đang mở. -->
           <div class="vg-binRow">
@@ -962,6 +962,7 @@
             <span class="vg-binName" id="vgBinName">Voice Over</span>
             <div class="vg-binPick" id="vgBinPick" role="button"><span data-ic="folder_open" data-ic-size="12"></span></div>
           </div>
+          <div class="vg-binWarn" id="vgBinWarn" style="display:none"></div>
         </div>
 
         </div><!-- /vg-rightScroll -->
@@ -2104,8 +2105,11 @@
 <script src="clawd-pixel.js"></script>
 <script src="claude-log.js"></script>
 <script src="claude-actions.js"></script>
+<script src="proj-profile.js"></script>
 <script src="binset-core.js"></script>
 <script src="flow-engine.js"></script>
+<script src="cl-fix.js"></script>
+<script src="act-log.js"></script>
 <script src="cl-custom.js"></script>
 <script src="main.js"></script>
 <script src="watch.js"></script>
@@ -2123,6 +2127,7 @@
 <script src="cl-custom-ui.js"></script>
 <script src="claude-tab.js"></script>
 <script src="cl-queue.js"></script>
+<script src="cl-suggest.js"></script>
 <script src="cl-dash.js"></script>
 </body>
 </html>

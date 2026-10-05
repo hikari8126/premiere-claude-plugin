@@ -908,6 +908,19 @@
   async function engineStep(entry, rec, st, n, eng, label) {
     var items = (await PTOOLS.snapshot()) || [];
     var ctx = { items: items, targets: eng.targets, results: eng.results, platform: eng.platform, frames: eng.frames, fps: eng.fps };
+    var renderRoot = '';
+    if (st.type === 'render') {                    // Render: danh sách file đã render (học thư mục giao từ bộ trước)
+      try {
+        var ri = await fetch(BRIDGE_URL + '/render/index', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectPath: await projectPath() }) }).then(function (x) { return x.json(); });
+        if (ri && ri.ok) { ctx.renderFiles = ri.files || []; ctx.renderDirs = ri.dirs || []; renderRoot = ri.root; }
+        else throw new Error((ri && ri.error) || 'Bridge không trả lời');
+      } catch (e) {
+        addAct(entry, 'is-error', label + ': ' + e.message); rec.acts.push({ cls: 'is-error', text: label + ': ' + e.message });
+        eng.results.push(eng.targets.map(function () { return null; }));
+        return 'error';
+      }
+    }
     var rows = FLE.planStep(st, n, ctx);
     var idx = rec.acts.length;
     rec.acts.push({ cls: 'is-ask', text: label });
@@ -917,6 +930,9 @@
     entry.result.appendChild(box);
     // Tạo bin: nhiều video chung một bin → một dòng (tạo một lần, mọi video đó coi như xong)
     var shown = rows;
+    // Render: chỉ liệt kê bản sẽ xuất (và bản đã có file); bản không cần render gộp thành 1 dòng tóm tắt
+    var skipped = 0;
+    if (st.type === 'render') { skipped = rows.filter(function (r) { return r.skip; }).length; shown = rows.filter(function (r) { return !r.skip; }); }
     if (st.type === 'bin_make') {
       var byBin = {};
       shown = [];
@@ -929,6 +945,10 @@
     var lines = shown.map(function (r) {
       var title = st.type === 'bin_make' ? r.bin : st.type === 'raw_export' ? (r.src ? r.src.name : 'vid' + r.key) : (r.name || ('vid' + r.key));
       if (r.error) return { name: 'vid' + r.key + ' · ' + (title || ''), sub: r.error, bad: true, r: r };
+      if (st.type === 'render') {
+        if (r.exists) return { name: title, sub: 'đã có file — bỏ qua', bad: true, r: r };
+        return { name: title, sub: '→ ' + r.dest + (r.learnedFrom ? '' : ' (mặc định — chưa có bộ nào đã render)'), r: r };
+      }
       if (r.exists && st.type !== 'raw_export') return { name: title, sub: 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') + ' — bỏ qua', bad: true, r: r };
       var sub = st.type === 'bin_make' ? 'bin mới' + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + (r.fps ? ' · ' + r.fps + 'fps' : '') + ' → ' + r.bin
               : st.type === 'seq_move' ? r.src.name + ' → ' + r.bin
@@ -946,17 +966,37 @@
       function resultsOf(okKeys) {   // kết quả cho bước sau: dòng đã có / vừa tạo; lỗi / bỏ chọn → null
         var tmp = { items: items.slice(), results: eng.results.slice() };
         var all = FLE.applyVirtual(st, rows, tmp);
-        return all.map(function (x, k) { var r = rows[k]; return (r.error || (!r.exists && okKeys.indexOf(r.key) < 0 && st.type !== 'bin_make' && st.type !== 'raw_export')) ? null : x; });
+        return all.map(function (x, k) { var r = rows[k]; return (r.error || (!r.exists && okKeys.indexOf(r.key) < 0 && st.type !== 'bin_make' && st.type !== 'raw_export' && st.type !== 'render')) ? null : x; });
       }
       var todo = lines.filter(function (l) { return !l.bad; }).length;
-      row.textContent = label + (todo ? ' — ' + todo + ' việc' : ' — không còn gì để làm');
-      if (!todo) { box.remove(); finish('is-ok', label + ' — đã có đủ', resultsOf([])); return; }
-      pickList(box, lines, function (k) { return (st.type === 'raw_export' ? 'Xuất ' : 'Tạo ') + k; }, async function (sel) {
+      row.textContent = label + (todo ? ' — ' + todo + (st.type === 'render' ? ' video' : ' việc') : ' — không còn gì để làm')
+        + (skipped ? ' · bỏ qua ' + skipped + ' bản không cần render (bản sao, resize tài nguyên' + (eng.platform ? ', nền tảng khác' : '') + ')' : '');
+      if (!todo) {
+        box.remove();
+        var why = st.type === 'render' && skipped && !rows.some(function (r) { return r.exists; })
+          ? ' — không có bản nào bộ trước đã render (' + skipped + ' bản bỏ qua)' : ' — đã có đủ';
+        finish(st.type === 'render' && why.indexOf('không có') > 0 ? 'is-skip' : 'is-ok', label + why, resultsOf([]));
+        return;
+      }
+      pickList(box, lines, function (k) { return (st.type === 'raw_export' || st.type === 'render' ? 'Xuất ' : 'Tạo ') + k; }, async function (sel) {
         setClawd('work', label + '…');
         row.className = 'cl-act is-run';
         var ok = [], fail = [];
         try {
-          if (st.type === 'raw_export') {
+          if (st.type === 'render') {
+            for (var q = 0; q < sel.length; q++) {
+              var rr = sel[q].r;
+              row.textContent = 'Đang render ' + (q + 1) + '/' + sel.length + ': ' + rr.name + '…';
+              try {
+                var prep = await fetch(BRIDGE_URL + '/render/prepare', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ root: renderRoot, dir: rr.dest, name: rr.name }) }).then(function (x) { return x.json(); });
+                if (!prep || !prep.ok) throw new Error((prep && prep.error) || 'Bridge không trả lời');
+                var ex2 = await RCP.exportFile(await seqByRef(rr.src.ref), prep.file, prep.preset);
+                if (!ex2.ok) throw new Error(ex2.error);
+                ok.push(rr.key);
+              } catch (e) { fail.push(rr.name + ': ' + ((e && e.message) || e)); if (/Media Encoder/.test(String(e && e.message))) break; }
+            }
+          } else if (st.type === 'raw_export') {
             var seqs = [];
             for (var a = 0; a < sel.length; a++) seqs.push(await seqByRef(sel[a].r.src.ref));
             row.textContent = 'Đang xuất RAW ' + seqs.length + ' sequence… (xem tab RAW)';
@@ -1003,10 +1043,28 @@
     });
   }
 
+  // Lỗi bất ngờ trong quy trình không được làm panel đứng im (bug 2026-10-05: nút GG bấm Chạy không có gì xảy ra
+  // — runFlow văng TypeError trong async, không ai bắt). Bắt lại, dọn trạng thái, báo lỗi trong nhật ký.
   async function runFlow(b, over) {
+    try { return await runFlowCore(b, over); }
+    catch (e) {
+      console.error('[claude-tab] runFlow', e);
+      flow = null; window.CL_FLOW_RUNNING = 0;
+      try {
+        var en = makeEntry((b && b.name) || 'Quy trình', false);
+        addAct(en, 'is-error', 'Quy trình lỗi: ' + ((e && e.message) || e));
+        syncEmpty();
+      } catch (e2) {}
+      setSendMode();
+      setClawd('fail', 'Quy trình lỗi', 'is-error');
+      return { ok: false, error: (e && e.message) || String(e) };
+    }
+  }
+  async function runFlowCore(b, over) {
     if (busy || flow) return { ok: false, error: 'đang chạy việc khác' };
     over = over || {};
     autoRun = !!over.auto;
+    window.CL_FLOW_RUNNING = Date.now();                 // việc các tab làm trong lúc chạy quy trình không ghi nhật ký riêng
     showView('log');
     var v = CLC.vars(seqNameNow());
     if (over.set) v['bộ'] = String(over.set);
@@ -1027,6 +1085,7 @@
     var items = null, stopped = '';
     // Video đích cho khối đơn: theo phiếu chạy; không chỉ định → mọi FB gốc của bộ (bộ mới chưa có → .0 .1 .2)
     var eng = { targets: null, results: [], platform: '', frames: over.frames || null };
+    if (over.targets && over.targets.length) eng.targets = over.targets.map(function (t) { return { set: String(t.set), idx: Number(t.idx) }; });
     async function engTargets() {
       if (eng.targets) return eng.targets;
       var set = v['bộ'];
@@ -1113,6 +1172,8 @@
     if (stopped) { addAct(entry, 'is-skip', stopped); rec.acts.push({ cls: 'is-skip', text: stopped }); }
     lastFlowStopped = !!stopped;                   // phiếu chạy nhiều bộ: dừng thì không chạy bộ sau
     var bad = rec.acts.some(function (a) { return a.cls === 'is-error'; });
+    window.CL_FLOW_RUNNING = false;
+    if (!bad && !stopped) (over.idxs && over.idxs.length ? over.idxs : [0]).forEach(function (n) { window.actLog && window.actLog('claude', 'flow', v['bộ'] ? 'vid' + v['bộ'] + '.' + n : '', { name: b.name }); });
     setClawd(bad ? 'fail' : 'done', bad ? 'Quy trình có bước lỗi' : 'Xong quy trình', bad ? 'is-error' : 'is-done');
     history = CLLOG.pushHistory(history, rec);
     saveHistory();

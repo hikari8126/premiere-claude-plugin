@@ -623,7 +623,7 @@
       line.appendChild(el('div', 'rc-dest-err', (d.why || d.error || 'Chưa xác định được thư mục xuất')));
     }
     var list = (d.candidates && d.candidates.length ? d.candidates : []).concat((d.products || []).filter(function (n) { return !d.candidates || d.candidates.indexOf(n) === -1; }));
-    var showPick = list.length && (d.needPick || d.route === 'picked' || d.route === 'matched');
+    var showPick = list.length && (!d.ok || d.needPick || d.route === 'picked' || d.route === 'matched');
     pick.style.display = showPick ? '' : 'none';
     if (!showPick) { closePicker(); return; }
     var cur = st.prefs.productPick[projectKey()] || '', cands = d.candidates || [];
@@ -1063,6 +1063,7 @@
     var made = results.filter(function (r) { return !r.skipped; });
     if (!bad && made.length) {
       var clips = made.reduce(function (n, r) { return n + (r.ok || 0); }, 0);
+      window.actLog && window.actLog('rawcut', 'rawcut', st.read && st.read.seqName, { mode: st.prefs.mode, clips: clips });
       showDone('Xong! ' + clips + ' clip', made.map(function (r) { return r.half === 'render' ? 'edited/' : 'raw/'; }).join(' + ') + ' · ' + tookText(),
                made[made.length - 1].dir || '');
     }
@@ -1134,6 +1135,7 @@
     try { api('POST', '/notify', { title: 'Raw-cutter', body: (bad ? 'Xuất xong — có lỗi' : 'Xuất xong') + ' · ' + all.length + ' sequence' }); } catch (e) {}
     if (!bad && flat.some(function (r) { return !r.skipped; })) {
       var nClips = flat.reduce(function (n, r) { return n + (r.ok || 0); }, 0);
+      all.forEach(function (a) { window.actLog && window.actLog('rawcut', 'rawcut', a.item && a.item.read && a.item.read.seqName, { mode: st.prefs.mode }); });
       showDone('Xong! ' + all.length + ' sequence · ' + nClips + ' clip', tookText(), '');
     }
   }
@@ -1447,6 +1449,11 @@
   // xem lại thư mục xuất / clip rồi bấm XUẤT trong tab RAW.
   window.RawcutAPI = {
     modes: MODES,
+    // Thư mục / sản phẩm bro đã chọn ở tab RAW cho project này (khối Render xuất cùng chỗ).
+    destPicks: function (projectPath) {
+      var pk = projectPath || projectKey();
+      return { chosen: st.prefs.chosen[pk] || '', productPick: st.prefs.productPick[pk] || '' };
+    },
     prepare: async function (seqs, mode) {
       if (st.busy || st.running) throw new Error('tab RAW đang chạy lượt khác');
       if (!seqs || !seqs.length) throw new Error('chưa có sequence nào');

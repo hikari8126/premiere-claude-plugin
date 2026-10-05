@@ -11,6 +11,7 @@
 // Phần chạm Premiere ở binset.js.
 
 var BSC = (function () {
+  var PF = (typeof PPF !== 'undefined') ? PPF : require('./proj-profile.js');
   var PLATFORMS = ['GG', 'PIN'];
   var DEFAULT_TARGETS = { GG: ['dọc', 'ngang', 'vuông'], PIN: [] };   // PIN: lấy theo bộ trước
 
@@ -30,9 +31,9 @@ var BSC = (function () {
     (items || []).forEach(function (it) {
       if (!isSeq(it)) return;
       var m = String(it.name).match(re);
-      if (!m || /\b\d+x\d+\b/i.test(it.name) || /(^|\s)(GG|PIN)(\s|$)/.test(it.name)) return;
+      if (!m || /\b\d+x\d+\b/i.test(it.name) || new RegExp('(^|\\s)(' + PF.alt('GG') + '|' + PF.alt('PIN') + '|' + PF.alt('APP') + ')(\\s|$)', 'i').test(it.name)) return;
       var idx = Number(m[1]), cur = out[idx];
-      var score = /(^|\/)\s*FB\s*(\/|$)/i.test(it.path || '') ? 2 : 1;
+      var score = new RegExp('(^|/)\\s*(' + PF.alt('FB') + ')\\s*(/|$)', 'i').test(it.path || '') ? 2 : 1;
       if (!cur || score > cur.score) out[idx] = { idx: idx, ref: ref(it), name: it.name, score: score };
     });
     return out;

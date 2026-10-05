@@ -20,6 +20,7 @@
 
 var FLE = (function () {
   var B = (typeof BSC !== 'undefined') ? BSC : require('./binset-core.js');
+  var PF = (typeof PPF !== 'undefined') ? PPF : require('./proj-profile.js');
 
   var TYPES = {
     platform:   { label: 'Nền tảng',       desc: 'chọn FB / GG / PIN / APP — các khối sau tự học bin, tên, khung theo nền tảng' },
@@ -28,7 +29,8 @@ var FLE = (function () {
     seq_clone:  { label: 'Nhân bản',       desc: 'nhân bản một sequence rồi đặt tên mới' },
     seq_resize: { label: 'Resize',         desc: 'đổi khung sequence thành bản mới (tab Resize)' },
     seq_move:   { label: 'Chuyển vào bin', desc: 'chuyển sequence vào bin khác' },
-    raw_export: { label: 'Xuất RAW',       desc: 'xuất từng cut ra file (tab RAW)' }
+    raw_export: { label: 'Xuất RAW',       desc: 'xuất từng cut ra file (tab RAW)' },
+    render:     { label: 'Render',         desc: 'xuất video ra .mp4, tự vào đúng thư mục giao như bộ trước (Output/Facebook/36x…)' }
   };
   var FRAMES = { '9-16': [1080, 1920], '4-5': [1080, 1350], '1-1': [1080, 1080], '16-9': [1920, 1080], '2-3': [1080, 1620] };
   var RATIO_TXT = { '9-16': '9:16', '4-5': '4:5', '1-1': '1:1', '16-9': '16:9', '2-3': '2:3' };
@@ -54,6 +56,7 @@ var FLE = (function () {
     if (s.k === 'prev') return { k: 'prev', ref: nRef(s.ref) };
     if (s.k === 'current') return { k: 'current' };
     if (s.k === 'plat') return { k: 'plat' };
+    if (s.k === 'video') return { k: 'video' };
     return { k: 'base' };
   }
   function nName(n) {
@@ -88,6 +91,7 @@ var FLE = (function () {
       o.bin = nBin(s.bin, { k: 'src' });
     }
     if (t === 'seq_move') { o.src = nSrc(s.src); o.bin = nBin(s.bin, { k: 'tpl', text: '' }); }
+    if (t === 'render') o.src = nSrc(s.src || { k: 'video' });
     if (t === 'raw_export') { o.src = nSrc(s.src); o.mode = ['source', 'render', 'both'].indexOf(s.mode) >= 0 ? s.mode : 'both'; o.auto = s.auto !== false; }
     return o;
   }
@@ -107,6 +111,7 @@ var FLE = (function () {
     if (s.k === 'step') return 'kết quả bước ' + s.n;
     if (s.k === 'prev') return refTxt(s.ref) + ' bộ trước';
     if (s.k === 'current') return 'đang chọn / mở';
+    if (s.k === 'video') return 'mọi bản của video (bộ trước đã render)';
     return 'FB gốc';
   }
   function nameTxt(n) { return n.k === 'tpl' ? (n.text || 'mẫu tên?') : n.k === 'plat' ? 'tên theo nền tảng' : 'tên như ' + refTxt(n.ref) + ' bộ trước'; }
@@ -196,8 +201,9 @@ var FLE = (function () {
   }
 
   // ── Học theo nền tảng (khối Nền tảng phía trước) ─────────────────────────
-  var GG_RE = /(^|\s)GG\s+(\S+)\s+vid\s*(\d+)\s*\.\s*(\d+)(?!\d)/i;
-  function inPlat(path, P) { return new RegExp('(^|/)\\s*' + P + '\\s*(/|$)', 'i').test(String(path || '')); }
+  function ggRe() { return new RegExp('(^|\\s)(?:' + PF.alt('GG') + ')\\s+(\\S+)\\s+vid\\s*(\\d+)\\s*\\.\\s*(\\d+)(?!\\d)', 'i'); }
+  // Bin mang chữ nền tảng (đứng riêng hoặc là một từ trong tên bin: "Ads GGL", "Google / v1").
+  function inPlat(path, P) { return new RegExp('(^|/)[^/]*(^|[\\s_\\-])(' + PF.alt(P) + ')([\\s_\\-][^/]*)?\\s*(/|$)', 'i').test(String(path || '')); }
   // Bin chứa đồ GG của video set.idx (bản sao "{bộ}.{số}" hoặc khung "GG … vid…") ở một bộ.
   function ggBinOf(items, set, idx) {
     var hit = (items || []).filter(function (it) {
@@ -229,9 +235,19 @@ var FLE = (function () {
     var day = best && best.num ? p2(dd) + p2(mm) + p2(yy) : MON[d.getMonth()] + ' ' + p2(dd) + ' ' + p2(yy);
     return (best ? best.parent + best.word : 'Sequence / PIN / Order') + ' ' + day;
   }
-  function platBin(items, P, set, idx, date) {
+  // PIN (quy định 2026-10-05): mọi video của lượt chạy cùng MỘT bộ → bin "{bộ}x" cạnh các đơn
+  // (Sequence / PIN / 36x); lẫn nhiều bộ → bin đơn "Order <ngày>".
+  function pinBin(items, date, targets) {
+    var sets = {};
+    (targets || []).forEach(function (t) { sets[String(t.set)] = 1; });
+    var ks = Object.keys(sets);
+    var order = pinOrderBin(items, date);
+    if (ks.length !== 1) return order;
+    return order.replace(/[^/]*$/, '').replace(/\s*$/, ' ') + ks[0] + 'x';
+  }
+  function platBin(items, P, set, idx, date, targets) {
     var to = { set: Number(set), idx: Number(idx) };
-    if (P === 'PIN') return pinOrderBin(items, date);
+    if (P === 'PIN') return pinBin(items, date, targets);
     if (P === 'GG') {
       var sets = prevSets(items, set);
       for (var i = 0; i < sets.length; i++) {
@@ -241,12 +257,16 @@ var FLE = (function () {
           return subst(path, from, to);
         }
       }
-      return 'Sequence / GG / ' + set + 'x / ' + set + '.' + idx;
+      return defBin('GG', set, idx, 'Sequence / ' + PF.alias('GG') + ' / {bộ}x / {bộ}.{số}');
     }
     var ref = P === 'APP' ? { k: 'match', text: 'AppLovin' } : { k: 'base' };
     var p = nearestPrev(items, ref, set, idx);
     if (p) return subst(p.item.path, { set: p.set, idx: p.idx }, to);
-    return 'Sequence / ' + P + ' / ' + set + 'x';
+    return defBin(P, set, idx, 'Sequence / ' + PF.alias(P) + ' / {bộ}x');
+  }
+  // Chưa có bộ trước: mẫu bin học từ project (hồ sơ quy ước), không có thì mặc định.
+  function defBin(P, set, idx, fallback) {
+    return (PF.binTpl(P) || fallback).replace(/\{bộ\}/g, set).replace(/\{số\}/g, idx);
   }
   // Khung / template để nhân bản theo nền tảng: GG = mọi khung "GG <loại>" của bộ gần nhất có
   // (ưu tiên cùng số video); APP = bản AppLovin bộ trước. → [{item, set, idx, label}]
@@ -260,7 +280,7 @@ var FLE = (function () {
     for (var i = 0; i < sets.length; i++) {
       var by = {};
       (items || []).forEach(function (it) {
-        var m = isSeq(it) && String(it.name).match(GG_RE);
+        var m = isSeq(it) && String(it.name).match(ggRe());
         if (!m || Number(m[3]) !== sets[i]) return;
         var lab = m[2], same = Number(m[4]) === Number(idx), cur = by[lab.toLowerCase()];
         if (!cur || (same && !cur.same)) by[lab.toLowerCase()] = { item: it, set: sets[i], idx: Number(m[4]), label: lab, same: same };
@@ -288,6 +308,72 @@ var FLE = (function () {
     return f ? f.item.name : '';
   }
 
+  // ── Render: học thư mục giao từ file đã render ở bộ trước ─────────────────
+  // files = [{dir:'Google/35x/35.0', name:'SonaShape GG Dọc vid35.0 [..] [..]'}] (bridge /render/index).
+  function numOf(name) {
+    var v = vidOf(name);
+    if (v) return v;
+    var m = String(name).match(/(?:^|[^\d.])(?:aiv\s*)?(\d+)\.(\d+)(?![\d.])/i);
+    return m ? { set: Number(m[1]), idx: Number(m[2]) } : null;
+  }
+  // Tên file trên Drive hay ở dạng NFD (dấu tách rời) → chuẩn NFC trước khi so; bỏ " (1)", "-" thừa ở đuôi.
+  function nfc(s) { var t = String(s || ''); try { t = t.normalize('NFC'); } catch (e) {} return t; }
+  // So "loại" bản render: bỏ tag người làm [..] (bộ 39 [c.trang…] vs bộ 40 [c.uyen…] — bug 2026-10-05).
+  function fkey(s) {
+    var t = nfc(s).replace(/\[[^\]]*\]/g, ' ');
+    return norm(t.replace(/\s*\(\d+\)/g, '').replace(/[-_]+$/, ''));
+  }
+  var RENDER_LOOKBACK = 6;     // chỉ học từ 6 bộ gần nhất (file cũ / nháp ở bộ xa không tính)
+  // → {dir, from:{set, idx}} | null — bộ gần nhất trước đó, ưu tiên cùng số video
+  function renderDest(files, name, set, idx, order) {
+    var to = { set: Number(set), idx: Number(idx) }, want = fkey(name), best = null;
+    (files || []).forEach(function (f) {
+      var n = numOf(f.name);
+      if (!n || n.set >= to.set || n.set < to.set - RENDER_LOOKBACK) return;
+      if (fkey(subst(f.name, n, to)) !== want) return;
+      var score = n.set * 10 + (n.idx === to.idx ? 1 : 0);
+      if (!best || score > best.score) best = { score: score, dir: subst(nfc(f.dir), n, to), from: n };
+    });
+    if (!best) return null;
+    // Đơn PIN: bộ trước nằm ở "Pinterest/Order <ngày cũ>" → vào đơn của bin hiện tại (cùng tên "Order …")
+    var segs = best.dir.split('/'), last = segs[segs.length - 1];
+    // PIN: bộ trước ở "Pinterest/Order <ngày cũ>" hay "Pinterest/35x" → theo bin hiện tại ("Order <ngày>" | "36x")
+    if (/^order\b|^\d+x$/i.test(last) && /^pinterest$|^pin$/i.test(segs[segs.length - 2] || '')) {
+      var ob = String(order || '').split('/').map(function (x) { return x.trim(); }).filter(Boolean).pop() || '';
+      if (/^order\b|^\d+x$/i.test(ob)) segs[segs.length - 1] = ob;
+    }
+    return { dir: segs.join('/'), from: best.from };
+  }
+  // Chưa có bộ nào đã render để học → chỗ mặc định theo nền tảng, chỉ cho BẢN GIAO (khung GG, AppLovin, 2x3 PIN,
+  // FB gốc). Thư mục nền tảng lấy đúng tên đang có trong Output ("FB" ở SAMX, "Facebook" ở ổ team…).
+  var PLAT_DIR = { FB: 'Facebook', GG: 'Google', PIN: 'Pinterest', APP: 'Applovin' };
+  function deliverable(items, P, name, set, idx) {
+    if (P === 'GG') return ggRe().test(name);
+    if (P === 'APP') return /applovin/i.test(name);
+    if (P === 'PIN') return /\b2x3\b/i.test(name) && new RegExp('(^|\\s)(' + PF.alt('PIN') + ')\\s*$', 'i').test(name);
+    if (P === 'FB') return familyIn(items, { k: 'base' }, set).some(function (f) { return f.idx === Number(idx) && f.item.name === name; });
+    return false;
+  }
+  function defaultRenderDir(dirs, P, set, idx, bin) {
+    var top = (dirs || []).filter(function (d) { return PF.platOf(d) === P; })[0] || PLAT_DIR[P];
+    if (P === 'GG') return top + '/' + set + 'x/' + set + '.' + idx;
+    if (P === 'PIN') {
+      var last = String(bin || '').split('/').map(function (x) { return x.trim(); }).filter(Boolean).pop() || '';
+      return top + '/' + (/^order\b|^\d+x$/i.test(last) ? last : set + 'x');
+    }
+    return top + '/' + set + 'x';
+  }
+
+  // Mọi sequence của video set.idx: tên có vid{set}.{idx}, hoặc mở đầu "{set}.{idx}" (bản sao / resize tài nguyên)
+  function videoSeqs(items, set, idx) {
+    var re = new RegExp('^' + set + '\\.' + idx + '(?![\\d.])');
+    return (items || []).filter(function (it) {
+      if (!isSeq(it)) return false;
+      var v = vidOf(it.name);
+      return (v && v.set === Number(set) && v.idx === Number(idx)) || re.test(String(it.name).trim());
+    });
+  }
+
   // ── Lập kế hoạch một bước ─────────────────────────────────────────────────
   // ctx = {items, targets:[{set, idx}], results:[…], platform:'FB'|…, frames:{idx:'9-16'}, date}
   // → rows [{key, ti, set, idx, name, bin, src, exists, error, frame?, like?, ratio?, ratios?, platform?, label?}]
@@ -305,6 +391,10 @@ var FLE = (function () {
       }
       // Nhân bản "khung theo nền tảng" → một dòng cho mỗi khung (GG Dọc / Ngang / Vuông…)
       var variants = [null];
+      if (s.type === 'render' && s.src && s.src.k === 'video') {
+        variants = videoSeqs(items, set, idx).map(function (it) { return { item: it, set: Number(set), idx: idx, label: it.name, video: true }; });
+        if (!variants.length) variants = [{ err: 'chưa có sequence nào của vid' + set + '.' + idx }];
+      }
       if (s.src && s.src.k === 'plat') {
         try { needP(); variants = platTemplates(items, P, set, idx); } catch (e) { variants = [{ err: e.message }]; }
         if (!variants.length) variants = [{ err: 'chưa có khung ' + P + ' ở bộ trước để nhân bản' }];
@@ -315,7 +405,7 @@ var FLE = (function () {
           if (tpl && tpl.err) throw new Error(tpl.err);
           // nguồn
           if (s.src) {
-            if (tpl) row.src = { ref: refOf(tpl.item), name: tpl.item.name, bin: tpl.item.path, prev: tpl.set };
+            if (tpl) row.src = { ref: refOf(tpl.item), name: tpl.item.name, bin: tpl.item.path, prev: tpl.video ? undefined : tpl.set };
             else if (s.src.k === 'base') {
               var f = familyIn(items, { k: 'base' }, set).filter(function (x) { return x.idx === idx; })[0];
               if (!f) throw new Error('không thấy FB gốc vid' + set + '.' + idx);
@@ -358,7 +448,7 @@ var FLE = (function () {
               var fb = fillTpl(s.bin.text, v);
               if (fb.missing.length) throw new Error('thiếu ' + fb.missing.map(function (k) { return '{' + k + '}'; }).join(', '));
               row.bin = fb.text;
-            } else if (s.bin.k === 'plat') { needP(); row.bin = platBin(items, P, set, idx, ctx.date); }
+            } else if (s.bin.k === 'plat') { needP(); row.bin = platBin(items, P, set, idx, ctx.date, ctx.targets); }
             else if (s.bin.k === 'prev') {
               var pb = nearestPrev(items, s.bin.ref, set, idx);
               if (!pb) throw new Error('chưa có ' + refTxt(s.bin.ref) + ' ở bộ trước để học bin');
@@ -401,7 +491,7 @@ var FLE = (function () {
               if (s.platform === 'plat') row.platform = pr.label;
             }
             if (s.ratio === 'prev' || s.platform === 'prev') {
-              var hint = (String(row.bin || '').match(/\/\s*(GG|PIN|FB|APP)\s*(\/|$)/i) || [])[1] || 'GG';
+              var hint = ['GG', 'PIN', 'FB', 'APP'].filter(function (q) { return inPlat(row.bin, q); })[0] || 'GG';
               var spec = B.res2Spec(items, hint.toUpperCase(), set, idx);
               if (s.ratio === 'prev') { if (spec.from) row.ratios = spec.ratios; else row.ratio = 'other'; }
               if (s.platform === 'prev') row.platform = spec.from ? spec.platform : 'FB';
@@ -419,6 +509,22 @@ var FLE = (function () {
             row.name = stem ? stem + ' ' + (row.ratio === 'other' ? '…' : (row.ratios && row.ratios.length ? row.ratios.map(function (r) { return r.replace('-', 'x'); }).join('+') : String(row.ratio).replace('-', 'x'))) + ' ' + row.platform : '';
           }
           if (s.type === 'seq_move') row.exists = !!row.src && samePath(row.src.bin, row.bin);
+          if (s.type === 'render') {
+            row.name = row.src && row.src.name;
+            if (ctx.renderFiles) {
+              var rd = renderDest(ctx.renderFiles, row.name, set, idx, row.src && row.src.bin);
+              var top = rd ? PF.platOf(rd.dir.split('/')[0]) : '';
+              if (!rd && P && deliverable(items, P, row.name, set, idx)) {
+                rd = { dir: defaultRenderDir(ctx.renderDirs, P, set, idx, row.src && row.src.bin), from: null }; top = P;
+              }
+              if (!rd) row.skip = 'bộ trước chưa render loại này';
+              else if (P && top && top !== P) row.skip = 'bản ' + top + ' — quy trình này chỉ render ' + P;
+              else {
+                row.dest = rd.dir; row.learnedFrom = rd.from ? rd.from.set + '.' + rd.from.idx : '';
+                row.exists = ctx.renderFiles.some(function (f) { return samePath(f.dir, rd.dir) && fkey(f.name) === fkey(row.name); });
+              }
+            }
+          }
         } catch (e) { row.error = e.message; }
         rows.push(row);
       });
@@ -439,7 +545,7 @@ var FLE = (function () {
         if (!r.exists) ctx.items.push({ name: r.name, path: r.bin, isFolder: false, mediaType: 'sequence', virtual: true });
         out = { name: r.name, bin: r.bin, ref: r.bin + ' ▸ ' + r.name };
       } else if (s.type === 'seq_move') out = r.src ? { name: r.src.name, bin: r.bin, ref: r.bin + ' ▸ ' + r.src.name } : null;
-      else out = r.src ? { name: r.src.name, bin: r.src.bin, ref: r.src.ref } : null;   // resize / raw: kết quả = nguồn
+      else out = r.src ? { name: r.src.name, bin: r.src.bin, ref: r.src.ref } : null;   // resize / raw / render: kết quả = nguồn
       if (out && !res[ti]) res[ti] = out;                                                // nhiều khung / video → giữ dòng đầu
     });
     ctx.results = (ctx.results || []).concat([res]);
@@ -457,7 +563,7 @@ var FLE = (function () {
     });
   }
 
-  return { TYPES: TYPES, FRAMES: FRAMES, PLATS: PLATS, platBin: platBin, platTemplates: platTemplates, platResize: platResize, pinOrderBin: pinOrderBin, RATIO_TXT: RATIO_TXT, isType: isType, normStep: normStep, problems: problems,
+  return { renderDest: renderDest, videoSeqs: videoSeqs, TYPES: TYPES, FRAMES: FRAMES, PLATS: PLATS, platBin: platBin, platTemplates: platTemplates, platResize: platResize, pinOrderBin: pinOrderBin, RATIO_TXT: RATIO_TXT, isType: isType, normStep: normStep, problems: problems,
            chips: chips, srcTxt: srcTxt, nameTxt: nameTxt, binTxt: binTxt,
            familyIn: familyIn, nearestPrev: nearestPrev, subst: subst, varsFor: varsFor, fillTpl: fillTpl,
            planStep: planStep, applyVirtual: applyVirtual, planFlow: planFlow };

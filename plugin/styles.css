@@ -5026,3 +5026,33 @@ div.cd-frame.is-45[role="button"] { border-color: #4a5a86; background: #22283a; 
 .cd-frame.is-45 .cd-frameR { color: #b9c8f0; }
 div.cd-frameAdd[role="button"] { align-self: center; }
 .cd-segFrame { margin-bottom: 8px; }
+
+.vg-binWarn {
+  margin-top: 5px;
+  font-size: 10px;
+  color: #f0c060;
+  line-height: 1.4;
+}
+.vg-binWarnFix {
+  color: var(--accent, #b48cff);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cd-prof { margin: 2px 0 4px; font-size: 10px; }
+.cd-profWarn { margin: 2px 0 4px; font-size: 10px; color: #f0c060; line-height: 1.4; }
+
+.cd-fix { margin: 4px 0 6px; font-size: 10.5px; color: var(--text-dim); line-height: 1.4; }
+.cd-fix.is-ok { color: #9fd8a8; }
+.cd-fix.is-bad { color: #f0c060; }
+
+.cd-scan { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; min-height: 320px; text-align: center; }
+.cd-scanPic { margin-bottom: 14px; }
+.cd-scanT { font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
+.cd-scanS { font-size: 10.5px; max-width: 280px; line-height: 1.5; margin-bottom: 14px; }
+.cd-scanHide { font-size: 10.5px; }
+
+.cd-sugBox { margin-top: 8px; }
+.cd-askRow { display: flex; align-items: center; margin: 4px 0 6px; }
+.cd-askIn { flex: 1 1 auto; min-width: 0; margin-right: 6px; }
+.cd-sgWhy { margin: 3px 0 4px; line-height: 1.45; }

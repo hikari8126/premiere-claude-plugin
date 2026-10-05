@@ -129,3 +129,7 @@ test("projectFacts: bin voice / sequence theo mẫu {bộ}", () => {
   assert.match(f, /Các bộ đã có: 39, 40/);
   assert.strictEqual(CLC.projectFacts([], SEQ), "");
 });
+
+test("slotOptions platform cho khối đơn không văng lỗi (bug nút GG 2026-10-05)", () => {
+  assert.deepStrictEqual(CLC.slotOptions({ type: "seq_resize", platform: "plat" }, "platform"), []);
+});

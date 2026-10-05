@@ -251,6 +251,14 @@ assert.strictEqual(r.route, 'matched');
 assert.strictEqual(r.product.name, 'Glow Serum');
 assert.strictEqual(r.dirs.raw, path.join(SAMX2, 'Glow Serum', 'Output', 'ACT', 'v2.0', 'raw'));
 assert.deepStrictEqual(r.products, ['Brand', 'Brand Two', 'Glow Serum', 'Kettle', 'Nopout']);
+// thư mục có version đuôi, sản phẩm thì không: "Kettle 2" → Kettle
+r = rd({ projectPath: proj('Kettle 2', 'Video', 'Editing File', 'k25.prproj'), sequenceName: 'K25 v1.0', mode: 'source' });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'Kettle');
+// chỉ tên file .prproj gọi tên sản phẩm
+r = rd({ projectPath: proj('Team stuff', 'Template', 'Editing File', 'Kettle.prproj'), sequenceName: 'x v1.0', mode: 'source' });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'Kettle');
 // khớp phần đầu: "<Product> (…) - …"
 r = rd({ projectPath: proj('Kettle (Acme old) - steel', 'Video', 'k.prproj'), sequenceName: 'K v1.0', mode: 'source' });
 assert.strictEqual(r.ok, true, r.why);

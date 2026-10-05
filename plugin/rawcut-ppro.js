@@ -504,14 +504,14 @@ var RCP = (function () {
 
   // exportSequence rồi chờ file có thật trên đĩa. IMMEDIATELY thường chỉ trả về khi đã ghi
   // xong (Voice Changer dựa vào đó) — vẫn chờ size đứng yên, hạn chờ theo độ dài cut.
-  async function exportOne(em, seq, ET, file, preset, secs) {
+  async function exportOne(em, seq, ET, file, preset, secs, statUrl) {
     var ret;
     try { ret = await un(em.exportSequence(seq, ET, file, preset, false)); }
     catch (e) { return { ok: false, error: 'exportSequence lỗi: ' + ((e && (e.message || e.code)) || e) }; }
     var limit = Date.now() + (ret === false ? 2000 : Math.max(60000, (secs || 0) * 10000));
     var last = -1, stable = 0;
     while (Date.now() < limit) {
-      var stt = await bridgePost('/rawcut/stat', { path: file });
+      var stt = await bridgePost(statUrl || '/rawcut/stat', { path: file });
       if (stt && stt.exists && stt.size > 0) {
         if (stt.size === last) { if (++stable >= 2) return { ok: true, size: stt.size }; }
         else stable = 0;
@@ -584,7 +584,20 @@ var RCP = (function () {
     return L.join('\n');
   }
 
-  return { readSequence: readSequence, exportXml: exportXml, stamp: stamp, renderRanges: renderRanges, diag: diag,
+  // Khối Render (tab Claude): xuất CẢ sequence ra một file (preset H.264 Match Source của bridge).
+  // Đường dẫn file do caller quyết; thư mục phải có sẵn (bridge /render/prepare tạo).
+  async function exportFile(seq, file, preset) {
+    if (!ppro.EncoderManager || !ppro.EncoderManager.getManager) return { ok: false, error: 'Premiere bản này không có EncoderManager (cần ≥ 25.6)' };
+    var em = ppro.EncoderManager.getManager();
+    var ET = ppro.Constants && ppro.Constants.ExportType && ppro.Constants.ExportType.IMMEDIATELY;
+    var secs = 0;
+    try { var end = await call(seq, 'getEndTime', null); secs = end ? Number(await call(end, 'seconds', 0)) || Number(end.seconds) || 0 : 0; } catch (e) {}
+    var r = await exportOne(em, seq, ET, file, preset, secs || 120, '/render/stat');
+    if (!r.ok && AME_MISSING_RE.test(r.error || '')) r.error = AME_MISSING_MSG.replace('Timeline Render (edited/)', 'Render');
+    return r;
+  }
+
+  return { exportFile: exportFile, readSequence: readSequence, exportXml: exportXml, stamp: stamp, renderRanges: renderRanges, diag: diag,
            selectedSequences: selectedSequences, activate: activate, guidOf: guidOf,
            _text: { collect: collectText, setDisabled: setItemsDisabled } };   // _text: cho dev.sh eval kiểm tra
 })();

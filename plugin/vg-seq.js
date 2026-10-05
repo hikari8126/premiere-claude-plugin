@@ -94,7 +94,27 @@ var VGSEQ = (function () {
     };
   }
 
-  return { parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, sameVoiceDir: sameVoiceDir, findVoiceDirName: findVoiceDirName, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
+  // Ô bin Settings nhận biến {bộ}: "Voice Over / {bộ}x" → "Voice Over / 36x" theo sequence đang mở.
+  // Không biết bộ → bỏ đoạn bin chứa {bộ} ("Voice Over"). Không có biến → giữ nguyên.
+  var SET_VAR_RE = /\{\s*(?:bộ|bo|set)\s*\}/i;
+  function applySetVar(bin, set) {
+    var b = String(bin || '');
+    if (!SET_VAR_RE.test(b)) return b;
+    var segs = b.split('/').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (set) return segs.map(function (x) { return x.replace(new RegExp(SET_VAR_RE.source, 'gi'), set); }).join(' / ');
+    var keep = segs.filter(function (x) { return !SET_VAR_RE.test(x); });
+    return keep.join(' / ') || 'Voice Over';
+  }
+  // Ô ghi cứng số bộ ("… / 34x") khác bộ đang mở → {stale: '34', fixed: '… / {bộ}x'}; không thì null.
+  function staleSetBin(bin, set) {
+    var b = String(bin || '');
+    if (!set || SET_VAR_RE.test(b)) return null;
+    var m = /^(.*?)(\d+)x\s*$/i.exec(b);
+    if (!m || m[2].replace(/^0+(?=\d)/, '') === String(set)) return null;
+    return { stale: m[2], fixed: m[1] + '{bộ}x' };
+  }
+
+  return { applySetVar: applySetVar, staleSetBin: staleSetBin, parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, sameVoiceDir: sameVoiceDir, findVoiceDirName: findVoiceDirName, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
 })();
 
 (function (root) {

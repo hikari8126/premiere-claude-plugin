@@ -73,3 +73,18 @@ test("pickVoiceOverDir also accepts a plain 'Voice' folder, preferring 'Voice Ov
   a.strictEqual(V.sameVoiceDir("/b/Other", "/a/Voice Over/36x", "Voice Over / 36x"), false);
   console.log("vg-seq sameVoiceDir: OK");
 }
+
+test("applySetVar thay {bộ} theo sequence, không biết bộ thì bỏ đoạn đó", () => {
+  assert.strictEqual(VGSEQ.applySetVar("Voice Over / {bộ}x", "36"), "Voice Over / 36x");
+  assert.strictEqual(VGSEQ.applySetVar("Voice Over / {bộ}x", ""), "Voice Over");
+  assert.strictEqual(VGSEQ.applySetVar("{bộ}x", ""), "Voice Over");
+  assert.strictEqual(VGSEQ.applySetVar("Voice Over / 34x", "36"), "Voice Over / 34x");
+});
+
+test("staleSetBin báo ô ghi cứng số bộ khác bộ đang mở", () => {
+  assert.deepStrictEqual(VGSEQ.staleSetBin("Voice Over / 34x", "36"), { stale: "34", fixed: "Voice Over / {bộ}x" });
+  assert.strictEqual(VGSEQ.staleSetBin("Voice Over / 36x", "36"), null);
+  assert.strictEqual(VGSEQ.staleSetBin("Voice Over / {bộ}x", "36"), null);
+  assert.strictEqual(VGSEQ.staleSetBin("Voice Over", "36"), null);
+  assert.strictEqual(VGSEQ.staleSetBin("Voice Over / 34x", ""), null);
+});
