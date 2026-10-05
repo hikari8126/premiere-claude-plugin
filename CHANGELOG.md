@@ -4,7 +4,7 @@
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
 
-## Hotfix (chưa gắn version) — 2026-10-05 · RAW: thư mục xuất "true"
+## v5.15.1 / bridge 3.18 (server 1.22.0) — 2026-10-05 · RAW: thư mục xuất "true"
 
 - **Lỗi:** chọn thư mục xuất bằng "Đổi thư mục" xong thì mọi lần mở lại tab RAW báo *"Thư mục đã chọn cho project này, true, không có ở đó…"*, nút XUẤT bị khoá.
 - **Nguyên nhân:** `onChooseFolder` lưu `r.chosen || p`, mà `/rawcut/dest` trả `chosen: true` (cờ "đang dùng thư mục chọn tay", không phải đường dẫn) → lưu chữ `true` thay cho đường dẫn; lần sau gửi `chosen: "true"` lên bridge.
