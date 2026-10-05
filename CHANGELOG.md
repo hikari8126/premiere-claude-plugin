@@ -6,6 +6,12 @@
 
 
 
+
+## v5.18.3 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Voice Gen: bin theo bộ (tiếp)
+
+- **Vẫn lỗi sau 5.18.2:** voice bộ 36 vẫn nằm ở `Voice Over`, bin `36x` không được tạo. `vgSeqVoiceTarget` đúng (`Voice Over / 36x`) — nguyên nhân thật: import chỉ chuyển bin khi ô **"Chuyển vào bin"** bật; ô tắt → voice nằm lại bin đang chọn ở Project panel.
+- **Sửa:** voice lưu theo sequence (`saved.bin` có bin bộ) → luôn `ppMoveToBin` (Import + Lên timeline); không theo sequence → theo ô như cũ.
+
 ## v5.18.2 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Voice Gen: bin theo bộ
 
 - **Lỗi:** gen voice theo sequence `vid36.0` → file tên đúng `36.0 - …` nhưng vào bin chung `Voice Over` thay vì `Voice Over / 36x`.
