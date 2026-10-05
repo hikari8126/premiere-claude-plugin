@@ -5,6 +5,13 @@
 
 
 
+
+## v5.18.2 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Voice Gen: bin theo bộ
+
+- **Lỗi:** gen voice theo sequence `vid36.0` → file tên đúng `36.0 - …` nhưng vào bin chung `Voice Over` thay vì `Voice Over / 36x`.
+- **Nguyên nhân:** chỉ dùng bin bộ khi thư mục chọn lúc lưu trùng y hệt thư mục gợi ý — lệch `/` cuối, NFC/NFD (Google Drive), hoa thường là mất.
+- **Sửa:** `VGSEQ.sameVoiceDir` so sau chuẩn hoá, hoặc thư mục chọn kết thúc bằng đúng `{bộ}x` của bin gợi ý; log khi khác.
+
 ## v5.18.1 / bridge 3.20 (server 1.24.0) — 2026-10-05 · NAV 30 fps
 
 - **NAV tạo sequence 30 fps mặc định:** fps không đổi được sau khi tạo (UXP) → `createSequence(name, preset)` với `plugin/seq-30fps.sqpreset` (chép từ preset "Social Media Portrait 9x16 30 fps" của Premiere, `VideoFrameRate 8467200000`) rồi đặt khung như cũ. Khối Nền tảng FB · tạo mới: **FPS 30 | theo project**. Premiere không nhận preset → tạo theo project + cảnh báo console. `build-app.sh` đóng gói + kiểm `plugin/*.sqpreset`.
