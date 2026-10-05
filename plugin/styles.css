@@ -4981,3 +4981,22 @@ div.cd-recent[role="button"]:hover { background: rgba(255,255,255,0.05); }
 /* Trang Cài đặt: nút thêm mới to */
 .cu-addRow { margin-top: 0; }
 div.cu-addBig[role="button"] { flex: 1 1 0; padding: 7px 0; font-size: 12px; border-style: dashed; }
+/* Hàng đợi nhiều project + chọn dự án ở phiếu chạy */
+.cd-qItem { display: flex; align-items: flex-start; padding: 5px 0; border-top: 1px solid #262626; }
+.cd-qItem:first-of-type { border-top: none; }
+.cd-qItem .cd-dot { margin-top: 5px; }
+.cd-dot.is-wait { background: #6f6f6f; }
+.cd-dot.is-run { background: #F2C14E; }
+.cd-dot.is-ok { background: #34d399; }
+.cd-dot.is-error { background: #f87171; }
+.cd-dot.is-skip { background: #444; }
+.cd-qBody { flex: 1 1 auto; min-width: 0; }
+.cd-qT { font-size: 11.5px; color: #d0d0d0; }
+.cd-qMsg { font-size: 10.5px; color: #7a7a7a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-qMsg.is-bad { color: #f87171; white-space: normal; }
+div.cd-qRun[role="button"] { margin-top: 8px; padding: 8px 0; font-size: 12px; }
+div.cd-run.is-stop[role="button"] { background: #3a3a3a; color: #f0f0f0; }
+.cd-dimLink { color: var(--cl-dim); }
+.cd-projSel { width: 100%; margin: 0; }
+div.cd-qAdd[role="button"] { width: 100%; margin: 6px 0 0; padding: 7px 0; border-style: dashed; }
+.cd-queued { font-size: 11px; color: #34d399; margin-bottom: 6px; }

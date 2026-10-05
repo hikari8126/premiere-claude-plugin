@@ -56,6 +56,74 @@
     }
   } catch (e) {}
 
+  // ── Project đã biết + hàng đợi nhiều project (cl-queue.js) ───────────────
+  // Mỗi 4s xem project active: đổi thì ghi vào danh sách (đường dẫn + tên). Hàng đợi chạy lần lượt:
+  // Project.open(path) (đang mở → chuyển ngay; đang đóng → mở ra) → quy trình chế độ tự chạy → việc kế;
+  // hết hàng thì về project ban đầu.
+  var PKEY = 'cl_projects_v1', QKEY = 'cl_queue_v1';
+  function lsGet(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function projects() { return lsGet(PKEY, []); }
+  function loadQ() { return CLQ.normQueue(lsGet(QKEY, [])); }
+  function saveQ(q) { lsSet(QKEY, CLQ.normQueue(q)); }
+  var activePath = '';
+  async function activeProjectPath() {
+    try { var p = await getActiveProject(); return (p && p.path) || ''; } catch (e) { return ''; }
+  }
+  async function pollProject() {
+    var p = await activeProjectPath();
+    if (p && p !== activePath) {
+      activePath = p;
+      lsSet(PKEY, CLQ.seeProject(projects(), p, Date.now()));
+    }
+  }
+  pollProject();
+  setInterval(pollProject, 4000);
+
+  var qRun = null;   // { stop } khi hàng đợi đang chạy
+  async function switchTo(path) {
+    if ((await activeProjectPath()) === path) return;
+    var ppro = require('premierepro');
+    await ppro.Project.open(path);
+    for (var t = 0; t < 360; t++) {                 // đang đóng → Premiere mở ra, chờ tối đa 3 phút
+      if ((await activeProjectPath()) === path) { activePath = path; PTOOLS.invalidate(); return; }
+      await new Promise(function (r) { setTimeout(r, 500); });
+    }
+    throw new Error('không mở / chuyển được sang project (Premiere có hộp thoại đang chờ?)');
+  }
+  async function runQueue() {
+    if (qRun || T.busy()) return;
+    qRun = { stop: false };
+    saveQ(CLQ.recover(loadQ()));
+    var orig = await activeProjectPath();
+    render();
+    try {
+      while (!qRun.stop) {
+        var it = CLQ.plan(loadQ())[0];
+        if (!it) break;
+        saveQ(CLQ.mark(loadQ(), it.id, 'run', 'đang chạy…')); render();
+        var status = 'ok', msg = '';
+        try {
+          var b = CLSTORE.get().buttons.filter(function (x) { return x.id === it.flowId; })[0];
+          if (!b) throw new Error('quy trình "' + it.flowName + '" đã bị xoá');
+          await switchTo(it.path);
+          var r = await T.runFlow(b, { set: it.set, idxs: it.idxs.length ? it.idxs : null, platform: it.platform, auto: true });
+          if (!r || !r.ok) { status = 'error'; msg = (r && (r.error || r.detail)) || 'lỗi'; } else msg = r.detail || 'xong';
+        } catch (e) { status = 'error'; msg = (e && e.message) || String(e); }
+        saveQ(CLQ.mark(loadQ(), it.id, status, msg)); render();
+      }
+    } finally {
+      if (orig) { try { await switchTo(orig); } catch (e) {} }
+      qRun = null;
+      T.showView('dash');
+    }
+  }
+  function queueAdd(path, b, set, idxs, platform) {
+    var r = CLQ.add(loadQ(), { path: path, name: CLQ.baseName(path), flowId: b.id, flowName: b.name, set: set, idxs: idxs || [], platform: platform || '' });
+    saveQ(r.queue);
+    return r.added;
+  }
+
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -107,6 +175,46 @@
     nw.setAttribute('role', 'button');
     nw.addEventListener('click', function () { window.ClaudeCustomUI.edit(null); });
     var nc = el('div', 'cd-cell'); nc.appendChild(nw); grid.appendChild(nc);
+
+    // Hàng đợi nhiều project
+    var q = loadQ();
+    if (q.length || qRun) {
+      var qb = el('div', 'cd-box');
+      var qh2 = el('div', 'cd-boxHd');
+      var nWait = q.filter(function (x) { return x.status === 'wait'; }).length;
+      qh2.appendChild(el('span', 'cd-boxT', 'Hàng đợi' + (nWait ? ' · ' + nWait + ' việc chờ' : '')));
+      if (q.some(function (x) { return x.status !== 'wait' && x.status !== 'run'; }) && !qRun) {
+        var cd = el('span', 'cd-link cd-dimLink', 'Dọn xong');
+        cd.setAttribute('role', 'button');
+        cd.addEventListener('click', function () { saveQ(CLQ.clearDone(loadQ())); render(); });
+        qh2.appendChild(cd);
+      }
+      qb.appendChild(qh2);
+      CLQ.plan(q).concat(q.filter(function (x) { return x.status !== 'wait'; })).forEach(function (x) {
+        var line = el('div', 'cd-qItem');
+        line.appendChild(el('span', 'cd-dot is-' + x.status));
+        var body = el('div', 'cd-qBody');
+        body.appendChild(el('div', 'cd-qT', x.name + ' · ' + x.flowName + ' · ' + CLQ.targetText(x) + (x.platform ? ' · ' + x.platform : '')));
+        if (x.msg) body.appendChild(el('div', 'cd-qMsg' + (x.status === 'error' ? ' is-bad' : ''), x.msg));
+        line.appendChild(body);
+        if (x.status !== 'run') {
+          var rm = el('span', 'cd-x', '✕');
+          rm.setAttribute('role', 'button');
+          rm.addEventListener('click', function () { saveQ(CLQ.remove(loadQ(), x.id)); render(); });
+          line.appendChild(rm);
+        }
+        qb.appendChild(line);
+      });
+      var qGo = el('div', 'cd-run cd-qRun' + (qRun ? ' is-stop' : (nWait ? '' : ' is-off')),
+                   qRun ? '■  Dừng sau việc này' : (nWait ? '▶  Chạy hàng đợi (' + nWait + ')' : 'Không còn việc chờ'));
+      qGo.setAttribute('role', 'button');
+      qGo.addEventListener('click', function () {
+        if (qRun) { qRun.stop = true; qGo.textContent = 'Sẽ dừng sau việc đang chạy…'; return; }
+        if (nWait) runQueue();
+      });
+      qb.appendChild(qGo);
+      dash.appendChild(qb);
+    }
 
     // Lệnh nhanh: chip bấm → điền lệnh vào ô chat (Enter mới gửi)
     var prompts = d.buttons.filter(function (b) { return b.kind === 'prompt'; });
@@ -197,7 +305,9 @@
     if (T.busy()) return;
     T.showView('sheet');
     var v = CLC.vars(T.seqName());
-    var st = { items: null, vids: [], targets: [], platform: '', add: '', addErr: '', search: '', ticks: {}, done: {} };
+    var st = { items: null, vids: [], targets: [], platform: '', add: '', addErr: '', search: '', ticks: {}, done: {},
+               here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '' };
+    st.project = st.here;
     var usesSeq = b.steps.some(function (s) { return s.seqs && s.seqs.length && s.seqs[0].k !== 'current'; });
     var plats = {};
     b.steps.forEach(function (s) { if (s.platform) plats[s.platform] = 1; });
@@ -264,7 +374,34 @@
         return box;
       }
 
+      // Dự án: project đang mở (chạy ngay) hoặc project khác đã biết (chỉ thêm vào hàng đợi)
+      var other = usesSeq && st.project && st.project !== st.here;
       if (usesSeq) {
+        var known = projects(), pj = section('Dự án');
+        var sel = el('select', 'cu-sel cd-projSel');
+        [st.here].concat(known.map(function (p) { return p.path; }).filter(function (p) { return p !== st.here; })).forEach(function (p) {
+          if (!p) return;
+          var op = el('option', null, CLQ.baseName(p) + (p === st.here ? '  (đang mở)' : ''));
+          op.value = p;
+          if (p === st.project) op.selected = true;
+          sel.appendChild(op);
+        });
+        sel.addEventListener('change', function () { st.project = sel.value; st.queued = ''; draw(); });
+        pj.appendChild(sel);
+        if (other) pj.appendChild(el('div', 'cd-dim cd-pad', 'Project khác → thêm vào hàng đợi; lúc chạy plugin tự mở / chuyển sang project này.'));
+      }
+      if (other) {
+        var ms = section('Bộ / video');
+        var mi = el('input', 'cu-in cd-search');
+        mi.placeholder = 'vd 35  ·  35.0, 35.2';
+        mi.value = st.manual;
+        mi.addEventListener('focus', window.claimKeyboard);
+        mi.addEventListener('blur', window.releaseKeyboard);
+        mi.addEventListener('input', function () { st.manual = mi.value; st.manualErr = ''; });
+        ms.appendChild(mi);
+        if (st.manualErr) ms.appendChild(el('div', 'cu-err', st.manualErr));
+      }
+      if (usesSeq && !other) {
         var clr = null;
         if (st.targets.length) {
           clr = el('span', 'cd-link', 'Bỏ hết');
@@ -320,7 +457,7 @@
         CLC.chips(s).forEach(function (c) {
           var t = c.text;
           if (c.slot === 'platform' && st.platform) t = st.platform;
-          if (c.kind === 'seq' && usesSeq && s.seqs[0].k !== 'current') { if (c.i) return; t = st.targets.length + ' video'; }
+          if (c.kind === 'seq' && usesSeq && s.seqs[0].k !== 'current') { if (c.i) return; t = other ? 'bộ / video ở trên' : st.targets.length + ' video'; }
           row.appendChild(el('span', 'cu-chip ' + c.kind + ' cd-static', t.replace(/\{bộ\}/g, setText)));
         });
         ss.appendChild(row);
@@ -329,6 +466,21 @@
 
       var n = st.targets.length, ready = !usesSeq || n > 0;
       var foot = el('div', 'cd-foot');
+      if (st.queued) foot.appendChild(el('div', 'cd-queued', st.queued));
+      if (other) {
+        var qa = el('div', 'cd-run', '+  Thêm vào hàng đợi');
+        qa.setAttribute('role', 'button');
+        qa.addEventListener('click', function () {
+          var t = CLQ.parseTargets(st.manual);
+          if (t.error) { st.manualErr = t.error; draw(); return; }
+          var ok = queueAdd(st.project, b, t.set, t.idxs, st.platform);
+          st.queued = ok ? '✓ Đã thêm: ' + CLQ.baseName(st.project) + ' · ' + CLQ.targetText(t) : 'Việc này đã có trong hàng đợi';
+          st.manual = ''; draw();
+        });
+        foot.appendChild(qa);
+        sheet.appendChild(foot);
+        return;
+      }
       var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
       go.setAttribute('role', 'button');
       go.addEventListener('click', async function () {
@@ -340,6 +492,17 @@
         }
       });
       foot.appendChild(go);
+      if (usesSeq && n && st.here) {
+        var qh = el('div', 'cl-btn cd-qAdd', '+ Thêm vào hàng đợi');
+        qh.setAttribute('role', 'button');
+        qh.addEventListener('click', function () {
+          var added = 0;
+          sets.forEach(function (g) { if (queueAdd(st.here, b, g.set, g.idxs, st.platform)) added++; });
+          st.queued = added ? '✓ Đã thêm ' + added + ' việc vào hàng đợi (' + CLQ.baseName(st.here) + ')' : 'Đã có trong hàng đợi';
+          draw();
+        });
+        foot.appendChild(qh);
+      }
       sheet.appendChild(foot);
     }
     function groupSets() {

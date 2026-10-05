@@ -22,6 +22,21 @@
 - **Nguyên nhân:** `onChooseFolder` lưu `r.chosen || p`, mà `/rawcut/dest` trả `chosen: true` (cờ "đang dùng thư mục chọn tay", không phải đường dẫn) → lưu chữ `true` thay cho đường dẫn; lần sau gửi `chosen: "true"` lên bridge.
 - **Sửa:** lưu đúng đường dẫn đã chọn; khi đọc prefs bỏ mọi giá trị không phải đường dẫn tuyệt đối (`RCC.cleanChosen`) → máy đã dính lỗi tự về thư mục tự nhận, không cần thao tác. Không cần Bridge mới.
 
+## v5.17.0-beta.4 — 2026-10-05 (chưa release, bridge giữ 1.24.0-beta.2)
+
+### ✨ Hàng đợi nhiều project
+- Plugin **tự nhớ project** mỗi lần bro mở / chuyển sang (đường dẫn + tên, `cl_projects_v1`). Premiere UXP không liệt kê được project đang mở và trả **cùng một guid** cho mọi project (thử 2026-10-05) → nhận diện theo đường dẫn.
+- Phiếu chạy có mục **Dự án**: project đang mở → Chạy ngay hoặc "+ Thêm vào hàng đợi"; project khác → gõ bộ / video (`35`, `35.0, 35.2`) rồi thêm vào hàng đợi.
+- Bảng điều khiển có hộp **Hàng đợi** (chấm trạng thái, lời nhắn từng việc, ✕, Dọn xong) + **Chạy hàng đợi** / Dừng sau việc này. Chạy: gom theo project, `Project.open(path)` (đang mở → chuyển ~50ms; đang đóng → mở ra, chờ tối đa 3 phút), quy trình **chế độ tự chạy** (thẻ xác nhận tự chọn hết, "Chờ bro" tự đi tiếp), hết hàng về project ban đầu. Đóng panel giữa chừng → việc đang chạy quay về chờ.
+- Thử thật: SonaShape active, việc "chuẩn bị RAW bộ 40" của AeriSoft → tự chuyển AeriSoft, đọc 3 sequence, về lại SonaShape ✓.
+- `plugin/cl-queue.js` (CLQ, thuần + test).
+
+### Giao diện
+- Thẻ quy trình 2 cột; "Resize GG" → "GG", RAW xuống cuối; Cài đặt: Thêm mới ở trên, Đã tạo ở dưới; Lệnh nhanh / Lệnh gần đây dạng hộp; nút lật trang kiểu tab hẹp + chấm trang; tab Claude đứng riêng (không thuộc trang).
+
+### Quy trình dựng sẵn
+- **RAW** (Both, tự xuất — `RawcutAPI.exportSeqs`), **PIN theo đơn** (resize 2:3 từ FB gốc → `Sequence / PIN / Order <ngày>`), **APP** (nhân bản template AppLovin của bộ gần nhất → `Sequence / APP / {bộ}x`).
+
 ## v5.17.0-beta.3 — 2026-10-05 (chưa release, bridge giữ 1.24.0-beta.2)
 
 ### ✨ Tab Claude = bảng điều khiển (user: "nhìn vào khó biết làm gì", "bấm là chạy luôn")

@@ -277,6 +277,15 @@
     function sync() { var n = picked().length; go.textContent = goLabel(n); go.classList.toggle('is-disabled', !n); }
     sync();
     if (!lines.some(function (ln) { return !ln.bad; })) go.remove();
+    if (autoRun) {                                   // hàng đợi: tự chọn mọi dòng hợp lệ và chạy
+      setTimeout(function () {
+        var sel = picked();
+        btns.remove();
+        box.querySelectorAll('.cl-mv').forEach(function (l) { l.style.pointerEvents = 'none'; });
+        if (sel.length) onGo(sel); else { box.remove(); onSkip(); }
+      }, 0);
+      return;
+    }
     go.addEventListener('click', function () {
       var sel = picked();
       if (!sel.length) return;
@@ -846,6 +855,7 @@
 
   // ── Quy trình: chạy lần lượt các bước, bước cần xác nhận thì chờ bro bấm ─────
   var flow = null;   // { aborted, learn }
+  var autoRun = false;  // hàng đợi đang chạy quy trình: thẻ xác nhận tự chọn hết + chạy
   var lastFlowStopped = false;
   function waitAsk(rec, idx) {
     return new Promise(function (res) {
@@ -856,6 +866,7 @@
     });
   }
   function askWait(entry, rec, idx, text) {
+    if (autoRun) { addAct(entry, 'is-skip', text + ' — hàng đợi tự đi tiếp'); rec.acts[idx] = { cls: 'is-ok', text: text }; saveHistory(); return; }
     var row = addAct(entry, 'is-ask', text);
     var btns = document.createElement('div');
     btns.className = 'cl-askBtns';
@@ -869,6 +880,7 @@
   }
   // → Promise<[ref đã chọn]> | null (bỏ qua)
   function askPick(entry, rec, idx, label, refs) {
+    if (autoRun) { rec.acts[idx] = { cls: 'is-ok', text: label + ': ' + refs.length + ' sequence (hàng đợi)' }; return Promise.resolve(refs); }
     return new Promise(function (resolve) {
       var row = addAct(entry, 'is-ask', label + ': chọn sequence');
       var box = document.createElement('div');
@@ -886,8 +898,9 @@
 
   // over (từ phiếu chạy): {set, idxs:[số], platform} — thay bộ / video / nền tảng của các bước.
   async function runFlow(b, over) {
-    if (busy || flow) return;
+    if (busy || flow) return { ok: false, error: 'đang chạy việc khác' };
     over = over || {};
+    autoRun = !!over.auto;
     showView('log');
     var v = CLC.vars(seqNameNow());
     if (over.set) v['bộ'] = String(over.set);
@@ -967,8 +980,11 @@
     history = CLLOG.pushHistory(history, rec);
     saveHistory();
     flow = null;
+    autoRun = false;
     setSendMode();
     scrollEnd();
+    return { ok: !bad && !stopped, error: stopped || (bad ? 'có bước lỗi' : ''),
+             detail: rec.acts.filter(function (a) { return a.cls === 'is-ok' || a.cls === 'is-error'; }).map(function (a) { return a.text; }).slice(-2).join(' · ') };
   }
 
   // ── Bấm nút lệnh / quy trình (bảng điều khiển gọi) — dữ liệu ở CLSTORE ──────
