@@ -1,0 +1,222 @@
+// plugin/clawd-pixel.js — Clawd (linh vật Claude Code) dạng pixel cho tab Claude (global CLAWD).
+//
+// Dáng gốc theo logo khối của Claude Code:
+//    ▐▛███▜▌        thân rộng dẹt, hai mắt là hai khe dọc khoét vào thân,
+//   ▝▜█████▛▘       hai tay ngắn chìa ra giữa hông,
+//     ▘▘ ▝▝         bốn chân nhỏ (hai cặp).
+// Quy về pixel vuông: Clawd 18×10 (ô terminal cao gấp đôi rộng), đặt trong khung 24×18
+// — 8 hàng trên chừa cho hiệu ứng (bong bóng nghĩ, lấp lánh, nhảy lên, giọt mồ hôi).
+//
+// Cảnh (mỗi khung 250ms, claude-tab.js lặp theo tick):
+//   idle  — đứng thở (nhún 1px), thỉnh thoảng chớp mắt
+//   think — mắt liếc lên phía bong bóng nghĩ đang to dần, một chân gõ nhịp
+//   work  — hai tay vung thay nhau, chạy tại chỗ, bụi tung sau chân (đang chạy action)
+//   done  — nhún lấy đà, bật nhảy giơ hai tay, đáp xuống cười, lấp lánh
+//   fail  — gục xuống, tay buông thõng, mắt cụp, giọt mồ hôi chảy
+//   party — ăn mừng (thẻ "Xong" tab RAW): nhảy liên tục, tay vẫy, pháo giấy nhiều màu rơi quanh
+// Hàm thuần — test ở bridge/test/clawd-pixel.test.js.
+//
+// Ký tự: O thân · K mắt (lỗ khoét, nền tối) · W chấm suy nghĩ · Y lấp lánh/tia lửa ·
+//        B giọt mồ hôi · . trong suốt  (W cũng là bụi khi chạy)
+
+var CLAWD = (function () {
+  var W = 24, H = 18, OX = 3, OY = 8;           // Clawd 18×10 đặt ở (3,8) → đáy chạm hàng 17
+  var COLORS = { O: '#D97757', K: '#141414', W: '#d4d4d4', Y: '#F2C14E', B: '#6CB4EE',
+                 R: '#F472B6', G: '#4ADE80', C: '#22D3EE' };   // R/G/C: pháo giấy
+
+  function blank() {
+    var g = [];
+    for (var y = 0; y < H; y++) { var r = []; for (var x = 0; x < W; x++) r.push('.'); g.push(r); }
+    return g;
+  }
+  function px(g, x, y, c) { if (x >= 0 && y >= 0 && x < W && y < H) g[y][x] = c; }
+  function rect(g, x0, y0, w, h, c) { for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) px(g, x, y, c); }
+
+  // Một tư thế Clawd. Toạ độ cục bộ 18×10: thân cột 3..14, tay cột 1-2 / 15-16, chân 4,6,11,13.
+  //   dy    — dời cả người (âm = bay lên, dương = lún xuống)
+  //   eyes  — open | closed | up | happy | sad
+  //   arms  — side | up | down | leftUp | rightUp | leftMid | rightMid
+  //   legs  — stand | squash | stepA | stepB
+  function clawd(g, o) {
+    var dy = o.dy || 0, bx = OX, by = OY + dy;
+    var legs = o.legs || 'stand';
+    var squash = legs === 'squash';
+    var top = by + (squash ? 1 : 0);              // nhún: thân hạ 1px, chân còn 1px
+
+    // Thân 12×8
+    rect(g, bx + 3, top, 12, 8, 'O');
+
+    // Mắt — khe dọc 1×2 ở cột 5 và 12 (hàng 2-3 của thân)
+    var e = o.eyes || 'open';
+    [[5, 0], [12, 1]].forEach(function (p) {
+      var ex = bx + p[0];
+      if (e === 'open')   { px(g, ex, top + 2, 'K'); px(g, ex, top + 3, 'K'); }
+      if (e === 'closed') { px(g, ex - 1, top + 3, 'K'); px(g, ex, top + 3, 'K'); px(g, ex + 1, top + 3, 'K'); }
+      if (e === 'up')     { px(g, ex + 1, top + 1, 'K'); px(g, ex + 1, top + 2, 'K'); }                        // liếc lên-phải
+      if (e === 'happy')  { px(g, ex - 1, top + 3, 'K'); px(g, ex, top + 2, 'K'); px(g, ex + 1, top + 3, 'K'); }   // ^ ^
+      if (e === 'sad')    {                                                                                          // mắt cụp xuống phía ngoài
+        var out = p[1] ? 1 : -1;
+        px(g, ex - out, top + 3, 'K'); px(g, ex, top + 3, 'K'); px(g, ex + out, top + 4, 'K');
+      }
+    });
+
+    // Tay — mẩu 2×2 hai bên hông; giơ lên thì thành cột 2×4 chĩa lên trên đầu
+    function arm(side, pose) {
+      var ax = side < 0 ? bx + 1 : bx + 15;
+      if (pose === 'side') rect(g, ax, top + 4, 2, 2, 'O');
+      if (pose === 'up')   { rect(g, ax, top - 2, 2, 4, 'O'); px(g, side < 0 ? ax : ax + 1, top - 3, 'O'); }
+      if (pose === 'mid')  { rect(g, ax, top + 2, 2, 2, 'O'); px(g, side < 0 ? ax - 1 : ax + 2, top + 2, 'O'); }   // vung ngang ngực
+      // Buông thõng: mẩu tay 2px vẫn dính hông nhưng chĩa chéo xuống dưới-ra ngoài
+      var inX = side < 0 ? ax + 1 : ax, outX = side < 0 ? ax : ax + 1;
+      if (pose === 'down') {
+        px(g, inX, top + 5, 'O');
+        px(g, inX, top + 6, 'O'); px(g, outX, top + 6, 'O');
+        px(g, outX, top + 7, 'O');
+      }
+    }
+    var a = o.arms || 'side';
+    var L = { side: 'side', up: 'up', down: 'down', leftUp: 'up', rightUp: 'side', leftMid: 'mid', rightMid: 'side' }[a];
+    var R = { side: 'side', up: 'up', down: 'down', leftUp: 'side', rightUp: 'up', leftMid: 'side', rightMid: 'mid' }[a];
+    arm(-1, L); arm(1, R);
+
+    // Chân — 4 cột 1×2 dưới thân
+    var ly = top + 8;
+    [4, 6, 11, 13].forEach(function (c, i) {
+      var lifted = (legs === 'stepA' && i >= 2) || (legs === 'stepB' && i < 2);
+      if (squash) px(g, bx + c, ly, 'O');
+      else { px(g, bx + c, ly, 'O'); if (!lifted) px(g, bx + c, ly + 1, 'O'); }
+    });
+  }
+
+  // Hiệu ứng
+  // Bong bóng nghĩ lên phía trên bên phải: chấm 1px → bóng 2×2 → đám mây 7×3 có
+  // `dots` chấm tối "…" bên trong (0..3, như đang gõ).
+  function thought(g, n, dots) {
+    if (n >= 1) px(g, 18, 7, 'W');
+    if (n >= 2) rect(g, 19, 4, 2, 2, 'W');
+    if (n >= 3) {
+      rect(g, 18, 0, 5, 1, 'W'); rect(g, 17, 1, 7, 1, 'W'); rect(g, 18, 2, 5, 1, 'W');
+      for (var d = 0; d < (dots || 0); d++) px(g, 18 + d * 2, 1, 'K');
+    }
+  }
+  function dust(g, n) {                           // bụi tung sau chân khi chạy
+    if (n === 0) { px(g, 2, 16, 'W'); px(g, 1, 15, 'W'); }
+    else { px(g, 1, 16, 'W'); px(g, 0, 14, 'W'); }
+  }
+  function sparkle(g, x, y, big) {                // dấu + lấp lánh (to) hoặc một chấm (nhỏ)
+    px(g, x, y, 'Y');
+    if (big) { px(g, x - 1, y, 'Y'); px(g, x + 1, y, 'Y'); px(g, x, y - 1, 'Y'); px(g, x, y + 1, 'Y'); }
+  }
+  function drop(g, y) { px(g, 21, y, 'B'); rect(g, 20, y + 1, 2, 2, 'B'); }   // giọt nước: chóp 1px, bầu 2×2
+
+  function frame(pose, fx) {
+    var g = blank();
+    clawd(g, pose);
+    if (fx) fx(g);
+    return g.map(function (r) { return r.join(''); });
+  }
+
+  var IDLE = { eyes: 'open', arms: 'side', legs: 'stand' };
+  function P(extra) { var o = {}; for (var k in IDLE) o[k] = IDLE[k]; for (var j in extra) o[j] = extra[j]; return o; }
+
+  // Pháo giấy: mỗi mảnh rơi 1 hàng/khung, lắc ngang theo nhịp, lặp lại sau H hàng.
+  var CONFETTI = [[1, 0, 'Y'], [4, 5, 'R'], [7, 2, 'G'], [10, 8, 'C'], [13, 1, 'B'], [16, 6, 'Y'],
+                  [19, 3, 'R'], [22, 9, 'G'], [2, 11, 'C'], [21, 13, 'Y'], [0, 15, 'G'], [23, 7, 'R']];
+  function confetti(g, t) {
+    CONFETTI.forEach(function (p, i) {
+      var y = (p[1] + t) % H, x = p[0] + ((t + i) % 4 < 2 ? 0 : 1);
+      if (y < OY || x < OX - 1 || x > OX + 18) px(g, x, y, p[2]);   // không đè lên thân Clawd
+    });
+  }
+
+  var SCENES = {
+    // 16 khung = 4s: đứng, nhún thở ở khung 7, chớp mắt ở khung 13
+    idle: (function () {
+      var out = [];
+      for (var i = 0; i < 16; i++) {
+        if (i === 7) out.push(frame(P({ legs: 'squash' })));
+        else if (i === 13) out.push(frame(P({ eyes: 'closed' })));
+        else out.push(frame(P({})));
+      }
+      return out;
+    })(),
+    // chân phải gõ nhịp (stepA = nhấc cặp chân phải) trong khi bong bóng nghĩ hiện dần
+    think: [
+      frame(P({ eyes: 'up' })),
+      frame(P({ eyes: 'up', legs: 'stepA' }), function (g) { thought(g, 1); }),
+      frame(P({ eyes: 'up' }), function (g) { thought(g, 2); }),
+      frame(P({ eyes: 'up', legs: 'stepA' }), function (g) { thought(g, 3, 1); }),
+      frame(P({ eyes: 'up' }), function (g) { thought(g, 3, 2); }),
+      frame(P({ eyes: 'up', legs: 'stepA' }), function (g) { thought(g, 3, 3); }),
+      frame(P({ eyes: 'closed' }), function (g) { thought(g, 3, 3); })
+    ],
+    work: [
+      frame(P({ arms: 'leftMid', legs: 'stepA', dy: -1 }), function (g) { dust(g, 0); }),
+      frame(P({ arms: 'side', legs: 'stand' }), function (g) { dust(g, 1); }),
+      frame(P({ arms: 'rightMid', legs: 'stepB', dy: -1 }), function (g) { dust(g, 0); }),
+      frame(P({ arms: 'side', legs: 'stand' }), function (g) { dust(g, 1); })
+    ],
+    done: [
+      frame(P({ legs: 'squash', eyes: 'closed' })),                                         // nhún lấy đà
+      frame(P({ dy: -2, arms: 'up', eyes: 'happy' })),                                      // bật lên
+      frame(P({ dy: -3, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 5, true); sparkle(g, 22, 4, true); }),
+      frame(P({ dy: -2, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 5, false); sparkle(g, 22, 4, false); }),
+      frame(P({ legs: 'squash', arms: 'up', eyes: 'happy' })),                              // đáp
+      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, true); sparkle(g, 22, 5, false); }),
+      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, false); sparkle(g, 22, 5, true); })
+    ],
+    // 8 khung lặp: nhún → bật cao → lơ lửng (tay vẫy) → đáp, pháo giấy rơi suốt
+    party: (function () {
+      var poses = [
+        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
+        P({ dy: -2, arms: 'up', eyes: 'happy' }),
+        P({ dy: -4, arms: 'up', eyes: 'happy' }),
+        P({ dy: -4, arms: 'leftMid', eyes: 'happy' }),
+        P({ dy: -3, arms: 'up', eyes: 'happy' }),
+        P({ dy: -1, arms: 'rightMid', eyes: 'happy' }),
+        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
+        P({ arms: 'up', eyes: 'happy' })
+      ];
+      return poses.map(function (pose, t) { return frame(pose, function (g) { confetti(g, t * 2); }); });
+    })(),
+    fail: [
+      frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 8); }),
+      frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 9); }),
+      frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 10); }),
+      frame(P({ legs: 'squash', arms: 'down', eyes: 'closed' }), function (g) { drop(g, 11); })
+    ]
+  };
+
+  function frames(name) { return SCENES[name] || SCENES.idle; }
+
+  // crop {x,y,w,h}: chỉ vẽ một phần khung (icon tab bỏ phần trời trống cho Clawd to hơn).
+  // Gộp ô cùng màu liền nhau trên một hàng thành một <rect> cho nhẹ DOM.
+  // palette: ghi đè màu theo ký tự (vd Clawd âm bản trên nền cam: { O: '#1a1a1a', K: '#D97757' }).
+  function toSvg(frame, width, crop, palette) {
+    var c = crop || { x: 0, y: 0, w: W, h: H };
+    var pal = palette || COLORS;
+    var out = [];
+    for (var y = 0; y < frame.length; y++) {
+      var row = frame[y], x = 0;
+      while (x < row.length) {
+        var ch = row.charAt(x), x0 = x;
+        while (x < row.length && row.charAt(x) === ch) x++;
+        if (ch === '.') continue;
+        out.push('<rect x="' + x0 + '" y="' + y + '" width="' + (x - x0) + '" height="1" fill="' + (pal[ch] || COLORS[ch]) + '"/>');
+      }
+    }
+    var w = width || 24, h = Math.round(w * c.h / c.w);
+    return '<svg viewBox="' + c.x + ' ' + c.y + ' ' + c.w + ' ' + c.h + '" width="' + w + '" height="' + h +
+           '" shape-rendering="crispEdges">' + out.join('') + '</svg>';
+  }
+
+  // Khung cắt cho icon tab: bỏ hiệu ứng hai bên, giữ chỗ cho cú nhảy (dy -3).
+  var TAB_CROP = { x: 3, y: 4, w: 18, h: 14 };
+
+  return { W: W, H: H, frames: frames, toSvg: toSvg, TAB_CROP: TAB_CROP, SCENES: Object.keys(SCENES) };
+})();
+
+(function (root) {
+  if (root) { root.CLAWD = CLAWD; }
+  if (typeof module !== "undefined" && module.exports) { module.exports = CLAWD; }
+})(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this));

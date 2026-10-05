@@ -152,6 +152,49 @@
     if (cancelled) RCPX.hide(); else RCPX.finish(ok);
   }
 
+  // ── Thẻ "Xong" — Clawd ăn mừng (clawd-pixel.js, cảnh party) ở đầu chân trang ──
+  // Chỉ hiện khi xuất xong KHÔNG lỗi, không dừng giữa chừng. Tự ẩn sau 12s; bấm "Mở thư mục"
+  // mở thư mục xuất. Thông báo macOS (/notify) vẫn gửi như trước.
+  var doneTimer = null, doneAnim = null;
+  function hideDone() {
+    clearTimeout(doneTimer); clearInterval(doneAnim);
+    var box = $('rcDone');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  }
+  function showDone(title, sub, dir) {
+    var box = $('rcDone');
+    if (!box) return;
+    hideDone();
+    box.innerHTML = '<div class="rc-done-clawd"></div><div class="rc-done-body"><div class="rc-done-title"></div>'
+      + '<div class="rc-done-sub"></div></div><div class="rc-done-act"></div>';
+    box.querySelector('.rc-done-title').textContent = title;
+    box.querySelector('.rc-done-sub').textContent = sub;
+    var act = box.querySelector('.rc-done-act');
+    if (dir) {
+      var open = el('div', 'wf-btn wf-btn-sm', 'Mở thư mục');
+      open.setAttribute('role', 'button');
+      open.addEventListener('click', function () { api('POST', '/rawcut/open', { dir: dir }); });
+      act.appendChild(open);
+    }
+    var x = el('div', 'rc-done-x', '✕');
+    x.setAttribute('role', 'button');
+    x.addEventListener('click', hideDone);
+    act.appendChild(x);
+    box.style.display = '';
+    var cl = box.querySelector('.rc-done-clawd');
+    if (typeof CLAWD !== 'undefined') {
+      var fr = CLAWD.frames('party'), t = 0;
+      var draw = function () { cl.innerHTML = CLAWD.toSvg(fr[t++ % fr.length], 64); };
+      draw();
+      doneAnim = setInterval(draw, 140);
+    }
+    doneTimer = setTimeout(hideDone, 12000);
+  }
+  function tookText() {
+    var s = Math.round((Date.now() - (st.t0 || Date.now())) / 1000);
+    return s >= 60 ? Math.floor(s / 60) + 'p' + (s % 60 < 10 ? '0' : '') + (s % 60) + 's' : s + 's';
+  }
+
   // ── Trạng thái chung ────────────────────────────────────────────────────
   // Dòng trạng thái chỉ còn cho lỗi / cảnh báo. Thông tin tiến trình chạy ở chân trang
   // (cạnh nhân vật pixel); thành công thì im — đã có thẻ báo cáo + ✓.
@@ -976,7 +1019,7 @@
     if (!halves.some(function (h) { return picked[h].length; })) { setStatus('Chưa chọn clip nào.', 'warn'); return; }
     // Khoá NGAY (trước mọi await): bấm Xuất 2 lần không được chạy 2 lượt song song —
     // hai lượt render đan nhau sẽ ghi nhận sai mute/in-out ban đầu và để timeline hỏng.
-    st.running = true; st.stop = false;
+    st.running = true; st.stop = false; st.t0 = Date.now(); hideDone();
     paintGo();
     var g;
     try {
@@ -1007,6 +1050,12 @@
              results.some(function (r) { return r.cancelled; }));
     var bad = results.some(function (r) { return r.error || r.failed > 0 || r.cancelled; });
     try { api('POST', '/notify', { title: 'Raw-cutter', body: bad ? 'Xuất xong — có clip lỗi' : 'Xuất xong — ' + results.map(function (r) { return r.ok + ' clip ' + (r.half === 'render' ? 'edited/' : 'raw/'); }).join(', ') }); } catch (e) {}
+    var made = results.filter(function (r) { return !r.skipped; });
+    if (!bad && made.length) {
+      var clips = made.reduce(function (n, r) { return n + (r.ok || 0); }, 0);
+      showDone('Xong! ' + clips + ' clip', made.map(function (r) { return r.half === 'render' ? 'edited/' : 'raw/'; }).join(' + ') + ' · ' + tookText(),
+               made[made.length - 1].dir || '');
+    }
   }
 
   // Chạy các nửa của 1 sequence (st.read đang là sequence đó). tag: tiền tố tiến độ (hàng loạt).
@@ -1030,7 +1079,7 @@
     if (!st.bulk || st.busy || st.running || st.confirmResolve) return;
     var targets = retryMap ? st.bulk.items.filter(function (it) { return retryMap[it.id]; }) : bulkTargets();
     if (!targets.length) { setStatus('Chưa có sequence nào để xuất.', 'warn'); return; }
-    st.running = true; st.stop = false;
+    st.running = true; st.stop = false; st.t0 = Date.now(); hideDone();
     hideReport();
     paintGo();
     var orig = null, all = [];
@@ -1073,6 +1122,10 @@
     var bad = flat.some(function (r) { return r.error || r.failed > 0 || r.cancelled; });
     pixelEnd(!bad, flat.some(function (r) { return r.cancelled; }));
     try { api('POST', '/notify', { title: 'Raw-cutter', body: (bad ? 'Xuất xong — có lỗi' : 'Xuất xong') + ' · ' + all.length + ' sequence' }); } catch (e) {}
+    if (!bad && flat.some(function (r) { return !r.skipped; })) {
+      var nClips = flat.reduce(function (n, r) { return n + (r.ok || 0); }, 0);
+      showDone('Xong! ' + all.length + ' sequence · ' + nClips + ' clip', tookText(), '');
+    }
   }
 
   // Một lượt engine (SSE) vào outDir.
