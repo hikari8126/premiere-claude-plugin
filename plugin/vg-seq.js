@@ -59,6 +59,17 @@ var VGSEQ = (function () {
     return { dir: dir, bin: bin, basis: best.bin, from: best.dir };
   }
 
+  // Thư mục bro chọn lúc lưu có phải thư mục bộ plugin gợi ý không. So sau khi chuẩn hoá (NFC — đĩa
+  // Mac / Google Drive trả dạng tách dấu, bỏ "/" cuối, không phân biệt hoa thường); hoặc thư mục
+  // chọn kết thúc bằng đúng "{bộ}x" của bin gợi ý (vd …/Voice/36x ↔ bin "Voice Over / 36x").
+  // Trước đây so nguyên chuỗi → lệch một ký tự là voice rơi về bin chung "Voice Over" (bug 2026-10-05).
+  function sameVoiceDir(picked, suggested, bin) {
+    function n(p) { var t = String(p || ''); try { t = t.normalize('NFC'); } catch (e) {} return t.replace(/\/+$/, '').toLowerCase(); }
+    if (n(picked) && n(picked) === n(suggested)) return true;
+    var want = /(\d+)x\s*$/i.exec(String(bin || '')), got = /\/(\d+)x$/i.exec(n(picked));
+    return !!(want && got && want[1] === got[1]);
+  }
+
   function pickSetDir(names, set) {
     var want = String(set) + 'x', list = names || [];
     for (var i = 0; i < list.length; i++) {
@@ -83,7 +94,7 @@ var VGSEQ = (function () {
     };
   }
 
-  return { parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, findVoiceDirName: findVoiceDirName, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
+  return { parseSeqSet: parseSeqSet, inferVoiceDir: inferVoiceDir, sameVoiceDir: sameVoiceDir, findVoiceDirName: findVoiceDirName, pickVoiceOverDir: pickVoiceOverDir, pickSetDir: pickSetDir, buildTarget: buildTarget };
 })();
 
 (function (root) {

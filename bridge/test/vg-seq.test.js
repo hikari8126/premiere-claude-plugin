@@ -61,3 +61,15 @@ test("pickVoiceOverDir also accepts a plain 'Voice' folder, preferring 'Voice Ov
   assert.strictEqual(VGSEQ.pickVoiceOverDir(["Clip", "Voice"]), "Voice");
   assert.strictEqual(VGSEQ.pickVoiceOverDir(["Voice", "Voice Over"]), "Voice Over");
 });
+
+// sameVoiceDir: thư mục lưu ≈ gợi ý (bỏ "/" cuối, NFC, hoa thường) hoặc cùng "{bộ}x" với bin gợi ý
+{
+  const V = require("../../plugin/vg-seq.js");
+  const a = require("assert");
+  a.strictEqual(V.sameVoiceDir("/a/Voice Over/36x/", "/a/Voice Over/36x", "Voice Over / 36x"), true);
+  a.strictEqual(V.sameVoiceDir("/a/Café/36X", "/a/Café/36x", "Voice Over / 36x"), true);
+  a.strictEqual(V.sameVoiceDir("/b/VO/36x", "/a/Voice Over/36x", "Voice Over / 36x"), true);
+  a.strictEqual(V.sameVoiceDir("/b/VO/35x", "/a/Voice Over/36x", "Voice Over / 36x"), false);
+  a.strictEqual(V.sameVoiceDir("/b/Other", "/a/Voice Over/36x", "Voice Over / 36x"), false);
+  console.log("vg-seq sameVoiceDir: OK");
+}

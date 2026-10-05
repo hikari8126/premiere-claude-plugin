@@ -8374,7 +8374,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!picked) return null;
     // Giữ thư mục theo sequence → import vào bin theo sequence. Đổi sang thư mục khác
     // nghĩa là user không theo bộ này nữa → dùng bin trong Settings như cũ.
-    variation._seqBin = (seqT && picked.dir.replace(/\/+$/, '') === seqT.dir) ? seqT.bin : '';
+    variation._seqBin = (seqT && VGSEQ.sameVoiceDir(picked.dir, seqT.dir, seqT.bin)) ? seqT.bin : '';
+    if (seqT && !variation._seqBin) console.warn('[VG] thư mục lưu khác gợi ý → bin theo Settings:', picked.dir, '≠', seqT.dir);
     // Ô "thư mục lưu" là của voice — nhạc vào BGM/AI không được đổi nó.
     if (els.outputFolder && !saveOpts) els.outputFolder.value = picked.dir;
     var finalPath = variation.audioPath;
