@@ -5,8 +5,8 @@ const CLAWD = require("../../plugin/clawd-pixel.js");
 
 const rowsWith = (f, ch) => f.map((r, y) => (r.includes(ch) ? y : -1)).filter(y => y >= 0);
 
-test("đủ 5 cảnh; mọi khung 24×18, chỉ dùng ký tự đã khai báo", () => {
-  assert.deepStrictEqual(CLAWD.SCENES, ["idle", "think", "work", "done", "fail"]);
+test("đủ 6 cảnh; mọi khung 24×18, chỉ dùng ký tự đã khai báo", () => {
+  assert.deepStrictEqual(CLAWD.SCENES, ["idle", "think", "work", "done", "party", "fail"]);
   for (const name of CLAWD.SCENES) {
     const frames = CLAWD.frames(name);
     assert.ok(frames.length >= 4, name + " có chuyển động");
@@ -14,7 +14,7 @@ test("đủ 5 cảnh; mọi khung 24×18, chỉ dùng ký tự đã khai báo", 
       assert.strictEqual(f.length, CLAWD.H, name + " cao 18");
       for (const row of f) {
         assert.strictEqual(row.length, CLAWD.W, name + " rộng 24: " + row);
-        assert.match(row, /^[.OKWYB]+$/);
+        assert.match(row, /^[.OKWYBRGC]+$/);
       }
     }
   }
@@ -73,4 +73,13 @@ test("toSvg gộp pixel, viewBox theo khung cắt, đủ màu", () => {
 
 test("tên cảnh lạ → idle", () => {
   assert.deepStrictEqual(CLAWD.frames("??"), CLAWD.frames("idle"));
+});
+
+test("cảnh party: Clawd nhảy + pháo giấy nhiều màu, không đè thân", () => {
+  const f = CLAWD.frames("party");
+  assert.strictEqual(f.length, 8);
+  const colors = new Set(f.join("").split(""));
+  for (const c of ["R", "G", "C", "Y"]) assert.ok(colors.has(c), c);
+  assert.ok(CLAWD.SCENES.includes("party"));
+  assert.match(CLAWD.toSvg(f[2], 48), /#F472B6|#4ADE80|#22D3EE/);
 });

@@ -13,6 +13,7 @@
 //   work  — hai tay vung thay nhau, chạy tại chỗ, bụi tung sau chân (đang chạy action)
 //   done  — nhún lấy đà, bật nhảy giơ hai tay, đáp xuống cười, lấp lánh
 //   fail  — gục xuống, tay buông thõng, mắt cụp, giọt mồ hôi chảy
+//   party — ăn mừng (thẻ "Xong" tab RAW): nhảy liên tục, tay vẫy, pháo giấy nhiều màu rơi quanh
 // Hàm thuần — test ở bridge/test/clawd-pixel.test.js.
 //
 // Ký tự: O thân · K mắt (lỗ khoét, nền tối) · W chấm suy nghĩ · Y lấp lánh/tia lửa ·
@@ -20,7 +21,8 @@
 
 var CLAWD = (function () {
   var W = 24, H = 18, OX = 3, OY = 8;           // Clawd 18×10 đặt ở (3,8) → đáy chạm hàng 17
-  var COLORS = { O: '#D97757', K: '#141414', W: '#d4d4d4', Y: '#F2C14E', B: '#6CB4EE' };
+  var COLORS = { O: '#D97757', K: '#141414', W: '#d4d4d4', Y: '#F2C14E', B: '#6CB4EE',
+                 R: '#F472B6', G: '#4ADE80', C: '#22D3EE' };   // R/G/C: pháo giấy
 
   function blank() {
     var g = [];
@@ -117,6 +119,16 @@ var CLAWD = (function () {
   var IDLE = { eyes: 'open', arms: 'side', legs: 'stand' };
   function P(extra) { var o = {}; for (var k in IDLE) o[k] = IDLE[k]; for (var j in extra) o[j] = extra[j]; return o; }
 
+  // Pháo giấy: mỗi mảnh rơi 1 hàng/khung, lắc ngang theo nhịp, lặp lại sau H hàng.
+  var CONFETTI = [[1, 0, 'Y'], [4, 5, 'R'], [7, 2, 'G'], [10, 8, 'C'], [13, 1, 'B'], [16, 6, 'Y'],
+                  [19, 3, 'R'], [22, 9, 'G'], [2, 11, 'C'], [21, 13, 'Y'], [0, 15, 'G'], [23, 7, 'R']];
+  function confetti(g, t) {
+    CONFETTI.forEach(function (p, i) {
+      var y = (p[1] + t) % H, x = p[0] + ((t + i) % 4 < 2 ? 0 : 1);
+      if (y < OY || x < OX - 1 || x > OX + 18) px(g, x, y, p[2]);   // không đè lên thân Clawd
+    });
+  }
+
   var SCENES = {
     // 16 khung = 4s: đứng, nhún thở ở khung 7, chớp mắt ở khung 13
     idle: (function () {
@@ -153,6 +165,20 @@ var CLAWD = (function () {
       frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, true); sparkle(g, 22, 5, false); }),
       frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, false); sparkle(g, 22, 5, true); })
     ],
+    // 8 khung lặp: nhún → bật cao → lơ lửng (tay vẫy) → đáp, pháo giấy rơi suốt
+    party: (function () {
+      var poses = [
+        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
+        P({ dy: -2, arms: 'up', eyes: 'happy' }),
+        P({ dy: -4, arms: 'up', eyes: 'happy' }),
+        P({ dy: -4, arms: 'leftMid', eyes: 'happy' }),
+        P({ dy: -3, arms: 'up', eyes: 'happy' }),
+        P({ dy: -1, arms: 'rightMid', eyes: 'happy' }),
+        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
+        P({ arms: 'up', eyes: 'happy' })
+      ];
+      return poses.map(function (pose, t) { return frame(pose, function (g) { confetti(g, t * 2); }); });
+    })(),
     fail: [
       frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 8); }),
       frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 9); }),
