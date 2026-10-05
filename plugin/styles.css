@@ -4950,3 +4950,14 @@ div.cd-run[role="button"] { width: 100%; padding: 10px 0; border-radius: 9px; fo
 div.cd-run[role="button"]:hover { background: #e48b6d; }
 div.cd-run[role="button"]:active { background: #c96a4c; }
 div.cd-run.is-off[role="button"] { background: #2e2e2e; color: #777; cursor: default; }
+/* Nút lật trang kiểu A: một tab hẹp cùng nền / cao với các tab, mũi tên + chấm trang */
+.tab-pageBtn {
+  width: 34px; margin: 0 0 0 2px; padding: 6px 0 5px; border: none;
+  border-radius: 8px 8px 0 0; background: rgba(255, 255, 255, 0.02);
+  flex-direction: column; color: var(--text);
+}
+.tab-pageBtn:hover { background: rgba(255, 255, 255, 0.07); color: #fff; border-color: transparent; }
+.tab-pageArrow { font-size: 17px; font-weight: 700; line-height: 1; }
+.tab-pageDots { display: flex; margin-top: 3px; }
+.tab-pageDot { width: 5px; height: 5px; border-radius: 3px; background: #4a4a4a; margin: 0 1.5px; }
+.tab-pageDot.is-on { background: var(--accent); }

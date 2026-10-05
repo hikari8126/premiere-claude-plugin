@@ -1609,7 +1609,10 @@ function tabShowPage(page) {
   });
   var tg = document.getElementById('tabPageToggle');
   if (tg) {
-    tg.textContent = tabPage >= TAB_PAGES ? '‹' : '›';
+    // Kiểu "một tab hẹp": mũi tên + chấm trang (chấm sáng = trang đang xem)
+    var dots = '';
+    for (var p = 1; p <= TAB_PAGES; p++) dots += '<span class="tab-pageDot' + (p === tabPage ? ' is-on' : '') + '"></span>';
+    tg.innerHTML = '<span class="tab-pageArrow">' + (tabPage >= TAB_PAGES ? '‹' : '›') + '</span><span class="tab-pageDots">' + dots + '</span>';
     tg.setAttribute('aria-label', tabPage >= TAB_PAGES ? 'Về trang tab 1' : 'Sang trang tab 2');
   }
 }
