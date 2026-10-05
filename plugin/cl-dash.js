@@ -16,8 +16,8 @@
   try {
     if (!localStorage.getItem(SEED_KEY)) {
       var d0 = CLSTORE.get();
-      if (!d0.buttons.some(function (b) { return b.name === 'Resize GG'; })) {
-        d0.buttons.unshift({ name: 'Resize GG', kind: 'flow', steps: [
+      if (!d0.buttons.some(function (b) { return b.name === 'Resize GG' || b.name === 'GG'; })) {
+        d0.buttons.unshift({ name: 'GG', kind: 'flow', steps: [
           { type: 'bin_set', platform: 'GG', seqs: [{ k: 'set' }] },
           { type: 'wait', text: 'Đặt video vào khung GG dọc / ngang / vuông bộ {bộ} rồi bấm Tiếp tục' }
         ] });
@@ -37,6 +37,22 @@
       ].forEach(function (f) { if (have.indexOf(f.name) < 0) d2.buttons.push(f); });
       CLSTORE.set(d2);
       localStorage.setItem(SEED2, '1');
+    }
+  } catch (e) {}
+
+  // Đợt 3: quy trình dựng sẵn "Resize GG" đổi tên thành "GG"; thứ tự GG · PIN · APP · RAW (RAW cuối).
+  var SEED3 = 'cl_seed_v3';
+  try {
+    if (!localStorage.getItem(SEED3)) {
+      var d3 = CLSTORE.get();
+      d3.buttons.forEach(function (b) {
+        var gg = b.kind === 'flow' && b.steps.length && b.steps[0].type === 'bin_set' && b.steps[0].platform === 'GG';
+        if (gg && (b.name === 'Resize GG' || b.name === 'Resize')) b.name = 'GG';
+      });
+      var raw = d3.buttons.filter(function (b) { return b.name === 'RAW' && b.kind === 'flow'; });
+      d3.buttons = d3.buttons.filter(function (b) { return raw.indexOf(b) < 0; }).concat(raw);
+      CLSTORE.set(d3);
+      localStorage.setItem(SEED3, '1');
     }
   } catch (e) {}
 
@@ -67,6 +83,8 @@
 
     var d = CLSTORE.get(), flows = d.buttons.filter(function (b) { return b.kind === 'flow'; });
     dash.appendChild(el('div', 'cd-lbl', 'Quy trình'));
+    var grid = el('div', 'cd-grid');                    // 2 cột (UXP không có CSS grid → flex-wrap 50%)
+    dash.appendChild(grid);
     flows.forEach(function (b) {
       var c = el('div', 'cd-card');
       c.setAttribute('role', 'button');
@@ -76,12 +94,12 @@
       c.appendChild(h);
       c.appendChild(el('div', 'cd-dim', stepsText(b)));
       c.addEventListener('click', function () { openSheet(b); });
-      dash.appendChild(c);
+      var cell = el('div', 'cd-cell'); cell.appendChild(c); grid.appendChild(cell);
     });
-    var nw = el('div', 'cd-card cd-new', '+ Tạo quy trình mới');
+    var nw = el('div', 'cd-card cd-new', '+ Tạo quy trình');
     nw.setAttribute('role', 'button');
     nw.addEventListener('click', function () { window.ClaudeCustomUI.edit(null); });
-    dash.appendChild(nw);
+    var nc = el('div', 'cd-cell'); nc.appendChild(nw); grid.appendChild(nc);
 
     // Lệnh nhanh (nút lệnh): bấm → điền lệnh vào ô chat, Enter mới gửi
     var prompts = d.buttons.filter(function (b) { return b.kind === 'prompt'; });

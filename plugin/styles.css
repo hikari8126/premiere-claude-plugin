@@ -4961,3 +4961,9 @@ div.cd-run.is-off[role="button"] { background: #2e2e2e; color: #777; cursor: def
 .tab-pageDots { display: flex; margin-top: 3px; }
 .tab-pageDot { width: 5px; height: 5px; border-radius: 3px; background: #4a4a4a; margin: 0 1.5px; }
 .tab-pageDot.is-on { background: var(--accent); }
+/* Bảng điều khiển: thẻ quy trình 2 cột */
+.cd-grid { display: flex; flex-wrap: wrap; margin: 0 -3px; }
+.cd-cell { width: 50%; box-sizing: border-box; padding: 0 3px 6px; display: flex; }
+.cd-cell div.cd-card[role="button"] { margin-bottom: 0; flex: 1 1 auto; min-height: 50px; }
+.cd-cell .cd-cardHd { flex-wrap: wrap; }
+.cd-cell div.cd-new[role="button"] { justify-content: center; }
