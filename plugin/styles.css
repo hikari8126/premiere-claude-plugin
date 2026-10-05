@@ -5015,3 +5015,6 @@ div.cu-typeOpt[role="button"]:hover { background: rgba(255,255,255,0.05); }
 .cu-typeDesc { flex: 1 1 auto; font-size: 10.5px; color: #8a8a8a; }
 .cd-pv { font-size: 10.5px; color: #8a9aa8; margin: 0 0 6px 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-pv.is-bad { color: #f87171; white-space: normal; }
+/* Phiếu chạy: Chạy + Thêm vào hàng đợi cùng cỡ, xếp dọc */
+.cd-foot { display: flex; flex-direction: column; align-items: stretch; }
+div.cd-qAdd[role="button"] { width: 100%; margin: 8px 0 0; padding: 9px 0; border-radius: 9px; border-style: solid; font-size: 12px; font-weight: 600; }

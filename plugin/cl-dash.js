@@ -377,6 +377,15 @@
     async function load() {
       st.items = await PTOOLS.snapshot();
       st.vids = allVids(st.items);
+      // Quy trình TẠO bộ mới (có khối Tạo sequence) → mặc định bộ kế tiếp (lớn nhất + 1), video .0 .1 .2
+      if (b.steps.some(function (x) { return x.type === 'seq_make'; })) {
+        var maxSet = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
+        if (maxSet) {
+          var ns = String(maxSet + 1);
+          addTargets([0, 1, 2].map(function (n) { return { set: ns, idx: n, name: 'bộ mới', key: ns + '.' + n, fresh: true }; }));
+          return;
+        }
+      }
       // mặc định: video chưa dựng của bộ đang mở (theo bước đầu nếu nó chỉ định vid .N)
       var first = b.steps.filter(function (s) { return s.seqs && s.seqs[0] && s.seqs[0].k === 'idx'; })[0];
       addTargets(st.vids.filter(function (x) {
@@ -498,6 +507,10 @@
         // Xem trước khối đơn: tên / bin của video đầu + số đã có / lỗi
         var pv = preview && preview[i];
         if (pv && pv.rows && pv.rows.length) {
+          if (s.type === 'bin_make') {               // một bin cho nhiều video → đếm theo bin, không theo video
+            var seenB = {};
+            pv = { rows: pv.rows.filter(function (r) { if (r.error) return true; if (seenB[r.bin]) return false; seenB[r.bin] = 1; return true; }) };
+          }
           var r0 = pv.rows.filter(function (r) { return !r.error; })[0];
           var nErr = pv.rows.filter(function (r) { return r.error; }).length, nHave = pv.rows.filter(function (r) { return r.exists; }).length;
           var txt = r0 ? '→ ' + (s.type === 'bin_make' ? r0.bin : s.type === 'raw_export' ? (r0.src && r0.src.name) : (r0.name || '') + (r0.bin ? '  ·  ' + r0.bin : '')) : '';
@@ -510,6 +523,14 @@
       if (sets.length > 1) ss.appendChild(el('div', 'cd-dim cd-pad', 'Chạy lần lượt ' + sets.length + ' bộ: ' + setText + '.'));
 
       var n = st.targets.length, ready = !usesSeq || n > 0;
+      // Xem trước cho thấy mọi bước đều đã có / lỗi → không còn gì để chạy
+      var nothing = false;
+      if (preview && n) {
+        var eng = preview.filter(function (p) { return p.rows; });
+        nothing = eng.length && eng.every(function (p) { return p.rows.every(function (r) { return r.exists || r.error; }); });
+        if (nothing && eng.some(function (p) { return p.type === 'raw_export'; })) nothing = false;   // xuất RAW luôn chạy lại được
+      }
+      if (nothing) ready = false;
       var foot = el('div', 'cd-foot');
       if (st.queued) foot.appendChild(el('div', 'cd-queued', st.queued));
       if (other) {
@@ -526,7 +547,7 @@
         sheet.appendChild(foot);
         return;
       }
-      var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
+      var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), nothing ? 'Đã có đủ — không còn gì để tạo' : usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
       go.setAttribute('role', 'button');
       go.addEventListener('click', async function () {
         if (!ready) return;
@@ -537,7 +558,7 @@
         }
       });
       foot.appendChild(go);
-      if (usesSeq && n && st.here) {
+      if (usesSeq && n && st.here && !nothing) {
         var qh = el('div', 'cl-btn cd-qAdd', '+ Thêm vào hàng đợi');
         qh.setAttribute('role', 'button');
         qh.addEventListener('click', function () {
