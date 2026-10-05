@@ -75,7 +75,7 @@
       hear: (s.hear && typeof s.hear === 'object') ? s.hear : {},
       vinc: (s.vinc && typeof s.vinc === 'object') ? s.vinc : {},
       master: (s.master && typeof s.master === 'object') ? s.master : {},
-      chosen: (s.chosen && typeof s.chosen === 'object') ? s.chosen : {},
+      chosen: RCC.cleanChosen(s.chosen),
       productPick: (s.productPick && typeof s.productPick === 'object') ? s.productPick : {}
     };
   }
@@ -526,7 +526,7 @@
     var p = f.nativePath || '';
     var r = await resolveDest({ chosen: p, walk: true });
     if (r && r.ok) {
-      st.prefs.chosen[projectKey()] = r.chosen || p;
+      st.prefs.chosen[projectKey()] = p;               // r.chosen chỉ là cờ true — lưu đường dẫn đã chọn
       savePrefs();
     }
     await refreshDests();

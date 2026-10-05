@@ -317,7 +317,21 @@ var RCC = (function () {
     return any ? out : null;
   }
 
+  // Thư mục xuất chọn tay theo project {projectPath: đường dẫn}. Bản ≤5.15.0 lưu nhầm cờ `true`
+  // của /rawcut/dest (res.chosen là cờ, không phải đường dẫn) → bỏ mọi giá trị không phải đường dẫn
+  // tuyệt đối, để máy đã dính lỗi tự lành (về thư mục tự nhận) thay vì báo "thư mục true không có".
+  function cleanChosen(map) {
+    var out = {};
+    if (!map || typeof map !== 'object') return out;
+    Object.keys(map).forEach(function (k) {
+      var v = map[k];
+      if (typeof v === 'string' && v.charAt(0) === '/') out[k] = v;
+    });
+    return out;
+  }
+
   return {
+    cleanChosen: cleanChosen,
     TPS: TPS, DEAD_TYPES: DEAD_TYPES, ALWAYS_TYPES: ALWAYS_TYPES,
     tickStr: tickStr, timeObj: timeObj, pointOrNull: pointOrNull, buildDump: buildDump,
     hashStr: hashStr, fingerprint: fingerprint,
