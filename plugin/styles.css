@@ -5025,3 +5025,4 @@ div.cd-frame.is-45[role="button"] { border-color: #4a5a86; background: #22283a; 
 .cd-frameR { font-size: 12px; font-weight: 700; color: #a6e2c8; }
 .cd-frame.is-45 .cd-frameR { color: #b9c8f0; }
 div.cd-frameAdd[role="button"] { align-self: center; }
+.cd-segFrame { margin-bottom: 8px; }

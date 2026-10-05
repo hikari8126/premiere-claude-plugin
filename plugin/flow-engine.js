@@ -373,12 +373,13 @@ var FLE = (function () {
           }
           if (s.type === 'seq_make') {
             var pl = nearestPrev(items, { k: 'base' }, set, idx);
-            if (s.frame === 'set') {
-              var fr = ctx.frames && ctx.frames[idx];
+            // "theo bộ frame": phiếu chạy chọn 1 trong 2 — theo bộ cũ (frames = null → chép cài đặt video
+            // cùng số bộ trước) hoặc tự chọn (frames {số: ratio} → cài đặt mặc định project + khung đó).
+            if (s.frame === 'set' && ctx.frames) {
+              var fr = ctx.frames[idx];
               if (!FRAMES[fr]) throw new Error('chưa chọn khung cho vid' + set + '.' + idx + ' (bộ frame)');
               row.frame = FRAMES[fr]; row.frameKey = fr;
-              if (pl) row.like = { ref: refOf(pl.item), name: pl.item.name };   // fps / audio… như bộ trước, khung theo bộ frame
-            } else if (s.frame === 'prev') {
+            } else if (s.frame === 'set' || s.frame === 'prev') {
               if (!pl) throw new Error('chưa có bộ trước để chép cài đặt sequence');
               row.like = { ref: refOf(pl.item), name: pl.item.name };
             } else row.frame = FRAMES[s.frame];

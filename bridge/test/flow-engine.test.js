@@ -135,7 +135,9 @@ test("FB tạo mới (NAV): bộ frame theo từng video, tên + bin học bộ 
     [{ set: "37", idx: 0 }, { set: "37", idx: 1 }, { set: "37", idx: 2 }], { 0: "9-16", 1: "9-16", 2: "4-5" });
   assert.strictEqual(p[1].rows[0].bin, "Sequence / FB / 37x");
   assert.deepStrictEqual(p[2].rows.map(r => [r.name, r.frameKey]), [["SonaShape vid37.0 [c.ha] [hoang]", "9-16"], ["SonaShape vid37.1 [c.ha] [hoang]", "9-16"], ["SonaShape vid37.2 [c.ha] [hoang]", "4-5"]]);
-  assert.strictEqual(p[2].rows[0].like.name, "SonaShape vid36.0 [c.ha] [hoang]");
+  assert.strictEqual(p[2].rows[0].like, undefined);                                   // tự chọn: không chép bộ cũ
+  const old = plan([{ type: "platform", p: "FB" }, { type: "seq_make" }], [{ set: "37", idx: 1 }], null);
+  assert.deepStrictEqual([old[1].rows[0].like.name, old[1].rows[0].frame], ["SonaShape vid36.1 [c.ha] [hoang]", undefined]);   // theo bộ cũ
   const miss = plan([{ type: "platform", p: "FB" }, { type: "seq_make" }], [{ set: "37", idx: 0 }], {});
   assert.match(miss[1].rows[0].error, /bộ frame/);
   const noP = plan([{ type: "bin_make" }], [{ set: "37", idx: 0 }]);

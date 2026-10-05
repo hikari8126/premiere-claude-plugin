@@ -413,6 +413,7 @@
         var mx = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
         st.navSet = mx ? String(mx + 1) : '';
         st.frames = ['9-16', '9-16', '9-16'];
+        st.frameMode = 'prev';                           // 'prev' theo bộ cũ | 'pick' tự chọn
         if (mx) {
           try {
             var src = BSC.fbSources(st.items, String(mx)), keys = Object.keys(src).map(Number).sort(function (a, c) { return a - c; });
@@ -513,7 +514,20 @@
         var have = st.vids.some(function (x) { return x.set === st.navSet; });
         nr.appendChild(el('span', 'cd-dim', have ? '⚠ bộ ' + st.navSet + ' đã có sequence' : 'bộ mới'));
         nb.appendChild(nr);
-        var fs = section('Bộ frame' + (st.framesFrom ? ' · như bộ ' + st.framesFrom : ''));
+        var fs = section('Khung');
+        var seg = el('div', 'cd-seg cd-segFrame');
+        [['prev', 'Theo bộ cũ' + (st.framesFrom ? ' (' + st.framesFrom + ')' : '')], ['pick', 'Tự chọn']].forEach(function (o) {
+          var c = el('div', 'cd-segOpt' + (st.frameMode === o[0] ? ' is-on' : ''), o[1]);
+          c.setAttribute('role', 'button');
+          c.addEventListener('click', function () { st.frameMode = o[0]; st.frameErr = ''; draw(); });
+          seg.appendChild(c);
+        });
+        fs.appendChild(seg);
+        if (st.frameMode === 'prev') {
+          fs.appendChild(el('div', 'cd-dim cd-pad', st.framesFrom
+            ? 'Mỗi video chép nguyên cài đặt (khung, audio…) của video cùng số ở bộ ' + st.framesFrom + ': ' + st.frames.map(function (f, k) { return '.' + k + ' ' + (f === '4-5' ? '4:5' : '9:16'); }).join(' · ')
+            : 'Chép cài đặt của bộ trước.'));
+        }
         var fr2 = el('div', 'cu-chipRow');
         st.frames.forEach(function (f, k) {
           var c = el('div', 'cd-frame' + (f === '4-5' ? ' is-45' : ''));
@@ -537,8 +551,10 @@
           });
           fr2.appendChild(c);
         });
-        fs.appendChild(fr2);
-        fs.appendChild(el('div', st.frameErr ? 'cu-err' : 'cd-dim cd-pad', st.frameErr || 'Bấm từng video để đổi 9:16 ⇄ 4:5 · tối thiểu 1 video 9:16'));
+        if (st.frameMode === 'pick') {
+          fs.appendChild(fr2);
+          fs.appendChild(el('div', st.frameErr ? 'cu-err' : 'cd-dim cd-pad', st.frameErr || 'Bấm từng video để đổi 9:16 ⇄ 4:5 · tối thiểu 1 video 9:16 · cài đặt khác theo mặc định project'));
+        }
         st.targets = st.navSet ? st.frames.map(function (f, k) { return { set: st.navSet, idx: k, key: st.navSet + '.' + k, fresh: true }; }) : [];
       }
       if (usesSeq && !other && !navMode) {
@@ -661,7 +677,11 @@
       }
       sheet.appendChild(foot);
     }
-    function framesMap() { var m = {}; (st.frames || []).forEach(function (f, k) { m[k] = f; }); return m; }
+    // Tự chọn → {số: ratio}; theo bộ cũ → null (khối Tạo sequence chép cài đặt bộ trước)
+    function framesMap() {
+      if (st.frameMode !== 'pick') return null;
+      var m = {}; (st.frames || []).forEach(function (f, k) { m[k] = f; }); return m;
+    }
     function groupSets() {
       var by = {}, order = [];
       st.targets.forEach(function (t) { if (!by[t.set]) { by[t.set] = []; order.push(t.set); } by[t.set].push(t.idx); });
