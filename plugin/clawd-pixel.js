@@ -207,7 +207,9 @@ var CLAWD = (function () {
         var ch = row.charAt(x), x0 = x;
         while (x < row.length && row.charAt(x) === ch) x++;
         if (ch === '.') continue;
-        out.push('<rect x="' + x0 + '" y="' + y + '" width="' + (x - x0) + '" height="1" fill="' + (pal[ch] || COLORS[ch]) + '"/>');
+        // Phủ chồng 0.1px sang phải/xuống dưới: UXP khử răng cưa từng <rect> nên giữa các hàng
+        // lộ vạch nền mờ; ô vẽ sau (bên phải / hàng dưới) đè lại phần chồng nên hình không đổi.
+        out.push('<rect x="' + x0 + '" y="' + y + '" width="' + (x - x0 + 0.1) + '" height="1.1" fill="' + (pal[ch] || COLORS[ch]) + '"/>');
       }
     }
     var w = width || 24, h = Math.round(w * c.h / c.w);
