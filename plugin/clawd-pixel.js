@@ -60,12 +60,17 @@ var CLAWD = (function () {
       }
     });
 
-    // Tay — mẩu 2×2 hai bên hông; giơ lên thì thành cột 2×4 chĩa lên trên đầu
+    // Tay — mẩu 2×2 hai bên hông (như logo). Giơ lên: đường chéo dày 2px chĩa ra ngoài-lên từ
+    // vai, hai tay thành chữ V (cột thẳng dính thân trông như cái xô). Vung: mẩu tay nhấc lên vai.
     function arm(side, pose) {
       var ax = side < 0 ? bx + 1 : bx + 15;
+      var out = side < 0 ? -1 : 1;                     // hướng ra ngoài
       if (pose === 'side') rect(g, ax, top + 4, 2, 2, 'O');
-      if (pose === 'up')   { rect(g, ax, top - 2, 2, 4, 'O'); px(g, side < 0 ? ax : ax + 1, top - 3, 'O'); }
-      if (pose === 'mid')  { rect(g, ax, top + 2, 2, 2, 'O'); px(g, side < 0 ? ax - 1 : ax + 2, top + 2, 'O'); }   // vung ngang ngực
+      if (pose === 'up') {
+        for (var k = 0; k < 3; k++) rect(g, ax + out * k, top + 2 - k, 2, 1, 'O');   // bậc chéo 2px
+        px(g, (side < 0 ? ax : ax + 1) + out * 2, top - 1, 'O');                       // đầu ngón chĩa lên
+      }
+      if (pose === 'mid')  rect(g, ax, top + 2, 2, 2, 'O');
       // Buông thõng: mẩu tay 2px vẫn dính hông nhưng chĩa chéo xuống dưới-ra ngoài
       var inX = side < 0 ? ax + 1 : ax, outX = side < 0 ? ax : ax + 1;
       if (pose === 'down') {
@@ -125,7 +130,7 @@ var CLAWD = (function () {
   function confetti(g, t) {
     CONFETTI.forEach(function (p, i) {
       var y = (p[1] + t) % H, x = p[0] + ((t + i) % 4 < 2 ? 0 : 1);
-      if (y < OY || x < OX - 1 || x > OX + 18) px(g, x, y, p[2]);   // không đè lên thân Clawd
+      if (g[y] && g[y][x] === '.') px(g, x, y, p[2]);   // chỉ rơi vào ô trống — không đè thân / tay
     });
   }
 
@@ -159,11 +164,11 @@ var CLAWD = (function () {
     done: [
       frame(P({ legs: 'squash', eyes: 'closed' })),                                         // nhún lấy đà
       frame(P({ dy: -2, arms: 'up', eyes: 'happy' })),                                      // bật lên
-      frame(P({ dy: -3, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 5, true); sparkle(g, 22, 4, true); }),
-      frame(P({ dy: -2, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 5, false); sparkle(g, 22, 4, false); }),
+      frame(P({ dy: -3, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 1, true); sparkle(g, 22, 2, true); }),
+      frame(P({ dy: -2, arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 1, false); sparkle(g, 22, 2, false); }),
       frame(P({ legs: 'squash', arms: 'up', eyes: 'happy' })),                              // đáp
-      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, true); sparkle(g, 22, 5, false); }),
-      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 6, false); sparkle(g, 22, 5, true); })
+      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 2, true); sparkle(g, 22, 1, false); }),
+      frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 2, false); sparkle(g, 22, 1, true); })
     ],
     // 8 khung lặp: nhún → bật cao → lơ lửng (tay vẫy) → đáp, pháo giấy rơi suốt
     party: (function () {
@@ -171,9 +176,9 @@ var CLAWD = (function () {
         P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
         P({ dy: -2, arms: 'up', eyes: 'happy' }),
         P({ dy: -4, arms: 'up', eyes: 'happy' }),
-        P({ dy: -4, arms: 'leftMid', eyes: 'happy' }),
+        P({ dy: -4, arms: 'leftUp', eyes: 'happy' }),
         P({ dy: -3, arms: 'up', eyes: 'happy' }),
-        P({ dy: -1, arms: 'rightMid', eyes: 'happy' }),
+        P({ dy: -1, arms: 'rightUp', eyes: 'happy' }),
         P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
         P({ arms: 'up', eyes: 'happy' })
       ];
