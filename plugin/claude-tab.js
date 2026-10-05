@@ -907,7 +907,7 @@
   }
   async function engineStep(entry, rec, st, n, eng, label) {
     var items = (await PTOOLS.snapshot()) || [];
-    var ctx = { items: items, targets: eng.targets, results: eng.results, platform: eng.platform, frames: eng.frames };
+    var ctx = { items: items, targets: eng.targets, results: eng.results, platform: eng.platform, frames: eng.frames, fps: eng.fps };
     var rows = FLE.planStep(st, n, ctx);
     var idx = rec.acts.length;
     rec.acts.push({ cls: 'is-ask', text: label });
@@ -930,7 +930,7 @@
       var title = st.type === 'bin_make' ? r.bin : st.type === 'raw_export' ? (r.src ? r.src.name : 'vid' + r.key) : (r.name || ('vid' + r.key));
       if (r.error) return { name: 'vid' + r.key + ' · ' + (title || ''), sub: r.error, bad: true, r: r };
       if (r.exists && st.type !== 'raw_export') return { name: title, sub: 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') + ' — bỏ qua', bad: true, r: r };
-      var sub = st.type === 'bin_make' ? 'bin mới' + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + ' → ' + r.bin
+      var sub = st.type === 'bin_make' ? 'bin mới' + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + (r.fps ? ' · ' + r.fps + 'fps' : '') + ' → ' + r.bin
               : st.type === 'seq_move' ? r.src.name + ' → ' + r.bin
               : st.type === 'raw_export' ? (st.mode === 'both' ? 'source + render' : st.mode)
               : 'từ ' + (r.src ? r.src.name : '?') + ' → ' + r.bin;
@@ -972,7 +972,7 @@
                   if (!(await ppGetOrCreateBin(project, r.bin))) throw new Error('không tạo được bin');
                   (r.also || []).forEach(function (k) { if (k !== r.key) ok.push(k); });
                 } else if (st.type === 'seq_make') {
-                  await window.ResizeAPI.makeSequence(r.name, r.bin, { like: r.like ? await seqByRef(r.like.ref) : null, frame: r.frame || null });
+                  await window.ResizeAPI.makeSequence(r.name, r.bin, { like: r.like ? await seqByRef(r.like.ref) : null, frame: r.frame || null, fps: r.fps || '' });
                 } else if (st.type === 'seq_clone') {
                   await window.ResizeAPI.cloneInto(await seqByRef(r.src.ref), r.name, r.bin);
                 } else if (st.type === 'seq_move') {
@@ -1047,7 +1047,7 @@
       if (st.seqs && st.seqs.some(function (q) { return q.k !== 'current'; }) && !items) items = await PTOOLS.snapshot();
       var sa = CLC.stepAction(st, { vars: v, items: items || [] });
       if (sa.engine && st.type === 'platform') {       // khối Nền tảng: chỉ đặt ngữ cảnh cho các khối sau
-        eng.platform = st.p;
+        eng.platform = st.p; eng.fps = st.fps || '';
         eng.results.push((eng.targets || []).map(function () { return null; }));
         addAct(entry, 'is-ok', label);
         rec.acts.push({ cls: 'is-ok', text: label });

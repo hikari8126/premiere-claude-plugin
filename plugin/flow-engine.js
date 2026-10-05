@@ -74,7 +74,10 @@ var FLE = (function () {
     if (!s || !isType(s.type)) return null;
     var t = s.type, o = { type: t };
     // Mặc định "theo nền tảng" (khối Nền tảng phía trước quyết định bin / tên / khung / ratio)
-    if (t === 'platform') { o.p = PLATS.indexOf(s.p) >= 0 ? s.p : 'FB'; if (o.p === 'FB') o.mode = s.mode === 'resize' ? 'resize' : 'new'; }
+    if (t === 'platform') {
+      o.p = PLATS.indexOf(s.p) >= 0 ? s.p : 'FB';
+      if (o.p === 'FB') { o.mode = s.mode === 'resize' ? 'resize' : 'new'; if (o.mode === 'new') o.fps = s.fps === 'project' ? 'project' : '30'; }
+    }
     if (t === 'bin_make') o.bin = nBin(s.bin, { k: 'plat' });
     if (t === 'seq_make') { o.name = nName(s.name || { k: 'plat' }); o.frame = FRAMES[s.frame] || s.frame === 'prev' ? s.frame : 'set'; o.bin = nBin(s.bin, { k: 'plat' }); }
     if (t === 'seq_clone') { o.src = nSrc(s.src || { k: 'plat' }); o.name = nName(s.name || { k: 'plat' }); o.bin = nBin(s.bin, { k: 'plat' }); }
@@ -118,7 +121,7 @@ var FLE = (function () {
   function chips(s) {
     var out = [{ kind: 'act', text: TYPES[s.type].label }];
     function c(kind, text, miss) { out.push({ kind: kind, text: text, missing: !!miss }); }
-    if (s.type === 'platform') { c('par', s.p + (s.p === 'FB' ? ' · ' + (s.mode === 'resize' ? 'resize' : 'tạo mới') : '')); return out; }
+    if (s.type === 'platform') { c('par', s.p + (s.p === 'FB' ? ' · ' + (s.mode === 'resize' ? 'resize' : 'tạo mới' + (s.fps === '30' ? ' · 30fps' : '')) : '')); return out; }
     if (s.src) c('seq', srcTxt(s.src));
     if (s.type === 'seq_resize') {
       c('par', s.ratio === 'plat' ? 'ratio theo nền tảng' : s.ratio === 'other' ? 'ratio còn lại' : s.ratio === 'prev' ? 'ratio như bộ trước' : RATIO_TXT[s.ratio]);
@@ -290,7 +293,7 @@ var FLE = (function () {
   // → rows [{key, ti, set, idx, name, bin, src, exists, error, frame?, like?, ratio?, ratios?, platform?, label?}]
   function planStep(s, n, ctx) {
     var items = ctx.items || [], rows = [], P = ctx.platform || '';
-    if (s.type === 'platform') { ctx.platform = s.p; ctx.platMode = s.mode || ''; return rows; }
+    if (s.type === 'platform') { ctx.platform = s.p; ctx.platMode = s.mode || ''; ctx.fps = s.fps || ''; return rows; }
     function needP() { if (!P) throw new Error('chưa có khối Nền tảng phía trước'); }
     (ctx.targets || []).forEach(function (tg, ti) {
       var set = String(tg.set), idx = Number(tg.idx), to = { set: Number(set), idx: idx };
@@ -372,6 +375,7 @@ var FLE = (function () {
                       || (items || []).some(function (it) { return !it.isFolder && samePath(it.path, row.bin); });
           }
           if (s.type === 'seq_make') {
+            if (ctx.fps === '30') row.fps = '30';
             var pl = nearestPrev(items, { k: 'base' }, set, idx);
             // "theo bộ frame": phiếu chạy chọn 1 trong 2 — theo bộ cũ (frames = null → chép cài đặt video
             // cùng số bộ trước) hoặc tự chọn (frames {số: ratio} → cài đặt mặc định project + khung đó).

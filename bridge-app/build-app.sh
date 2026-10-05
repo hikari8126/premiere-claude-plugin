@@ -226,6 +226,7 @@ zip -j "$CCX_TMP_FILE" \
   plugin/index.html \
   plugin/styles.css \
   plugin/*.js \
+  plugin/*.sqpreset \
   -x "*.DS_Store" > /dev/null
 
 cp -r "${APP_DIR}"     "${INSTALLER_DIR}/Contents/Resources/Claude Bridge.app"
@@ -250,6 +251,7 @@ zip -j "$CCX_FILE" \
   plugin/index.html \
   plugin/styles.css \
   plugin/*.js \
+  plugin/*.sqpreset \
   -x "*.DS_Store"
 
 # Chốt chặn: mọi plugin/*.js phải nằm trong CCX. Thiếu một file là tính năng
@@ -261,7 +263,11 @@ for f in plugin/*.js; do
     exit 1
   fi
 done
-echo "  ✅ CCX đủ $(ls plugin/*.js | wc -l | tr -d ' ') file .js của plugin"
+for f in plugin/*.sqpreset; do                     # preset sequence (NAV tạo sequence 30fps)
+  base=$(basename "$f")
+  if ! unzip -l "$CCX_FILE" | grep -q " ${base}$"; then echo "  ❌ CCX thiếu ${base} — dừng build"; exit 1; fi
+done
+echo "  ✅ CCX đủ $(ls plugin/*.js | wc -l | tr -d ' ') file .js + $(ls plugin/*.sqpreset | wc -l | tr -d ' ') preset của plugin"
 
 CCX_SIZE=$(du -sh "$CCX_FILE" | cut -f1)
 echo "  ✅ CCX: ${CCX_FILE}  (${CCX_SIZE})"

@@ -276,6 +276,7 @@ window.CLSTORE = CLSTORE;
     if (s.type === 'platform') {
       row('Nền tảng', sel([['FB', 'FB'], ['GG', 'GG'], ['PIN', 'PIN'], ['APP', 'APP']], s.p, function (v) { set({ p: v }); }));
       if (s.p === 'FB') row('Chế độ', sel([['new', 'Tạo mới (NAV — bộ frame)'], ['resize', 'Resize 9:16 ⇄ 4:5']], s.mode, function (v) { set({ mode: v }); }));
+      if (s.p === 'FB' && s.mode === 'new') row('FPS', sel([['30', '30 fps (mặc định)'], ['project', 'Theo project']], s.fps, function (v) { set({ fps: v }); }));
       f.appendChild(el('div', 'cu-hint cu-fHint', 'Khối phía sau để "Theo nền tảng" là tự đọc bin, tên, khung, ratio của nền tảng này từ bộ trước.'));
       return f;
     }

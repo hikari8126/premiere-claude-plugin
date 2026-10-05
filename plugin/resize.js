@@ -986,7 +986,17 @@
         if (binPathStr && !bin) throw new Error('không tạo được bin ' + binPathStr);
         rzStep(name + ' · tạo sequence');
         if (typeof project.createSequence !== 'function') throw new Error('Premiere bản này không có createSequence');
-        var seq = await un(project.createSequence(name));
+        // opts.fps '30': tạo từ preset 30fps kèm plugin (fps không đổi được sau khi tạo); khung đặt lại bên dưới
+        var preset = '';
+        if (String(opts.fps) === '30') {
+          try { var pf = await require('uxp').storage.localFileSystem.getPluginFolder(); preset = (pf.nativePath || '').replace(/\/$/, '') + '/seq-30fps.sqpreset'; } catch (e) { preset = ''; }
+        }
+        var seq = null;
+        if (preset) {
+          try { seq = await un(project.createSequence(name, preset)); }
+          catch (e) { console.warn('[Flow] preset 30fps không dùng được, tạo theo project:', e && e.message); }
+        }
+        if (!seq) seq = await un(project.createSequence(name));
         if (!seq) throw new Error('không tạo được sequence');
         await sleep(700);                                   // chờ Premiere ghi nhận sequence mới
         rzStep(name + ' · đổi tên');
