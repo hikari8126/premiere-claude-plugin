@@ -3651,7 +3651,11 @@ app.get('/rawcut/status', (_req, res) => {
   let ffOk = false;
   try { ffOk = require('child_process').spawnSync('ffmpeg', ['-version'], { env: cleanEnv(), timeout: 5000 }).status === 0; } catch (e) {}
   const exists = fs.existsSync(RC_ENGINE);
-  res.json({ ok: py.ok && ffOk && exists, python: py, ffmpeg: { ok: ffOk }, engine: { path: RC_ENGINE, exists, version: rcEngineVersion() } });
+  // Adobe Media Encoder: exportSequence (Timeline Render) của Premiere UXP cần AME cài trên máy.
+  let ame = [];
+  try { ame = fs.readdirSync('/Applications').filter(n => /^Adobe Media Encoder/i.test(n)); } catch (e) {}
+  res.json({ ok: py.ok && ffOk && exists, python: py, ffmpeg: { ok: ffOk }, engine: { path: RC_ENGINE, exists, version: rcEngineVersion() },
+             ame: { ok: ame.length > 0, apps: ame } });
 });
 
 // ── POST /rawcut/scan ── {projectPath, sequenceName, dump, xmlPath?} | {read}, half, options

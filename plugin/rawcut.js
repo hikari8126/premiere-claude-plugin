@@ -399,7 +399,13 @@
   }
   function paintEnv(env) {
     var e = $('rcEnv');
-    setText(e, env && env.ok ? '' : envProblem(env || {}));
+    var msg = env && env.ok ? '' : envProblem(env || {});
+    // Bridge ≥1.22.2 báo có Adobe Media Encoder không — Timeline Render (edited/) cần AME.
+    if (!msg && env && env.ame && env.ame.ok === false && st.prefs && st.prefs.mode !== 'source') {
+      msg = '⚠ Máy chưa cài Adobe Media Encoder — Timeline Render (edited/) sẽ không chạy được. Cài "Media Encoder" '
+        + 'trong Creative Cloud (cùng năm với Premiere) rồi mở lại Premiere, hoặc chọn Source (raw/ không cần AME).';
+    }
+    setText(e, msg);
   }
 
   // ── Hàng loạt: chọn nhiều sequence ở Project panel ─────────────────────
