@@ -376,7 +376,8 @@
     T.showView('sheet');
     var v = CLC.vars(T.seqName());
     var st = { items: null, vids: [], targets: [], platform: '', add: '', addErr: '', search: '', ticks: {}, done: {},
-               here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '' };
+               here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '',
+               navSet: '', frames: ['9-16', '9-16', '9-16'], frameMode: 'prev', framesFrom: '', frameErr: '' };   // NAV: có sẵn mặc định trước khi đọc xong project
     st.project = st.here;
     var usesSeq = b.steps.some(function (s) { return CLC.isEngine(s.type) || (s.seqs && s.seqs.length && s.seqs[0].k !== 'current'); });
     // NAV: Tạo sequence theo bộ frame → phiếu chỉ cần số bộ + bộ frame (mỗi video 9:16 / 4:5, ≥1 video 9:16)
@@ -411,9 +412,7 @@
       // NAV (Tạo sequence theo bộ frame): bộ kế tiếp + bộ frame như bộ trước (đọc khung FB gốc bộ trước)
       if (navMode) {
         var mx = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
-        st.navSet = mx ? String(mx + 1) : '';
-        st.frames = ['9-16', '9-16', '9-16'];
-        st.frameMode = 'prev';                           // 'prev' theo bộ cũ | 'pick' tự chọn
+        if (!st.navSet) st.navSet = mx ? String(mx + 1) : '';   // bro đã gõ số thì giữ
         if (mx) {
           try {
             var src = BSC.fbSources(st.items, String(mx)), keys = Object.keys(src).map(Number).sort(function (a, c) { return a - c; });
@@ -509,7 +508,10 @@
         ni.value = st.navSet || ''; ni.placeholder = 'số bộ';
         ni.addEventListener('focus', window.claimKeyboard);
         ni.addEventListener('blur', window.releaseKeyboard);
-        ni.addEventListener('change', function () { st.navSet = String(ni.value || '').trim().replace(/x$/i, ''); draw(); });
+        // lưu NGAY khi gõ (UXP chỉ bắn 'change' khi rời ô — bấm sang nút khác là mất số); Enter / rời ô thì vẽ lại
+        ni.addEventListener('input', function () { st.navSet = String(ni.value || '').trim().replace(/x$/i, ''); });
+        ni.addEventListener('change', function () { draw(); });
+        ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') draw(); });
         var nr = el('div', 'cd-setRow'); nr.appendChild(ni);
         var have = st.vids.some(function (x) { return x.set === st.navSet; });
         nr.appendChild(el('span', 'cd-dim', have ? '⚠ bộ ' + st.navSet + ' đã có sequence' : 'bộ mới'));
