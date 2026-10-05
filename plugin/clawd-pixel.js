@@ -22,7 +22,8 @@
 var CLAWD = (function () {
   var W = 24, H = 18, OX = 3, OY = 8;           // Clawd 18×10 đặt ở (3,8) → đáy chạm hàng 17
   var COLORS = { O: '#D97757', K: '#141414', W: '#d4d4d4', Y: '#F2C14E', B: '#6CB4EE',
-                 R: '#F472B6', G: '#4ADE80', C: '#22D3EE' };   // R/G/C: pháo giấy
+                 R: '#F472B6', G: '#4ADE80', C: '#22D3EE',     // R/G/C: pháo giấy
+                 D: '#B85F42', T: '#C9B27F' };                 // D: khớp tay (đậm) · T: tia pháo nhạt
 
   function blank() {
     var g = [];
@@ -38,7 +39,7 @@ var CLAWD = (function () {
   //   arms  — side | up | down | leftUp | rightUp | leftMid | rightMid
   //   legs  — stand | squash | stepA | stepB
   function clawd(g, o) {
-    var dy = o.dy || 0, bx = OX, by = OY + dy;
+    var dy = o.dy || 0, bx = OX + (o.dx || 0), by = OY + dy;
     var legs = o.legs || 'stand';
     var squash = legs === 'squash';
     var top = by + (squash ? 1 : 0);              // nhún: thân hạ 1px, chân còn 1px
@@ -71,6 +72,11 @@ var CLAWD = (function () {
         px(g, (side < 0 ? ax : ax + 1) + out * 2, top - 1, 'O');                       // đầu ngón chĩa lên
       }
       if (pose === 'mid')  rect(g, ax, top + 2, 2, 2, 'O');
+      // Duỗi dài cầm que pháo (ảnh mẫu): tay 4px có khớp đậm, que đen 2px ở mép trên bàn tay
+      if (pose === 'hold') {
+        rect(g, ax, top + 4, 4, 2, 'O'); rect(g, ax + 1, top + 4, 1, 2, 'D');
+        rect(g, ax + 4, top + 4, 2, 1, 'W');   // que xám nhạt (que đen chìm vào nền tối)
+      }
       // Buông thõng: mẩu tay 2px vẫn dính hông nhưng chĩa chéo xuống dưới-ra ngoài
       var inX = side < 0 ? ax + 1 : ax, outX = side < 0 ? ax : ax + 1;
       if (pose === 'down') {
@@ -80,8 +86,8 @@ var CLAWD = (function () {
       }
     }
     var a = o.arms || 'side';
-    var L = { side: 'side', up: 'up', down: 'down', leftUp: 'up', rightUp: 'side', leftMid: 'mid', rightMid: 'side' }[a];
-    var R = { side: 'side', up: 'up', down: 'down', leftUp: 'side', rightUp: 'up', leftMid: 'side', rightMid: 'mid' }[a];
+    var L = { side: 'side', up: 'up', down: 'down', leftUp: 'up', rightUp: 'side', leftMid: 'mid', rightMid: 'side', hold: 'side' }[a];
+    var R = { side: 'side', up: 'up', down: 'down', leftUp: 'side', rightUp: 'up', leftMid: 'side', rightMid: 'mid', hold: 'hold' }[a];
     arm(-1, L); arm(1, R);
 
     // Chân — 4 cột 1×2 dưới thân
@@ -134,6 +140,20 @@ var CLAWD = (function () {
     });
   }
 
+  // Tia pháo hoa quanh đầu que (cx, cy): lõi vàng + tia toả, 4 dạng xoay vòng cho lấp lánh.
+  var SPARKS = [   // lệch tối đa ±2 quanh đầu que để không bị mép khung cắt
+    [[0,0,'Y'],[1,0,'Y'],[0,-1,'Y'],[0,1,'Y'],[-1,-2,'T'],[2,-2,'Y'],[2,1,'T'],[-1,2,'Y'],[2,2,'T']],
+    [[0,0,'Y'],[0,1,'Y'],[1,-1,'Y'],[-1,-1,'T'],[2,0,'Y'],[1,2,'Y'],[0,-2,'T'],[2,-2,'T'],[-2,1,'T']],
+    [[0,0,'Y'],[1,0,'T'],[-1,1,'Y'],[1,-2,'Y'],[2,1,'Y'],[0,2,'T'],[-2,-2,'Y'],[2,2,'Y']],
+    [[0,0,'Y'],[0,-1,'Y'],[1,1,'Y'],[2,-1,'Y'],[-1,0,'T'],[-1,-2,'Y'],[2,2,'T'],[1,-2,'T'],[-2,2,'Y']]
+  ];
+  function sparkler(g, cx, cy, t) {
+    SPARKS[t % SPARKS.length].forEach(function (p) {
+      var x = cx + p[0], y = cy + p[1];
+      if (g[y] && g[y][x] === '.') px(g, x, y, p[2]);
+    });
+  }
+
   var SCENES = {
     // 16 khung = 4s: đứng, nhún thở ở khung 7, chớp mắt ở khung 13
     idle: (function () {
@@ -170,19 +190,16 @@ var CLAWD = (function () {
       frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 2, true); sparkle(g, 22, 1, false); }),
       frame(P({ arms: 'up', eyes: 'happy' }), function (g) { sparkle(g, 1, 2, false); sparkle(g, 22, 1, true); })
     ],
-    // 8 khung lặp: nhún → bật cao → lơ lửng (tay vẫy) → đáp, pháo giấy rơi suốt
+    // Ăn mừng theo sticker Clawd cầm pháo que: lùi sang trái lấy chỗ, tay phải duỗi cầm que,
+    // nhún nhảy nhẹ, đầu que toé tia vàng. 8 khung lặp.
     party: (function () {
-      var poses = [
-        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
-        P({ dy: -2, arms: 'up', eyes: 'happy' }),
-        P({ dy: -4, arms: 'up', eyes: 'happy' }),
-        P({ dy: -4, arms: 'leftUp', eyes: 'happy' }),
-        P({ dy: -3, arms: 'up', eyes: 'happy' }),
-        P({ dy: -1, arms: 'rightUp', eyes: 'happy' }),
-        P({ legs: 'squash', arms: 'up', eyes: 'happy' }),
-        P({ arms: 'up', eyes: 'happy' })
-      ];
-      return poses.map(function (pose, t) { return frame(pose, function (g) { confetti(g, t * 2); }); });
+      var hops = [0, -1, -2, -1, 0, 'sq', 0, -1];
+      return hops.map(function (h, t) {
+        var pose = h === 'sq' ? P({ dx: -3, legs: 'squash', arms: 'hold', eyes: 'happy' })
+                              : P({ dx: -3, dy: h, arms: 'hold', eyes: h <= -2 ? 'happy' : 'open' });
+        var top = OY + (h === 'sq' ? 1 : h);
+        return frame(pose, function (g) { sparkler(g, 21, top + 4, t); });
+      });
     })(),
     fail: [
       frame(P({ legs: 'squash', arms: 'down', eyes: 'sad' }), function (g) { drop(g, 8); }),

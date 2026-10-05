@@ -14,7 +14,7 @@ test("đủ 6 cảnh; mọi khung 24×18, chỉ dùng ký tự đã khai báo", 
       assert.strictEqual(f.length, CLAWD.H, name + " cao 18");
       for (const row of f) {
         assert.strictEqual(row.length, CLAWD.W, name + " rộng 24: " + row);
-        assert.match(row, /^[.OKWYBRGC]+$/);
+        assert.match(row, /^[.OKWYBRGCDT]+$/);
       }
     }
   }
@@ -75,11 +75,16 @@ test("tên cảnh lạ → idle", () => {
   assert.deepStrictEqual(CLAWD.frames("??"), CLAWD.frames("idle"));
 });
 
-test("cảnh party: Clawd nhảy + pháo giấy nhiều màu, không đè thân", () => {
+test("cảnh party: Clawd cầm que pháo (sticker) — tay duỗi có khớp, que, tia vàng, nhún nhảy", () => {
   const f = CLAWD.frames("party");
   assert.strictEqual(f.length, 8);
-  const colors = new Set(f.join("").split(""));
-  for (const c of ["R", "G", "C", "Y"]) assert.ok(colors.has(c), c);
+  const all = f.join("");
+  for (const c of ["D", "W", "Y", "T"]) assert.ok(all.includes(c), c);
   assert.ok(CLAWD.SCENES.includes("party"));
-  assert.match(CLAWD.toSvg(f[2], 48), /#F472B6|#4ADE80|#22D3EE/);
+  // nhún nhảy: hàng đỉnh thân đổi giữa các khung
+  const topRow = fr => fr.findIndex(r => r.includes("OOOOOOOOOOOO"));
+  assert.ok(new Set(f.map(topRow)).size >= 3);
+  // tia lửa nằm trọn trong khung (không cắt ở mép phải): cột 23 vẫn trong lưới 24
+  for (const fr of f) for (const r of fr) assert.strictEqual(r.length, CLAWD.W);
+  assert.match(CLAWD.toSvg(f[2], 72), /#F2C14E/);
 });
