@@ -4911,3 +4911,42 @@ div.cd-new[role="button"] { align-items: center; }
 .cu-tog:hover .cl-mvTick { border-color: var(--cl); }
 .cd-prompt { cursor: pointer; }
 .cd-card .cd-dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Nút lật trang tab: to, có nền — dễ thấy và dễ bấm (trước 18px chữ mờ) */
+.tab-pageBtn {
+  width: 30px; margin: 4px 2px 5px 4px; border-radius: 7px;
+  font-size: 20px; color: var(--text); background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.tab-pageBtn:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+.tab-pageBtn:active { opacity: 0.85; }
+/* ── Phiếu chạy (làm lại 2026-10-05): đầu trang + khối đánh số + nút Chạy to ── */
+.cd-sheetHd { display: flex; align-items: center; padding: 0 0 10px; border-bottom: 1px solid #2c2c2c; }
+div.cd-back[role="button"] { width: 28px; height: 28px; margin-right: 8px; border-radius: 7px; font-size: 18px; color: var(--text);
+  background: rgba(255,255,255,0.06); border: 1px solid #3a3a3a; }
+div.cd-back[role="button"]:hover { border-color: var(--cl); color: var(--cl); }
+.cd-sheetTitle { flex: 1 1 auto; min-width: 0; }
+.cd-sheetName { font-size: 14px; font-weight: 700; color: var(--text); }
+.cd-sheetTitle .cd-dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-sec { margin-top: 10px; padding: 10px; border: 1px solid #303030; border-radius: 9px; background: rgba(255,255,255,0.02); }
+.cd-secHd { display: flex; align-items: center; margin-bottom: 8px; }
+.cd-secNo { flex: 0 0 auto; width: 18px; height: 18px; line-height: 18px; border-radius: 9px; margin-right: 8px; text-align: center;
+  font-size: 11px; font-weight: 700; color: #1a1a1a; background: var(--cl); }
+.cd-secT { flex: 1 1 auto; font-size: 12px; font-weight: 600; color: var(--text); }
+.cd-empty { font-size: 11.5px; color: var(--cl-dim); padding: 2px 0 8px; }
+.cd-pad { margin: 2px 0 6px; }
+.cd-tgtChips { margin-bottom: 4px; }
+.cu-chip.cd-tgtChip.is-done { opacity: 0.7; border-style: dashed; }
+.cd-addBtns { display: flex; margin-top: 2px; }
+div.cd-addBtn[role="button"] { flex: 1 1 0; padding: 6px 0; font-size: 11.5px; border-style: dashed; }
+.cl-btn.cd-addBtn.is-on { border-style: solid; border-color: #6fc9a2; color: #a6e2c8; background: rgba(111,201,162,0.08); }
+.cd-seg { display: flex; padding: 2px; border-radius: 8px; background: #141414; }
+div.cd-segOpt[role="button"] { flex: 1 1 0; padding: 5px 0; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--cl-dim); }
+div.cd-segOpt[role="button"]:hover { color: var(--text); }
+div.cd-segOpt.is-on[role="button"] { background: #33406a; color: #e6ecff; }
+.cd-stepRow { margin-bottom: 2px; }
+.cu-chip.cd-static { cursor: default; }
+.cd-foot { margin-top: 14px; padding-top: 0; border-top: none; }
+div.cd-run[role="button"] { width: 100%; padding: 10px 0; border-radius: 9px; font-size: 13px; font-weight: 700; color: #1a1a1a; background: var(--cl); }
+div.cd-run[role="button"]:hover { background: #e48b6d; }
+div.cd-run[role="button"]:active { background: #c96a4c; }
+div.cd-run.is-off[role="button"] { background: #2e2e2e; color: #777; cursor: default; }

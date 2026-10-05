@@ -1591,7 +1591,7 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     // Nhớ tab đang dùng (cả theo từng trang) để mở lại panel / đổi trang quay về đúng chỗ.
     try {
       localStorage.setItem('tab_active', tab);
-      localStorage.setItem('tab_last_p' + (btn.dataset.page || '1'), tab);
+      if (btn.dataset.page) localStorage.setItem('tab_last_p' + btn.dataset.page, tab);   // tab Claude đứng riêng, không thuộc trang
     } catch (e) {}
   });
 });
@@ -1608,7 +1608,10 @@ function tabShowPage(page) {
     b.hidden = String(b.dataset.page) !== String(tabPage);
   });
   var tg = document.getElementById('tabPageToggle');
-  if (tg) tg.textContent = tabPage >= TAB_PAGES ? '‹' : '›';
+  if (tg) {
+    tg.textContent = tabPage >= TAB_PAGES ? '‹' : '›';
+    tg.setAttribute('aria-label', tabPage >= TAB_PAGES ? 'Về trang tab 1' : 'Sang trang tab 2');
+  }
 }
 function tabGoPage(page) {
   page = Math.max(1, Math.min(TAB_PAGES, page));
@@ -1623,7 +1626,7 @@ function tabGoPage(page) {
 function tabOpen(tab) {
   var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
   if (!btn) return;
-  tabShowPage(parseInt(btn.dataset.page, 10) || 1);
+  if (btn.dataset.page) tabShowPage(parseInt(btn.dataset.page, 10) || 1);   // tab Claude: giữ nguyên trang
   if (!btn.classList.contains('active')) btn.click();
 }
 window.tabOpen = tabOpen;

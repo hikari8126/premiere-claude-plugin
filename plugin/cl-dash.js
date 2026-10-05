@@ -191,100 +191,109 @@
 
     function draw() {
       sheet.innerHTML = '';
+      // Đầu trang: ‹ quay lại · tên quy trình · Sửa
       var hd = el('div', 'cd-sheetHd');
-      var back = el('div', 'cd-link', '‹ ' + b.name);
+      var back = el('div', 'cd-back', '‹');
       back.setAttribute('role', 'button');
       back.addEventListener('click', function () { T.showView('dash'); });
       hd.appendChild(back);
-      hd.appendChild(el('span', 'cd-grow'));
-      var ed = el('span', 'cd-link cd-dim', 'Sửa quy trình');
+      var ttl = el('div', 'cd-sheetTitle');
+      ttl.appendChild(el('div', 'cd-sheetName', b.name));
+      ttl.appendChild(el('div', 'cd-dim', b.steps.length + ' bước · ' + b.steps.map(function (s) { return CLC.SPEC[s.type].label; }).join(' → ')));
+      hd.appendChild(ttl);
+      var ed = el('div', 'cl-btn', '✎ Sửa');
       ed.setAttribute('role', 'button');
       ed.addEventListener('click', function () { window.ClaudeCustomUI.edit(b); });
       hd.appendChild(ed);
       sheet.appendChild(hd);
 
+      var no = 0;
+      function section(title, right) {
+        var box = el('div', 'cd-sec');
+        var h = el('div', 'cd-secHd');
+        h.appendChild(el('span', 'cd-secNo', String(++no)));
+        h.appendChild(el('span', 'cd-secT', title));
+        if (right) h.appendChild(right);
+        box.appendChild(h);
+        sheet.appendChild(box);
+        return box;
+      }
+
       if (usesSeq) {
-        var lh = el('div', 'cd-lbl cd-lblRow');
-        lh.appendChild(el('span', null, 'Sequence' + (st.targets.length ? ' · ' + st.targets.length + ' video' : '')));
+        var clr = null;
         if (st.targets.length) {
-          var clr = el('span', 'cd-link', 'Bỏ hết');
+          clr = el('span', 'cd-link', 'Bỏ hết');
           clr.setAttribute('role', 'button');
           clr.addEventListener('click', function () { st.targets = []; draw(); });
-          lh.appendChild(clr);
         }
-        sheet.appendChild(lh);
-        if (!st.items) sheet.appendChild(el('div', 'cd-dim', 'Đang đọc project…'));
-        else if (!st.targets.length) sheet.appendChild(el('div', 'cd-dim', 'Chưa chọn video nào — bấm + để thêm theo bộ hoặc theo vid.'));
+        var sq = section('Video' + (st.targets.length ? ' · ' + st.targets.length : ''), clr);
+        if (!st.items) sq.appendChild(el('div', 'cd-dim cd-pad', 'Đang đọc project…'));
+        else if (!st.targets.length) sq.appendChild(el('div', 'cd-empty', 'Chưa chọn video nào'));
+        var chips = el('div', 'cu-chipRow cd-tgtChips');
         st.targets.forEach(function (t) {
-          var line = el('div', 'cd-tgt');
-          line.appendChild(el('span', 'cd-tgtName', 'vid' + t.key));
-          line.appendChild(el('span', 'cd-dim cd-grow', isDone(t) ? 'đã dựng ' + (st.platform || '') + ' — chạy lại sẽ bỏ qua phần đã có' : ''));
-          var x = el('span', 'cd-x', '✕');
-          x.setAttribute('role', 'button');
-          x.addEventListener('click', function () { st.targets = st.targets.filter(function (o) { return o.key !== t.key; }); draw(); });
-          line.appendChild(x);
-          sheet.appendChild(line);
+          var c = el('div', 'cu-chip seq cd-tgtChip' + (isDone(t) ? ' is-done' : ''), 'vid' + t.key + (isDone(t) ? ' · đã dựng' : '') + '  ✕');
+          c.setAttribute('role', 'button');
+          c.addEventListener('click', function () { st.targets = st.targets.filter(function (o) { return o.key !== t.key; }); draw(); });
+          chips.appendChild(c);
         });
+        if (st.targets.length) sq.appendChild(chips);
+        if (st.targets.some(isDone)) sq.appendChild(el('div', 'cd-dim cd-pad', 'Video đã dựng: chạy lại chỉ tạo phần còn thiếu.'));
         if (st.items) {
-          var addRow = el('div', 'cu-chipRow cd-addRow');
-          [['', '+'], ['set', 'Bộ'], ['vid', 'Vid']].forEach(function (o) {
-            if (!st.add && o[0]) return;                     // chưa bấm + → chỉ hiện nút +
-            if (st.add && !o[0]) return;
-            var c = el('div', 'cu-chip ' + (o[0] ? 'seq' + (st.add === o[0] ? ' is-on' : ' cd-off') : 'add'), o[1]);
+          var addRow = el('div', 'cd-addBtns');
+          [['set', '+ Theo bộ'], ['vid', '+ Theo vid']].forEach(function (o) {
+            var c = el('div', 'cl-btn cd-addBtn' + (st.add === o[0] ? ' is-on' : ''), o[1]);
             c.setAttribute('role', 'button');
-            c.addEventListener('click', function () { st.add = o[0] || 'set'; st.addErr = ''; draw(); });
+            c.addEventListener('click', function () { st.add = st.add === o[0] ? '' : o[0]; st.addErr = ''; draw(); });
             addRow.appendChild(c);
           });
-          if (st.add) {
-            var cl = el('div', 'cu-chip tool', 'Đóng');
-            cl.setAttribute('role', 'button');
-            cl.addEventListener('click', function () { st.add = ''; draw(); });
-            addRow.appendChild(cl);
-          }
-          sheet.appendChild(addRow);
-          if (st.add === 'set') sheet.appendChild(addSetBox());
-          if (st.add === 'vid') sheet.appendChild(addVidBox());
+          sq.appendChild(addRow);
+          if (st.add === 'set') sq.appendChild(addSetBox());
+          if (st.add === 'vid') sq.appendChild(addVidBox());
         }
       }
 
       if (st.platform) {
         var opts = [];
         b.steps.forEach(function (s) { if (s.platform) CLC.slotOptions(s, 'platform').forEach(function (o) { if (opts.indexOf(o.value) < 0) opts.push(o.value); }); });
-        sheet.appendChild(el('div', 'cd-lbl', 'Nền tảng'));
-        var pr = el('div', 'cu-chipRow');
+        var ps = section('Nền tảng');
+        var pr = el('div', 'cd-seg');
         opts.forEach(function (p) {
-          var c = el('div', 'cu-chip par' + (p === st.platform ? ' cd-sel' : ' cd-off'), (p === st.platform ? '✓ ' : '') + p);
+          var c = el('div', 'cd-segOpt' + (p === st.platform ? ' is-on' : ''), p);
           c.setAttribute('role', 'button');
           c.addEventListener('click', function () { st.platform = p; draw(); });
           pr.appendChild(c);
         });
-        sheet.appendChild(pr);
+        ps.appendChild(pr);
       }
 
-      sheet.appendChild(el('div', 'cd-lbl', 'Các bước'));
       var sets = groupSets();
       var setText = sets.length ? sets.map(function (g) { return g.set; }).join(', ') : (v['bộ'] || '?');
+      var ss = section('Sẽ chạy');
       b.steps.forEach(function (s, i) {
-        var t = CLC.stepLabel(s);
-        if (st.platform && s.platform) t = t.replace(s.platform, st.platform);
-        if (usesSeq && s.seqs && s.seqs.length && s.seqs[0].k !== 'current') t = t.replace(/(vid \.\d+( · )?)+|Cả bộ|Chọn lúc chạy/g, '').replace(/ · $/, '') + ' · video đã chọn';
-        sheet.appendChild(el('div', 'cd-step', (i + 1) + ' · ' + t.replace(/\{bộ\}/g, setText)));
+        var row = el('div', 'cu-chipRow cd-stepRow');
+        row.appendChild(el('span', 'cu-stepN', String(i + 1)));
+        CLC.chips(s).forEach(function (c) {
+          var t = c.text;
+          if (c.slot === 'platform' && st.platform) t = st.platform;
+          if (c.kind === 'seq' && usesSeq && s.seqs[0].k !== 'current') { if (c.i) return; t = st.targets.length + ' video'; }
+          row.appendChild(el('span', 'cu-chip ' + c.kind + ' cd-static', t.replace(/\{bộ\}/g, setText)));
+        });
+        ss.appendChild(row);
       });
-      if (sets.length > 1) sheet.appendChild(el('div', 'cd-dim', 'Chạy lần lượt ' + sets.length + ' bộ: ' + setText + '.'));
+      if (sets.length > 1) ss.appendChild(el('div', 'cd-dim cd-pad', 'Chạy lần lượt ' + sets.length + ' bộ: ' + setText + '.'));
 
-      var n = st.targets.length;
+      var n = st.targets.length, ready = !usesSeq || n > 0;
       var foot = el('div', 'cd-foot');
-      foot.appendChild(btn('Huỷ', '', function () { T.showView('dash'); }));
-      foot.appendChild(el('span', 'cd-grow'));
-      var go = btn(usesSeq ? 'Chạy cho ' + n + ' video' : 'Chạy', 'cl-btn--primary', async function () {
-        if (usesSeq && !n) return;
+      var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
+      go.setAttribute('role', 'button');
+      go.addEventListener('click', async function () {
+        if (!ready) return;
         if (!usesSeq) { T.runFlow(b, { platform: st.platform }); return; }
         for (var k = 0; k < sets.length; k++) {                        // từng bộ một
           await T.runFlow(b, { set: sets[k].set, idxs: sets[k].idxs, platform: st.platform });
           if (T.flowStopped && T.flowStopped()) break;
         }
       });
-      if (usesSeq && !n) go.classList.add('is-disabled');
       foot.appendChild(go);
       sheet.appendChild(foot);
     }
