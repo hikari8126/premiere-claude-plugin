@@ -184,7 +184,7 @@
     var cl = box.querySelector('.rc-done-clawd');
     if (typeof CLAWD !== 'undefined') {
       var fr = CLAWD.frames('party'), t = 0;
-      var draw = function () { cl.innerHTML = CLAWD.toSvg(fr[t++ % fr.length], 64); };
+      var draw = function () { cl.innerHTML = CLAWD.toSvg(fr[t++ % fr.length], 72);   // 72 = 3×24: bội số nguyên, không lộ khe giữa các hàng pixel };
       draw();
       doneAnim = setInterval(draw, 140);
     }
