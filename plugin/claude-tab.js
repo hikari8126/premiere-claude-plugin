@@ -897,6 +897,99 @@
   }
 
   // over (từ phiếu chạy): {set, idxs:[số], platform} — thay bộ / video / nền tảng của các bước.
+  // ── Khối đơn (flow-engine.js): lập kế hoạch → thẻ xem trước → chạy, ghi kết quả cho bước sau ──
+  // eng = {targets:[{set, idx}], results:[...]} dùng chung cả quy trình. → 'ok' | 'skip' | 'error'
+  async function seqByRef(ref) {
+    PTOOLS.invalidate();
+    var r = await PTOOLS.sequencesFor([ref]);
+    if (!r.seqs.length) throw new Error('không mở được ' + String(ref).split(' ▸ ').pop() + (r.rows[0] && r.rows[0].error ? ' (' + r.rows[0].error + ')' : ''));
+    return r.seqs[0];
+  }
+  async function engineStep(entry, rec, st, n, eng, label) {
+    var items = (await PTOOLS.snapshot()) || [];
+    var ctx = { items: items, targets: eng.targets, results: eng.results };
+    var rows = FLE.planStep(st, n, ctx);
+    var idx = rec.acts.length;
+    rec.acts.push({ cls: 'is-ask', text: label });
+    var row = addAct(entry, 'is-ask', label);
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    var lines = rows.map(function (r) {
+      var title = st.type === 'bin_make' ? r.bin : st.type === 'raw_export' ? (r.src ? r.src.name : 'vid' + r.key) : (r.name || ('vid' + r.key));
+      if (r.error) return { name: 'vid' + r.key + ' · ' + (title || ''), sub: r.error, bad: true, r: r };
+      if (r.exists && st.type !== 'raw_export') return { name: title, sub: 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') + ' — bỏ qua', bad: true, r: r };
+      var sub = st.type === 'bin_make' ? 'bin mới' : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + ' → ' + r.bin
+              : st.type === 'seq_move' ? r.src.name + ' → ' + r.bin
+              : st.type === 'raw_export' ? (st.mode === 'both' ? 'source + render' : st.mode)
+              : 'từ ' + (r.src ? r.src.name : '?') + ' → ' + r.bin;
+      return { name: title, sub: sub, r: r };
+    });
+    return await new Promise(function (resolve) {
+      function finish(cls, text, res) {
+        row.className = 'cl-act ' + cls; row.textContent = text;
+        rec.acts[idx] = { cls: cls, text: text }; saveHistory();
+        eng.results.push(res);
+        resolve(cls === 'is-error' ? 'error' : cls === 'is-skip' ? 'skip' : 'ok');
+      }
+      function resultsOf(okKeys) {   // kết quả cho bước sau: dòng đã có / vừa tạo; lỗi / bỏ chọn → null
+        var tmp = { items: items.slice(), results: eng.results.slice() };
+        var all = FLE.applyVirtual(st, rows, tmp);
+        return all.map(function (x, k) { var r = rows[k]; return (r.error || (!r.exists && okKeys.indexOf(r.key) < 0 && st.type !== 'bin_make' && st.type !== 'raw_export')) ? null : x; });
+      }
+      var todo = lines.filter(function (l) { return !l.bad; }).length;
+      row.textContent = label + (todo ? ' — ' + todo + ' việc' : ' — không còn gì để làm');
+      if (!todo) { box.remove(); finish('is-ok', label + ' — đã có đủ', resultsOf([])); return; }
+      pickList(box, lines, function (k) { return (st.type === 'raw_export' ? 'Xuất ' : 'Tạo ') + k; }, async function (sel) {
+        setClawd('work', label + '…');
+        row.className = 'cl-act is-run';
+        var ok = [], fail = [];
+        try {
+          if (st.type === 'raw_export') {
+            var seqs = [];
+            for (var a = 0; a < sel.length; a++) seqs.push(await seqByRef(sel[a].r.src.ref));
+            row.textContent = 'Đang xuất RAW ' + seqs.length + ' sequence… (xem tab RAW)';
+            var ex = st.auto ? await window.RawcutAPI.exportSeqs(seqs, st.mode) : await window.RawcutAPI.prepare(seqs, st.mode);
+            if (ex.failed && ex.failed.length) fail = ex.failed; else sel.forEach(function (l) { ok.push(l.r.key); });
+          } else {
+            var project = await getActiveProject();
+            for (var b = 0; b < sel.length; b++) {
+              var r = sel[b].r;
+              row.textContent = label + ' ' + (b + 1) + '/' + sel.length + '…';
+              try {
+                if (st.type === 'bin_make') {
+                  if (!(await ppGetOrCreateBin(project, r.bin))) throw new Error('không tạo được bin');
+                } else if (st.type === 'seq_make') {
+                  await window.ResizeAPI.makeSequence(r.name, r.bin, r.like ? { like: await seqByRef(r.like.ref) } : { frame: r.frame });
+                } else if (st.type === 'seq_clone') {
+                  await window.ResizeAPI.cloneInto(await seqByRef(r.src.ref), r.name, r.bin);
+                } else if (st.type === 'seq_move') {
+                  await window.ResizeAPI.moveInto(await seqByRef(r.src.ref), r.bin);
+                } else if (st.type === 'seq_resize') {
+                  var src = await seqByRef(r.src.ref);
+                  var wanted = r.ratio === 'other' ? ['9-16', '4-5'] : r.ratio === 'prev' ? (r.ratios || []) : [r.ratio];
+                  var pl = await window.ResizeAPI.plan(r.platform, wanted, [src]);
+                  if (!pl.ok) throw new Error(pl.error);
+                  var go = pl.plan.filter(function (x) { return !x.skip && !x.exists && !x.dupInPlan; });
+                  if (!go.length && pl.plan.some(function (x) { return x.exists || x.dupInPlan; })) { ok.push(r.key); continue; }   // đã có → coi như xong
+                  if (!go.length) throw new Error((pl.plan[0] && pl.plan[0].skip) || 'không có ratio nào để resize');
+                  var out = await window.ResizeAPI.run(r.platform, go, function () {}, r.bin && r.src.bin !== r.bin ? { destBin: r.bin } : null);
+                  var er = out.results.filter(function (x) { return x.error; });
+                  if (er.length) throw new Error(er[0].error);
+                }
+                ok.push(r.key);
+              } catch (e) { fail.push('vid' + r.key + ': ' + ((e && e.message) || e)); }
+            }
+          }
+        } catch (e) { fail.push((e && e.message) || String(e)); }
+        PTOOLS.invalidate();
+        if (fail.length) finish('is-error', label + ' — xong ' + ok.length + ', lỗi: ' + fail.join('; '), resultsOf(ok));
+        else finish('is-ok', label + ' — xong ' + ok.length, resultsOf(ok));
+      }, function () { finish('is-skip', label + ' — bỏ qua', resultsOf([])); });
+      setClawd('idle', 'Chờ bro xác nhận');
+    });
+  }
+
   async function runFlow(b, over) {
     if (busy || flow) return { ok: false, error: 'đang chạy việc khác' };
     over = over || {};
@@ -919,11 +1012,34 @@
     entry.meta.textContent = 'Quy trình · ' + b.steps.length + ' bước';
     syncEmpty();
     var items = null, stopped = '';
+    // Video đích cho khối đơn: theo phiếu chạy; không chỉ định → mọi FB gốc của bộ (bộ mới chưa có → .0 .1 .2)
+    var eng = { targets: null, results: [] };
+    async function engTargets() {
+      if (eng.targets) return eng.targets;
+      var set = v['bộ'];
+      if (!set) throw new Error('không biết bộ nào — mở một sequence vid{bộ}.N hoặc chọn bộ ở phiếu chạy');
+      var idxs = over.idxs && over.idxs.length ? over.idxs : null;
+      if (!idxs) {
+        var snap = (await PTOOLS.snapshot()) || [];
+        idxs = Object.keys(BSC.fbSources(snap, set)).map(Number).sort(function (a, c) { return a - c; });
+        if (!idxs.length) idxs = [0, 1, 2];
+      }
+      eng.targets = idxs.map(function (n) { return { set: String(set), idx: n }; });
+      return eng.targets;
+    }
     for (var i = 0; i < b.steps.length && !stopped; i++) {
       if (flow.aborted) { stopped = 'Đã dừng ở bước ' + (i + 1) + '.'; break; }
       var st = b.steps[i], label = (i + 1) + '. ' + CLC.stepLabel(st);
       if (st.seqs && st.seqs.some(function (q) { return q.k !== 'current'; }) && !items) items = await PTOOLS.snapshot();
       var sa = CLC.stepAction(st, { vars: v, items: items || [] });
+      if (sa.engine) {
+        try { await engTargets(); } catch (e) { sa = { error: e.message }; }
+        if (!sa.error) {
+          var er = await engineStep(entry, rec, st, i + 1, eng, label);
+          if (er === 'error' || (flow && flow.aborted)) { stopped = er === 'error' ? 'Dừng vì bước ' + (i + 1) + ' lỗi.' : 'Đã dừng ở bước ' + (i + 1) + '.'; break; }
+          continue;
+        }
+      } else eng.results.push((eng.targets || []).map(function () { return null; }));   // khối khác: giữ chỗ để "kết quả bước N" đúng số
       if (sa.error) { addAct(entry, 'is-error', label + ': ' + sa.error); rec.acts.push({ cls: 'is-error', text: label + ': ' + sa.error }); stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.'; break; }
       if (sa.wait) {                                   // khối "Chờ bro": dừng tới khi bấm Tiếp tục
         var wi = rec.acts.length;

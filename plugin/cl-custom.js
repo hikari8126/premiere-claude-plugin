@@ -40,6 +40,18 @@ var CLC = (function () {
     wait:           { label: 'Chờ bro',       req: [], opt: ['text'] }
   };
   var STEP_TYPES = Object.keys(SPEC);
+  // Khối đơn (flow-engine.js): Tạo bin · Tạo sequence · Nhân bản · Resize · Chuyển vào bin · Xuất RAW.
+  var FL = (typeof FLE !== 'undefined') ? FLE : (function () { try { return require('./flow-engine.js'); } catch (e) { return null; } })();
+  // Danh sách khối khi ráp (khối gộp cũ bin_set / pin_order / app_set / resize / rawcut* vẫn chạy được
+  // cho dữ liệu cũ nhưng không còn trong danh sách — đã đổi thành chuỗi khối đơn).
+  var BUILDER_TYPES = ['bin_make', 'seq_make', 'seq_clone', 'seq_resize', 'seq_move', 'raw_export', 'fix_voice_bins', 'wait', 'prompt', 'open_tab'];
+  function isEngine(t) { return !!(FL && FL.isType(t)); }
+  function typeLabel(t) { return isEngine(t) ? FL.TYPES[t].label : (SPEC[t] ? SPEC[t].label : t); }
+  function typeDesc(t) {
+    if (isEngine(t)) return FL.TYPES[t].desc;
+    return { fix_voice_bins: 'chuyển voice về đúng bin Voice Over / {bộ}x', wait: 'dừng chờ bro làm tay rồi bấm Tiếp tục',
+             prompt: 'gửi một lệnh cho Claude', open_tab: 'mở một tab của plugin' }[t] || '';
+  }
   var PLATFORM_OF = { resize: PLATFORMS, bin_set: ['GG', 'PIN'] };
   var SEQ_LABEL = { set: 'Cả bộ', current: 'Đang chọn / mở', pick: 'Chọn lúc chạy' };
 
@@ -57,6 +69,7 @@ var CLC = (function () {
   }
 
   function normStep(s) {
+    if (s && isEngine(s.type)) return FL.normStep(s);
     if (!s || typeof s !== 'object' || !SPEC[s.type]) return null;
     var t = s.type, out = { type: t };
     if (PLATFORM_OF[t]) out.platform = PLATFORM_OF[t].indexOf(s.platform) >= 0 ? s.platform : '';
@@ -74,6 +87,7 @@ var CLC = (function () {
   }
   // Tham số bắt buộc còn thiếu → ['platform', 'seqs', …]
   function problems(s) {
+    if (s && isEngine(s.type)) return FL.problems(s);
     var sp = SPEC[s && s.type];
     if (!sp) return ['type'];
     return sp.req.filter(function (k) { return k === 'seqs' ? !(s.seqs && s.seqs.length) : !s[k]; });
@@ -160,6 +174,7 @@ var CLC = (function () {
 
   // Chip của một bước: [{kind:'act'|'par'|'seq', slot, text, i?, missing?}]
   function chips(s) {
+    if (isEngine(s.type)) return FL.chips(s).map(function (c, i) { c.slot = i ? 'form' : 'type'; return c; });
     var out = [{ kind: 'act', slot: 'type', text: SPEC[s.type].label }];
     function par(slot, text) { out.push({ kind: 'par', slot: slot, text: text || SLOT_HINT[slot], missing: !text }); }
     if (PLATFORM_OF[s.type]) par('platform', s.platform);
@@ -178,7 +193,7 @@ var CLC = (function () {
 
   // Lựa chọn cho một ô (popover "+" / bấm chip): [{value, text, on}]
   function slotOptions(s, slot) {
-    if (slot === 'type') return STEP_TYPES.map(function (t) { return { value: t, text: SPEC[t].label, on: t === s.type }; });
+    if (slot === 'type') return BUILDER_TYPES.map(function (t) { return { value: t, text: typeLabel(t), desc: typeDesc(t), on: t === s.type }; });
     if (slot === 'platform') return PLATFORM_OF[s.type].map(function (p) { return { value: p, text: p, on: p === s.platform }; });
     if (slot === 'ratios') return RATIOS.map(function (r) { return { value: r, text: RATIO_LABEL[r], on: s.ratios.indexOf(r) >= 0 }; });
     if (slot === 'mode') return RAW_MODES.map(function (m) { return { value: m, text: RAW_LABEL[m], on: m === s.mode }; });
@@ -195,6 +210,7 @@ var CLC = (function () {
   // Ô có thể thêm bằng "+": tham số tuỳ chọn + sequence (chọn nhiều).
   function addable(s) {
     var out = [];
+    if (isEngine(s.type)) return out;
     if (s.type === 'resize') out.push({ slot: 'ratios', text: 'Ratio' });
     if (SPEC[s.type].seqKinds) out.push({ slot: 'seqs', text: 'Sequence' });
     if (s.type === 'wait') out.push({ slot: 'text', text: 'Lời nhắc' });
@@ -204,7 +220,7 @@ var CLC = (function () {
   // Chọn / bỏ một lựa chọn → bước mới (không sửa bước cũ).
   function toggle(s, slot, value) {
     var n = JSON.parse(JSON.stringify(s));
-    if (slot === 'type') return normStep({ type: value, platform: n.platform, seqs: n.seqs });
+    if (slot === 'type') return isEngine(value) ? normStep({ type: value }) : normStep({ type: value, platform: n.platform, seqs: n.seqs });
     if (slot === 'ratios') { var i = n.ratios.indexOf(value); if (i >= 0) n.ratios.splice(i, 1); else n.ratios.push(value); }
     else if (slot === 'seqs') {
       var p = String(value).split(':'), q = p[0] === 'idx' ? { k: 'idx', n: Number(p[1]) } : { k: p[0] };
@@ -223,6 +239,7 @@ var CLC = (function () {
   // ctx = {vars, items}. → {action} | {prompt} | {wait} | {pick:{refs, step}} | {error}
   function stepAction(s, ctx) {
     ctx = ctx || {};
+    if (isEngine(s.type)) return { engine: true };
     var v = ctx.vars || {}, miss = problems(s);
     if (miss.length) return { error: 'bước chưa đủ: ' + miss.map(function (k) { return SLOT_HINT[k] || k; }).join(', ') };
     var needSet = function () { return v['bộ'] ? null : { error: 'không biết bộ nào — mở một sequence của bộ trước (tên có vid{bộ}.N)' }; };
@@ -439,7 +456,7 @@ var CLC = (function () {
   return {
     NOTES_MAX: NOTES_MAX, STEP_TYPES: STEP_TYPES, PLATFORMS: PLATFORMS, RATIOS: RATIOS, RAW_MODES: RAW_MODES, TABS: TABS,
     RATIO_LABEL: RATIO_LABEL, RAW_LABEL: RAW_LABEL, TAB_LABEL: TAB_LABEL, SPEC: SPEC,
-    problems: problems, chips: chips, slotOptions: slotOptions, addable: addable, toggle: toggle,
+    problems: problems, chips: chips, isEngine: isEngine, typeLabel: typeLabel, typeDesc: typeDesc, BUILDER_TYPES: BUILDER_TYPES, slotOptions: slotOptions, addable: addable, toggle: toggle,
     empty: empty, normalize: normalize, normButton: normButton, normStep: normStep, fromLegacy: fromLegacy, uid: uid,
     vars: vars, hasVars: hasVars, fill: fill, setRefs: setRefs, stepLabel: stepLabel, stepAction: stepAction,
     exportData: exportData, importData: importData, addNote: addNote, parseRemember: parseRemember,

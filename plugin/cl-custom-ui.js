@@ -185,10 +185,11 @@ window.CLSTORE = CLSTORE;
       var addRow = el('div', 'cu-chipRow');
       addRow.appendChild(chip('+ Khối hành động', 'add' + (pop && pop.step === 'new' ? ' is-open' : ''), function () { pop = pop && pop.step === 'new' ? null : { step: 'new' }; render(); }));
       box.appendChild(addRow);
-      if (pop && pop.step === 'new') box.appendChild(popBox(CLC.STEP_TYPES.map(function (t) { return { value: t, text: CLC.SPEC[t].label }; }), function (v) {
+      if (pop && pop.step === 'new') box.appendChild(popBox(CLC.BUILDER_TYPES.map(function (t) { return { value: t, text: CLC.typeLabel(t), desc: CLC.typeDesc(t) }; }), function (v) {
         e.steps.push(CLC.normStep({ type: v }));
         var ns = e.steps[e.steps.length - 1], miss = CLC.problems(ns);
-        pop = miss.length ? { step: e.steps.length - 1, slot: miss[0] } : null;   // mở luôn ô bắt buộc đầu tiên
+        pop = CLC.isEngine(v) ? { step: e.steps.length - 1, slot: 'form' }          // khối đơn: mở luôn bảng setting
+            : miss.length ? { step: e.steps.length - 1, slot: miss[0] } : null;   // mở luôn ô bắt buộc đầu tiên
         render();
       }));
     }
@@ -226,13 +227,89 @@ window.CLSTORE = CLSTORE;
     return c;
   }
   function popBox(opts, onPick, multi) {
-    var p = el('div', 'cu-pop');
+    var p = el('div', 'cu-pop' + (opts.some(function (o) { return o.desc; }) ? ' cu-popList' : ''));
     opts.forEach(function (o) {
+      if (o.desc) {                                   // danh sách khối: tên + mô tả ngắn từng khối
+        var r = el('div', 'cu-typeOpt' + (o.on ? ' is-on' : ''));
+        r.setAttribute('role', 'button');
+        r.appendChild(el('span', 'cu-chip act', o.text));
+        r.appendChild(el('span', 'cu-typeDesc', o.desc));
+        r.addEventListener('click', function () { onPick(o.value); });
+        p.appendChild(r);
+        return;
+      }
       p.appendChild(chip(o.text, (o.kind || 'par') + (o.on ? ' is-on' : ''), function () { onPick(o.value); }));
     });
     if (multi) p.appendChild(chip('Xong', 'done', function () { pop = null; render(); }));
     return p;
   }
+  // ── Bảng setting của khối đơn (flow-engine.js) ─────────────────────────────
+  // Mỗi dòng: nhãn + ô chọn (+ ô gõ khi cần). Đổi gì cũng chuẩn hoá lại bằng FLE.normStep.
+  function engineForm(e, i, s) {
+    var f = el('div', 'cu-pop cu-form');
+    function set(patch) { var n = JSON.parse(JSON.stringify(s)); for (var k in patch) n[k] = patch[k]; e.steps[i] = FLE.normStep(n); render(); }
+    function row(label, ctl, extra) {
+      var r = el('div', 'cu-fRow');
+      r.appendChild(el('span', 'cu-fLbl', label));
+      var c = el('div', 'cu-fCtl');
+      c.appendChild(ctl);
+      if (extra) c.appendChild(extra);
+      r.appendChild(c);
+      f.appendChild(r);
+    }
+    function sel(opts, val, onChange) {
+      var x = select(opts, val);
+      x.addEventListener('change', function () { onChange(x.value); });
+      return x;
+    }
+    function txt(val, ph, onChange) {
+      var x = kb(el('input', 'cu-in'));
+      x.value = val || ''; x.placeholder = ph || '';
+      x.addEventListener('change', function () { onChange(x.value); });
+      return x;
+    }
+    var prevSteps = [];
+    for (var k = 1; k <= i; k++) prevSteps.push(['step:' + k, 'Kết quả bước ' + k]);
+    var binSteps = prevSteps.map(function (p) { return [p[0], 'Bin bước ' + p[0].split(':')[1]]; });
+    function refBox(ref, onChange) { return txt(ref.k === 'match' ? ref.text : '', 'loại, vd GG Dọc — trống = FB gốc', function (v) { onChange(v.trim() ? { k: 'match', text: v.trim() } : { k: 'base' }); }); }
+
+    if (s.src) {
+      var sv = s.src.k === 'step' ? 'step:' + s.src.n : s.src.k;
+      row('Nguồn', sel([['base', 'FB gốc của video'], ['prev', 'Bản cùng loại ở bộ trước'], ['current', 'Đang chọn / mở']].concat(prevSteps), sv, function (v) {
+        set({ src: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'prev' ? { k: 'prev', ref: { k: 'match', text: '' } } : { k: v } });
+      }), s.src.k === 'prev' ? refBox(s.src.ref, function (r) { set({ src: { k: 'prev', ref: r } }); }) : null);
+    }
+    if (s.name) {
+      row('Tên', sel([['learn', 'Học theo bộ trước'], ['tpl', 'Mẫu tự gõ']], s.name.k, function (v) {
+        set({ name: v === 'tpl' ? { k: 'tpl', text: '{SP} vid{bộ}.{số} [{CO}] [{ED}]' } : { k: 'learn', ref: { k: 'base' } } });
+      }), s.name.k === 'tpl'
+        ? txt(s.name.text, '{SP} vid{bộ}.{số} [{CO}] [{ED}]', function (v) { set({ name: { k: 'tpl', text: v } }); })
+        : refBox(s.name.ref, function (r) { set({ name: { k: 'learn', ref: r } }); }));
+    }
+    if (s.type === 'seq_make') {
+      row('Khung', sel([['prev', 'Như bộ trước (chép cài đặt)'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['16-9', '16:9'], ['2-3', '2:3']], s.frame, function (v) { set({ frame: v }); }));
+    }
+    if (s.type === 'seq_resize') {
+      row('Ratio', sel([['other', 'Ratio còn lại (9:16 ⇄ 4:5)'], ['prev', 'Như bộ trước'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['2-3', '2:3']], s.ratio, function (v) { set({ ratio: v }); }));
+      row('Nhãn', sel([['GG', 'GG'], ['FB', 'FB'], ['PIN', 'PIN'], ['prev', 'Như bộ trước']], s.platform, function (v) { set({ platform: v }); }));
+    }
+    if (s.type === 'raw_export') {
+      row('Chế độ', sel([['both', 'Source + Render'], ['source', 'Source (raw/)'], ['render', 'Render (edited/)']], s.mode, function (v) { set({ mode: v }); }));
+      row('Xuất', sel([['1', 'Tự xuất'], ['0', 'Chỉ chuẩn bị tab RAW']], s.auto ? '1' : '0', function (v) { set({ auto: v === '1' }); }));
+    }
+    if (s.bin) {
+      var bv = s.bin.k === 'step' ? 'step:' + s.bin.n : s.bin.k;
+      var bopts = [['tpl', 'Mẫu tự gõ'], ['prev', 'Như bộ trước']].concat(binSteps);
+      if (s.type !== 'bin_make' && s.type !== 'seq_make') bopts.push(['src', 'Cùng bin nguồn']);
+      row('Bin', sel(bopts, bv, function (v) {
+        set({ bin: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'tpl' ? { k: 'tpl', text: 'Sequence / FB / {bộ}x' } : v === 'prev' ? { k: 'prev', ref: { k: 'base' } } : { k: 'src' } });
+      }), s.bin.k === 'tpl' ? txt(s.bin.text, 'Sequence / GG / {bộ}x / {bộ}.{số}', function (v) { set({ bin: { k: 'tpl', text: v } }); })
+        : s.bin.k === 'prev' ? refBox(s.bin.ref, function (r) { set({ bin: { k: 'prev', ref: r } }); }) : null);
+    }
+    f.appendChild(el('div', 'cu-hint cu-fHint', 'Biến: {bộ} {số} {SP} {CO} {ED} {ngày} — CO / ED / SP lấy từ bộ trước. Bấm chip để đóng.'));
+    return f;
+  }
+
   function textPop(e, i, s) {
     var p = el('div', 'cu-pop');
     var inp = kb(el('input', 'cu-in'));
@@ -273,6 +350,8 @@ window.CLSTORE = CLSTORE;
     if (pop && pop.step === i) {
       if (pop.slot === '+') {
         wrap.appendChild(popBox(CLC.addable(s).map(function (a) { return { value: a.slot, text: a.text }; }), function (v) { pop = { step: i, slot: v }; render(); }));
+      } else if (pop.slot === 'form') {
+        wrap.appendChild(engineForm(e, i, s));
       } else if (pop.slot === 'text') {
         wrap.appendChild(textPop(e, i, s));
       } else {

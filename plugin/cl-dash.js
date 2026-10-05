@@ -56,6 +56,47 @@
     }
   } catch (e) {}
 
+  // Đợt 4: khối gộp → chuỗi khối đơn (user: "dựng bin thì chỉ dựng bin"); thêm quy trình NAV.
+  var SEED4 = 'cl_seed_v4';
+  function chainFor(st) {
+    var b1 = { k: 'step', n: 1 };
+    if (st.type === 'bin_set' && st.platform === 'GG') return [
+      { type: 'bin_make', bin: { k: 'tpl', text: 'Sequence / GG / {bộ}x / {bộ}.{số}' } },
+      { type: 'seq_clone', src: { k: 'base' }, name: { k: 'tpl', text: '{bộ}.{số}' }, bin: b1 },
+      { type: 'seq_resize', src: { k: 'step', n: 2 }, ratio: 'prev', platform: 'prev', bin: { k: 'src' } }
+    ].concat(['GG Dọc', 'GG Ngang', 'GG Vuông'].map(function (t) {
+      return { type: 'seq_clone', src: { k: 'prev', ref: { k: 'match', text: t } }, name: { k: 'learn', ref: { k: 'match', text: t } }, bin: b1 };
+    }));
+    if (st.type === 'pin_order') return [
+      { type: 'bin_make', bin: { k: 'tpl', text: 'Sequence / PIN / ' + (st.text || 'Order {ngày}') } },
+      { type: 'seq_resize', src: { k: 'base' }, ratio: '2-3', platform: 'PIN', bin: b1 }
+    ];
+    if (st.type === 'app_set') return [
+      { type: 'bin_make', bin: { k: 'prev', ref: { k: 'match', text: 'AppLovin' } } },
+      { type: 'seq_clone', src: { k: 'prev', ref: { k: 'match', text: 'AppLovin' } }, name: { k: 'learn', ref: { k: 'match', text: 'AppLovin' } }, bin: b1 }
+    ];
+    if (st.type === 'rawcut_export') return [{ type: 'raw_export', src: { k: 'base' }, mode: st.mode || 'both', auto: true }];
+    return null;
+  }
+  try {
+    if (!localStorage.getItem(SEED4)) {
+      var d4 = CLSTORE.get();
+      d4.buttons.forEach(function (b) {
+        if (b.kind !== 'flow') return;
+        // chỉ đổi quy trình 1 khối gộp (chuỗi bước sau "bước N" không lệch số)
+        if (b.steps.length === 1 && chainFor(b.steps[0])) b.steps = chainFor(b.steps[0]);
+      });
+      if (!d4.buttons.some(function (b) { return b.name === 'NAV'; })) {
+        d4.buttons.unshift({ name: 'NAV', kind: 'flow', steps: [
+          { type: 'bin_make', bin: { k: 'prev', ref: { k: 'base' } } },
+          { type: 'seq_make', name: { k: 'learn', ref: { k: 'base' } }, frame: 'prev', bin: { k: 'step', n: 1 } }
+        ] });
+      }
+      CLSTORE.set(d4);
+      localStorage.setItem(SEED4, '1');
+    }
+  } catch (e) { console.warn('[cl-dash] seed v4:', e && e.message); }
+
   // ── Project đã biết + hàng đợi nhiều project (cl-queue.js) ───────────────
   // Mỗi 4s xem project active: đổi thì ghi vào danh sách (đường dẫn + tên). Hàng đợi chạy lần lượt:
   // Project.open(path) (đang mở → chuyển ngay; đang đóng → mở ra) → quy trình chế độ tự chạy → việc kế;
@@ -144,7 +185,7 @@
     return Math.round(m / 1440) + ' ngày';
   }
   function stepsText(b) {
-    return b.kind === 'flow' ? b.steps.map(function (s) { return CLC.SPEC[s.type].label; }).join(' → ') : b.prompt;
+    return b.kind === 'flow' ? b.steps.map(function (s) { return CLC.typeLabel(s.type); }).join(' → ') : b.prompt;
   }
 
   // ── Bảng điều khiển ───────────────────────────────────────────────────────
@@ -308,7 +349,7 @@
     var st = { items: null, vids: [], targets: [], platform: '', add: '', addErr: '', search: '', ticks: {}, done: {},
                here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '' };
     st.project = st.here;
-    var usesSeq = b.steps.some(function (s) { return s.seqs && s.seqs.length && s.seqs[0].k !== 'current'; });
+    var usesSeq = b.steps.some(function (s) { return CLC.isEngine(s.type) || (s.seqs && s.seqs.length && s.seqs[0].k !== 'current'); });
     var plats = {};
     b.steps.forEach(function (s) { if (s.platform) plats[s.platform] = 1; });
     st.platform = Object.keys(plats).length === 1 ? Object.keys(plats)[0] : '';
@@ -354,7 +395,7 @@
       hd.appendChild(back);
       var ttl = el('div', 'cd-sheetTitle');
       ttl.appendChild(el('div', 'cd-sheetName', b.name));
-      ttl.appendChild(el('div', 'cd-dim', b.steps.length + ' bước · ' + b.steps.map(function (s) { return CLC.SPEC[s.type].label; }).join(' → ')));
+      ttl.appendChild(el('div', 'cd-dim', b.steps.length + ' bước · ' + b.steps.map(function (s) { return CLC.typeLabel(s.type); }).join(' → ')));
       hd.appendChild(ttl);
       var ed = el('div', 'cl-btn', '✎ Sửa');
       ed.setAttribute('role', 'button');
@@ -413,7 +454,7 @@
         else if (!st.targets.length) sq.appendChild(el('div', 'cd-empty', 'Chưa chọn video nào'));
         var chips = el('div', 'cu-chipRow cd-tgtChips');
         st.targets.forEach(function (t) {
-          var c = el('div', 'cu-chip seq cd-tgtChip' + (isDone(t) ? ' is-done' : ''), 'vid' + t.key + (isDone(t) ? ' · đã dựng' : '') + '  ✕');
+          var c = el('div', 'cu-chip seq cd-tgtChip' + (isDone(t) ? ' is-done' : ''), 'vid' + t.key + (t.fresh ? ' · mới' : isDone(t) ? ' · đã dựng' : '') + '  ✕');
           c.setAttribute('role', 'button');
           c.addEventListener('click', function () { st.targets = st.targets.filter(function (o) { return o.key !== t.key; }); draw(); });
           chips.appendChild(c);
@@ -437,6 +478,11 @@
       // Nền tảng cố định trong quy trình (GG / PIN…) — phiếu chạy không chọn lại (user 2026-10-05).
 
       var sets = groupSets();
+      // Xem trước khối đơn cho bộ đầu tiên đã chọn (tính trên bản chụp project, chưa đụng Premiere)
+      var preview = null;
+      if (!other && st.items && sets.length && b.steps.some(function (x) { return CLC.isEngine(x.type); })) {
+        try { preview = FLE.planFlow(st.items, b.steps, sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; })); } catch (e) { preview = null; }
+      }
       var setText = sets.length ? sets.map(function (g) { return g.set; }).join(', ') : (v['bộ'] || '?');
       var ss = section('Sẽ chạy');
       b.steps.forEach(function (s, i) {
@@ -445,10 +491,21 @@
         CLC.chips(s).forEach(function (c) {
           var t = c.text;
           if (c.slot === 'platform' && st.platform) t = st.platform;
-          if (c.kind === 'seq' && usesSeq && s.seqs[0].k !== 'current') { if (c.i) return; t = other ? 'bộ / video ở trên' : st.targets.length + ' video'; }
-          row.appendChild(el('span', 'cu-chip ' + c.kind + ' cd-static', t.replace(/\{bộ\}/g, setText)));
+          if (c.kind === 'seq' && usesSeq && s.seqs && s.seqs[0].k !== 'current') { if (c.i) return; t = other ? 'bộ / video ở trên' : st.targets.length + ' video'; }
+          row.appendChild(el('span', 'cu-chip ' + c.kind + ' cd-static', CLC.isEngine(s.type) ? t : t.replace(/\{bộ\}/g, setText)));   // khối đơn: tên thật ở dòng → bên dưới
         });
         ss.appendChild(row);
+        // Xem trước khối đơn: tên / bin của video đầu + số đã có / lỗi
+        var pv = preview && preview[i];
+        if (pv && pv.rows && pv.rows.length) {
+          var r0 = pv.rows.filter(function (r) { return !r.error; })[0];
+          var nErr = pv.rows.filter(function (r) { return r.error; }).length, nHave = pv.rows.filter(function (r) { return r.exists; }).length;
+          var txt = r0 ? '→ ' + (s.type === 'bin_make' ? r0.bin : s.type === 'raw_export' ? (r0.src && r0.src.name) : (r0.name || '') + (r0.bin ? '  ·  ' + r0.bin : '')) : '';
+          if (pv.rows.length > 1 && r0) txt += '  (+' + (pv.rows.length - 1) + ' video)';
+          if (nHave) txt += (txt ? ' · ' : '') + nHave + ' đã có';
+          ss.appendChild(el('div', 'cd-pv', txt));
+          if (nErr) ss.appendChild(el('div', 'cd-pv is-bad', nErr + ' lỗi: ' + pv.rows.filter(function (r) { return r.error; })[0].error));
+        }
       });
       if (sets.length > 1) ss.appendChild(el('div', 'cd-dim cd-pad', 'Chạy lần lượt ' + sets.length + ' bộ: ' + setText + '.'));
 
@@ -509,7 +566,9 @@
         var set = String(inp.value || '').trim().replace(/x$/i, '');
         var list = st.vids.filter(function (x) { return x.set === set; });
         if (!/^\d+$/.test(set)) { st.addErr = 'Gõ số bộ, vd 35'; draw(); return; }
-        if (!list.length) { st.addErr = 'Không thấy video FB gốc nào của bộ ' + set; draw(); return; }
+        if (!list.length) {                         // bộ MỚI (chưa có sequence): video ảo .0 .1 .2 cho Tạo bin / Tạo sequence
+          list = [0, 1, 2].map(function (n) { return { set: set, idx: n, name: 'bộ mới', key: set + '.' + n, fresh: true }; });
+        }
         addTargets(list); st.add = ''; st.addErr = ''; draw();
       }
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });

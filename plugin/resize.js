@@ -975,6 +975,44 @@
       if (r.dup) return r.dup;
       throw new Error(r.error || 'lỗi không rõ');
     },
+    // Khối "Tạo sequence": sequence RỖNG → đổi tên → chép cài đặt (khung, audio…) của opts.like
+    // hoặc đặt khung opts.frame [w,h] → vào bin. fps theo mặc định project (UXP không đổi được sau khi tạo).
+    makeSequence: async function (name, binPathStr, opts) {
+      opts = opts || {};
+      var project = await getActiveProject();
+      var work = (async function () {
+        rzStep(name + ' · tạo bin ' + binPathStr);
+        var bin = binPathStr ? await ppGetOrCreateBin(project, binPathStr) : null;
+        if (binPathStr && !bin) throw new Error('không tạo được bin ' + binPathStr);
+        rzStep(name + ' · tạo sequence');
+        if (typeof project.createSequence !== 'function') throw new Error('Premiere bản này không có createSequence');
+        var seq = await un(project.createSequence(name));
+        if (!seq) throw new Error('không tạo được sequence');
+        await sleep(700);                                   // chờ Premiere ghi nhận sequence mới
+        rzStep(name + ' · đổi tên');
+        await renameSeq(project, seq, name);
+        rzStep(name + ' · cài đặt');
+        if (opts.like) {
+          var st = await un(opts.like.getSettings());
+          await commit(project, function (ca) { ca.addAction(seq.createSetSettingsAction(st)); }, 'Flow: chép cài đặt sequence');
+        } else if (opts.frame) {
+          if (!(await setFrameSize(project, seq, opts.frame[0], opts.frame[1]))) throw new Error('Premiere không nhận khung ' + opts.frame.join('×'));
+        }
+        if (bin) { rzStep(name + ' · chuyển bin'); await moveToBin(project, seq, bin, await binIdOf(bin)); }
+        return seq;
+      })();
+      var r = await withWatchdog(work.then(function (q) { return { dup: q }; }), { name: name });
+      if (r.dup) return r.dup;
+      throw new Error(r.error || 'lỗi không rõ');
+    },
+    // Khối "Chuyển vào bin"
+    moveInto: async function (seq, binPathStr) {
+      var project = await getActiveProject();
+      var bin = await ppGetOrCreateBin(project, binPathStr);
+      if (!bin) throw new Error('không tạo được bin ' + binPathStr);
+      await moveToBin(project, seq, bin, await binIdOf(bin));
+      return true;
+    },
     status: function () { return { busy: rszState.busy, step: rzStepNow.step, seconds: rzStepNow.since ? Math.round((Date.now() - rzStepNow.since) / 1000) : 0 }; },
     run: async function (platform, plan, onRow, opts) {
       if (rszState.busy) throw new Error('tab Resize đang chạy lượt khác');

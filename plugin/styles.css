@@ -5000,3 +5000,18 @@ div.cd-run.is-stop[role="button"] { background: #3a3a3a; color: #f0f0f0; }
 .cd-projSel { width: 100%; margin: 0; }
 div.cd-qAdd[role="button"] { width: 100%; margin: 6px 0 0; padding: 7px 0; border-style: dashed; }
 .cd-queued { font-size: 11px; color: #34d399; margin-bottom: 6px; }
+/* Khối đơn: bảng setting + danh sách khối có mô tả + xem trước ở phiếu chạy */
+.cu-form { flex-direction: column; align-items: stretch; padding: 8px; }
+.cu-fRow { display: flex; align-items: flex-start; margin-bottom: 6px; }
+.cu-fLbl { flex: 0 0 52px; font-size: 11px; color: var(--cl-dim); padding-top: 4px; }
+.cu-fCtl { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cu-fCtl .cu-sel { width: 100%; margin: 0 0 4px; }
+.cu-fCtl .cu-in { width: 100%; box-sizing: border-box; }
+.cu-fHint { margin: 2px 0 0; }
+.cu-popList { flex-direction: column; align-items: stretch; }
+div.cu-typeOpt[role="button"] { display: flex; align-items: center; justify-content: flex-start; padding: 3px 4px; border-radius: 6px; }
+div.cu-typeOpt[role="button"]:hover { background: rgba(255,255,255,0.05); }
+.cu-typeOpt .cu-chip { flex: 0 0 auto; margin: 0 8px 0 0; min-width: 92px; text-align: center; }
+.cu-typeDesc { flex: 1 1 auto; font-size: 10.5px; color: #8a8a8a; }
+.cd-pv { font-size: 10.5px; color: #8a9aa8; margin: 0 0 6px 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-pv.is-bad { color: #f87171; white-space: normal; }
