@@ -99,21 +99,24 @@ window.CLSTORE = CLSTORE;
     if (ioMode) page.appendChild(ioBox(d));
     else if (ioMsg) page.appendChild(el('div', 'cu-msg', ioMsg));
 
-    // Nút và quy trình
+    // Thêm mới ở trên — danh sách đã tạo ở dưới (sửa một mục thì mở ngay tại dòng đó)
     var sec = el('div', 'cu-sec');
-    sec.appendChild(el('div', 'cu-lbl', 'Quy trình & lệnh nhanh'));
-    if (!d.buttons.length && !editing) sec.appendChild(el('div', 'cu-hint', 'Chưa có gì.'));
+    sec.appendChild(el('div', 'cu-lbl', 'Thêm mới'));
+    if (editing && editing._new) sec.appendChild(editor(d));
+    else {
+      var add = el('div', 'cu-row-btns cu-addRow');
+      add.appendChild(btn('+ Quy trình', 'cu-addBig', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
+      add.appendChild(btn('+ Lệnh nhanh', 'cu-addBig', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
+      sec.appendChild(add);
+    }
+    page.appendChild(sec);
+    sec = el('div', 'cu-sec');
+    sec.appendChild(el('div', 'cu-lbl', 'Đã tạo · ' + d.buttons.length));
+    if (!d.buttons.length) sec.appendChild(el('div', 'cu-hint', 'Chưa có gì.'));
     d.buttons.forEach(function (b, i) {
       if (editing && editing.id === b.id && !editing._new) { sec.appendChild(editor(d)); return; }
       sec.appendChild(buttonRow(d, b, i));
     });
-    if (editing && editing._new) sec.appendChild(editor(d));
-    if (!editing) {
-      var add = el('div', 'cu-row-btns');
-      add.appendChild(btn('+ Lệnh nhanh', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
-      add.appendChild(btn('+ Quy trình', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
-      sec.appendChild(add);
-    }
     page.appendChild(sec);
 
     page.appendChild(notesSec(d));

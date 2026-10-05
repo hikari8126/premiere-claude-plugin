@@ -68,6 +68,13 @@
     b.addEventListener('click', onClick);
     return b;
   }
+  function ago(t) {
+    var m = Math.round((Date.now() - (t || Date.now())) / 60000);
+    if (m < 1) return 'vừa xong';
+    if (m < 60) return m + ' phút';
+    if (m < 1440) return Math.round(m / 60) + ' giờ';
+    return Math.round(m / 1440) + ' ngày';
+  }
   function stepsText(b) {
     return b.kind === 'flow' ? b.steps.map(function (s) { return CLC.SPEC[s.type].label; }).join(' → ') : b.prompt;
   }
@@ -101,26 +108,28 @@
     nw.addEventListener('click', function () { window.ClaudeCustomUI.edit(null); });
     var nc = el('div', 'cd-cell'); nc.appendChild(nw); grid.appendChild(nc);
 
-    // Lệnh nhanh (nút lệnh): bấm → điền lệnh vào ô chat, Enter mới gửi
+    // Lệnh nhanh: chip bấm → điền lệnh vào ô chat (Enter mới gửi)
     var prompts = d.buttons.filter(function (b) { return b.kind === 'prompt'; });
-    var ph = el('div', 'cd-lbl cd-lblRow');
-    ph.appendChild(el('span', null, 'Lệnh nhanh'));
+    var qs = el('div', 'cd-box');
+    var qh = el('div', 'cd-boxHd');
+    qh.appendChild(el('span', 'cd-boxT', 'Lệnh nhanh'));
     var addP = el('span', 'cd-link', '+ Thêm');
     addP.setAttribute('role', 'button');
     addP.addEventListener('click', function () { window.ClaudeCustomUI.edit(null, 'prompt'); });
-    ph.appendChild(addP);
-    dash.appendChild(ph);
-    if (!prompts.length) dash.appendChild(el('div', 'cd-dim', 'Lưu câu lệnh hay gõ để bấm là điền sẵn.'));
+    qh.appendChild(addP);
+    qs.appendChild(qh);
+    if (!prompts.length) qs.appendChild(el('div', 'cd-boxEmpty', 'Lưu câu lệnh hay gõ — bấm là điền sẵn vào ô chat.'));
     else {
       var pr = el('div', 'cu-chipRow');
       prompts.forEach(function (b) {
-        var c = el('div', 'cu-chip par cd-prompt', b.name);
+        var c = el('div', 'cu-chip par cd-prompt', '› ' + b.name);
         c.setAttribute('role', 'button');
         c.addEventListener('click', function () { T.runButton(b); });
         pr.appendChild(c);
       });
-      dash.appendChild(pr);
+      qs.appendChild(pr);
     }
+    dash.appendChild(qs);
 
     // Gợi ý Claude học được (thói quen lặp lại)
     var sg = CLSTORE.learn().suggest ? CLC.suggest(CLSTORE.habits(), d) : null;
@@ -141,23 +150,28 @@
       dash.appendChild(g);
     }
 
-    // Lệnh gần đây → mở lịch sử
-    var h = T.history().slice(-3).reverse();
-    var lh = el('div', 'cd-lbl cd-lblRow');
-    lh.appendChild(el('span', null, 'Lệnh gần đây'));
-    var all = el('span', 'cd-link', 'Xem lịch sử ›');
+    // Lệnh gần đây: dòng có chấm trạng thái + thời gian, bấm → mở lịch sử
+    var h = T.history().slice(-4).reverse();
+    var rs = el('div', 'cd-box');
+    var rh = el('div', 'cd-boxHd');
+    rh.appendChild(el('span', 'cd-boxT', 'Lệnh gần đây'));
+    var all = el('span', 'cd-link', 'Lịch sử ›');
     all.setAttribute('role', 'button');
     all.addEventListener('click', function () { T.showView('log'); });
-    lh.appendChild(all);
-    dash.appendChild(lh);
-    if (!h.length) dash.appendChild(el('div', 'cd-dim', 'Chưa có lệnh nào — gõ ở ô dưới, hoặc bấm một quy trình.'));
+    rh.appendChild(all);
+    rs.appendChild(rh);
+    if (!h.length) rs.appendChild(el('div', 'cd-boxEmpty', 'Chưa có lệnh nào — gõ ở ô dưới, hoặc bấm một quy trình.'));
     h.forEach(function (r) {
       var bad = r.err || (r.acts || []).some(function (a) { return a.cls === 'is-error'; });
-      var x = el('div', 'cd-recent', '› ' + r.cmd.split('\n')[0].slice(0, 60) + (bad ? '  ✗' : '  ✓'));
+      var x = el('div', 'cd-recent');
       x.setAttribute('role', 'button');
+      x.appendChild(el('span', 'cd-dot' + (bad ? ' is-bad' : '')));
+      x.appendChild(el('span', 'cd-recentT', r.cmd.split('\n')[0].slice(0, 60)));
+      x.appendChild(el('span', 'cd-recentAt', ago(r.at)));
       x.addEventListener('click', function () { T.showView('log'); });
-      dash.appendChild(x);
+      rs.appendChild(x);
     });
+    dash.appendChild(rs);
   }
 
   // ── Phiếu chạy ────────────────────────────────────────────────────────────
