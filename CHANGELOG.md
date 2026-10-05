@@ -3,7 +3,11 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## Hotfix (chưa gắn version) — 2026-10-05 · RAW: máy chưa cài Adobe Media Encoder
+## v5.17.0 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Tab Claude (Clawd)
+
+> Gộp các bản beta 5.16.0 (QC) → 5.17.0-beta.4 bên dưới + hotfix RAW thiếu AME. Cần Bridge app 3.20.
+
+### RAW: máy chưa cài Adobe Media Encoder
 
 - **Lỗi (máy đồng nghiệp):** Timeline Render (edited/) báo từng cut *"exportSequence lỗi: Internal error : AME is not installed"* — 17 dòng lỗi, không ra file nào.
 - **Nguyên nhân:** `EncoderManager.exportSequence` của Premiere UXP cần **Adobe Media Encoder cài trên máy** (lỗi do chính Premiere trả về, dù gọi `ExportType.IMMEDIATELY`). Máy có AME thì chạy bình thường. Source Render (raw/, ffmpeg) không cần AME.
@@ -22,7 +26,7 @@
 - **Nguyên nhân:** `onChooseFolder` lưu `r.chosen || p`, mà `/rawcut/dest` trả `chosen: true` (cờ "đang dùng thư mục chọn tay", không phải đường dẫn) → lưu chữ `true` thay cho đường dẫn; lần sau gửi `chosen: "true"` lên bridge.
 - **Sửa:** lưu đúng đường dẫn đã chọn; khi đọc prefs bỏ mọi giá trị không phải đường dẫn tuyệt đối (`RCC.cleanChosen`) → máy đã dính lỗi tự về thư mục tự nhận, không cần thao tác. Không cần Bridge mới.
 
-## v5.17.0-beta.4 — 2026-10-05 (chưa release, bridge giữ 1.24.0-beta.2)
+### (beta.4)
 
 ### ✨ Hàng đợi nhiều project
 - Plugin **tự nhớ project** mỗi lần bro mở / chuyển sang (đường dẫn + tên, `cl_projects_v1`). Premiere UXP không liệt kê được project đang mở và trả **cùng một guid** cho mọi project (thử 2026-10-05) → nhận diện theo đường dẫn.
