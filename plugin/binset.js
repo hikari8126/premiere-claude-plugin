@@ -65,7 +65,7 @@ var BINSET = (function () {
     return { made: made, failed: failed };
   }
 
-  // ── APP: nhân bản FB gốc → "<SP> AppLovin vid…" vào bin APP của bộ ──
+  // ── APP: nhân bản template / bản AppLovin bộ gần nhất → "<SP> AppLovin vid…" vào bin APP ──
   async function planApp(set, idxs) {
     var items = await PTOOLS.snapshot();
     if (!items) return { ok: false, error: 'chưa mở project' };
@@ -76,10 +76,10 @@ var BINSET = (function () {
     var made = 0, failed = [];
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
-      if (r.error || r.exists || r.skip) continue;
+      if (r.error || r.exists || r.skip || !r.from) continue;
       try {
         onLine('Tạo ' + r.name + '…');
-        await window.ResizeAPI.cloneInto(await seqOf(r.src.ref), r.name, r.bin);
+        await window.ResizeAPI.cloneInto(await seqOf(r.from.ref), r.name, r.bin);   // template / bản AppLovin bộ trước
         made++;
       } catch (e) { failed.push('vid' + r.idx + ': ' + ((e && e.message) || e)); }
     }

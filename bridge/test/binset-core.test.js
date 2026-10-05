@@ -97,18 +97,25 @@ test("dữ liệu thật SonaShape: bản resize đuôi GG, nhãn viết hoa gi�
   assert.deepStrictEqual(BSC.res2Spec([], "GG", "40", 1), { platform: "FB", ratios: [] });
 });
 
-test("APP: bản sao FB gốc tên AppLovin, bin học theo bộ trước", () => {
+test("APP: nhân bản bản AppLovin (template) của bộ gần nhất, đổi tên theo FB gốc", () => {
   const its = [
     S("SonaShape vid36.0 [a] [b]", "Sequence / FB / 36x"),
     S("SonaShape vid36.1 [a] [b]", "Sequence / FB / 36x"),
+    S("SonaShape vid36.2 [a] [b]", "Sequence / FB / 36x"),
+    S("SonaShape AppLovin vid34.2 [a] [b]", "Sequence / APP / 34x"),
     S("SonaShape AppLovin vid35.0 [a] [b]", "Sequence / APP / 35x"),
+    S("SonaShape AppLovin vid35.1 [a] [b]", "Sequence / APP / 35x"),
     S("SonaShape AppLovin vid36.1 [a] [b]", "Sequence / APP / 36x"),
   ];
   const p = BSC.planApp(its, { set: "36" });
-  assert.strictEqual(p.rows[0].bin, "Sequence / APP / 36x");
-  assert.strictEqual(p.rows[0].name, "SonaShape AppLovin vid36.0 [a] [b]");
-  assert.deepStrictEqual(p.rows.map(r => r.exists), [false, true]);
-  assert.strictEqual(BSC.appBin([], "40"), "Sequence / APP / 40x");
+  const r = p.rows;
+  assert.strictEqual(r[0].bin, "Sequence / APP / 36x");
+  assert.strictEqual(r[0].name, "SonaShape AppLovin vid36.0 [a] [b]");
+  assert.deepStrictEqual([r[0].from.set, r[0].from.name], [35, "SonaShape AppLovin vid35.0 [a] [b]"]);
+  assert.strictEqual(r[1].exists, true);
+  assert.strictEqual(r[2].from.name, "SonaShape AppLovin vid35.0 [a] [b]");   // bộ 35 không có .2 → video khác của bộ gần nhất
+  assert.strictEqual(BSC.planApp(its, { set: "36", template: "T ▸ Khung APP" }).rows[0].from.kind, "template");
+  assert.strictEqual(BSC.planApp([S("X vid1.0 [a]", "Sequence / FB / 1x")], { set: "1" }).rows[0].from, null);
   assert.match(BSC.planApp(its, { set: "" }).error, /chưa biết bộ/);
 });
 

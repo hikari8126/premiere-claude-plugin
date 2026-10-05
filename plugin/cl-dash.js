@@ -26,7 +26,7 @@
       localStorage.setItem(SEED_KEY, '1');
     }
   } catch (e) {}
-  // Đợt 2 (2026-10-05): RAW (Both, tự xuất), PIN theo đơn, APP — luồng user mô tả. Thêm một lần, không đè.
+  // Đợt 2 (2026-10-05): RAW (Both, tự xuất), PIN theo đơn, APP (nhân bản template AppLovin bộ trước). Thêm một lần, không đè.
   var SEED2 = 'cl_seed_v2';
   try {
     if (!localStorage.getItem(SEED2)) {

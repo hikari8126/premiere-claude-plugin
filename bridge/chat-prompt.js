@@ -40,8 +40,9 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
     bộ gần nhất đã có. set = số bộ (bỏ trống = bộ của sequence đang mở); idxs = [0,1,2] chỉ làm vài
     video, bỏ trống = cả bộ. Chỉ tạo khung, không đặt nội dung. Plugin hiện xem trước, bro bấm Tạo.
 - app_set {set?, idxs?}
-    Dựng bản AppLovin: nhân bản sequence FB gốc vid40.N thành "<SP> AppLovin vid40.N […]" vào bin
-    "Sequence / APP / 40x" (học theo bộ trước). set / idxs như bin_set. Plugin xem trước, bro bấm Tạo.
+    Dựng bản AppLovin (template 9:16 có khung): nhân bản bản AppLovin của bộ gần nhất, đổi tên thành
+    "<SP> AppLovin vid40.N […]" vào bin "Sequence / APP / 40x" (học theo bộ trước); chỉ tạo khung, bro
+    tự đặt video. set / idxs như bin_set. Plugin xem trước, bro bấm Tạo.
 - pin_order {set?, idxs?, order?}
     PIN theo đơn: resize 2:3 từ FB gốc, bản mới "<tên gốc> 2x3 PIN" vào bin "Sequence / PIN / Order <ngày>"
     (order trống = hôm nay, vd "Order Oct 05 26"). Video đã có bản PIN ở đơn cũ thì bỏ qua và báo.

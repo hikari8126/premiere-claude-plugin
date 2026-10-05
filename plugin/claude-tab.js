@@ -456,7 +456,9 @@
       var lines = p.rows.map(function (r) {
         if (r.error) return { name: set + '.' + r.idx, sub: r.error, bad: true };
         if (r.exists) return { name: r.name, sub: pin ? 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') : 'đã có', bad: true };
-        return { name: r.name, sub: pin ? 'resize 2:3 từ ' + r.src.name + ' → ' + p.bin.split(' / ').pop() : 'bản sao ' + r.src.name + ' → ' + r.bin, r: r };
+        if (!pin && !r.from) return { name: r.name, sub: 'chưa có template / bản AppLovin cũ để nhân bản', bad: true };
+        return { name: r.name, sub: pin ? 'resize 2:3 từ ' + r.src.name + ' → ' + p.bin.split(' / ').pop()
+                                       : (r.from.kind === 'template' ? 'từ template' : 'khung từ bộ ' + r.from.set) + ' → ' + r.bin, r: r };
       });
       var n = lines.filter(function (l) { return !l.bad; }).length;
       row.className = 'cl-act is-ask';

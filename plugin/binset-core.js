@@ -135,19 +135,27 @@ var BSC = (function () {
     return (items || []).filter(function (it) { return isSeq(it) && norm(it.name) === norm(name); })[0] || null;
   }
 
-  // ── APP (Applovin): bản sao nguyên sequence FB gốc, tên "<SP> AppLovin vid40.1 […]" ──
-  // Bin học theo bộ gần nhất đã có bản AppLovin ("Sequence / APP / 35x" → "Sequence / APP / 40x");
-  // chưa có → "Sequence / APP / {bộ}x". Trùng tên ở bất kỳ đâu trong project → coi như đã có.
+  // ── APP (Applovin): sequence dạng TEMPLATE (9:16, có khung bên trong) — nhân bản bản AppLovin
+  // của bộ gần nhất (cùng số video; không có thì video bất kỳ của bộ đó), đổi tên theo FB gốc
+  // "<SP> AppLovin vid40.1 […]". Template quy định sau sẽ được ưu tiên (opts.template = ref).
+  // Không đụng nội dung — bro tự đặt video vào khung. Bin học theo bộ trước.
   function appName(src) { return String(src || '').replace(/(^|\s)(vid\s*\d)/i, '$1AppLovin $2'); }
-  function appBin(items, set) {
-    var best = null, re = /AppLovin\s+vid\s*(\d+)\s*\.\s*\d+/i;
+  var APP_RE = /AppLovin\s+vid\s*(\d+)\s*\.\s*(\d+)(?!\d)/i;
+  function appPrev(items, set, idx) {
+    var best = null;
     (items || []).forEach(function (it) {
-      var m = isSeq(it) && String(it.name).match(re);
-      if (!m || Number(m[1]) >= Number(set) || !it.path) return;
-      if (!best || Number(m[1]) > best.set) best = { set: Number(m[1]), path: it.path };
+      var m = isSeq(it) && String(it.name).match(APP_RE);
+      if (!m || Number(m[1]) >= Number(set)) return;
+      var s = Number(m[1]), same = Number(m[2]) === Number(idx);
+      // bộ gần nhất trước; trong cùng bộ ưu tiên đúng số video
+      if (!best || s > best.set || (s === best.set && same && !best.same)) best = { set: s, same: same, ref: ref(it), name: it.name, path: it.path };
     });
-    if (!best) return 'Sequence / APP / ' + set + 'x';
-    return best.path.replace(new RegExp('(^|\\D)' + best.set + '(?=x\\b|\\b)', 'g'), '$1' + set);
+    return best;
+  }
+  function appBin(items, set) {
+    var p = appPrev(items, set, 0);
+    if (!p || !p.path) return 'Sequence / APP / ' + set + 'x';
+    return p.path.replace(new RegExp('(^|\\D)' + p.set + '(?=x\\b|\\b)', 'g'), '$1' + set);
   }
   function planApp(items, opts) {
     opts = opts || {};
@@ -160,8 +168,9 @@ var BSC = (function () {
     return { ok: true, set: set, rows: idxs.map(function (idx) {
       var s = src[idx];
       if (!s) return { idx: idx, bin: bin, error: 'không thấy sequence FB gốc vid' + set + '.' + idx };
-      var name = appName(s.name);
-      return { idx: idx, bin: bin, src: s, name: name, exists: !!seqNamed(items, name) };
+      var name = appName(s.name), prev = appPrev(items, set, idx);
+      var from = opts.template ? { kind: 'template', ref: opts.template } : prev ? { kind: 'prev', ref: prev.ref, name: prev.name, set: prev.set } : null;
+      return { idx: idx, bin: bin, src: s, name: name, from: from, exists: !!seqNamed(items, name) };
     }) };
   }
 
