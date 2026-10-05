@@ -96,25 +96,15 @@
       <!-- ⚙ Tuỳ biến: nút / quy trình / ghi chú / xuất nhập / tự học (cl-custom-ui.js) -->
       <div class="cl-gear" id="clGear" role="button" aria-label="Tuỳ biến">⚙</div>
     </div>
-    <!-- [ô lệnh] [+ lưu thành nút] [gửi] — cùng cao. Ô lệnh theo kiểu Voice Gen: div ẩn
+    <!-- [ô lệnh] [gửi] — cùng cao (nút lệnh / quy trình nằm ở bảng điều khiển). Ô lệnh theo kiểu Voice Gen: div ẩn
          (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
     <div class="cl-input">
       <div class="cl-field" id="clField">
         <div class="cl-sizer" id="clSizer" aria-hidden="true"></div>
         <textarea id="message-input" rows="1" spellcheck="false" placeholder="Gõ lệnh… (Enter để gửi)"></textarea>
       </div>
-      <div class="cl-plus" id="add-shortcut-btn" role="button" aria-label="Lưu lệnh thành nút">+</div>
       <div class="cl-send" id="send-btn" role="button" aria-label="Gửi"></div>
     </div>
-    <div class="cl-scForm" id="clScForm" hidden>
-      <input class="cl-scName" id="clScName" placeholder="Tên nút" maxlength="24" />
-      <textarea class="cl-scPrompt" id="clScPrompt" rows="2" placeholder="Lệnh khi bấm nút"></textarea>
-      <div class="cl-scActions">
-        <div class="cl-btn" id="clScCancel" role="button">Huỷ</div>
-        <div class="cl-btn cl-btn--primary" id="clScSave" role="button">Lưu nút</div>
-      </div>
-    </div>
-    <div class="cl-chips" id="quick-actions" hidden></div>
   </div>
   <!-- Trang Tuỳ biến — thay chỗ nhật ký + ô lệnh khi mở (cl-custom-ui.js vẽ) -->
   <div class="cl-page" id="clCustom" hidden></div>

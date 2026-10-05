@@ -70,6 +70,27 @@
     nw.addEventListener('click', function () { window.ClaudeCustomUI.edit(null); });
     dash.appendChild(nw);
 
+    // Lệnh nhanh (nút lệnh): bấm → điền lệnh vào ô chat, Enter mới gửi
+    var prompts = d.buttons.filter(function (b) { return b.kind === 'prompt'; });
+    var ph = el('div', 'cd-lbl cd-lblRow');
+    ph.appendChild(el('span', null, 'Lệnh nhanh'));
+    var addP = el('span', 'cd-link', '+ Thêm');
+    addP.setAttribute('role', 'button');
+    addP.addEventListener('click', function () { window.ClaudeCustomUI.edit(null, 'prompt'); });
+    ph.appendChild(addP);
+    dash.appendChild(ph);
+    if (!prompts.length) dash.appendChild(el('div', 'cd-dim', 'Lưu câu lệnh hay gõ để bấm là điền sẵn.'));
+    else {
+      var pr = el('div', 'cu-chipRow');
+      prompts.forEach(function (b) {
+        var c = el('div', 'cu-chip par cd-prompt', b.name);
+        c.setAttribute('role', 'button');
+        c.addEventListener('click', function () { T.runButton(b); });
+        pr.appendChild(c);
+      });
+      dash.appendChild(pr);
+    }
+
     // Gợi ý Claude học được (thói quen lặp lại)
     var sg = CLSTORE.learn().suggest ? CLC.suggest(CLSTORE.habits(), d) : null;
     if (sg) {

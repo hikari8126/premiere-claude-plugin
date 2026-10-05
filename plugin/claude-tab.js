@@ -913,8 +913,7 @@
     scrollEnd();
   }
 
-  // ── Nút lệnh / quy trình dưới ô lệnh (dữ liệu ở CLSTORE — sửa ở trang ⚙ Tuỳ biến) ──
-  var chipsEl = $('quick-actions'), addEl = $('add-shortcut-btn'), formEl = $('clScForm');
+  // ── Bấm nút lệnh / quy trình (bảng điều khiển gọi) — dữ liệu ở CLSTORE ──────
   function runButton(b) {
     if (busy || flow) return;
     if (b.kind === 'flow') { if (window.ClaudeDash) window.ClaudeDash.openSheet(b); return; }
@@ -924,48 +923,6 @@
     fill(f.text);
     setClawd('idle', f.missing.length ? 'Điền ' + f.missing.map(function (k) { return '{' + k + '}'; }).join(', ') + ' rồi Enter' : 'Xem lại lệnh rồi Enter');
   }
-  function renderShortcuts() {
-    chipsEl.innerHTML = '';
-    var list = CLSTORE.get().buttons;
-    chipsEl.hidden = !list.length;
-    list.forEach(function (b) {
-      var chip = document.createElement('div');
-      chip.className = 'cl-chip' + (b.kind === 'flow' ? ' is-flow' : '');
-      chip.setAttribute('role', 'button');
-      chip.textContent = (b.kind === 'flow' ? '▸▸ ' : '') + b.name;
-      chip.addEventListener('click', function () { runButton(b); });
-      chip.addEventListener('contextmenu', function (e) { e.preventDefault(); window.ClaudeCustomUI.open(); });
-      chipsEl.appendChild(chip);
-    });
-  }
-  var scName = $('clScName'), scPrompt = $('clScPrompt');
-  [scName, scPrompt].forEach(function (el) {
-    el.addEventListener('focus', window.claimKeyboard);
-    el.addEventListener('blur', window.releaseKeyboard);
-  });
-  function setFormOpen(open) {
-    formEl.hidden = !open;
-    addEl.classList.toggle('is-open', open);
-  }
-  addEl.addEventListener('click', function () {
-    setFormOpen(formEl.hidden);
-    if (!formEl.hidden) {
-      scName.value = '';
-      // đang gõ dở lệnh nào → gợi ý lưu luôn, số bộ đang mở đổi thành {bộ}
-      scPrompt.value = CLC.cmdTemplate(String(input.value || '').trim(), CLC.vars(seqNameNow()));
-      scName.focus();
-    }
-  });
-  $('clScCancel').addEventListener('click', function () { setFormOpen(false); });
-  $('clScSave').addEventListener('click', function () {
-    var name = scName.value.trim(), prompt = scPrompt.value.trim();
-    if (!name) { scName.focus(); return; }
-    if (!prompt) { scPrompt.focus(); return; }
-    var d = CLSTORE.get();
-    d.buttons.push({ name: name, kind: 'prompt', mode: mode, prompt: prompt });
-    CLSTORE.set(d);
-    setFormOpen(false);
-  });
 
   // ── Màn: 'dash' (bảng điều khiển) | 'log' (lịch sử lệnh) | 'sheet' (phiếu chạy) ─────
   var tabEl = $('tab-claude'), view = 'dash';
@@ -976,7 +933,7 @@
     if (v === 'log') { syncEmpty(); scrollEnd(); }
   }
   window.ClaudeTab = {
-    showView: showView, runFlow: runFlow, flowStopped: function () { return lastFlowStopped; }, busy: function () { return !!(busy || flow); },
+    showView: showView, runFlow: runFlow, runButton: runButton, flowStopped: function () { return lastFlowStopped; }, busy: function () { return !!(busy || flow); },
     history: function () { return history; }, seqName: seqNameNow, fill: fill,
     saveSuggest: function (sg) { shownSuggest[sg.key] = 1; },
     declineSuggest: function (sg) { CLSTORE.setHabits(CLC.decline(CLSTORE.habits(), sg.key)); }
@@ -984,8 +941,6 @@
 
   // ── Khởi động ───────────────────────────────────────────────────────────────
   setMode(mode);
-  renderShortcuts();
-  CLSTORE.onChange(renderShortcuts);
   renderPast();
   resizeInput();
   setClawd('idle');

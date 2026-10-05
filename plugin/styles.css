@@ -4887,3 +4887,27 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .cd-vidList { max-height: 220px; overflow-y: auto; }
 .cd-vidFoot { display: flex; justify-content: flex-end; margin-top: 6px; }
 .cu-chip.cd-sel { background: #33406a; border-color: #8aa4f0; color: #e6ecff; font-weight: 600; }
+/* ── Tab Claude: dọn UI (2026-10-05) ──
+   div[role=button] chung của plugin là inline-flex → thẻ / dòng bấm được bị xếp ngang, chữ dính nhau. */
+div.cd-card[role="button"] { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; width: 100%; }
+div.cd-recent[role="button"] { display: block; }
+div.cu-tog[role="button"] { display: flex; align-items: flex-start; justify-content: flex-start; }
+div.cd-new[role="button"] { align-items: center; }
+/* Trang ⚙ chiếm trọn tab (trước đây bảng điều khiển vẫn hiện → mỗi bên nửa màn) */
+#tab-claude.is-custom #clDash, #tab-claude.is-custom #clSheet { display: none; }
+/* Nút có phản hồi rõ khi rê / bấm */
+.cl-btn { transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.cl-btn:hover { background: #2c2c2c; border-color: #6a6a6a; color: #fff; }
+.cl-btn:active { background: #383838; }
+.cl-btn--primary:active { background: #c96a4c; border-color: #c96a4c; }
+.cu-chip:hover { border-color: #8a8a8a; }
+.cu-chip.par:hover { border-color: #8aa4f0; }
+.cu-chip.seq:hover { border-color: #6fc9a2; }
+.cu-chip.act:hover { background: #4a3229; }
+.cu-chip:active { opacity: 0.8; }
+.cu-tool { font-size: 12px; min-width: 18px; text-align: center; }
+.cu-tool:hover { background: #2c2c2c; }
+.cu-item:hover { border-color: #444; }
+.cu-tog:hover .cl-mvTick { border-color: var(--cl); }
+.cd-prompt { cursor: pointer; }
+.cd-card .cd-dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -88,7 +88,7 @@ window.CLSTORE = CLSTORE;
     var d = CLSTORE.get();
 
     var hd = el('div', 'cu-hd');
-    var back = el('div', 'cu-back', '‹ Tuỳ biến');
+    var back = el('div', 'cu-back', '‹ Cài đặt');
     back.setAttribute('role', 'button');
     back.addEventListener('click', close);
     hd.appendChild(back);
@@ -101,8 +101,8 @@ window.CLSTORE = CLSTORE;
 
     // Nút và quy trình
     var sec = el('div', 'cu-sec');
-    sec.appendChild(el('div', 'cu-lbl', 'Nút và quy trình · hiện dưới ô lệnh'));
-    if (!d.buttons.length && !editing) sec.appendChild(el('div', 'cu-hint', 'Chưa có nút nào. Nút lệnh = một câu lệnh hay gõ; quy trình = nhiều bước chạy liền một lượt.'));
+    sec.appendChild(el('div', 'cu-lbl', 'Quy trình & lệnh nhanh'));
+    if (!d.buttons.length && !editing) sec.appendChild(el('div', 'cu-hint', 'Chưa có gì.'));
     d.buttons.forEach(function (b, i) {
       if (editing && editing.id === b.id && !editing._new) { sec.appendChild(editor(d)); return; }
       sec.appendChild(buttonRow(d, b, i));
@@ -110,11 +110,10 @@ window.CLSTORE = CLSTORE;
     if (editing && editing._new) sec.appendChild(editor(d));
     if (!editing) {
       var add = el('div', 'cu-row-btns');
-      add.appendChild(btn('+ Nút lệnh', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
+      add.appendChild(btn('+ Lệnh nhanh', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
       add.appendChild(btn('+ Quy trình', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
       sec.appendChild(add);
     }
-    sec.appendChild(el('div', 'cu-hint', 'Biến dùng trong lệnh: {bộ} {sequence} {sản phẩm} — lấy từ sequence đang mở (vd "vid40.0" → {bộ} = 40).'));
     page.appendChild(sec);
 
     page.appendChild(notesSec(d));
@@ -137,15 +136,15 @@ window.CLSTORE = CLSTORE;
       CLSTORE.set(d); render();
     }
     [['↑', function () { move(-1); }], ['↓', function () { move(1); }],
-     ['Sửa', function () { pop = null; editing = JSON.parse(JSON.stringify(b)); render(); }]].forEach(function (t) {
+     ['✎', function () { pop = null; editing = JSON.parse(JSON.stringify(b)); render(); }]].forEach(function (t) {
       var x = el('div', 'cu-tool', t[0]); x.setAttribute('role', 'button'); x.addEventListener('click', t[1]); tools.appendChild(x);
     });
-    var del = el('div', 'cu-tool', 'Xoá'); del.setAttribute('role', 'button');
+    var del = el('div', 'cu-tool', '✕'); del.setAttribute('role', 'button');
     var armT = null;
     del.addEventListener('click', function () {
       if (!del.classList.contains('is-armed')) {
-        del.classList.add('is-armed'); del.textContent = 'Xoá thật?';
-        armT = setTimeout(function () { del.classList.remove('is-armed'); del.textContent = 'Xoá'; }, 3000);
+        del.classList.add('is-armed'); del.textContent = 'Xoá?';
+        armT = setTimeout(function () { del.classList.remove('is-armed'); del.textContent = '✕'; }, 3000);
         return;
       }
       clearTimeout(armT);
@@ -173,12 +172,12 @@ window.CLSTORE = CLSTORE;
       box.appendChild(md);
       var pr = kb(el('textarea', 'cu-ta'));
       pr.rows = 3;
-      pr.placeholder = 'Lệnh khi bấm nút, vd: resize bộ {bộ} sang 4x5 FB';
+      pr.placeholder = 'vd: resize bộ {bộ} sang 4x5 FB — {bộ} {sequence} {sản phẩm} tự điền';
       pr.value = e.prompt;
       pr.addEventListener('input', function () { e.prompt = pr.value; });
       box.appendChild(pr);
     } else {
-      if (!e.steps.length) box.appendChild(el('div', 'cu-hint', 'Ráp từng bước bằng khối: khối hành động (cam) + tham số (xanh dương) + sequence (xanh lá). Bước cần xác nhận thì khi chạy sẽ dừng chờ bro bấm.'));
+      if (!e.steps.length) box.appendChild(el('div', 'cu-hint', 'Thêm khối hành động, rồi bấm chip để chọn tham số.'));
       e.steps.forEach(function (s, i) { box.appendChild(stepRow(e, s, i)); });
       var addRow = el('div', 'cu-chipRow');
       addRow.appendChild(chip('+ Khối hành động', 'add' + (pop && pop.step === 'new' ? ' is-open' : ''), function () { pop = pop && pop.step === 'new' ? null : { step: 'new' }; render(); }));
@@ -290,7 +289,7 @@ window.CLSTORE = CLSTORE;
   // ── Ghi chú ──────────────────────────────────────────────────────────────
   function notesSec(d) {
     var sec = el('div', 'cu-sec');
-    sec.appendChild(el('div', 'cu-lbl', 'Ghi chú của tôi · gửi kèm mọi lệnh'));
+    sec.appendChild(el('div', 'cu-lbl', 'Ghi chú cho Claude'));
     var ta = kb(el('textarea', 'cu-ta cu-notes'));
     ta.rows = 5;
     ta.maxLength = CLC.NOTES_MAX;
@@ -305,7 +304,6 @@ window.CLSTORE = CLSTORE;
     });
     sec.appendChild(ta);
     sec.appendChild(cnt);
-    sec.appendChild(el('div', 'cu-hint', 'Khi bro sửa Claude hoặc nói một thói quen, Claude sẽ hỏi "Nhớ không?" — bấm Nhớ là dòng đó vào đây.'));
     return sec;
   }
 
@@ -324,8 +322,8 @@ window.CLSTORE = CLSTORE;
       row.addEventListener('click', function () { l[key] = !l[key]; CLSTORE.setLearn(l); render(); });
       sec.appendChild(row);
     }
-    toggle('suggest', 'Gợi ý lưu nút', 'gõ một lệnh 3 lần, hay làm 2 việc liền nhau 3 lần → hỏi có lưu thành nút / quy trình không');
-    toggle('facts', 'Đọc quy ước từ project', 'gửi kèm Claude: bin voice, bin sequence, mẫu tên, các bộ đã có');
+    toggle('suggest', 'Gợi ý lưu khi lặp lại', 'lặp 3 lần → hỏi lưu thành nút / quy trình');
+    toggle('facts', 'Đọc quy ước project', 'bin voice, bin sequence, tên mẫu');
     var h = CLSTORE.habits(), n = Object.keys(h.cmds).length + Object.keys(h.pairs).length;
     var row = el('div', 'cu-row-btns');
     row.appendChild(el('span', 'cu-hint cu-grow', 'Đã ghi ' + n + ' thói quen.'));
@@ -396,10 +394,10 @@ window.CLSTORE = CLSTORE;
   }
 
   // Mở thẳng trình sửa: b = quy trình có sẵn (Sửa), null = quy trình mới (từ bảng điều khiển).
-  function edit(b) {
+  function edit(b, kind) {
     open();
     pop = null;
-    editing = b ? JSON.parse(JSON.stringify(b)) : { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true };
+    editing = b ? JSON.parse(JSON.stringify(b)) : { id: CLC.uid(), name: '', kind: kind === 'prompt' ? 'prompt' : 'flow', mode: 'command', prompt: '', steps: [], _new: true };
     render();
   }
   window.ClaudeCustomUI = { open: open, close: close, render: render, edit: edit };
