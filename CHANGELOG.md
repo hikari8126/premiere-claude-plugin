@@ -9,8 +9,6 @@
 - **Sửa:** `localRoute` (bridge/rawcut-dest.js) — tìm SAMX_WORKSPACE trong Drive for desktop, dò tên sản phẩm trong đường dẫn project + tên sequence (so chữ+số nên `_`, khoảng trắng, dấu chấm đều là ranh giới); khớp một → tự nhận (`matchedBy: 'name'`), khớp nhiều cùng độ dài → menu chọn; không khớp → như cũ. **Cần Bridge mới.**
 - **Lỗi 2:** chọn nhiều sequence, mỗi dòng chỉ hiện `…/Output/ACT/v35.0/edited` — mất tên sản phẩm (cắt 4 cấp cuối). Sửa: `RCC.shortDest` luôn giữ thư mục sản phẩm: `…/SonaShape/Output/ACT/v35.0/edited`.
 
-## v5.15.1 / bridge 3.18 (server 1.22.0) — 2026-10-05 · RAW: thư mục xuất "true"
-
 ## v5.15.1 / bridge 3.18 (server 1.22.0) — 2026-10-05 · RAW: thư mục xuất "true" (đã ship)
 
 - **Lỗi:** chọn thư mục xuất bằng "Đổi thư mục" xong thì mọi lần mở lại tab RAW báo *"Thư mục đã chọn cho project này, true, không có ở đó…"*, nút XUẤT bị khoá.
