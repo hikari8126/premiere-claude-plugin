@@ -10,7 +10,7 @@ test("parse nhiều khối ```actions, bỏ khối JSON hỏng / phần tử kh�
 });
 
 test("danh sách action cho phép", () => {
-  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["app_set", "autocut_load", "bin_set", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "pin_order", "rawcut", "resize", "voicegen_script", "voicegen_sfx"]);
+  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["app_set", "autocut_load", "bin_set", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "pin_order", "queue_raw", "rawcut", "resize", "voicegen_script", "voicegen_sfx"]);
 });
 
 test("resize: nền tảng GG/FB/PIN, ratio chuẩn hoá về khoá tab Resize, luôn hỏi xác nhận", () => {
@@ -58,4 +58,10 @@ test("action cũ sửa timeline / chưa làm bị chặn, không sửa object g�
   const orig = { action: "open_tab", tab: "voicegen" };
   const r = CLA.check(orig);
   assert.notStrictEqual(r.action, orig);
+});
+
+test("queue_raw: cần product + số bộ, luôn hỏi xác nhận", () => {
+  assert.deepStrictEqual(CLA.check({ action: "queue_raw", items: [{ product: "AeriSoft", set: 40 }] }).mode, "confirm");
+  assert.ok(CLA.check({ action: "queue_raw", items: [{ product: "AeriSoft" }] }).error);
+  assert.ok(CLA.check({ action: "queue_raw", items: [] }).error);
 });

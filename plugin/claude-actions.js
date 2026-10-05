@@ -55,6 +55,16 @@ var CLA = (function () {
       }
       return { mode: 'confirm' };
     },
+    // Xếp việc xuất RAW vào hàng đợi nhiều project (từ ảnh / tin Slack "Beat cuts to export").
+    // items: [{product, set, idxs?}] — plugin map sản phẩm → project đã mở trước đó; luôn qua thẻ xác nhận.
+    queue_raw: function (a) {
+      if (!Array.isArray(a.items) || !a.items.length) return { error: 'thiếu items' };
+      for (var i = 0; i < a.items.length; i++) {
+        var it = a.items[i] || {};
+        if (!String(it.product || '').trim() || !/^\d+$/.test(String(it.set || ''))) return { error: 'mỗi dòng cần product và set (số bộ)' };
+      }
+      return { mode: 'confirm' };
+    },
     // Plugin tự quét: voice "N.x - …" nằm sai bin / ngoài "Voice Over / Nx" → thẻ xem trước.
     fix_voice_bins: function () { return { mode: 'confirm' }; },
     // Nhân bản sequence sang ratio khác (tab Resize). items: ref "<bin> ▸ <tên sequence>";

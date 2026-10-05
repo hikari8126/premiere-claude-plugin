@@ -5056,3 +5056,14 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 .cd-askRow { display: flex; align-items: center; margin: 4px 0 6px; }
 .cd-askIn { flex: 1 1 auto; min-width: 0; margin-right: 6px; }
 .cd-sgWhy { margin: 3px 0 4px; line-height: 1.45; }
+
+/* Ảnh đính ở ô lệnh tab Claude (dán ra đường dẫn → chip) */
+.cl-attach { display: flex; flex-wrap: wrap; padding: 4px 8px 0; }
+.cl-attChip { display: flex; align-items: center; font-size: 10.5px; color: var(--text); background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border); border-radius: 10px; padding: 2px 4px 2px 8px; margin: 0 4px 4px 0; max-width: 220px; }
+.cl-attName { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.cl-attX { margin-left: 4px; padding: 0 4px; color: var(--text-dim); cursor: pointer; }
+.cl-attBad { border-color: #c0605a; color: #f0a39d; }
+.cl-clip { flex: 0 0 auto; width: 28px; height: 36px; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; opacity: 0.75; }
+.cl-clip:hover { opacity: 1; }

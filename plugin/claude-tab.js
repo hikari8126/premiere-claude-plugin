@@ -494,7 +494,40 @@
     return { cls: 'is-ask', text: what };
   }
 
+  // Xếp RAW vào hàng đợi (từ ảnh / tin Slack NAV): sản phẩm → project đã mở trước đó (CLATT.matchProject).
+  function askQueueRaw(entry, rec, idx, a) {
+    var row = addAct(entry, 'is-ask', '');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    var projects = (window.ClaudeDash && window.ClaudeDash.projects()) || [];
+    var lines = a.items.map(function (it) {
+      var idxs = Array.isArray(it.idxs) ? it.idxs.map(Number).filter(function (n) { return n >= 0; }) : [];
+      var vids = idxs.length ? idxs.map(function (n) { return it.set + '.' + n; }).join(', ') : 'cả bộ';
+      var pj = CLATT.matchProject(projects, it.product);
+      var name = it.product + ' · bộ ' + it.set + ' · ' + vids + (it.note ? ' · ' + it.note : '');
+      if (!pj) return { name: name, sub: 'chưa thấy project "' + it.product + '" — mở project đó một lần trong Premiere rồi thử lại', bad: true };
+      return { name: name, sub: '→ ' + pj.name + '.prproj · ' + pj.path.split('/').slice(-4, -1).join(' / '), q: { path: pj.path, set: String(it.set), idxs: idxs } };
+    });
+    var n = lines.filter(function (l) { return !l.bad; }).length;
+    row.textContent = n ? 'Xếp ' + n + ' việc xuất RAW (' + (a.mode || 'both') + ') vào hàng đợi? Bấm dòng để bỏ chọn.' : 'Không xếp được việc RAW nào.';
+    save('is-ask', row.textContent);
+    setClawd('idle', 'Chờ bro xác nhận');
+    pickList(box, lines, function (k) { return 'Xếp ' + k + ' việc'; }, function (sel) {
+      var added = 0;
+      sel.forEach(function (l) { if (window.ClaudeDash.queueRaw(l.q.path, l.q.set, l.q.idxs, a.mode)) added++; });
+      learnAct(a);
+      row.className = 'cl-act is-ok';
+      row.textContent = 'Đã xếp ' + added + ' việc RAW vào hàng đợi' + (added < sel.length ? ' (' + (sel.length - added) + ' việc đã có sẵn)' : '') + ' — chạy ở Bảng điều khiển › Hàng đợi.';
+      save('is-ok', row.textContent);
+      setClawd('done', 'Đã xếp hàng đợi', 'is-done');
+    }, function () { row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua — không xếp RAW'; save('is-skip', row.textContent); setClawd('idle'); });
+    return { cls: 'is-ask', text: row.textContent };
+  }
+
   function askConfirm(entry, rec, idx, a) {
+    if (a.action === 'queue_raw') return askQueueRaw(entry, rec, idx, a);
     if (a.action === 'move_items' || a.action === 'fix_voice_bins') return askMoves(entry, rec, idx, a);
     if (a.action === 'resize') return askResize(entry, rec, idx, a);
     if (a.action === 'rawcut') return askRaw(entry, rec, idx, a);
@@ -573,16 +606,66 @@
 
   // opts: {text, mode, via:'button'|'flow'} — bấm nút / bước quy trình gửi thẳng, không qua ô lệnh.
   // Trả Promise → rec của lệnh khi xong (quy trình chờ để chạy bước tiếp).
+  // ── Ảnh đính (cl-attach.js): dán ảnh / file ảnh vào ô lệnh ra ĐƯỜNG DẪN → chip 📎; nút 📎 chọn file ──
+  var attach = [];                                      // [{path, ok}]
+  var attachEl = $('clAttach');
+  function renderAttach() {
+    if (!attachEl) return;
+    attachEl.innerHTML = '';
+    attachEl.hidden = !attach.length;
+    attach.forEach(function (a, i) {
+      var c = document.createElement('div');
+      c.className = 'cl-attChip' + (a.ok === false ? ' cl-attBad' : '');
+      var n = document.createElement('span');
+      n.className = 'cl-attName';
+      n.textContent = '📎 ' + CLATT.baseName(a.path) + (a.ok === false ? ' (không thấy file)' : '');
+      var x = document.createElement('span');
+      x.className = 'cl-attX'; x.setAttribute('role', 'button'); x.textContent = '×';
+      x.addEventListener('click', function () { attach.splice(i, 1); renderAttach(); });
+      c.appendChild(n); c.appendChild(x);
+      attachEl.appendChild(c);
+    });
+  }
+  function addAttach(paths) {
+    paths.forEach(function (p) {
+      if (attach.some(function (a) { return a.path === p; }) || attach.length >= 5) return;
+      var a = { path: p, ok: null };
+      attach.push(a);
+      fetch(BRIDGE_URL + '/fs/exists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: p }) })
+        .then(function (r) { return r.json(); }).then(function (r) { if (r && r.ok === true && r.exists === false) { a.ok = false; renderAttach(); } })
+        .catch(function () {});
+    });
+    renderAttach();
+  }
+  input.addEventListener('input', function () {
+    if (!/\.(png|jpe?g|webp|gif|heic)/i.test(input.value)) return;
+    var ex = CLATT.extract(input.value);
+    if (!ex.paths.length) return;
+    input.value = ex.text; resizeInput();
+    addAttach(ex.paths);
+  });
+  var clipBtn = $('clClip');
+  if (clipBtn) clipBtn.addEventListener('click', async function () {
+    try {
+      var fs2 = require('uxp').storage.localFileSystem;
+      var fsel = await fs2.getFileForOpening({ allowMultiple: true, types: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'heic'] });
+      var list = Array.isArray(fsel) ? fsel : (fsel ? [fsel] : []);
+      addAttach(list.map(function (f) { return f.nativePath; }).filter(CLATT.isImage));
+    } catch (e) { console.warn('[claude-tab] chọn ảnh:', e && e.message); }
+  });
+
   function send(opts) {
     opts = opts || {};
     var cmd = String(opts.text != null ? opts.text : (input.value || '')).trim();
+    var pics = opts.text == null ? attach.filter(function (a) { return a.ok !== false; }).map(function (a) { return a.path; }) : [];
+    if (!cmd && pics.length) cmd = 'Đọc ảnh này giúp mình.';
     if (!cmd || busy || (flow && opts.via !== 'flow')) return Promise.resolve(null);
-    if (opts.text == null) { input.value = ''; resizeInput(); }
+    if (opts.text == null) { input.value = ''; resizeInput(); attach = []; renderAttach(); }
     var doneCb, donePromise = new Promise(function (r) { doneCb = r; });
     if (!opts.via) learnCmd(cmd, CLC.vars(seqNameNow()));
 
     showView('log');
-    var entry = makeEntry(cmd, false), sentMode = opts.mode || mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
+    var entry = makeEntry(cmd + (pics.length ? '  📎 ' + pics.map(CLATT.baseName).join(', ') : ''), false), sentMode = opts.mode || mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
     setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
     entry.reply.textContent = sentMode === 'free' ? 'Đang tìm hiểu…' : 'Đang hiểu ý…';
@@ -699,7 +782,8 @@
       var pp = got[0], snap = got[1], learn = CLSTORE.learn();
       if (busy && busy.aborted) return;
       xhr.send(JSON.stringify({
-        messages: CLLOG.toMessages(history).concat([{ role: 'user', content: cmd }]),
+        messages: CLLOG.toMessages(history).concat([{ role: 'user', content: pics.length
+          ? [{ type: 'text', text: cmd }].concat(pics.map(function (p) { return { type: 'image', path: p }; })) : cmd }]),
         mode: sentMode,
         project: snap || undefined,
         projectPath: pp || undefined,

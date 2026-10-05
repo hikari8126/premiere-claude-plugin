@@ -22,6 +22,13 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
     Đề xuất chuyển item sang bin khác. item = NGUYÊN chuỗi "<bin> ▸ <tên>" lấy từ kết quả tool
     list_bin / find_items (không tự gõ lại); to = bin đích, các cấp nối " / " (bin chưa có sẽ được tạo).
     Plugin hiện bảng xem trước, bro tick rồi bấm Chuyển mới chạy — nói rõ là đã đề xuất, chưa chuyển.
+- queue_raw {items: [{product, set, idxs?, note?}], mode?}
+    Xếp việc XUẤT RAW (beat cut) vào hàng đợi nhiều project. Hay dùng khi bro dán ẢNH / tin Slack
+    "Beat cuts to export — N NAVs released" (bảng Product code | Released | Content Owner | …): đọc bảng,
+    gom theo sản phẩm + bộ. product = đúng chữ cột Product code (vd "AeriSoft"); set = số bộ (vd 40);
+    idxs = số video [0,1,2] nếu bảng/tin cho biết, không rõ thì bỏ trống (= cả bộ); note = ghi chú ngắn
+    (vd "3 NAV · released 3 Oct"). Không suy ra được số bộ thì HỎI bro, đừng đoán. mode: both (mặc định) | source | render.
+    Plugin map sản phẩm → project bro đã mở trước đó, hiện thẻ xem trước, bro bấm Xếp mới thêm vào hàng đợi.
 - fix_voice_bins {}
     Plugin tự soát cả project: voice có số phiên bản ("40.0 - <tên voice>") nằm sai bin / ngoài bin
     chuẩn → bảng xem trước để chuyển về "Voice Over / 40x". Dùng khi bro hỏi đúng việc này.

@@ -98,7 +98,9 @@
     </div>
     <!-- [ô lệnh] [gửi] — cùng cao (nút lệnh / quy trình nằm ở bảng điều khiển). Ô lệnh theo kiểu Voice Gen: div ẩn
          (cl-sizer) quyết định chiều cao, textarea phủ lên (UXP không chịu height của textarea). -->
+    <div class="cl-attach" id="clAttach" hidden></div>
     <div class="cl-input">
+      <div class="cl-clip" id="clClip" role="button" aria-label="Đính ảnh">📎</div>
       <div class="cl-field" id="clField">
         <div class="cl-sizer" id="clSizer" aria-hidden="true"></div>
         <textarea id="message-input" rows="1" spellcheck="false" placeholder="Gõ lệnh… (Enter để gửi)"></textarea>
@@ -2109,6 +2111,7 @@
 <script src="binset-core.js"></script>
 <script src="flow-engine.js"></script>
 <script src="cl-fix.js"></script>
+<script src="cl-attach.js"></script>
 <script src="act-log.js"></script>
 <script src="cl-custom.js"></script>
 <script src="main.js"></script>

@@ -123,7 +123,10 @@ app.post('/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const { messages = [], timelineContext, model, apiKey, voiceContext } = req.body;
+  const { timelineContext, model, apiKey, voiceContext } = req.body;
+  // Ảnh đính theo ĐƯỜNG DẪN (tab Claude: dán ảnh vào ô lệnh ra đường dẫn file — UXP không kéo thả được)
+  // → đọc file thành base64 như ảnh thường. HEIC đổi sang JPEG bằng sips (Claude không đọc HEIC).
+  const messages = (Array.isArray(req.body.messages) ? req.body.messages : []).map(chatImagePaths);
   // mode: 'command' (Lệnh — giao việc, trả lời ngắn) | 'free' (Hỏi tự do — research).
   // projectPath: .prproj đang mở → Claude được đọc thư mục project + thư mục sản phẩm.
   const opts = { mode: req.body.mode === 'free' ? 'free' : 'command', projectPath: req.body.projectPath || '',
@@ -143,6 +146,31 @@ app.post('/chat', async (req, res) => {
     await chatViaCLI(req, res, messages, timelineContext, voiceContext, opts);
   }
 });
+
+function chatImagePaths(m) {
+  if (!m || !Array.isArray(m.content)) return m;
+  const content = [];
+  for (const p of m.content) {
+    if (!p || p.type !== 'image' || !p.path) { content.push(p); continue; }
+    let file = String(p.path);
+    const ext = (file.split('.').pop() || '').toLowerCase();
+    try {
+      if (!path.isAbsolute(file) || !/^(png|jpe?g|webp|gif|heic)$/.test(ext)) throw new Error('không phải ảnh');
+      if (ext === 'heic') {
+        const out = path.join(os.tmpdir(), 'cl-heic-' + Date.now() + '.jpg');
+        require('child_process').execFileSync('/usr/bin/sips', ['-s', 'format', 'jpeg', file, '--out', out], { stdio: 'ignore', timeout: 20000 });
+        file = out;
+      }
+      const st = fs.statSync(file);
+      if (st.size > 8 * 1024 * 1024) throw new Error('ảnh quá 8MB');
+      const mt = { jpg: 'image/jpeg', jpeg: 'image/jpeg', heic: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[ext];
+      content.push({ type: 'image', mediaType: mt, data: fs.readFileSync(file).toString('base64'), name: path.basename(String(p.path)) });
+    } catch (e) {
+      content.push({ type: 'text', text: '[ảnh "' + path.basename(String(p.path)) + '" không đọc được: ' + e.message + ']' });
+    }
+  }
+  return Object.assign({}, m, { content });
+}
 
 // ── Convert plugin message format to Anthropic SDK content blocks ────────
 // Plugin sends: { role, content: string | [{type:'text',text}|{type:'image',mediaType,data,name}] }

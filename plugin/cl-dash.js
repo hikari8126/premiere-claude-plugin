@@ -1027,6 +1027,19 @@
   if (back) back.addEventListener('click', function () { T.showView('dash'); });
   CLSTORE.onChange(function () { render(); });
 
-  window.ClaudeDash = { render: render, openSheet: openSheet };
+  // Xếp RAW từ tab Claude (action queue_raw): dùng quy trình RAW dựng sẵn (chỉ khối Xuất RAW); chưa có thì tạo.
+  function queueRaw(path, set, idxs, mode) {
+    var d = CLSTORE.get();
+    var b = d.buttons.filter(function (x) { return x.kind === 'flow' && x.steps.length && x.steps.every(function (s) { return s.type === 'raw_export' || s.type === 'rawcut_export'; }); })[0];
+    if (!b) {
+      d.buttons.push({ name: 'RAW', kind: 'flow', steps: [{ type: 'raw_export', src: { k: 'base' }, mode: mode || 'both', auto: true }] });
+      CLSTORE.set(d);
+      b = CLSTORE.get().buttons.filter(function (x) { return x.name === 'RAW' && x.kind === 'flow'; })[0];
+    }
+    var ok = queueAdd(path, b, set, idxs, '');
+    render();
+    return ok;
+  }
+  window.ClaudeDash = { render: render, openSheet: openSheet, queueRaw: queueRaw, projects: projects };
   render();
 })();
