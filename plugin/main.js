@@ -1091,8 +1091,9 @@ function showPluginUpdateBanner(latestVersion, downloadUrl, notes) {
   if (notesEl) {
     var note = String(notes || '').trim();
     // Dòng "CẦN BRIDGE …" hay nằm cuối ghi chú → cắt 260 ký tự là mất (S4). Kéo lên đầu.
-    var need = note.match(/(?:CẦN|KHÔNG cần)[^.;]*BRIDGE[^.;]*/i);
-    if (need) note = '⚠ ' + need[0].trim() + ' · ' + note.replace(need[0], '').replace(/\s+([.;])/g, '$1').trim();
+    // Số version "3.21" có dấu chấm → cho phép ".<số>" trong câu (5.19.0 cắt thành "CẦN BRIDGE APP 3").
+    var need = note.match(/(?:CẦN|KHÔNG cần)(?:[^.;]|\.\d)*BRIDGE(?:[^.;]|\.\d)*/i);
+    if (need) note = '⚠ ' + need[0].trim() + ' · ' + note.replace(need[0], '').replace(/\s+([.;])(?=\s|$)/g, '$1').replace(/\.{2,}/g, '.').trim();
     if (note.length > 260) note = note.slice(0, 257) + '…';
     notesEl.textContent = note ? '✦ ' + note : '';
     notesEl.hidden = !note;
