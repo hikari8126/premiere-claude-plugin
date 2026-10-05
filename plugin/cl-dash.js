@@ -434,20 +434,7 @@
         }
       }
 
-      // Nền tảng đã cố định trong quy trình (GG / PIN…) — không chọn lại ở phiếu chạy (user 2026-10-05).
-      if (false) {
-        var opts = [];
-        b.steps.forEach(function (s) { if (s.platform) CLC.slotOptions(s, 'platform').forEach(function (o) { if (opts.indexOf(o.value) < 0) opts.push(o.value); }); });
-        var ps = section('Nền tảng');
-        var pr = el('div', 'cd-seg');
-        opts.forEach(function (p) {
-          var c = el('div', 'cd-segOpt' + (p === st.platform ? ' is-on' : ''), p);
-          c.setAttribute('role', 'button');
-          c.addEventListener('click', function () { st.platform = p; draw(); });
-          pr.appendChild(c);
-        });
-        ps.appendChild(pr);
-      }
+      // Nền tảng cố định trong quy trình (GG / PIN…) — phiếu chạy không chọn lại (user 2026-10-05).
 
       var sets = groupSets();
       var setText = sets.length ? sets.map(function (g) { return g.set; }).join(', ') : (v['bộ'] || '?');
