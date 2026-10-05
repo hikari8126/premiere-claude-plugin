@@ -5017,7 +5017,7 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 /* Thẻ "Xong" tab RAW — Clawd ăn mừng (rawcut.js showDone) */
 .rc-done { display: flex; align-items: center; margin-bottom: 8px; padding: 6px 10px 6px 6px; border-radius: 10px;
   border: 1px solid #D97757; background: rgba(217,119,87,0.10); }
-.rc-done-clawd { flex: 0 0 auto; width: 64px; height: 48px; margin-right: 8px; }
+.rc-done-clawd { flex: 0 0 auto; width: 72px; height: 54px; margin-right: 8px; }
 .rc-done-body { flex: 1 1 auto; min-width: 0; }
 .rc-done-title { font-size: 13px; font-weight: 700; color: #f6c2ad; }
 .rc-done-sub { font-size: 11px; color: var(--text-dim, #9a9a9a); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
