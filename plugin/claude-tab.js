@@ -788,6 +788,7 @@
 
   // ── Quy trình: chạy lần lượt các bước, bước cần xác nhận thì chờ bro bấm ─────
   var flow = null;   // { aborted, learn }
+  var lastFlowStopped = false;
   function waitAsk(rec, idx) {
     return new Promise(function (res) {
       var t = setInterval(function () {
@@ -902,6 +903,7 @@
       if (typeof refreshTimeline === 'function') refreshTimeline();
     }
     if (stopped) { addAct(entry, 'is-skip', stopped); rec.acts.push({ cls: 'is-skip', text: stopped }); }
+    lastFlowStopped = !!stopped;                   // phiếu chạy nhiều bộ: dừng thì không chạy bộ sau
     var bad = rec.acts.some(function (a) { return a.cls === 'is-error'; });
     setClawd(bad ? 'fail' : 'done', bad ? 'Quy trình có bước lỗi' : 'Xong quy trình', bad ? 'is-error' : 'is-done');
     history = CLLOG.pushHistory(history, rec);
@@ -974,7 +976,7 @@
     if (v === 'log') { syncEmpty(); scrollEnd(); }
   }
   window.ClaudeTab = {
-    showView: showView, runFlow: runFlow, busy: function () { return !!(busy || flow); },
+    showView: showView, runFlow: runFlow, flowStopped: function () { return lastFlowStopped; }, busy: function () { return !!(busy || flow); },
     history: function () { return history; }, seqName: seqNameNow, fill: fill,
     saveSuggest: function (sg) { shownSuggest[sg.key] = 1; },
     declineSuggest: function (sg) { CLSTORE.setHabits(CLC.decline(CLSTORE.habits(), sg.key)); }

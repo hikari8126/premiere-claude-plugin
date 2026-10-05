@@ -4874,3 +4874,16 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .rc-done-act { flex: 0 0 auto; display: flex; align-items: center; }
 .rc-done-x { margin-left: 8px; padding: 2px 6px; color: #9a9a9a; cursor: pointer; border-radius: 4px; }
 .rc-done-x:hover { color: #D97757; }
+/* Phiếu chạy: danh sách video đích + thêm theo bộ / vid */
+.cd-tgt { display: flex; align-items: baseline; padding: 4px 0; border-bottom: 1px solid #262626; }
+.cd-tgtName { flex: 0 0 auto; font-size: 12px; color: #a6e2c8; margin-right: 8px; min-width: 56px; }
+.cd-x { flex: 0 0 auto; color: #777; cursor: pointer; padding: 0 4px; }
+.cd-x:hover { color: #f87171; }
+.cd-addRow { margin-top: 8px; }
+.cd-addBox { margin-left: 0; }
+.cd-full { flex: 1 1 100%; margin-top: 4px; }
+.cd-vidBox { flex-direction: column; align-items: stretch; padding-bottom: 6px; }
+.cd-search { margin: 0 0 6px; }
+.cd-vidList { max-height: 220px; overflow-y: auto; }
+.cd-vidFoot { display: flex; justify-content: flex-end; margin-top: 6px; }
+.cu-chip.cd-sel { background: #33406a; border-color: #8aa4f0; color: #e6ecff; font-weight: 600; }
