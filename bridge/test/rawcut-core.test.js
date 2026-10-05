@@ -149,4 +149,9 @@ if (py.ok && ff.status === 0) {
   assert.deepStrictEqual(rws.map(r => [r.tlIn, r.tlOut]), [[0, 25], [25, 50]]);
 }
 
+// cleanChosen: bỏ cờ `true` lưu nhầm (lỗi ≤5.15.0), giữ đường dẫn tuyệt đối
+assert.deepStrictEqual(RCC.cleanChosen({ '/a.prproj': true, '/b.prproj': 'true', '/c.prproj': '/Volumes/X/Out', '/d.prproj': '' }),
+  { '/c.prproj': '/Volumes/X/Out' });
+assert.deepStrictEqual(RCC.cleanChosen(null), {});
+
 console.log('✓ rawcut-core');

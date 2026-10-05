@@ -3,6 +3,13 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+
+## Hotfix (chưa gắn version) — 2026-10-05 · RAW: thư mục xuất "true"
+
+- **Lỗi:** chọn thư mục xuất bằng "Đổi thư mục" xong thì mọi lần mở lại tab RAW báo *"Thư mục đã chọn cho project này, true, không có ở đó…"*, nút XUẤT bị khoá.
+- **Nguyên nhân:** `onChooseFolder` lưu `r.chosen || p`, mà `/rawcut/dest` trả `chosen: true` (cờ "đang dùng thư mục chọn tay", không phải đường dẫn) → lưu chữ `true` thay cho đường dẫn; lần sau gửi `chosen: "true"` lên bridge.
+- **Sửa:** lưu đúng đường dẫn đã chọn; khi đọc prefs bỏ mọi giá trị không phải đường dẫn tuyệt đối (`RCC.cleanChosen`) → máy đã dính lỗi tự về thư mục tự nhận, không cần thao tác. Không cần Bridge mới.
+
 ## v5.15.0 / bridge app 3.18 (server 1.22.0) — 2026-10-02
 
 > Không cần Bridge mới (vẫn Bridge app 3.18; dùng `/watch/browse` có từ bridge 1.16).
