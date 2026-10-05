@@ -3,6 +3,24 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+
+## v5.18.0 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Tab Claude: khối đơn + khối Nền tảng + NAV
+
+> Chỉ cập nhật plugin — Bridge giữ 3.20.
+
+### ✨ Quy trình ráp bằng khối đơn (user: "dựng bin thì chỉ dựng bin")
+- `plugin/flow-engine.js` (FLE, thuần + test): **Nền tảng · Tạo bin · Tạo sequence · Nhân bản · Resize · Chuyển vào bin · Xuất RAW**; mỗi khối một việc, chạy cho từng video, khối sau lấy "kết quả bước N". Lập kế hoạch trước (kết quả ảo để nối chuỗi) → phiếu chạy hiện tên / bin video đầu mỗi bước, đã có / lỗi.
+- **Khối Nền tảng** (FB tạo mới / FB resize / GG / PIN / APP): các khối sau mặc định "theo nền tảng", tự học từ bộ trước — GG: bin, bản sao `{bộ}.{số}`, bản resize (4x5 GG + 1x1 GG hay 4x5 FB tuỳ member), **mọi khung `GG <loại>`**; PIN: bin `Order` đúng định dạng ngày đơn mới nhất + 2:3; APP: bin + khung AppLovin; FB resize 9:16⇄4:5 không cần bin. Vẫn đổi được sang mẫu tự gõ (`{bộ} {số} {SP} {CO} {ED} {ngày}`).
+- Bảng setting từng khối trong trình ráp; danh sách khối có mô tả.
+- Quy trình dựng sẵn viết lại theo khối Nền tảng: **NAV · FB · GG · PIN · APP · RAW** (quy trình tự ráp giữ nguyên).
+
+### ✨ NAV
+- Phiếu chỉ cần **số bộ** (tự điền bộ gần nhất + 1, sai thì gõ lại) + **Khung**: *Theo bộ cũ* (chép cài đặt video cùng số bộ trước) | *Tự chọn* (bộ frame 9:16 / 4:5 từng video, ±video, tối thiểu 1 video 9:16, cài đặt mặc định project). Tạo bin + sequence rỗng tên học bộ trước (`ResizeAPI.makeSequence`). fps theo mặc định project (UXP không đổi được sau khi tạo).
+- Thử thật: SonaShape bộ 36 → 1 bin `Sequence / FB / 36x` + `SonaShape vid36.0/.1/.2 [c.ha.ttdo] [hoang.vietnguyen]`, vid36.1 4:5 ✓.
+
+### Sửa
+- Phiếu chạy: không mời chạy khi mọi bước đã có; Tạo bin gom video chung bin thành một dòng; số bộ không mất khi bấm nút khác, xem trước + nút theo số mới khi gõ; bỏ chọn nền tảng ở phiếu; Resize tên chắc chắn thì kiểm trùng cả project (PIN ở đơn cũ).
+
 ## v5.17.0 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Tab Claude (Clawd)
 
 > Gộp các bản beta 5.16.0 (QC) → 5.17.0-beta.4 bên dưới + hotfix RAW thiếu AME. Cần Bridge app 3.20.
