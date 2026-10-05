@@ -915,11 +915,22 @@
     var box = document.createElement('div');
     box.className = 'cl-moves';
     entry.result.appendChild(box);
-    var lines = rows.map(function (r) {
+    // Tạo bin: nhiều video chung một bin → một dòng (tạo một lần, mọi video đó coi như xong)
+    var shown = rows;
+    if (st.type === 'bin_make') {
+      var byBin = {};
+      shown = [];
+      rows.forEach(function (r) {
+        if (r.error) { shown.push(r); return; }
+        if (byBin[r.bin]) { byBin[r.bin].also.push(r.key); return; }
+        r.also = [r.key]; byBin[r.bin] = r; shown.push(r);
+      });
+    }
+    var lines = shown.map(function (r) {
       var title = st.type === 'bin_make' ? r.bin : st.type === 'raw_export' ? (r.src ? r.src.name : 'vid' + r.key) : (r.name || ('vid' + r.key));
       if (r.error) return { name: 'vid' + r.key + ' · ' + (title || ''), sub: r.error, bad: true, r: r };
       if (r.exists && st.type !== 'raw_export') return { name: title, sub: 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') + ' — bỏ qua', bad: true, r: r };
-      var sub = st.type === 'bin_make' ? 'bin mới' : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + ' → ' + r.bin
+      var sub = st.type === 'bin_make' ? 'bin mới' + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + ' → ' + r.bin
               : st.type === 'seq_move' ? r.src.name + ' → ' + r.bin
               : st.type === 'raw_export' ? (st.mode === 'both' ? 'source + render' : st.mode)
               : 'từ ' + (r.src ? r.src.name : '?') + ' → ' + r.bin;
@@ -959,6 +970,7 @@
               try {
                 if (st.type === 'bin_make') {
                   if (!(await ppGetOrCreateBin(project, r.bin))) throw new Error('không tạo được bin');
+                  (r.also || []).forEach(function (k) { if (k !== r.key) ok.push(k); });
                 } else if (st.type === 'seq_make') {
                   await window.ResizeAPI.makeSequence(r.name, r.bin, { like: r.like ? await seqByRef(r.like.ref) : null, frame: r.frame || null });
                 } else if (st.type === 'seq_clone') {
@@ -983,8 +995,9 @@
           }
         } catch (e) { fail.push((e && e.message) || String(e)); }
         PTOOLS.invalidate();
-        if (fail.length) finish('is-error', label + ' — xong ' + ok.length + ', lỗi: ' + fail.join('; '), resultsOf(ok));
-        else finish('is-ok', label + ' — xong ' + ok.length, resultsOf(ok));
+        var done = st.type === 'bin_make' ? sel.length + ' bin' + (ok.length > sel.length ? ' (' + ok.length + ' video)' : '') : String(ok.length);
+        if (fail.length) finish('is-error', label + ' — xong ' + done + ', lỗi: ' + fail.join('; '), resultsOf(ok));
+        else finish('is-ok', label + ' — xong ' + done, resultsOf(ok));
       }, function () { finish('is-skip', label + ' — bỏ qua', resultsOf([])); });
       setClawd('idle', 'Chờ bro xác nhận');
     });
