@@ -3,11 +3,11 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
-## Hotfix (chưa gắn version) — 2026-10-05 · RAW: nhận sản phẩm khi project ở ngoài ổ chung + đường dẫn hiện tên sản phẩm
+## v5.15.2 / bridge 3.19 (server 1.22.1) — 2026-10-05 · RAW: nhận sản phẩm khi project ở ngoài ổ chung + đường dẫn hiện tên sản phẩm + thẻ "Xong"
 
 - **Lỗi 1:** project không nằm trên ổ chung (copy về máy…) → tab RAW báo "Project không nằm trong SAMX_WORKSPACE hay ổ chung nào nên không nhận ra sản phẩm", dù tên sequence ghi rõ sản phẩm (`FB9.16(O) GlamyCurve_v8.0_[…]`). Nguyên nhân: chỉ dò sản phẩm khi project nằm dưới "Shared drives"; còn lại bỏ qua hẳn.
 - **Sửa:** `localRoute` (bridge/rawcut-dest.js) — tìm SAMX_WORKSPACE trong Drive for desktop, dò tên sản phẩm trong đường dẫn project + tên sequence (so chữ+số nên `_`, khoảng trắng, dấu chấm đều là ranh giới); khớp một → tự nhận (`matchedBy: 'name'`), khớp nhiều cùng độ dài → menu chọn; không khớp → như cũ. **Cần Bridge mới.**
-- **Mới — thẻ "Xong" có Clawd ăn mừng:** xuất RAW xong không lỗi → thẻ ở đầu chân trang: Clawd nhảy + pháo giấy pixel (cảnh `party` mới trong `plugin/clawd-pixel.js`, mang từ nhánh tab Claude sang), "Xong! N clip · raw/ + edited/ · thời gian", nút **Mở thư mục**; tự ẩn sau 12s. Thông báo macOS giữ như cũ.
+- **Mới — thẻ "Xong" có Clawd ăn mừng:** xuất RAW xong không lỗi → thẻ ở đầu chân trang: Clawd cầm que pháo ăn mừng theo sticker — tay duỗi có khớp, que, tia vàng, nhún nhảy (cảnh `party` mới trong `plugin/clawd-pixel.js`, mang từ nhánh tab Claude sang), "Xong! N clip · raw/ + edited/ · thời gian", nút **Mở thư mục**; tự ẩn sau 12s. Thông báo macOS giữ như cũ.
 - **Lỗi 2:** chọn nhiều sequence, mỗi dòng chỉ hiện `…/Output/ACT/v35.0/edited` — mất tên sản phẩm (cắt 4 cấp cuối). Sửa: `RCC.shortDest` luôn giữ thư mục sản phẩm: `…/SonaShape/Output/ACT/v35.0/edited`.
 
 ## v5.15.1 / bridge 3.18 (server 1.22.0) — 2026-10-05 · RAW: thư mục xuất "true" (đã ship)
