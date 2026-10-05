@@ -3,6 +3,12 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## Hotfix (chưa gắn version) — 2026-10-05 · RAW: máy chưa cài Adobe Media Encoder
+
+- **Lỗi (máy đồng nghiệp):** Timeline Render (edited/) báo từng cut *"exportSequence lỗi: Internal error : AME is not installed"* — 17 dòng lỗi, không ra file nào.
+- **Nguyên nhân:** `EncoderManager.exportSequence` của Premiere UXP cần **Adobe Media Encoder cài trên máy** (lỗi do chính Premiere trả về, dù gọi `ExportType.IMMEDIATELY`). Máy có AME thì chạy bình thường. Source Render (raw/, ffmpeg) không cần AME.
+- **Sửa:** trước khi render hỏi `em.isAMEInstalled` — `false` thì dừng nửa edited/ ngay; lỗi cut đầu khớp "AME is not installed" cũng dừng luôn (không thử hết các cut). Báo một câu tiếng Việt: cài "Media Encoder" cùng năm với Premiere qua Creative Cloud, mở lại Premiere, hoặc chọn Source. Bridge `/rawcut/status` thêm `ame: {ok, apps}` → tab RAW cảnh báo ngay khi đọc nếu mode có Render (cần Bridge mới; bridge cũ vẫn có 2 lớp chặn ở plugin).
+
 ## v5.15.2 / bridge 3.19 (server 1.22.1) — 2026-10-05 · RAW: nhận sản phẩm khi project ở ngoài ổ chung + đường dẫn hiện tên sản phẩm + thẻ "Xong"
 
 - **Lỗi 1:** project không nằm trên ổ chung (copy về máy…) → tab RAW báo "Project không nằm trong SAMX_WORKSPACE hay ổ chung nào nên không nhận ra sản phẩm", dù tên sequence ghi rõ sản phẩm (`FB9.16(O) GlamyCurve_v8.0_[…]`). Nguyên nhân: chỉ dò sản phẩm khi project nằm dưới "Shared drives"; còn lại bỏ qua hẳn.

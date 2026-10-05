@@ -323,6 +323,9 @@ var RCP = (function () {
     try { return await renderRangesInner(o); }
     catch (e) { return { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', error: 'Render lỗi: ' + ((e && e.message) || e) }; }
   }
+  var AME_MISSING_RE = /AME is not installed|Media Encoder (is )?not installed/i;
+  var AME_MISSING_MSG = 'Máy chưa cài Adobe Media Encoder — Timeline Render (edited/) cần AME. Mở Creative Cloud → '
+    + 'cài "Media Encoder" cùng năm với Premiere, khởi động lại Premiere rồi xuất lại. Source Render (raw/) không cần AME.';
   async function renderRangesInner(o) {
     var res = { ok: false, renders: [], warnings: [], written: 0, failed: 0, stopped: false, refused: '', presetFallback: false, textHidden: 0, skipped: [] };
     var textItems = [];
@@ -428,6 +431,15 @@ var RCP = (function () {
           });
         }
       }
+      // Hỏi thẳng Premiere có AME không (isAMEInstalled — property hoặc hàm tuỳ bản). false = chắc chắn
+      // thiếu → dừng trước khi thử từng cut. Không đọc được → cứ render, lỗi cut đầu sẽ bắt lại.
+      var amePresent = null;
+      try {
+        var ai = em.isAMEInstalled;
+        if (typeof ai === 'function') ai = ai.call(em);
+        amePresent = await un(ai);
+      } catch (e) {}
+      if (amePresent === false) { res.noAme = true; res.error = AME_MISSING_MSG; return res; }
       try { if (has(em, 'launchEncoder')) await un(em.launchEncoder()); } catch (e) {}
 
       var total = o.ranges.length;
@@ -460,6 +472,13 @@ var RCP = (function () {
           got = await exportOne(em, seq, ET, file, preset, secs);
         }
         item.ms = Date.now() - t0;
+        // Máy không cài Adobe Media Encoder: exportSequence của UXP cần AME kể cả khi render ngay
+        // (IMMEDIATELY) → mọi cut đều lỗi y hệt. Dừng ở cut đầu, báo cách khắc phục một lần.
+        if (!got.ok && AME_MISSING_RE.test(got.error || '')) {
+          item.error = got.error; res.renders.push(item); res.failed++;
+          res.noAme = true; res.error = AME_MISSING_MSG;
+          break;
+        }
         item.ok = got.ok; item.file = file; item.bytes = got.size;
         if (!got.ok) { item.error = got.error; res.failed++; } else res.written++;
         res.renders.push(item);
