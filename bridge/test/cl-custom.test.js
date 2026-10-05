@@ -13,32 +13,58 @@ test("vars + fill: lấy bộ / sản phẩm từ tên sequence, báo biến thi
   assert.deepStrictEqual(CLC.fill("bộ {bộ}", CLC.vars("Sequence 01")).missing, ["bộ"]);
 });
 
-test("normalize bỏ mục hỏng, chuẩn hoá bước quy trình", () => {
+test("normalize bỏ mục hỏng; quy trình thiếu tham số bắt buộc không lưu được", () => {
   const d = CLC.normalize({ buttons: [
     { name: "A", prompt: "x" },
     { name: "", prompt: "x" },
-    { name: "B", kind: "flow", steps: [{ type: "resize", platform: "FB", ratios: ["4-5", "7-7"] }, { type: "rm -rf" }] },
-    { name: "C", kind: "flow", steps: [{ type: "bogus" }] },
+    { name: "B", kind: "flow", steps: [{ type: "resize", platform: "FB", ratios: ["4-5", "7-7"], seqs: [{ k: "idx", n: 0 }, { k: "idx", n: 0 }, { k: "idx", n: 2 }] }, { type: "rm -rf" }] },
+    { name: "C", kind: "flow", steps: [{ type: "resize", seqs: [{ k: "set" }] }] },
+    { name: "D", kind: "flow", steps: [{ type: "rawcut", mode: "both", scope: "set" }] },
   ], notes: "n" });
-  assert.deepStrictEqual(d.buttons.map(b => b.name), ["A", "B"]);
-  assert.deepStrictEqual(d.buttons[1].steps, [{ type: "resize", platform: "FB", ratios: ["4-5"], scope: "current" }]);
+  assert.deepStrictEqual(d.buttons.map(b => b.name), ["A", "B", "D"]);
+  assert.deepStrictEqual(d.buttons[1].steps, [{ type: "resize", platform: "FB", ratios: ["4-5"], seqs: [{ k: "idx", n: 0 }, { k: "idx", n: 2 }] }]);
+  assert.deepStrictEqual(d.buttons[2].steps[0].seqs, [{ k: "set" }]);              // dữ liệu bản cũ (scope)
   assert.strictEqual(CLC.fromLegacy([{ name: "Cũ", prompt: "mở RAW" }]).buttons[0].prompt, "mở RAW");
 });
 
-test("stepAction: scope bộ → ref các sequence gốc của bộ (bỏ bản đã resize)", () => {
+test("chip: ráp bước, thiếu tham số hiện chip đỏ; toggle sequence / ratio", () => {
+  let s = CLC.normStep({ type: "resize" });
+  assert.deepStrictEqual(CLC.problems(s), ["platform", "seqs"]);
+  assert.deepStrictEqual(CLC.chips(s).map(c => [c.text, !!c.missing]), [["Resize", false], ["nền tảng?", true], ["sequence?", true]]);
+  s = CLC.toggle(s, "platform", "GG");
+  s = CLC.toggle(s, "seqs", "idx:1");
+  s = CLC.toggle(s, "seqs", "idx:0");
+  s = CLC.toggle(s, "ratios", "4-5");
+  assert.deepStrictEqual(CLC.chips(s).map(c => c.text), ["Resize", "GG", "4:5", "vid .0", "vid .1"]);
+  assert.deepStrictEqual(CLC.problems(s), []);
+  s = CLC.toggle(s, "seqs", "set");                                              // cả bộ thay cho vid lẻ
+  assert.deepStrictEqual(s.seqs, [{ k: "set" }]);
+  assert.ok(CLC.slotOptions(CLC.normStep({ type: "bin_set" }), "seqs").every(o => /vid|Cả bộ/.test(o.text)));
+  assert.deepStrictEqual(CLC.slotOptions(s, "platform").map(o => o.value), ["GG", "FB", "PIN"]);
+});
+
+test("stepAction: vid lẻ / cả bộ → ref sequence gốc; dựng bin; chờ; chọn lúc chạy", () => {
   const items = [
     { name: "AeriSoft vid40.0 [a]", path: "Sequence / FB / 40x", isFolder: false, mediaType: "sequence" },
     { name: "AeriSoft vid40.1 [a]", path: "Sequence / FB / 40x", isFolder: false, mediaType: "sequence" },
     { name: "AeriSoft vid40.1 [a] 4x5 FB", path: "Sequence / FB / 40x", isFolder: false, mediaType: "sequence" },
+    { name: "AeriSoft GG dọc vid40.1 [a]", path: "Sequence / GG / 40x / 40.1", isFolder: false, mediaType: "sequence" },
     { name: "AeriSoft vid400.1", path: "x", isFolder: false, mediaType: "sequence" },
-    { name: "vid40.0.mp4", path: "x", isFolder: false, mediaType: "video" },
   ];
-  const r = CLC.stepAction({ type: "rawcut", mode: "both", scope: "set" }, { vars: CLC.vars(SEQ), items });
+  const ctx = { vars: CLC.vars(SEQ), items };
+  const r = CLC.stepAction({ type: "rawcut", mode: "both", seqs: [{ k: "set" }] }, ctx);
   assert.deepStrictEqual(r.action.items, ["Sequence / FB / 40x ▸ AeriSoft vid40.0 [a]", "Sequence / FB / 40x ▸ AeriSoft vid40.1 [a]"]);
-  const rz = CLC.stepAction({ type: "resize", platform: "FB", ratios: ["4-5"], scope: "current" }, { vars: CLC.vars(SEQ), items });
-  assert.deepStrictEqual(rz.action, { action: "resize", platform: "FB", ratios: ["4:5"], items: [] });
-  assert.match(CLC.stepAction({ type: "rawcut", mode: "both", scope: "set" }, { vars: CLC.vars("x"), items }).error, /không biết bộ/);
-  assert.deepStrictEqual(CLC.stepAction({ type: "prompt", text: "soát bộ {bộ}" }, { vars: CLC.vars(SEQ) }), { prompt: "soát bộ 40" });
+  const one = CLC.stepAction({ type: "resize", platform: "GG", ratios: [], seqs: [{ k: "idx", n: 1 }] }, ctx);
+  assert.deepStrictEqual(one.action.items, ["Sequence / FB / 40x ▸ AeriSoft vid40.1 [a]"]);
+  const cur = CLC.stepAction({ type: "resize", platform: "FB", ratios: ["4-5"], seqs: [{ k: "current" }] }, ctx);
+  assert.deepStrictEqual(cur.action, { action: "resize", platform: "FB", ratios: ["4:5"], items: [] });
+  assert.deepStrictEqual(CLC.stepAction({ type: "bin_set", platform: "GG", seqs: [{ k: "idx", n: 2 }] }, ctx).action, { action: "bin_set", platform: "GG", set: "40", idxs: [2] });
+  assert.deepStrictEqual(CLC.stepAction({ type: "bin_set", platform: "PIN", seqs: [{ k: "set" }] }, ctx).action.idxs, []);
+  assert.ok(CLC.stepAction({ type: "rawcut", mode: "render", seqs: [{ k: "pick" }] }, ctx).pick.refs.length === 2);
+  assert.match(CLC.stepAction({ type: "wait", text: "đặt video bộ {bộ}" }, ctx).wait, /bộ 40/);
+  assert.match(CLC.stepAction({ type: "rawcut", mode: "both", seqs: [{ k: "set" }] }, { vars: CLC.vars("x"), items }).error, /không biết bộ/);
+  assert.match(CLC.stepAction({ type: "resize", seqs: [] }, ctx).error, /chưa đủ/);
+  assert.deepStrictEqual(CLC.stepAction({ type: "prompt", text: "soát bộ {bộ}" }, ctx), { prompt: "soát bộ 40" });
 });
 
 test("xuất / nhập: gộp bỏ trùng, thay thế, file lạ báo lỗi", () => {
@@ -85,7 +111,7 @@ test("tự học: resize rồi RAW liền nhau 3 lần → gợi ý quy trình",
   const s = CLC.suggest(h, CLC.empty());
   assert.strictEqual(s.kind, "flow");
   assert.deepStrictEqual(s.steps.map(x => x.type), ["resize", "rawcut"]);
-  assert.strictEqual(s.steps[1].scope, "set");
+  assert.deepStrictEqual(s.steps[1].seqs, [{ k: "set" }]);
   assert.strictEqual(CLC.suggestName(s), "Resize FB → RAW");
 });
 

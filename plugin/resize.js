@@ -947,6 +947,27 @@
       if (!RSZ.PLATFORM_TARGETS[platform]) return Promise.resolve({ ok: false, error: 'nền tảng "' + platform + '" không có (GG / FB / PIN)' });
       return planResize(platform, wanted && wanted.length ? wanted : RSZ.PLATFORM_TARGETS[platform], seqs);
     },
+    // Khối "Dựng bin" (binset.js): nhân bản seq → đổi tên → vào bin (đường dẫn, tạo nếu thiếu).
+    // Có đồng hồ canh như resize: bước quá STEP_LIMIT_MS thì ném lỗi kèm tên bước.
+    cloneInto: async function (seq, name, binPathStr) {
+      var project = await getActiveProject();
+      var work = (async function () {
+        rzStep(name + ' · tạo bin ' + binPathStr);
+        var bin = await ppGetOrCreateBin(project, binPathStr);
+        if (!bin) throw new Error('không tạo được bin ' + binPathStr);
+        rzStep(name + ' · nhân bản');
+        var dup = await cloneSequence(project, seq);
+        if (!dup) throw new Error('không nhân bản được sequence');
+        rzStep(name + ' · đổi tên');
+        await renameSeq(project, dup, name);
+        rzStep(name + ' · chuyển bin');
+        await moveToBin(project, dup, bin, await binIdOf(bin));
+        return dup;
+      })();
+      var r = await withWatchdog(work.then(function (d) { return { dup: d }; }), { name: name });
+      if (r.dup) return r.dup;
+      throw new Error(r.error || 'lỗi không rõ');
+    },
     status: function () { return { busy: rszState.busy, step: rzStepNow.step, seconds: rzStepNow.since ? Math.round((Date.now() - rzStepNow.since) / 1000) : 0 }; },
     run: async function (platform, plan, onRow) {
       if (rszState.busy) throw new Error('tab Resize đang chạy lượt khác');

@@ -36,6 +36,7 @@ window.CLSTORE = CLSTORE;
   if (!page || !gear) return;
   var tab = $('tab-claude');
   var editing = null;       // bản nháp nút đang sửa {…, _new}
+  var pop = null;           // ô chip đang mở lựa chọn (trình ráp quy trình)
   var ioMode = '';          // '' | 'export' | 'import'
   var ioMsg = '';
   var pendingImport = '';
@@ -69,7 +70,7 @@ window.CLSTORE = CLSTORE;
   }
 
   function open() {
-    editing = null; ioMode = ''; ioMsg = '';
+    editing = null; pop = null; ioMode = ''; ioMsg = '';
     tab.classList.add('is-custom');
     page.hidden = false;
     render();
@@ -109,8 +110,8 @@ window.CLSTORE = CLSTORE;
     if (editing && editing._new) sec.appendChild(editor(d));
     if (!editing) {
       var add = el('div', 'cu-row-btns');
-      add.appendChild(btn('+ Nút lệnh', '', function () { editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
-      add.appendChild(btn('+ Quy trình', '', function () { editing = { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
+      add.appendChild(btn('+ Nút lệnh', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'prompt', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
+      add.appendChild(btn('+ Quy trình', '', function () { pop = null; editing = { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true }; render(); }));
       sec.appendChild(add);
     }
     sec.appendChild(el('div', 'cu-hint', 'Biến dùng trong lệnh: {bộ} {sequence} {sản phẩm} — lấy từ sequence đang mở (vd "vid40.0" → {bộ} = 40).'));
@@ -136,7 +137,7 @@ window.CLSTORE = CLSTORE;
       CLSTORE.set(d); render();
     }
     [['↑', function () { move(-1); }], ['↓', function () { move(1); }],
-     ['Sửa', function () { editing = JSON.parse(JSON.stringify(b)); render(); }]].forEach(function (t) {
+     ['Sửa', function () { pop = null; editing = JSON.parse(JSON.stringify(b)); render(); }]].forEach(function (t) {
       var x = el('div', 'cu-tool', t[0]); x.setAttribute('role', 'button'); x.addEventListener('click', t[1]); tools.appendChild(x);
     });
     var del = el('div', 'cu-tool', 'Xoá'); del.setAttribute('role', 'button');
@@ -177,26 +178,17 @@ window.CLSTORE = CLSTORE;
       pr.addEventListener('input', function () { e.prompt = pr.value; });
       box.appendChild(pr);
     } else {
-      if (!e.steps.length) box.appendChild(el('div', 'cu-hint', 'Chưa có bước. Thêm bước bên dưới — chạy lần lượt, bước nào cần xác nhận thì dừng chờ bro bấm.'));
-      e.steps.forEach(function (s, i) {
-        var r = el('div', 'cu-step');
-        r.appendChild(el('span', 'cu-stepN', (i + 1) + ''));
-        r.appendChild(el('span', 'cu-stepT', CLC.stepLabel(s)));
-        [['↑', -1], ['↓', 1]].forEach(function (t) {
-          var x = el('div', 'cu-tool', t[0]); x.setAttribute('role', 'button');
-          x.addEventListener('click', function () {
-            var j = i + t[1];
-            if (j < 0 || j >= e.steps.length) return;
-            var tmp = e.steps[i]; e.steps[i] = e.steps[j]; e.steps[j] = tmp; render();
-          });
-          r.appendChild(x);
-        });
-        var x = el('div', 'cu-tool', '✕'); x.setAttribute('role', 'button');
-        x.addEventListener('click', function () { e.steps.splice(i, 1); render(); });
-        r.appendChild(x);
-        box.appendChild(r);
-      });
-      box.appendChild(stepAdder(e));
+      if (!e.steps.length) box.appendChild(el('div', 'cu-hint', 'Ráp từng bước bằng khối: khối hành động (cam) + tham số (xanh dương) + sequence (xanh lá). Bước cần xác nhận thì khi chạy sẽ dừng chờ bro bấm.'));
+      e.steps.forEach(function (s, i) { box.appendChild(stepRow(e, s, i)); });
+      var addRow = el('div', 'cu-chipRow');
+      addRow.appendChild(chip('+ Khối hành động', 'add' + (pop && pop.step === 'new' ? ' is-open' : ''), function () { pop = pop && pop.step === 'new' ? null : { step: 'new' }; render(); }));
+      box.appendChild(addRow);
+      if (pop && pop.step === 'new') box.appendChild(popBox(CLC.STEP_TYPES.map(function (t) { return { value: t, text: CLC.SPEC[t].label }; }), function (v) {
+        e.steps.push(CLC.normStep({ type: v }));
+        var ns = e.steps[e.steps.length - 1], miss = CLC.problems(ns);
+        pop = miss.length ? { step: e.steps.length - 1, slot: miss[0] } : null;   // mở luôn ô bắt buộc đầu tiên
+        render();
+      }));
     }
 
     var err = el('div', 'cu-err');
@@ -205,6 +197,11 @@ window.CLSTORE = CLSTORE;
     acts.appendChild(btn('Lưu', 'cl-btn--primary', function () {
       var nb = CLC.normButton(e);
       if (!String(e.name || '').trim()) { err.textContent = 'Đặt tên nút trước.'; return; }
+      if (e.kind === 'flow') {
+        var badStep = -1;
+        e.steps.forEach(function (st, k) { if (badStep < 0 && CLC.problems(st).length) badStep = k; });
+        if (badStep >= 0) { err.textContent = 'Bước ' + (badStep + 1) + ' chưa đủ (chip viền đỏ).'; return; }
+      }
       if (!nb) { err.textContent = e.kind === 'flow' ? 'Quy trình cần ít nhất một bước.' : 'Nhập lệnh cho nút.'; return; }
       var dd = CLSTORE.get(), idx = -1;
       dd.buttons.forEach(function (b, i) { if (b.id === nb.id) idx = i; });
@@ -217,46 +214,76 @@ window.CLSTORE = CLSTORE;
     return box;
   }
 
-  function stepAdder(e) {
-    var wrap = el('div', 'cu-add');
-    var type = select([['resize', 'Resize'], ['rawcut', 'RAW'], ['fix_voice_bins', 'Soát bin voice'], ['open_tab', 'Mở tab'], ['prompt', 'Hỏi Claude (lệnh gõ tay)']], wrap._type || 'resize');
-    var params = el('div', 'cu-params');
-    var ctl = {};
-    function scopeSel() { return select([['current', 'Sequence đang chọn / mở'], ['set', 'Cả bộ {bộ}']], 'current'); }
-    function draw() {
-      params.innerHTML = ''; ctl = {};
-      var t = type.value;
-      if (t === 'resize') {
-        ctl.platform = select(CLC.PLATFORMS.map(function (p) { return [p, p]; }), 'FB');
-        ctl.ratio = select([['', 'Mọi ratio']].concat(CLC.RATIOS.map(function (r) { return [r, CLC.RATIO_LABEL[r]]; })), '');
-        ctl.scope = scopeSel();
-      } else if (t === 'rawcut') {
-        ctl.mode = select(CLC.RAW_MODES.map(function (m) { return [m, CLC.RAW_LABEL[m]]; }), 'both');
-        ctl.scope = scopeSel();
-      } else if (t === 'open_tab') {
-        ctl.tab = select(CLC.TABS.map(function (x) { return [x, CLC.TAB_LABEL[x]]; }), 'voicegen');
-      } else if (t === 'prompt') {
-        ctl.text = kb(el('input', 'cu-in'));
-        ctl.text.placeholder = 'vd: soát lại tên voice bộ {bộ}';
-      }
-      Object.keys(ctl).forEach(function (k) { params.appendChild(ctl[k]); });
+  // ── Trình ráp chip ────────────────────────────────────────────────────────
+  // pop = ô đang mở lựa chọn: {step: i | 'new', slot: 'type'|'platform'|…|'+'}
+  var MULTI = { ratios: 1, seqs: 1 };
+  function chip(text, cls, onClick) {
+    var c = el('div', 'cu-chip ' + (cls || ''), text);
+    c.setAttribute('role', 'button');
+    c.addEventListener('click', onClick);
+    return c;
+  }
+  function popBox(opts, onPick, multi) {
+    var p = el('div', 'cu-pop');
+    opts.forEach(function (o) {
+      p.appendChild(chip(o.text, (o.kind || 'par') + (o.on ? ' is-on' : ''), function () { onPick(o.value); }));
+    });
+    if (multi) p.appendChild(chip('Xong', 'done', function () { pop = null; render(); }));
+    return p;
+  }
+  function textPop(e, i, s) {
+    var p = el('div', 'cu-pop');
+    var inp = kb(el('input', 'cu-in'));
+    inp.placeholder = s.type === 'wait' ? 'vd: đặt video bộ {bộ} vào khung rồi bấm Tiếp tục' : 'vd: soát lại tên voice bộ {bộ}';
+    inp.value = s.text || '';
+    p.appendChild(inp);
+    p.appendChild(chip('OK', 'done', function () { e.steps[i] = CLC.normStep(Object.assign({}, s, { text: inp.value })); pop = null; render(); }));
+    return p;
+  }
+  function stepRow(e, s, i) {
+    var wrap = el('div', 'cu-stepBox');
+    var row = el('div', 'cu-chipRow');
+    row.appendChild(el('span', 'cu-stepN', (i + 1) + ''));
+    var miss = CLC.problems(s);
+    CLC.chips(s).forEach(function (c) {
+      var open = pop && pop.step === i && pop.slot === c.slot;
+      row.appendChild(chip(c.text, c.kind + (c.missing ? ' is-missing' : '') + (open ? ' is-open' : ''), function () {
+        pop = open ? null : { step: i, slot: c.slot }; render();
+      }));
+    });
+    if (CLC.addable(s).length) {
+      var openAdd = pop && pop.step === i && pop.slot === '+';
+      row.appendChild(chip('+', 'add' + (openAdd ? ' is-open' : ''), function () { pop = openAdd ? null : { step: i, slot: '+' }; render(); }));
     }
-    type.addEventListener('change', draw);
-    draw();
-    wrap.appendChild(type);
-    wrap.appendChild(params);
-    var err = el('div', 'cu-err');
-    wrap.appendChild(btn('+ Thêm bước', '', function () {
-      var t = type.value, s = { type: t };
-      if (t === 'resize') { s.platform = ctl.platform.value; s.ratios = ctl.ratio.value ? [ctl.ratio.value] : []; s.scope = ctl.scope.value; }
-      if (t === 'rawcut') { s.mode = ctl.mode.value; s.scope = ctl.scope.value; }
-      if (t === 'open_tab') s.tab = ctl.tab.value;
-      if (t === 'prompt') s.text = ctl.text.value;
-      var ns = CLC.normStep(s);
-      if (!ns) { err.textContent = t === 'prompt' ? 'Nhập lệnh cho bước.' : 'Bước chưa hợp lệ.'; return; }
-      e.steps.push(ns); render();
-    }));
-    wrap.appendChild(err);
+    var tools = el('span', 'cu-stepTools');
+    [['↑', -1], ['↓', 1]].forEach(function (t) {
+      tools.appendChild(chip(t[0], 'tool', function () {
+        var j = i + t[1];
+        if (j < 0 || j >= e.steps.length) return;
+        var tmp = e.steps[i]; e.steps[i] = e.steps[j]; e.steps[j] = tmp; pop = null; render();
+      }));
+    });
+    tools.appendChild(chip('✕', 'tool', function () { e.steps.splice(i, 1); pop = null; render(); }));
+    row.appendChild(tools);
+    wrap.appendChild(row);
+    if (miss.length) wrap.appendChild(el('div', 'cu-miss', 'Thiếu: ' + miss.map(function (k) { return { platform: 'nền tảng', seqs: 'sequence', mode: 'chế độ', tab: 'tab', text: 'lệnh' }[k] || k; }).join(', ')));
+    if (pop && pop.step === i) {
+      if (pop.slot === '+') {
+        wrap.appendChild(popBox(CLC.addable(s).map(function (a) { return { value: a.slot, text: a.text }; }), function (v) { pop = { step: i, slot: v }; render(); }));
+      } else if (pop.slot === 'text') {
+        wrap.appendChild(textPop(e, i, s));
+      } else {
+        var opts = CLC.slotOptions(s, pop.slot).map(function (o) { o.kind = pop.slot === 'seqs' ? 'seq' : pop.slot === 'type' ? 'act' : 'par'; return o; });
+        wrap.appendChild(popBox(opts, function (v) {
+          e.steps[i] = CLC.toggle(s, pop.slot, v);
+          if (!MULTI[pop.slot]) {                       // chọn một → mở ô bắt buộc kế tiếp (nếu còn)
+            var m = CLC.problems(e.steps[i]);
+            pop = m.length ? { step: i, slot: m[0] } : null;
+          }
+          render();
+        }, !!MULTI[pop.slot]));
+      }
+    }
     return wrap;
   }
 

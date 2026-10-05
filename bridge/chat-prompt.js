@@ -33,6 +33,12 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
     items = ref "<bin> ▸ <tên sequence>" (tìm bằng find_items / list_bin, loại "(sequence)");
     bỏ trống = sequence bro đang chọn ở Project panel / đang mở. Plugin hiện danh sách bản sẽ tạo
     (trùng tên thì bỏ qua), bro bấm Tạo mới chạy.
+- bin_set {platform, set?, idxs?}
+    Dựng bin + sequence chuẩn cho nền tảng GG hoặc PIN (FB không dùng). Với mỗi video 40.N: bin
+    "Sequence / GG / 40x / 40.N" gồm "40.N" (bản sao sequence FB gốc vid40.N), "40.N 4x5 FB" (resize
+    sang ratio còn lại) và bản đích "<SP> GG dọc|ngang|vuông vid40.N […]" nhân bản từ template hoặc từ
+    bộ gần nhất đã có. set = số bộ (bỏ trống = bộ của sequence đang mở); idxs = [0,1,2] chỉ làm vài
+    video, bỏ trống = cả bộ. Chỉ tạo khung, không đặt nội dung. Plugin hiện xem trước, bro bấm Tạo.
 - rawcut {mode, items?}
     Chuẩn bị tab RAW xuất từng cut của timeline ra file riêng (+ clips.csv, manifest.json):
     mode: source (cắt từ file gốc → <Sản phẩm>/Output/ACT/<vN>/raw/) · render (Premiere render từng

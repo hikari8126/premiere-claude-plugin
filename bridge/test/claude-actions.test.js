@@ -10,7 +10,7 @@ test("parse nhiều khối ```actions, bỏ khối JSON hỏng / phần tử kh�
 });
 
 test("danh sách action cho phép", () => {
-  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["autocut_load", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "rawcut", "resize", "voicegen_script", "voicegen_sfx"]);
+  assert.deepStrictEqual(CLA.ACTIONS.slice().sort(), ["autocut_load", "bin_set", "fix_voice_bins", "get_timeline_info", "move_items", "open_tab", "rawcut", "resize", "voicegen_script", "voicegen_sfx"]);
 });
 
 test("resize: nền tảng GG/FB/PIN, ratio chuẩn hoá về khoá tab Resize, luôn hỏi xác nhận", () => {

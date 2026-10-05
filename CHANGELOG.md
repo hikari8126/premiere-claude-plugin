@@ -3,6 +3,23 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.17.0-beta.2 / bridge server 1.24.0-beta.2 — 2026-10-05 (chưa release)
+
+### ✨ Trình ráp quy trình bằng chip (⚙ → + Quy trình)
+- Mỗi bước là một hàng chip: **khối hành động** (cam) + **tham số** (xanh dương) + **sequence** (xanh lá). Bấm chip để đổi, `+` để thêm ratio / sequence, ô bắt buộc còn thiếu viền đỏ đứt (chưa cho Lưu).
+- Khối hành động: Dựng bin, Resize, RAW, Soát bin voice, Mở tab, Hỏi Claude, **Chờ bro** (dừng tới khi bấm Tiếp tục — cho bước làm tay).
+- Khối sequence: `vid .N` (chọn nhiều, theo bộ đang mở), Cả bộ, Đang chọn / mở, **Chọn lúc chạy** (hiện danh sách tick).
+- Dữ liệu quy trình cũ (`scope`) tự chuyển sang dạng mới. Logic thuần trong `cl-custom.js` (`chips`, `slotOptions`, `toggle`, `problems`).
+
+### ✨ Khối "Dựng bin GG" (action `bin_set`, gõ được "dựng bin GG bộ 40")
+- Với mỗi video {bộ}.N: bin `Sequence / GG / {bộ}x / {bộ}.N`, `{bộ}.N` = bản sao sequence FB gốc, bản resize tài nguyên (**học theo bộ gần nhất**: AeriSoft `4x5 FB`, SonaShape `4x5 GG` + `1x1 GG`; chưa có thì `FB` ratio còn lại), bản đích `<SP> GG dọc|ngang|vuông vid{bộ}.N […]` nhân bản từ template (sau này) › bộ gần nhất có loại đó (giữ cách viết hoa) › chưa có thì báo.
+- Chỉ tạo khung — không đụng nội dung. Thẻ xem trước: tạo mới / đã có / chưa có nguồn, bấm dòng để bỏ chọn.
+- `plugin/binset-core.js` (BSC, thuần + test), `plugin/binset.js` (chạy), `ResizeAPI.cloneInto(seq, name, binPath)`.
+- PIN: chưa làm — project thật dùng bin theo đơn (`Sequence / PIN / Order …` + `Material`), khác GG.
+
+### 🐛 Resize treo
+- Quy trình "RS GG" đứng ở "Đã tạo 1/6": một lệnh API Premiere không trả về. Mỗi bước giờ có đồng hồ canh 60s → báo đúng bước + dừng lượt (`ResizeAPI.status()` để dò).
+
 ## v5.17.0-beta.1 / bridge server 1.24.0-beta.1 — 2026-10-03 (chưa release)
 
 > Tab Claude (Clawd) + tuỳ biến theo từng member + tự học. Cần bridge 1.24.0-beta.1 (ghi chú + quy ước project gửi kèm prompt; bridge cũ bỏ qua, các phần khác vẫn chạy).

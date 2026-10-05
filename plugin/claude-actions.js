@@ -72,6 +72,16 @@ var CLA = (function () {
       a.items = a.items || [];
       return { mode: 'confirm' };
     },
+    // Dựng bin GG / PIN cho bộ: bin "Sequence / GG / 40x / 40.N" + 40.N (bản sao FB gốc) + 40.N 4x5 FB
+    // + bản đích dọc/ngang/vuông (từ template / bộ gần nhất). set trống = bộ của sequence đang mở.
+    bin_set: function (a) {
+      if (['GG', 'PIN'].indexOf(a.platform) < 0) return { error: 'platform phải là GG hoặc PIN' };
+      if (a.set != null && a.set !== '' && !/^\d+$/.test(String(a.set))) return { error: 'set phải là số bộ, vd "40"' };
+      if (a.idxs != null && !Array.isArray(a.idxs)) return { error: 'idxs phải là danh sách số' };
+      a.set = a.set != null ? String(a.set) : '';
+      a.idxs = (a.idxs || []).map(Number).filter(function (n) { return n >= 0; });
+      return { mode: 'confirm' };
+    },
     // Chuẩn bị tab RAW (xuất từng cut). mode: source (raw/) | render (edited/) | both.
     rawcut: function (a) {
       if (['source', 'render', 'both'].indexOf(a.mode) < 0) return { error: 'mode phải là source, render hoặc both' };

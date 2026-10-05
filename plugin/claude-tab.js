@@ -376,10 +376,62 @@
     return { cls: 'is-ask', text: 'RAW ' + modeName };
   }
 
+  // Dựng bin GG / PIN: xem trước từng sequence sẽ tạo (đã có / chưa có nguồn hiện mờ) → Tạo.
+  function askBinSet(entry, rec, idx, a) {
+    var set = a.set || CLC.vars(seqNameNow())['bộ'];
+    var row = addAct(entry, 'is-run', 'Đang lập danh sách bin ' + a.platform + (set ? ' bộ ' + set : '') + '…');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    function fail(msg) { box.remove(); row.className = 'cl-act is-error'; row.textContent = msg; save('is-error', msg); setClawd('fail', 'Lỗi', 'is-error'); }
+    BINSET.plan(a.platform, set, a.idxs).then(function (p) {
+      if (!p.ok) return fail('Dựng bin: ' + p.error);
+      var lines = [];
+      p.rows.forEach(function (r) {
+        if (r.error) { lines.push({ name: set + '.' + r.idx, sub: r.error, bad: true }); return; }
+        var bin = r.bin.split(' / ').slice(-2).join(' / ');
+        lines.push(r.res1.exists ? { name: r.res1.name, sub: bin + ' — đã có', bad: true }
+                                 : { name: r.res1.name, sub: bin + ' — bản sao ' + r.src.name, obj: r.res1 });
+        lines.push(r.res2.exists ? { name: r.res2.name, sub: 'đã có', bad: true }
+                                 : { name: r.res1.name + ' ' + (r.res2.spec.ratios.length ? r.res2.spec.ratios.map(function (x) { return x.replace('-', 'x'); }).join(' + ') : 'resize') + ' ' + r.res2.spec.platform,
+                                     sub: r.res2.spec.from ? 'resize như bộ ' + r.res2.spec.from : 'resize sang ratio còn lại (9:16 ⇄ 4:5)', obj: r.res2 });
+        r.targets.forEach(function (t) {
+          if (t.exists) lines.push({ name: t.name, sub: 'đã có', bad: true });
+          else if (!t.from) lines.push({ name: t.name || (a.platform + ' ' + t.label), sub: 'chưa có template / bản cũ cho ' + a.platform + ' ' + t.label, bad: true });
+          else lines.push({ name: t.name, sub: t.from.kind === 'template' ? 'từ template' : 'từ bộ ' + t.from.set, obj: t });
+        });
+      });
+      var n = lines.filter(function (l) { return !l.bad; }).length, sm = BSC.summary(p);
+      row.className = 'cl-act is-ask';
+      row.textContent = n ? 'Dựng bin ' + a.platform + ' bộ ' + p.set + ': tạo ' + n + ' sequence' + (sm.missing ? ', ' + sm.missing + ' chưa có nguồn' : '') + '? Bấm dòng để bỏ chọn.'
+                          : 'Bin ' + a.platform + ' bộ ' + p.set + ' không còn gì để tạo.';
+      save('is-ask', row.textContent);
+      setClawd('idle', 'Chờ bro xác nhận');
+      pickList(box, lines, function (k) { return 'Tạo ' + k + ' sequence'; }, async function (sel) {
+        lines.forEach(function (l) { if (l.obj) l.obj.skip = sel.indexOf(l) < 0; });
+        setClawd('work', 'Đang dựng bin…');
+        learnAct(a);
+        row.className = 'cl-act is-run';
+        try {
+          var out = await BINSET.run(p.rows, function (text) { row.textContent = text; });
+          row.className = 'cl-act ' + (out.failed.length ? 'is-error' : 'is-ok');
+          row.textContent = 'Đã tạo ' + out.made + ' sequence trong bin ' + a.platform + ' bộ ' + p.set + (out.failed.length ? ' — lỗi: ' + out.failed.join('; ') : '');
+        } catch (e) { row.className = 'cl-act is-error'; row.textContent = 'Dựng bin lỗi: ' + e.message; }
+        save(row.className.replace('cl-act ', ''), row.textContent);
+        var bad = row.classList.contains('is-error');
+        setClawd(bad ? 'fail' : 'done', bad ? 'Có bước lỗi' : 'Xong', bad ? 'is-error' : 'is-done');
+      }, function () { row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua — không dựng bin'; save('is-skip', row.textContent); setClawd('idle'); });
+    }).catch(function (e) { fail('Dựng bin lỗi: ' + e.message); });
+    setClawd('think', 'Đang đọc project…');
+    return { cls: 'is-ask', text: 'Dựng bin ' + a.platform };
+  }
+
   function askConfirm(entry, rec, idx, a) {
     if (a.action === 'move_items' || a.action === 'fix_voice_bins') return askMoves(entry, rec, idx, a);
     if (a.action === 'resize') return askResize(entry, rec, idx, a);
     if (a.action === 'rawcut') return askRaw(entry, rec, idx, a);
+    if (a.action === 'bin_set') return askBinSet(entry, rec, idx, a);
     var lb = askLabel(a);
     var row = addAct(entry, 'is-ask', lb.q);
     var btns = document.createElement('div');
@@ -742,6 +794,35 @@
       }, 300);
     });
   }
+  function askWait(entry, rec, idx, text) {
+    var row = addAct(entry, 'is-ask', text);
+    var btns = document.createElement('div');
+    btns.className = 'cl-askBtns';
+    btns.innerHTML = '<div class="cl-btn cl-btn--primary" role="button">Tiếp tục</div><div class="cl-btn" role="button">Dừng quy trình</div>';
+    entry.result.appendChild(btns);
+    setClawd('idle', 'Chờ bro làm tay');
+    function done(ok) { btns.remove(); row.className = 'cl-act ' + (ok ? 'is-ok' : 'is-skip'); rec.acts[idx] = { cls: ok ? 'is-ok' : 'is-skip', text: text }; saveHistory(); }
+    btns.children[0].addEventListener('click', function () { done(true); });
+    btns.children[1].addEventListener('click', function () { done(false); });
+    scrollEnd();
+  }
+  // → Promise<[ref đã chọn]> | null (bỏ qua)
+  function askPick(entry, rec, idx, label, refs) {
+    return new Promise(function (resolve) {
+      var row = addAct(entry, 'is-ask', label + ': chọn sequence');
+      var box = document.createElement('div');
+      box.className = 'cl-moves';
+      entry.result.appendChild(box);
+      setClawd('idle', 'Chờ bro chọn sequence');
+      var lines = refs.map(function (r) { var p = r.split(' ▸ '); return { name: p.pop(), sub: p.join(' ▸ '), ref: r }; });
+      pickList(box, lines, function (k) { return 'Chạy với ' + k + ' sequence'; }, function (sel) {
+        box.remove(); row.className = 'cl-act is-ok'; row.textContent = label + ': ' + sel.length + ' sequence';
+        rec.acts[idx] = { cls: 'is-ok', text: row.textContent }; saveHistory();
+        resolve(sel.map(function (l) { return l.ref; }));
+      }, function () { row.className = 'cl-act is-skip'; rec.acts[idx] = { cls: 'is-skip', text: label }; saveHistory(); resolve(null); });
+    });
+  }
+
   async function runFlow(b) {
     if (busy || flow) return;
     var v = CLC.vars(seqNameNow());
@@ -757,9 +838,23 @@
     for (var i = 0; i < b.steps.length && !stopped; i++) {
       if (flow.aborted) { stopped = 'Đã dừng ở bước ' + (i + 1) + '.'; break; }
       var st = b.steps[i], label = (i + 1) + '. ' + CLC.stepLabel(st);
-      if (st.scope === 'set' && !items) items = await PTOOLS.snapshot();
+      if (st.seqs && st.seqs.some(function (q) { return q.k !== 'current'; }) && !items) items = await PTOOLS.snapshot();
       var sa = CLC.stepAction(st, { vars: v, items: items || [] });
       if (sa.error) { addAct(entry, 'is-error', label + ': ' + sa.error); rec.acts.push({ cls: 'is-error', text: label + ': ' + sa.error }); stopped = 'Dừng vì bước ' + (i + 1) + ' lỗi.'; break; }
+      if (sa.wait) {                                   // khối "Chờ bro": dừng tới khi bấm Tiếp tục
+        var wi = rec.acts.length;
+        rec.acts.push({ cls: 'is-ask', text: label });
+        askWait(entry, rec, wi, label + ' — ' + sa.wait);
+        if ((await waitAsk(rec, wi)) !== 'is-ok') { stopped = 'Bro dừng ở bước ' + (i + 1) + '.'; break; }
+        continue;
+      }
+      if (sa.pick) {                                   // "Chọn lúc chạy": tick sequence rồi mới chạy bước
+        var pi2 = rec.acts.length;
+        rec.acts.push({ cls: 'is-ask', text: label });
+        var chosen = await askPick(entry, rec, pi2, label, sa.pick.refs);
+        if (!chosen) { stopped = 'Bỏ qua bước ' + (i + 1) + '.'; break; }
+        sa = { action: Object.assign({}, sa.pick.action, { items: chosen }) };
+      }
       if (sa.prompt) {                                 // bước hỏi Claude → một mục lệnh riêng
         addAct(entry, 'is-ok', label);
         rec.acts.push({ cls: 'is-ok', text: label });

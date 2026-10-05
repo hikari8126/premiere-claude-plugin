@@ -64,3 +64,12 @@ test("prompt dạy khối remember; ghi chú + quy ước project nối cuối, 
   assert.match(m, /Quy ước plugin đọc được[\s\S]*AeriSoft/);
   assert.ok(memberContext("x".repeat(5000), "").length < 1700);
 });
+
+test("prompt mô tả bin_set (GG/PIN, bin Sequence / GG / 40x / 40.N)", () => {
+  for (const p of [SYSTEM_PROMPT, FREE_PROMPT]) {
+    assert.match(p, /bin_set \{platform, set\?, idxs\?\}/);
+    assert.match(p, /Sequence \/ GG \/ 40x \/ 40\.N/);
+  }
+  assert.strictEqual(CLA.check({ action: "bin_set", platform: "GG", set: "40" }).mode, "confirm");
+  assert.strictEqual(CLA.check({ action: "bin_set", platform: "FB" }).ok, false);
+});

@@ -4809,3 +4809,24 @@ div.rn-link[role="button"]:hover { text-decoration: underline; }
 .cl-learnText { color: var(--text); margin: 2px 0 6px; font-family: Menlo, monospace; font-size: 10.5px; }
 .cl-act.is-wait { color: #6f6f6f; }
 .cl-act.is-wait::before { content: '· '; }
+/* Trình ráp quy trình bằng chip: cam = hành động, xanh dương = tham số, xanh lá = sequence */
+.cu-stepBox { border-bottom: 1px solid #262626; padding: 4px 0 2px; }
+.cu-chipRow { display: flex; flex-wrap: wrap; align-items: center; }
+.cu-chip { font-size: 11px; padding: 2px 8px; margin: 0 4px 4px 0; border-radius: 5px; border: 1px solid #444; color: #c9c9c9; cursor: pointer; white-space: nowrap; }
+.cu-chip.act { background: #3a2a24; border-color: var(--cl); color: #f6c2ad; font-weight: 600; }
+.cu-chip.par { background: #22283a; border-color: #4a5a86; color: #b9c8f0; }
+.cu-chip.seq { background: #1f2e29; border-color: #3f7a63; color: #a6e2c8; }
+.cu-chip.add { border-style: dashed; border-color: #5a5766; color: #9a97a8; }
+.cu-chip.add:hover, .cu-chip.add.is-open { border-color: var(--cl); color: var(--cl); }
+.cu-chip.is-missing { border-color: #f87171; border-style: dashed; color: #fca5a5; background: transparent; }
+.cu-chip.is-open { box-shadow: 0 0 0 1px var(--cl); }
+.cu-chip.tool { border: none; color: #777; padding: 2px 4px; margin-right: 0; }
+.cu-chip.tool:hover { color: var(--cl); }
+.cu-chip.done { border-color: var(--cl); color: var(--cl); }
+.cu-pop .cu-chip { opacity: 0.55; }
+.cu-pop .cu-chip.is-on, .cu-pop .cu-chip.done, .cu-pop .cu-chip:hover { opacity: 1; }
+.cu-pop .cu-chip.is-on::before { content: '✓ '; }
+.cu-stepTools { display: flex; margin-left: auto; }
+.cu-pop { display: flex; flex-wrap: wrap; align-items: center; background: #26242e; border: 1px solid #45424f; border-radius: 7px; padding: 6px 6px 2px; margin: 2px 0 6px 16px; }
+.cu-pop .cu-in { flex: 1 1 auto; margin: 0 6px 4px 0; }
+.cu-miss { font-size: 10.5px; color: #fca5a5; margin: 0 0 3px 16px; }
