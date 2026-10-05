@@ -54,7 +54,7 @@
   }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function base(p) { var s = String(p || ''); return s.substring(s.lastIndexOf('/') + 1); }
-  function shortDir(p) { var parts = String(p || '').split('/').filter(Boolean); return parts.length > 4 ? '…/' + parts.slice(-4).join('/') : String(p || ''); }
+  function shortDir(p) { return RCC.shortDest(p); }   // giữ tên sản phẩm (thư mục trên Output/)
 
   // ── Prefs ───────────────────────────────────────────────────────────────
   function loadPrefs() {

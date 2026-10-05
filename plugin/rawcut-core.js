@@ -330,8 +330,18 @@ var RCC = (function () {
     return out;
   }
 
+  // Đường dẫn xuất rút gọn cho một dòng: luôn giữ TÊN SẢN PHẨM (thư mục ngay trên Output/) —
+  // "…/SonaShape/Output/ACT/v35.0/edited". Không có Output/ (thư mục tự do) → 4 cấp cuối.
+  function shortDest(p) {
+    var parts = String(p || '').split('/').filter(Boolean);
+    var at = -1;
+    for (var i = parts.length - 1; i > 0; i--) { if (parts[i].toLowerCase() === 'output') { at = i - 1; break; } }
+    if (at < 0) at = Math.max(0, parts.length - 4);
+    return (at > 0 ? '…/' : '/') + parts.slice(at).join('/');
+  }
+
   return {
-    cleanChosen: cleanChosen,
+    cleanChosen: cleanChosen, shortDest: shortDest,
     TPS: TPS, DEAD_TYPES: DEAD_TYPES, ALWAYS_TYPES: ALWAYS_TYPES,
     tickStr: tickStr, timeObj: timeObj, pointOrNull: pointOrNull, buildDump: buildDump,
     hashStr: hashStr, fingerprint: fingerprint,

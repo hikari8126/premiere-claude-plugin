@@ -154,4 +154,10 @@ assert.deepStrictEqual(RCC.cleanChosen({ '/a.prproj': true, '/b.prproj': 'true',
   { '/c.prproj': '/Volumes/X/Out' });
 assert.deepStrictEqual(RCC.cleanChosen(null), {});
 
+// shortDest: luôn giữ tên sản phẩm trước Output/
+assert.strictEqual(RCC.shortDest('/Users/a/Library/CloudStorage/G/Shared drives/SAMX_WORKSPACE/SonaShape/Output/ACT/v35.0/edited'),
+  '…/SonaShape/Output/ACT/v35.0/edited');
+assert.strictEqual(RCC.shortDest('/Volumes/X/a/b/c/d/e'), '…/b/c/d/e');
+assert.strictEqual(RCC.shortDest('/a/b'), '/a/b');
+
 console.log('✓ rawcut-core');
