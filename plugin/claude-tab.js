@@ -103,6 +103,7 @@
   // ── Sequence đang mở (main.js gọi khi timeline đổi) ─────────────────────────
   window.ClaudeTabSetSeq = function (d) {
     if (seqEl) seqEl.textContent = CLLOG.seqLabel(d && d.sequenceName, d && d.durationSec);
+    if (window.ClaudeDash && view === 'dash') window.ClaudeDash.render();
   };
 
   // ── Lịch sử ─────────────────────────────────────────────────────────────────
@@ -513,6 +514,7 @@
     var doneCb, donePromise = new Promise(function (r) { doneCb = r; });
     if (!opts.via) learnCmd(cmd, CLC.vars(seqNameNow()));
 
+    showView('log');
     var entry = makeEntry(cmd, false), sentMode = opts.mode || mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
     setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
@@ -823,9 +825,19 @@
     });
   }
 
-  async function runFlow(b) {
+  // over (từ phiếu chạy): {set, idxs:[số], platform} — thay bộ / video / nền tảng của các bước.
+  async function runFlow(b, over) {
     if (busy || flow) return;
+    over = over || {};
+    showView('log');
     var v = CLC.vars(seqNameNow());
+    if (over.set) v['bộ'] = String(over.set);
+    if (over.idxs || over.platform) b = { name: b.name, steps: b.steps.map(function (st) {
+      var n = JSON.parse(JSON.stringify(st));
+      if (over.idxs && n.seqs && n.seqs.length && n.seqs[0].k !== 'current') n.seqs = over.idxs.map(function (x) { return { k: 'idx', n: x }; });
+      if (over.platform && n.platform && CLC.slotOptions(n, 'platform').some(function (o) { return o.value === over.platform; })) n.platform = over.platform;
+      return n;
+    }) };
     var title = CLC.fill(b.name, v).text;
     flow = { aborted: false, learn: false };
     setSendMode();
@@ -903,14 +915,12 @@
   var chipsEl = $('quick-actions'), addEl = $('add-shortcut-btn'), formEl = $('clScForm');
   function runButton(b) {
     if (busy || flow) return;
-    if (b.kind === 'flow') { runFlow(b); return; }
+    if (b.kind === 'flow') { if (window.ClaudeDash) window.ClaudeDash.openSheet(b); return; }
+    // Nút lệnh: điền lệnh (đã thay biến) vào ô cho bro xem / sửa, Enter mới gửi.
     var f = CLC.fill(b.prompt, CLC.vars(seqNameNow()));
-    if (f.missing.length) {                           // chưa có biến → điền vào ô cho bro sửa
-      fill(f.text);
-      setClawd('idle', 'Chưa biết ' + f.missing.map(function (k) { return '{' + k + '}'; }).join(', ') + ' — sửa lệnh rồi gửi');
-      return;
-    }
-    send({ text: f.text, mode: b.mode, via: 'button' });
+    if (b.mode !== mode) setMode(b.mode);
+    fill(f.text);
+    setClawd('idle', f.missing.length ? 'Điền ' + f.missing.map(function (k) { return '{' + k + '}'; }).join(', ') + ' rồi Enter' : 'Xem lại lệnh rồi Enter');
   }
   function renderShortcuts() {
     chipsEl.innerHTML = '';
@@ -955,6 +965,21 @@
     setFormOpen(false);
   });
 
+  // ── Màn: 'dash' (bảng điều khiển) | 'log' (lịch sử lệnh) | 'sheet' (phiếu chạy) ─────
+  var tabEl = $('tab-claude'), view = 'dash';
+  function showView(v) {
+    view = v;
+    ['dash', 'log', 'sheet'].forEach(function (k) { tabEl.classList.toggle('v-' + k, k === v); });
+    if (v === 'dash' && window.ClaudeDash) window.ClaudeDash.render();
+    if (v === 'log') { syncEmpty(); scrollEnd(); }
+  }
+  window.ClaudeTab = {
+    showView: showView, runFlow: runFlow, busy: function () { return !!(busy || flow); },
+    history: function () { return history; }, seqName: seqNameNow, fill: fill,
+    saveSuggest: function (sg) { shownSuggest[sg.key] = 1; },
+    declineSuggest: function (sg) { CLSTORE.setHabits(CLC.decline(CLSTORE.habits(), sg.key)); }
+  };
+
   // ── Khởi động ───────────────────────────────────────────────────────────────
   setMode(mode);
   renderShortcuts();
@@ -963,4 +988,5 @@
   resizeInput();
   setClawd('idle');
   if (timelineContext) window.ClaudeTabSetSeq(timelineContext);
+  showView('dash');
 })();

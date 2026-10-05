@@ -3,6 +3,15 @@
 > Mỗi entry ghi rõ: lỗi gì, nguyên nhân, cách fix, API/pattern đã dùng.
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
+## v5.17.0-beta.3 — 2026-10-05 (chưa release, bridge giữ 1.24.0-beta.2)
+
+### ✨ Tab Claude = bảng điều khiển (user: "nhìn vào khó biết làm gì", "bấm là chạy luôn")
+- Mở tab ra là **bảng điều khiển** (`plugin/cl-dash.js`): sản phẩm + bộ đang mở, thẻ quy trình, "+ Tạo quy trình mới", gợi ý Claude học được (Lưu / Bỏ), 3 lệnh gần đây → "Xem lịch sử ›" mở nhật ký (có "‹ Bảng điều khiển" để quay lại).
+- Bấm quy trình → **phiếu chạy**: bộ (sửa được), tick video của bộ (video đã dựng đủ bin bỏ tick sẵn), nền tảng, xem trước các bước → "Chạy cho N video". Không có gì tự chạy.
+- Nút lệnh dưới ô chỉ **điền lệnh** (đã thay biến) vào ô, Enter mới gửi.
+- Dựng sẵn quy trình **Resize GG** = Dựng bin GG (cả bộ) → Chờ bro đặt video (một lần / máy, khoá `cl_seed_v1`).
+- Chữ phụ ở trang ⚙ bỏ font máy đánh chữ.
+
 ## v5.17.0-beta.2 / bridge server 1.24.0-beta.2 — 2026-10-05 (chưa release)
 
 ### ✨ Trình ráp quy trình bằng chip (⚙ → + Quy trình)

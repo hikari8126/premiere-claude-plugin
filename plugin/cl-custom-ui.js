@@ -395,5 +395,12 @@ window.CLSTORE = CLSTORE;
     return box;
   }
 
-  window.ClaudeCustomUI = { open: open, close: close, render: render };
+  // Mở thẳng trình sửa: b = quy trình có sẵn (Sửa), null = quy trình mới (từ bảng điều khiển).
+  function edit(b) {
+    open();
+    pop = null;
+    editing = b ? JSON.parse(JSON.stringify(b)) : { id: CLC.uid(), name: '', kind: 'flow', mode: 'command', prompt: '', steps: [], _new: true };
+    render();
+  }
+  window.ClaudeCustomUI = { open: open, close: close, render: render, edit: edit };
 })();

@@ -55,9 +55,13 @@
   <!-- Tab Claude: ô lệnh + nhật ký lệnh. Claude hiểu ý → action, các tab làm việc.
        Logic ở claude-tab.js (DOM) + claude-log.js / clawd-pixel.js (thuần, có test). -->
   <div class="cl-seq">
+    <div class="cl-back" id="clBack" role="button">‹ Bảng điều khiển</div>
     <span class="cl-seqName" id="clSeqName">Chưa mở sequence</span>
     <div class="cl-clear" id="clClear" role="button" hidden>Xoá</div>
   </div>
+  <!-- Bảng điều khiển (màn chính) + phiếu chạy quy trình — cl-dash.js vẽ -->
+  <div class="cl-dash" id="clDash"></div>
+  <div class="cl-dash" id="clSheet"></div>
 
   <div class="cl-log" id="clLog">
     <div class="cl-empty" id="clEmpty">
@@ -2125,5 +2129,6 @@
 <script src="binset.js"></script>
 <script src="cl-custom-ui.js"></script>
 <script src="claude-tab.js"></script>
+<script src="cl-dash.js"></script>
 </body>
 </html>
