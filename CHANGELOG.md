@@ -4,6 +4,12 @@
 > Dùng làm reference khi gặp lại vấn đề tương tự.
 
 
+
+## v5.18.1 / bridge 3.20 (server 1.24.0) — 2026-10-05 · NAV 30 fps
+
+- **NAV tạo sequence 30 fps mặc định:** fps không đổi được sau khi tạo (UXP) → `createSequence(name, preset)` với `plugin/seq-30fps.sqpreset` (chép từ preset "Social Media Portrait 9x16 30 fps" của Premiere, `VideoFrameRate 8467200000`) rồi đặt khung như cũ. Khối Nền tảng FB · tạo mới: **FPS 30 | theo project**. Premiere không nhận preset → tạo theo project + cảnh báo console. `build-app.sh` đóng gói + kiểm `plugin/*.sqpreset`.
+- Thẻ Tạo bin gộp video chung bin thành một dòng ("xong 1 bin (3 video)").
+
 ## v5.18.0 / bridge 3.20 (server 1.24.0) — 2026-10-05 · Tab Claude: khối đơn + khối Nền tảng + NAV
 
 > Chỉ cập nhật plugin — Bridge giữ 3.20.
