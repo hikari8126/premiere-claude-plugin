@@ -412,7 +412,9 @@
       // NAV (Tạo sequence theo bộ frame): bộ kế tiếp + bộ frame như bộ trước (đọc khung FB gốc bộ trước)
       if (navMode) {
         var mx = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
-        if (!st.navSet) st.navSet = mx ? String(mx + 1) : '';   // bro đã gõ số thì giữ
+        if (!st.navSet) st.navSet = mx ? String(mx + 1) : '';   // tự điền bộ kế tiếp; bro đã gõ số thì giữ
+        st.loaded = true;
+        draw();                                          // hiện số ngay, khung bộ trước đọc tiếp bên dưới
         if (mx) {
           try {
             var src = BSC.fbSources(st.items, String(mx)), keys = Object.keys(src).map(Number).sort(function (a, c) { return a - c; });
@@ -505,16 +507,26 @@
       if (navMode && !other) {
         var nb = section('Bộ NAV');
         var ni = el('input', 'cu-in cd-setIn');
-        ni.value = st.navSet || ''; ni.placeholder = 'số bộ';
+        ni.value = st.navSet || ''; ni.placeholder = st.loaded ? 'số bộ' : 'đang đọc…';
         ni.addEventListener('focus', window.claimKeyboard);
         ni.addEventListener('blur', window.releaseKeyboard);
         // lưu NGAY khi gõ (UXP chỉ bắn 'change' khi rời ô — bấm sang nút khác là mất số); Enter / rời ô thì vẽ lại
-        ni.addEventListener('input', function () { st.navSet = String(ni.value || '').trim().replace(/x$/i, ''); });
-        ni.addEventListener('change', function () { draw(); });
-        ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') draw(); });
+        // Gõ xong ~0.5s thì vẽ lại (xem trước + nút theo số mới), giữ con trỏ trong ô.
+        ni.addEventListener('input', function () {
+          st.navSet = String(ni.value || '').trim().replace(/x$/i, '');
+          clearTimeout(st.navTimer);
+          st.navTimer = setTimeout(function () { st.navFocus = true; draw(); }, 500);
+        });
+        ni.addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(st.navTimer); draw(); } });
+        if (st.navFocus) {
+          st.navFocus = false;
+          setTimeout(function () { try { ni.focus(); var L = ni.value.length; ni.setSelectionRange(L, L); } catch (e) {} }, 0);
+        }
         var nr = el('div', 'cd-setRow'); nr.appendChild(ni);
         var have = st.vids.some(function (x) { return x.set === st.navSet; });
-        nr.appendChild(el('span', 'cd-dim', have ? '⚠ bộ ' + st.navSet + ' đã có sequence' : 'bộ mới'));
+        var mxs = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
+        nr.appendChild(el('span', 'cd-dim', !st.loaded ? 'đang đọc project…' : have ? '⚠ bộ ' + st.navSet + ' đã có sequence'
+          : 'bộ mới' + (mxs ? ' · bộ gần nhất là ' + mxs : '') + ' — sai thì gõ lại'));
         nb.appendChild(nr);
         var fs = section('Khung');
         var seg = el('div', 'cd-seg cd-segFrame');
@@ -660,6 +672,12 @@
       go.addEventListener('click', async function () {
         if (!ready) return;
         if (!usesSeq) { T.runFlow(b, { platform: st.platform }); return; }
+        if (navMode) {                                                  // lấy đúng số đang có trong ô, không theo lần vẽ trước
+          var live = sheet.querySelector('.cd-setIn');
+          var ns = String((live && live.value) || st.navSet || '').trim().replace(/x$/i, '');
+          if (!/^\d+$/.test(ns)) return;
+          sets = [{ set: ns, idxs: st.frames.map(function (f, k) { return k; }) }];
+        }
         for (var k = 0; k < sets.length; k++) {                        // từng bộ một
           await T.runFlow(b, { set: sets[k].set, idxs: sets[k].idxs, platform: st.platform, frames: navMode ? framesMap() : null });
           if (T.flowStopped && T.flowStopped()) break;
@@ -671,7 +689,13 @@
         qh.setAttribute('role', 'button');
         qh.addEventListener('click', function () {
           var added = 0;
-          sets.forEach(function (g) { if (queueAdd(st.here, b, g.set, g.idxs, st.platform, navMode ? framesMap() : null)) added++; });
+          var qsets = sets;
+          if (navMode) {
+            var lv = sheet.querySelector('.cd-setIn'), qs2 = String((lv && lv.value) || st.navSet || '').trim().replace(/x$/i, '');
+            if (!/^\d+$/.test(qs2)) return;
+            qsets = [{ set: qs2, idxs: st.frames.map(function (f, k) { return k; }) }];
+          }
+          qsets.forEach(function (g) { if (queueAdd(st.here, b, g.set, g.idxs, st.platform, navMode ? framesMap() : null)) added++; });
           st.queued = added ? '✓ Đã thêm ' + added + ' việc vào hàng đợi (' + CLQ.baseName(st.here) + ')' : 'Đã có trong hàng đợi';
           draw();
         });
