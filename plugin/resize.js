@@ -995,7 +995,8 @@
         if (opts.like) {
           var st = await un(opts.like.getSettings());
           await commit(project, function (ca) { ca.addAction(seq.createSetSettingsAction(st)); }, 'Flow: chép cài đặt sequence');
-        } else if (opts.frame) {
+        }
+        if (opts.frame) {                                   // bộ frame: khung riêng từng video (sau khi chép cài đặt)
           if (!(await setFrameSize(project, seq, opts.frame[0], opts.frame[1]))) throw new Error('Premiere không nhận khung ' + opts.frame.join('×'));
         }
         if (bin) { rzStep(name + ' · chuyển bin'); await moveToBin(project, seq, bin, await binIdOf(bin)); }

@@ -23,6 +23,13 @@ var CLQ = (function () {
   function uid() { return 'q' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
 
   // Việc: {id, path, name, flowId, flowName, set, idxs:[số] (trống = cả bộ), platform, status, msg, at}
+  // Bộ frame (NAV): {số video: '9-16' | '4-5'}; không có → null
+  function normFrames(f) {
+    if (!f || typeof f !== 'object') return null;
+    var out = {}, n = 0;
+    Object.keys(f).forEach(function (k) { if (/^\d+$/.test(k) && (f[k] === '9-16' || f[k] === '4-5')) { out[k] = f[k]; n++; } });
+    return n ? out : null;
+  }
   function normItem(it) {
     if (!it || typeof it !== 'object' || !/\.prproj$/i.test(String(it.path || '')) || !it.flowId) return null;
     var set = String(it.set || '').trim();
@@ -31,7 +38,7 @@ var CLQ = (function () {
       id: String(it.id || uid()), path: String(it.path), name: String(it.name || baseName(it.path)),
       flowId: String(it.flowId), flowName: String(it.flowName || ''), set: set,
       idxs: (Array.isArray(it.idxs) ? it.idxs : []).map(Number).filter(function (n, i, a) { return n >= 0 && n < 100 && a.indexOf(n) === i; }).sort(function (a, b) { return a - b; }),
-      platform: String(it.platform || ''), status: STATUS.indexOf(it.status) >= 0 ? it.status : 'wait',
+      platform: String(it.platform || ''), frames: normFrames(it.frames), status: STATUS.indexOf(it.status) >= 0 ? it.status : 'wait',
       msg: String(it.msg || '').slice(0, 300), at: Number(it.at) || Date.now()
     };
   }
@@ -41,7 +48,7 @@ var CLQ = (function () {
   function add(q, it) {
     var n = normItem(it), cur = normQueue(q);
     if (!n) return { queue: cur, added: false };
-    var key = function (x) { return [x.path, x.flowId, x.set, x.idxs.join(','), x.platform].join('|'); };
+    var key = function (x) { return [x.path, x.flowId, x.set, x.idxs.join(','), x.platform, JSON.stringify(x.frames)].join('|'); };
     if (cur.some(function (x) { return x.status === 'wait' && key(x) === key(n); })) return { queue: cur, added: false };
     n.status = 'wait'; n.msg = '';
     return { queue: cur.concat([n]).slice(-MAX_QUEUE), added: true };
@@ -81,7 +88,9 @@ var CLQ = (function () {
     }
     return { set: set, idxs: idxs.sort(function (a, b) { return a - b; }) };
   }
-  function targetText(it) { return it.idxs.length ? it.idxs.map(function (n) { return 'vid' + it.set + '.' + n; }).join(', ') : 'cả bộ ' + it.set; }
+  function targetText(it) {
+    if (it.frames) return 'bộ ' + it.set + ' · ' + Object.keys(it.frames).map(function (k) { return it.frames[k] === '4-5' ? '4:5' : '9:16'; }).join(' · ');
+    return it.idxs.length ? it.idxs.map(function (n) { return 'vid' + it.set + '.' + n; }).join(', ') : 'cả bộ ' + it.set; }
 
   return { seeProject: seeProject, baseName: baseName, normQueue: normQueue, add: add, next: next, mark: mark,
            remove: remove, clearDone: clearDone, recover: recover, plan: plan, parseTargets: parseTargets,

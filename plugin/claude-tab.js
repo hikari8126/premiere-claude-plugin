@@ -907,7 +907,7 @@
   }
   async function engineStep(entry, rec, st, n, eng, label) {
     var items = (await PTOOLS.snapshot()) || [];
-    var ctx = { items: items, targets: eng.targets, results: eng.results };
+    var ctx = { items: items, targets: eng.targets, results: eng.results, platform: eng.platform, frames: eng.frames };
     var rows = FLE.planStep(st, n, ctx);
     var idx = rec.acts.length;
     rec.acts.push({ cls: 'is-ask', text: label });
@@ -960,7 +960,7 @@
                 if (st.type === 'bin_make') {
                   if (!(await ppGetOrCreateBin(project, r.bin))) throw new Error('không tạo được bin');
                 } else if (st.type === 'seq_make') {
-                  await window.ResizeAPI.makeSequence(r.name, r.bin, r.like ? { like: await seqByRef(r.like.ref) } : { frame: r.frame });
+                  await window.ResizeAPI.makeSequence(r.name, r.bin, { like: r.like ? await seqByRef(r.like.ref) : null, frame: r.frame || null });
                 } else if (st.type === 'seq_clone') {
                   await window.ResizeAPI.cloneInto(await seqByRef(r.src.ref), r.name, r.bin);
                 } else if (st.type === 'seq_move') {
@@ -1013,12 +1013,13 @@
     syncEmpty();
     var items = null, stopped = '';
     // Video đích cho khối đơn: theo phiếu chạy; không chỉ định → mọi FB gốc của bộ (bộ mới chưa có → .0 .1 .2)
-    var eng = { targets: null, results: [] };
+    var eng = { targets: null, results: [], platform: '', frames: over.frames || null };
     async function engTargets() {
       if (eng.targets) return eng.targets;
       var set = v['bộ'];
       if (!set) throw new Error('không biết bộ nào — mở một sequence vid{bộ}.N hoặc chọn bộ ở phiếu chạy');
-      var idxs = over.idxs && over.idxs.length ? over.idxs : null;
+      var idxs = over.idxs && over.idxs.length ? over.idxs
+               : over.frames ? Object.keys(over.frames).map(Number).sort(function (a, c) { return a - c; }) : null;
       if (!idxs) {
         var snap = (await PTOOLS.snapshot()) || [];
         idxs = Object.keys(BSC.fbSources(snap, set)).map(Number).sort(function (a, c) { return a - c; });
@@ -1032,6 +1033,13 @@
       var st = b.steps[i], label = (i + 1) + '. ' + CLC.stepLabel(st);
       if (st.seqs && st.seqs.some(function (q) { return q.k !== 'current'; }) && !items) items = await PTOOLS.snapshot();
       var sa = CLC.stepAction(st, { vars: v, items: items || [] });
+      if (sa.engine && st.type === 'platform') {       // khối Nền tảng: chỉ đặt ngữ cảnh cho các khối sau
+        eng.platform = st.p;
+        eng.results.push((eng.targets || []).map(function () { return null; }));
+        addAct(entry, 'is-ok', label);
+        rec.acts.push({ cls: 'is-ok', text: label });
+        continue;
+      }
       if (sa.engine) {
         try { await engTargets(); } catch (e) { sa = { error: e.message }; }
         if (!sa.error) {

@@ -5018,3 +5018,10 @@ div.cu-typeOpt[role="button"]:hover { background: rgba(255,255,255,0.05); }
 /* Phiếu chạy: Chạy + Thêm vào hàng đợi cùng cỡ, xếp dọc */
 .cd-foot { display: flex; flex-direction: column; align-items: stretch; }
 div.cd-qAdd[role="button"] { width: 100%; margin: 8px 0 0; padding: 9px 0; border-radius: 9px; border-style: solid; font-size: 12px; font-weight: 600; }
+/* Phiếu NAV: bộ frame */
+div.cd-frame[role="button"] { flex-direction: column; min-width: 46px; padding: 5px 6px; margin: 0 5px 5px 0; border-radius: 7px; border: 1px solid #3f7a63; background: #1f2e29; }
+div.cd-frame.is-45[role="button"] { border-color: #4a5a86; background: #22283a; }
+.cd-frameN { font-size: 10px; color: #8a8a8a; }
+.cd-frameR { font-size: 12px; font-weight: 700; color: #a6e2c8; }
+.cd-frame.is-45 .cd-frameR { color: #b9c8f0; }
+div.cd-frameAdd[role="button"] { align-self: center; }

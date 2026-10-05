@@ -273,25 +273,31 @@ window.CLSTORE = CLSTORE;
     var binSteps = prevSteps.map(function (p) { return [p[0], 'Bin bước ' + p[0].split(':')[1]]; });
     function refBox(ref, onChange) { return txt(ref.k === 'match' ? ref.text : '', 'loại, vd GG Dọc — trống = FB gốc', function (v) { onChange(v.trim() ? { k: 'match', text: v.trim() } : { k: 'base' }); }); }
 
+    if (s.type === 'platform') {
+      row('Nền tảng', sel([['FB', 'FB'], ['GG', 'GG'], ['PIN', 'PIN'], ['APP', 'APP']], s.p, function (v) { set({ p: v }); }));
+      if (s.p === 'FB') row('Chế độ', sel([['new', 'Tạo mới (NAV — bộ frame)'], ['resize', 'Resize 9:16 ⇄ 4:5']], s.mode, function (v) { set({ mode: v }); }));
+      f.appendChild(el('div', 'cu-hint cu-fHint', 'Khối phía sau để "Theo nền tảng" là tự đọc bin, tên, khung, ratio của nền tảng này từ bộ trước.'));
+      return f;
+    }
     if (s.src) {
       var sv = s.src.k === 'step' ? 'step:' + s.src.n : s.src.k;
-      row('Nguồn', sel([['base', 'FB gốc của video'], ['prev', 'Bản cùng loại ở bộ trước'], ['current', 'Đang chọn / mở']].concat(prevSteps), sv, function (v) {
-        set({ src: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'prev' ? { k: 'prev', ref: { k: 'match', text: '' } } : { k: v } });
+      row('Nguồn', sel((s.type === 'seq_clone' ? [['plat', 'Khung theo nền tảng (bộ trước)']] : []).concat([['base', 'FB gốc của video'], ['prev', 'Bản cùng loại ở bộ trước'], ['current', 'Đang chọn / mở']]).concat(prevSteps), sv, function (v) {
+        set({ src: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'prev' ? { k: 'prev', ref: { k: 'match', text: '' } } : { k: v } });   // plat / base / current
       }), s.src.k === 'prev' ? refBox(s.src.ref, function (r) { set({ src: { k: 'prev', ref: r } }); }) : null);
     }
     if (s.name) {
-      row('Tên', sel([['learn', 'Học theo bộ trước'], ['tpl', 'Mẫu tự gõ']], s.name.k, function (v) {
-        set({ name: v === 'tpl' ? { k: 'tpl', text: '{SP} vid{bộ}.{số} [{CO}] [{ED}]' } : { k: 'learn', ref: { k: 'base' } } });
+      row('Tên', sel([['plat', 'Theo nền tảng'], ['learn', 'Học theo loại ở bộ trước'], ['tpl', 'Mẫu tự gõ']], s.name.k, function (v) {
+        set({ name: v === 'tpl' ? { k: 'tpl', text: '{SP} vid{bộ}.{số} [{CO}] [{ED}]' } : v === 'plat' ? { k: 'plat' } : { k: 'learn', ref: { k: 'base' } } });
       }), s.name.k === 'tpl'
         ? txt(s.name.text, '{SP} vid{bộ}.{số} [{CO}] [{ED}]', function (v) { set({ name: { k: 'tpl', text: v } }); })
-        : refBox(s.name.ref, function (r) { set({ name: { k: 'learn', ref: r } }); }));
+        : s.name.k === 'learn' ? refBox(s.name.ref, function (r) { set({ name: { k: 'learn', ref: r } }); }) : null);
     }
     if (s.type === 'seq_make') {
-      row('Khung', sel([['prev', 'Như bộ trước (chép cài đặt)'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['16-9', '16:9'], ['2-3', '2:3']], s.frame, function (v) { set({ frame: v }); }));
+      row('Khung', sel([['set', 'Theo bộ frame (chọn lúc chạy)'], ['prev', 'Như bộ trước (chép cài đặt)'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['16-9', '16:9'], ['2-3', '2:3']], s.frame, function (v) { set({ frame: v }); }));
     }
     if (s.type === 'seq_resize') {
-      row('Ratio', sel([['other', 'Ratio còn lại (9:16 ⇄ 4:5)'], ['prev', 'Như bộ trước'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['2-3', '2:3']], s.ratio, function (v) { set({ ratio: v }); }));
-      row('Nhãn', sel([['GG', 'GG'], ['FB', 'FB'], ['PIN', 'PIN'], ['prev', 'Như bộ trước']], s.platform, function (v) { set({ platform: v }); }));
+      row('Ratio', sel([['plat', 'Theo nền tảng'], ['other', 'Ratio còn lại (9:16 ⇄ 4:5)'], ['prev', 'Như bộ trước'], ['9-16', '9:16'], ['4-5', '4:5'], ['1-1', '1:1'], ['2-3', '2:3']], s.ratio, function (v) { set({ ratio: v }); }));
+      row('Nhãn', sel([['plat', 'Theo nền tảng'], ['GG', 'GG'], ['FB', 'FB'], ['PIN', 'PIN'], ['prev', 'Như bộ trước']], s.platform, function (v) { set({ platform: v }); }));
     }
     if (s.type === 'raw_export') {
       row('Chế độ', sel([['both', 'Source + Render'], ['source', 'Source (raw/)'], ['render', 'Render (edited/)']], s.mode, function (v) { set({ mode: v }); }));
@@ -299,10 +305,10 @@ window.CLSTORE = CLSTORE;
     }
     if (s.bin) {
       var bv = s.bin.k === 'step' ? 'step:' + s.bin.n : s.bin.k;
-      var bopts = [['tpl', 'Mẫu tự gõ'], ['prev', 'Như bộ trước']].concat(binSteps);
+      var bopts = [['plat', 'Theo nền tảng'], ['tpl', 'Mẫu tự gõ'], ['prev', 'Như bộ trước']].concat(binSteps);
       if (s.type !== 'bin_make' && s.type !== 'seq_make') bopts.push(['src', 'Cùng bin nguồn']);
       row('Bin', sel(bopts, bv, function (v) {
-        set({ bin: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'tpl' ? { k: 'tpl', text: 'Sequence / FB / {bộ}x' } : v === 'prev' ? { k: 'prev', ref: { k: 'base' } } : { k: 'src' } });
+        set({ bin: v.indexOf('step:') === 0 ? { k: 'step', n: Number(v.split(':')[1]) } : v === 'tpl' ? { k: 'tpl', text: 'Sequence / FB / {bộ}x' } : v === 'prev' ? { k: 'prev', ref: { k: 'base' } } : v === 'plat' ? { k: 'plat' } : { k: 'src' } });
       }), s.bin.k === 'tpl' ? txt(s.bin.text, 'Sequence / GG / {bộ}x / {bộ}.{số}', function (v) { set({ bin: { k: 'tpl', text: v } }); })
         : s.bin.k === 'prev' ? refBox(s.bin.ref, function (r) { set({ bin: { k: 'prev', ref: r } }); }) : null);
     }

@@ -44,7 +44,7 @@ var CLC = (function () {
   var FL = (typeof FLE !== 'undefined') ? FLE : (function () { try { return require('./flow-engine.js'); } catch (e) { return null; } })();
   // Danh sách khối khi ráp (khối gộp cũ bin_set / pin_order / app_set / resize / rawcut* vẫn chạy được
   // cho dữ liệu cũ nhưng không còn trong danh sách — đã đổi thành chuỗi khối đơn).
-  var BUILDER_TYPES = ['bin_make', 'seq_make', 'seq_clone', 'seq_resize', 'seq_move', 'raw_export', 'fix_voice_bins', 'wait', 'prompt', 'open_tab'];
+  var BUILDER_TYPES = ['platform', 'bin_make', 'seq_make', 'seq_clone', 'seq_resize', 'seq_move', 'raw_export', 'fix_voice_bins', 'wait', 'prompt', 'open_tab'];
   function isEngine(t) { return !!(FL && FL.isType(t)); }
   function typeLabel(t) { return isEngine(t) ? FL.TYPES[t].label : (SPEC[t] ? SPEC[t].label : t); }
   function typeDesc(t) {

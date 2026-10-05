@@ -97,6 +97,35 @@
     }
   } catch (e) { console.warn('[cl-dash] seed v4:', e && e.message); }
 
+  // Đợt 5: quy trình dựng sẵn theo khối Nền tảng (mọi thứ tự học từ project); thêm FB (resize, không tạo bin).
+  var SEED5 = 'cl_seed_v5';
+  var SEED5_FLOWS = {
+    NAV: [{ type: 'platform', p: 'FB', mode: 'new' }, { type: 'bin_make' }, { type: 'seq_make', frame: 'set' }],
+    FB: [{ type: 'platform', p: 'FB', mode: 'resize' }, { type: 'seq_resize', src: { k: 'base' } }],
+    GG: [{ type: 'platform', p: 'GG' }, { type: 'bin_make' }, { type: 'seq_clone', src: { k: 'base' } },
+         { type: 'seq_resize', src: { k: 'step', n: 3 } }, { type: 'seq_clone', src: { k: 'plat' } }],
+    PIN: [{ type: 'platform', p: 'PIN' }, { type: 'bin_make' }, { type: 'seq_resize', src: { k: 'base' }, bin: { k: 'plat' } }],
+    APP: [{ type: 'platform', p: 'APP' }, { type: 'bin_make' }, { type: 'seq_clone', src: { k: 'plat' } }]
+  };
+  try {
+    if (!localStorage.getItem(SEED5)) {
+      var d5 = CLSTORE.get();
+      Object.keys(SEED5_FLOWS).forEach(function (name) {
+        var cur = d5.buttons.filter(function (b) { return b.kind === 'flow' && b.name === name; })[0];
+        // chỉ thay quy trình dựng sẵn (chưa có khối Nền tảng) — quy trình bro tự ráp thì giữ nguyên
+        if (cur && !cur.steps.some(function (x) { return x.type === 'platform'; })) cur.steps = SEED5_FLOWS[name];
+        else if (!cur) d5.buttons.push({ name: name, kind: 'flow', steps: SEED5_FLOWS[name] });
+      });
+      var order = ['NAV', 'FB', 'GG', 'PIN', 'APP', 'RAW'];
+      d5.buttons.sort(function (a, c) {
+        var ia = order.indexOf(a.name), ic = order.indexOf(c.name);
+        return (ia < 0 ? 99 : ia) - (ic < 0 ? 99 : ic);
+      });
+      CLSTORE.set(d5);
+      localStorage.setItem(SEED5, '1');
+    }
+  } catch (e) { console.warn('[cl-dash] seed v5:', e && e.message); }
+
   // ── Project đã biết + hàng đợi nhiều project (cl-queue.js) ───────────────
   // Mỗi 4s xem project active: đổi thì ghi vào danh sách (đường dẫn + tên). Hàng đợi chạy lần lượt:
   // Project.open(path) (đang mở → chuyển ngay; đang đóng → mở ra) → quy trình chế độ tự chạy → việc kế;
@@ -148,7 +177,7 @@
           var b = CLSTORE.get().buttons.filter(function (x) { return x.id === it.flowId; })[0];
           if (!b) throw new Error('quy trình "' + it.flowName + '" đã bị xoá');
           await switchTo(it.path);
-          var r = await T.runFlow(b, { set: it.set, idxs: it.idxs.length ? it.idxs : null, platform: it.platform, auto: true });
+          var r = await T.runFlow(b, { set: it.set, idxs: it.idxs.length ? it.idxs : null, platform: it.platform, frames: it.frames, auto: true });
           if (!r || !r.ok) { status = 'error'; msg = (r && (r.error || r.detail)) || 'lỗi'; } else msg = r.detail || 'xong';
         } catch (e) { status = 'error'; msg = (e && e.message) || String(e); }
         saveQ(CLQ.mark(loadQ(), it.id, status, msg)); render();
@@ -159,8 +188,8 @@
       T.showView('dash');
     }
   }
-  function queueAdd(path, b, set, idxs, platform) {
-    var r = CLQ.add(loadQ(), { path: path, name: CLQ.baseName(path), flowId: b.id, flowName: b.name, set: set, idxs: idxs || [], platform: platform || '' });
+  function queueAdd(path, b, set, idxs, platform, frames) {
+    var r = CLQ.add(loadQ(), { path: path, name: CLQ.baseName(path), flowId: b.id, flowName: b.name, set: set, idxs: idxs || [], platform: platform || '', frames: frames || null });
     saveQ(r.queue);
     return r.added;
   }
@@ -350,6 +379,8 @@
                here: await activeProjectPath(), project: '', manual: '', manualErr: '', queued: '' };
     st.project = st.here;
     var usesSeq = b.steps.some(function (s) { return CLC.isEngine(s.type) || (s.seqs && s.seqs.length && s.seqs[0].k !== 'current'); });
+    // NAV: Tạo sequence theo bộ frame → phiếu chỉ cần số bộ + bộ frame (mỗi video 9:16 / 4:5, ≥1 video 9:16)
+    var navMode = b.steps.some(function (s) { return s.type === 'seq_make' && s.frame === 'set'; });
     var plats = {};
     b.steps.forEach(function (s) { if (s.platform) plats[s.platform] = 1; });
     st.platform = Object.keys(plats).length === 1 ? Object.keys(plats)[0] : '';
@@ -377,6 +408,26 @@
     async function load() {
       st.items = await PTOOLS.snapshot();
       st.vids = allVids(st.items);
+      // NAV (Tạo sequence theo bộ frame): bộ kế tiếp + bộ frame như bộ trước (đọc khung FB gốc bộ trước)
+      if (navMode) {
+        var mx = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
+        st.navSet = mx ? String(mx + 1) : '';
+        st.frames = ['9-16', '9-16', '9-16'];
+        if (mx) {
+          try {
+            var src = BSC.fbSources(st.items, String(mx)), keys = Object.keys(src).map(Number).sort(function (a, c) { return a - c; });
+            var got = await PTOOLS.sequencesFor(keys.map(function (k) { return src[k].ref; }));
+            var fr = [];
+            for (var q = 0; q < got.seqs.length; q++) {
+              var r = await got.seqs[q].getFrameSize();
+              fr.push(r && r.width && r.height && Math.abs(r.height / r.width - 1.25) < 0.05 ? '4-5' : '9-16');
+            }
+            if (fr.length && fr.indexOf('9-16') >= 0) st.frames = fr;
+            st.framesFrom = fr.length ? mx : '';
+          } catch (e) {}
+        }
+        return;
+      }
       // Quy trình TẠO bộ mới (có khối Tạo sequence) → mặc định bộ kế tiếp (lớn nhất + 1), video .0 .1 .2
       if (b.steps.some(function (x) { return x.type === 'seq_make'; })) {
         var maxSet = st.vids.reduce(function (m, x) { return Math.max(m, Number(x.set)); }, 0);
@@ -451,7 +502,46 @@
         ms.appendChild(mi);
         if (st.manualErr) ms.appendChild(el('div', 'cu-err', st.manualErr));
       }
-      if (usesSeq && !other) {
+      if (navMode && !other) {
+        var nb = section('Bộ NAV');
+        var ni = el('input', 'cu-in cd-setIn');
+        ni.value = st.navSet || ''; ni.placeholder = 'số bộ';
+        ni.addEventListener('focus', window.claimKeyboard);
+        ni.addEventListener('blur', window.releaseKeyboard);
+        ni.addEventListener('change', function () { st.navSet = String(ni.value || '').trim().replace(/x$/i, ''); draw(); });
+        var nr = el('div', 'cd-setRow'); nr.appendChild(ni);
+        var have = st.vids.some(function (x) { return x.set === st.navSet; });
+        nr.appendChild(el('span', 'cd-dim', have ? '⚠ bộ ' + st.navSet + ' đã có sequence' : 'bộ mới'));
+        nb.appendChild(nr);
+        var fs = section('Bộ frame' + (st.framesFrom ? ' · như bộ ' + st.framesFrom : ''));
+        var fr2 = el('div', 'cu-chipRow');
+        st.frames.forEach(function (f, k) {
+          var c = el('div', 'cd-frame' + (f === '4-5' ? ' is-45' : ''));
+          c.setAttribute('role', 'button');
+          c.appendChild(el('span', 'cd-frameN', '.' + k));
+          c.appendChild(el('span', 'cd-frameR', f === '4-5' ? '4:5' : '9:16'));
+          c.addEventListener('click', function () {
+            var nf = st.frames.slice(); nf[k] = f === '4-5' ? '9-16' : '4-5';
+            if (nf.indexOf('9-16') < 0) { st.frameErr = 'Bộ phải có ít nhất 1 video 9:16'; draw(); return; }
+            st.frames = nf; st.frameErr = ''; draw();
+          });
+          fr2.appendChild(c);
+        });
+        [['−', -1], ['+', 1]].forEach(function (o) {
+          var c = el('div', 'cu-chip add cd-frameAdd', o[0]);
+          c.setAttribute('role', 'button');
+          c.addEventListener('click', function () {
+            if (o[1] > 0 && st.frames.length < 6) st.frames.push('9-16');
+            if (o[1] < 0 && st.frames.length > 1) { var nf = st.frames.slice(0, -1); if (nf.indexOf('9-16') >= 0) st.frames = nf; }
+            draw();
+          });
+          fr2.appendChild(c);
+        });
+        fs.appendChild(fr2);
+        fs.appendChild(el('div', st.frameErr ? 'cu-err' : 'cd-dim cd-pad', st.frameErr || 'Bấm từng video để đổi 9:16 ⇄ 4:5 · tối thiểu 1 video 9:16'));
+        st.targets = st.navSet ? st.frames.map(function (f, k) { return { set: st.navSet, idx: k, key: st.navSet + '.' + k, fresh: true }; }) : [];
+      }
+      if (usesSeq && !other && !navMode) {
         var clr = null;
         if (st.targets.length) {
           clr = el('span', 'cd-link', 'Bỏ hết');
@@ -490,7 +580,7 @@
       // Xem trước khối đơn cho bộ đầu tiên đã chọn (tính trên bản chụp project, chưa đụng Premiere)
       var preview = null;
       if (!other && st.items && sets.length && b.steps.some(function (x) { return CLC.isEngine(x.type); })) {
-        try { preview = FLE.planFlow(st.items, b.steps, sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; })); } catch (e) { preview = null; }
+        try { preview = FLE.planFlow(st.items, b.steps, sets[0].idxs.map(function (n) { return { set: sets[0].set, idx: n }; }), null, navMode ? framesMap() : null); } catch (e) { preview = null; }
       }
       var setText = sets.length ? sets.map(function (g) { return g.set; }).join(', ') : (v['bộ'] || '?');
       var ss = section('Sẽ chạy');
@@ -547,13 +637,13 @@
         sheet.appendChild(foot);
         return;
       }
-      var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), nothing ? 'Đã có đủ — không còn gì để tạo' : usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
+      var go = el('div', 'cd-run' + (ready ? '' : ' is-off'), nothing ? 'Đã có đủ — không còn gì để tạo' : navMode ? (n ? '▶  Tạo bộ NAV ' + st.navSet + ' (' + n + ' video)' : 'Gõ số bộ NAV') : usesSeq ? (n ? '▶  Chạy cho ' + n + ' video' : 'Chọn ít nhất 1 video') : '▶  Chạy');
       go.setAttribute('role', 'button');
       go.addEventListener('click', async function () {
         if (!ready) return;
         if (!usesSeq) { T.runFlow(b, { platform: st.platform }); return; }
         for (var k = 0; k < sets.length; k++) {                        // từng bộ một
-          await T.runFlow(b, { set: sets[k].set, idxs: sets[k].idxs, platform: st.platform });
+          await T.runFlow(b, { set: sets[k].set, idxs: sets[k].idxs, platform: st.platform, frames: navMode ? framesMap() : null });
           if (T.flowStopped && T.flowStopped()) break;
         }
       });
@@ -563,7 +653,7 @@
         qh.setAttribute('role', 'button');
         qh.addEventListener('click', function () {
           var added = 0;
-          sets.forEach(function (g) { if (queueAdd(st.here, b, g.set, g.idxs, st.platform)) added++; });
+          sets.forEach(function (g) { if (queueAdd(st.here, b, g.set, g.idxs, st.platform, navMode ? framesMap() : null)) added++; });
           st.queued = added ? '✓ Đã thêm ' + added + ' việc vào hàng đợi (' + CLQ.baseName(st.here) + ')' : 'Đã có trong hàng đợi';
           draw();
         });
@@ -571,6 +661,7 @@
       }
       sheet.appendChild(foot);
     }
+    function framesMap() { var m = {}; (st.frames || []).forEach(function (f, k) { m[k] = f; }); return m; }
     function groupSets() {
       var by = {}, order = [];
       st.targets.forEach(function (t) { if (!by[t.set]) { by[t.set] = []; order.push(t.set); } by[t.set].push(t.idx); });
