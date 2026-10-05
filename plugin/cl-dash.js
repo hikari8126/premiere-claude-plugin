@@ -434,7 +434,8 @@
         }
       }
 
-      if (st.platform) {
+      // Nền tảng đã cố định trong quy trình (GG / PIN…) — không chọn lại ở phiếu chạy (user 2026-10-05).
+      if (false) {
         var opts = [];
         b.steps.forEach(function (s) { if (s.platform) CLC.slotOptions(s, 'platform').forEach(function (o) { if (opts.indexOf(o.value) < 0) opts.push(o.value); }); });
         var ps = section('Nền tảng');
