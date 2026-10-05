@@ -65,6 +65,55 @@ var BINSET = (function () {
     return { made: made, failed: failed };
   }
 
-  return { plan: plan, run: run };
+  // ── APP: nhân bản FB gốc → "<SP> AppLovin vid…" vào bin APP của bộ ──
+  async function planApp(set, idxs) {
+    var items = await PTOOLS.snapshot();
+    if (!items) return { ok: false, error: 'chưa mở project' };
+    return BSC.planApp(items, { set: set, idxs: idxs || [] });
+  }
+  async function runApp(rows, onLine) {
+    if (!window.ResizeAPI || !window.ResizeAPI.cloneInto) throw new Error('tab Resize chưa sẵn sàng');
+    var made = 0, failed = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.error || r.exists || r.skip) continue;
+      try {
+        onLine('Tạo ' + r.name + '…');
+        await window.ResizeAPI.cloneInto(await seqOf(r.src.ref), r.name, r.bin);
+        made++;
+      } catch (e) { failed.push('vid' + r.idx + ': ' + ((e && e.message) || e)); }
+    }
+    PTOOLS.invalidate();
+    return { made: made, failed: failed };
+  }
+
+  // ── PIN theo đơn: resize 2:3 từ FB gốc, bản mới vào "Sequence / PIN / Order <ngày>" ──
+  async function planPin(set, idxs, order) {
+    var items = await PTOOLS.snapshot();
+    if (!items) return { ok: false, error: 'chưa mở project' };
+    return BSC.planPin(items, { set: set, idxs: idxs || [], order: order });
+  }
+  async function runPin(p, rows, onLine) {
+    if (!window.ResizeAPI) throw new Error('tab Resize chưa sẵn sàng');
+    var todo = rows.filter(function (r) { return !r.error && !r.exists && !r.skip; });
+    if (!todo.length) return { made: 0, failed: [] };
+    var src = await PTOOLS.sequencesFor(todo.map(function (r) { return r.src.ref; }));
+    var failed = src.rows.filter(function (r) { return r.error; }).map(function (r) { return r.name + ': ' + r.error; });
+    if (!src.seqs.length) return { made: 0, failed: failed };
+    var pl = await window.ResizeAPI.plan('PIN', ['2-3'], src.seqs);
+    if (!pl.ok) throw new Error(pl.error);
+    var go = pl.plan.filter(function (x) { return !x.skip && !x.exists && !x.dupInPlan; });
+    pl.plan.forEach(function (x) { if (x.skip) failed.push(x.src + ': ' + x.skip); });
+    if (!go.length) return { made: 0, failed: failed };
+    var made = 0;
+    var out = await window.ResizeAPI.run('PIN', go, function (r) {
+      if (!r.skip && !r.error) onLine('Đã tạo ' + (++made) + '/' + go.length + '…');
+    }, { destBin: p.bin });
+    out.results.forEach(function (r) { if (r.error) failed.push((r.name || r.src) + ': ' + r.error); });
+    PTOOLS.invalidate();
+    return { made: made, failed: failed };
+  }
+
+  return { plan: plan, run: run, planApp: planApp, runApp: runApp, planPin: planPin, runPin: runPin };
 })();
 window.BINSET = BINSET;

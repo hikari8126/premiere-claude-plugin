@@ -31,6 +31,9 @@ var CLC = (function () {
     resize:         { label: 'Resize',        req: ['platform', 'seqs'], opt: ['ratios'], seqKinds: ['idx', 'set', 'current', 'pick'] },
     bin_set:        { label: 'Dựng bin',      req: ['platform', 'seqs'], opt: [], seqKinds: ['idx', 'set'] },
     rawcut:         { label: 'RAW',           req: ['mode', 'seqs'], opt: [], seqKinds: ['idx', 'set', 'current', 'pick'] },
+    rawcut_export:  { label: 'Xuất RAW',      req: ['mode', 'seqs'], opt: [], seqKinds: ['idx', 'set', 'current', 'pick'] },
+    pin_order:      { label: 'PIN theo đơn',  req: ['seqs'], opt: ['text'], seqKinds: ['idx', 'set'] },
+    app_set:        { label: 'Dựng APP',      req: ['seqs'], opt: [], seqKinds: ['idx', 'set'] },
     fix_voice_bins: { label: 'Soát bin voice', req: [], opt: [] },
     open_tab:       { label: 'Mở tab',        req: ['tab'], opt: [] },
     prompt:         { label: 'Hỏi Claude',    req: ['text'], opt: [] },
@@ -58,9 +61,10 @@ var CLC = (function () {
     var t = s.type, out = { type: t };
     if (PLATFORM_OF[t]) out.platform = PLATFORM_OF[t].indexOf(s.platform) >= 0 ? s.platform : '';
     if (t === 'resize') out.ratios = (Array.isArray(s.ratios) ? s.ratios : []).filter(function (r, i, a) { return RATIOS.indexOf(r) >= 0 && a.indexOf(r) === i; });
-    if (t === 'rawcut') out.mode = RAW_MODES.indexOf(s.mode) >= 0 ? s.mode : '';
+    if (t === 'rawcut' || t === 'rawcut_export') out.mode = RAW_MODES.indexOf(s.mode) >= 0 ? s.mode : '';
     if (t === 'open_tab') out.tab = TABS.indexOf(s.tab) >= 0 ? s.tab : '';
     if (t === 'prompt' || t === 'wait') out.text = str(s.text, 2000).trim();
+    if (t === 'pin_order') out.text = str(s.text, 60).trim();          // tên đơn — trống = "Order <hôm nay>"
     if (SPEC[t].seqKinds) {
       var seqs = s.seqs;
       if (!seqs && s.scope) seqs = [{ k: s.scope === 'set' ? 'set' : 'current' }];   // dữ liệu bản trước
@@ -160,7 +164,8 @@ var CLC = (function () {
     function par(slot, text) { out.push({ kind: 'par', slot: slot, text: text || SLOT_HINT[slot], missing: !text }); }
     if (PLATFORM_OF[s.type]) par('platform', s.platform);
     if (s.type === 'resize' && s.ratios.length) out.push({ kind: 'par', slot: 'ratios', text: s.ratios.map(function (r) { return RATIO_LABEL[r]; }).join(' · ') });
-    if (s.type === 'rawcut') par('mode', RAW_LABEL[s.mode]);
+    if (s.type === 'rawcut' || s.type === 'rawcut_export') par('mode', RAW_LABEL[s.mode]);
+    if (s.type === 'pin_order') out.push({ kind: 'par', slot: 'text', text: s.text || 'đơn hôm nay' });
     if (s.type === 'open_tab') par('tab', TAB_LABEL[s.tab]);
     if (s.type === 'prompt') par('text', s.text);
     if (s.type === 'wait' && s.text) out.push({ kind: 'par', slot: 'text', text: s.text });
@@ -193,6 +198,7 @@ var CLC = (function () {
     if (s.type === 'resize') out.push({ slot: 'ratios', text: 'Ratio' });
     if (SPEC[s.type].seqKinds) out.push({ slot: 'seqs', text: 'Sequence' });
     if (s.type === 'wait') out.push({ slot: 'text', text: 'Lời nhắc' });
+    if (s.type === 'pin_order') out.push({ slot: 'text', text: 'Tên đơn' });
     return out;
   }
   // Chọn / bỏ một lựa chọn → bước mới (không sửa bước cũ).
@@ -225,11 +231,17 @@ var CLC = (function () {
     if (s.type === 'fix_voice_bins') return { action: { action: 'fix_voice_bins' } };
     if (s.type === 'open_tab') return { action: { action: 'open_tab', tab: s.tab } };
     if (s.type === 'wait') return { wait: fill(s.text || 'Bro làm xong phần tay rồi bấm Tiếp tục', v).text };
+    if (s.type === 'app_set' || s.type === 'pin_order') {
+      var e3 = needSet(); if (e3) return e3;
+      var ax = { action: s.type, set: v['bộ'], idxs: kind === 'set' ? [] : idxs };
+      if (s.type === 'pin_order' && s.text) ax.order = fill(s.text, v).text;
+      return { action: ax };
+    }
     if (s.type === 'bin_set') {
       var e = needSet(); if (e) return e;
       return { action: { action: 'bin_set', platform: s.platform, set: v['bộ'], idxs: kind === 'set' ? [] : idxs } };
     }
-    if (s.type === 'resize' || s.type === 'rawcut') {
+    if (s.type === 'resize' || s.type === 'rawcut' || s.type === 'rawcut_export') {
       var refs = [];
       if (kind === 'idx' || kind === 'set' || kind === 'pick') {
         var e2 = needSet(); if (e2) return e2;
@@ -238,7 +250,7 @@ var CLC = (function () {
       }
       var act = s.type === 'resize'
         ? { action: 'resize', platform: s.platform, ratios: s.ratios.map(function (x) { return RATIO_LABEL[x]; }), items: refs }
-        : { action: 'rawcut', mode: s.mode, items: refs };
+        : { action: 'rawcut', mode: s.mode, items: refs, export: s.type === 'rawcut_export' };
       return kind === 'pick' ? { pick: { refs: refs, action: act } } : { action: act };
     }
     var f = fill(s.text, v);

@@ -96,3 +96,33 @@ test("dữ liệu thật SonaShape: bản resize đuôi GG, nhãn viết hoa gi�
   assert.deepStrictEqual(r37.res2.spec, { platform: "GG", ratios: ["4-5"], from: 36 });   // bộ gần nhất là 36
   assert.deepStrictEqual(BSC.res2Spec([], "GG", "40", 1), { platform: "FB", ratios: [] });
 });
+
+test("APP: bản sao FB gốc tên AppLovin, bin học theo bộ trước", () => {
+  const its = [
+    S("SonaShape vid36.0 [a] [b]", "Sequence / FB / 36x"),
+    S("SonaShape vid36.1 [a] [b]", "Sequence / FB / 36x"),
+    S("SonaShape AppLovin vid35.0 [a] [b]", "Sequence / APP / 35x"),
+    S("SonaShape AppLovin vid36.1 [a] [b]", "Sequence / APP / 36x"),
+  ];
+  const p = BSC.planApp(its, { set: "36" });
+  assert.strictEqual(p.rows[0].bin, "Sequence / APP / 36x");
+  assert.strictEqual(p.rows[0].name, "SonaShape AppLovin vid36.0 [a] [b]");
+  assert.deepStrictEqual(p.rows.map(r => r.exists), [false, true]);
+  assert.strictEqual(BSC.appBin([], "40"), "Sequence / APP / 40x");
+  assert.match(BSC.planApp(its, { set: "" }).error, /chưa biết bộ/);
+});
+
+test("PIN theo đơn: tên '… 2x3 PIN', bin Order <ngày>, đã có ở đơn cũ thì báo", () => {
+  assert.strictEqual(BSC.orderName(new Date(2026, 9, 5)), "Order Oct 05 26");
+  assert.strictEqual(BSC.pinName("SonaShape vid35.0 [a] [b]"), "SonaShape vid35.0 [a] [b] 2x3 PIN");
+  const its = [
+    S("SonaShape vid35.0 [a]", "Sequence / FB / 35x"),
+    S("SonaShape vid35.1 [a]", "Sequence / FB / 35x"),
+    S("SonaShape vid35.0 [a] 2x3 PIN", "Sequence / PIN / Order Sep 29 26"),
+  ];
+  const p = BSC.planPin(its, { set: "35", date: new Date(2026, 9, 5) });
+  assert.strictEqual(p.bin, "Sequence / PIN / Order Oct 05 26");
+  assert.deepStrictEqual(p.rows.map(r => [r.idx, r.exists]), [[0, true], [1, false]]);
+  assert.strictEqual(p.rows[0].where, "Sequence / PIN / Order Sep 29 26");
+  assert.strictEqual(BSC.planPin(its, { set: "35", order: "Order 1" }).bin, "Sequence / PIN / Order 1");
+});

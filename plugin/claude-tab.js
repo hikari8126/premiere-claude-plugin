@@ -358,12 +358,25 @@
       var lines = seqs.map(function (q) { return { name: String(q.name || ''), sub: modeName, seq: q }; })
         .concat(src.rows.filter(function (r) { return r.error; }).map(function (r) { return { name: r.name, sub: r.error, bad: true }; }));
       row.className = 'cl-act is-ask';
-      row.textContent = 'RAW · ' + modeName + ' · ' + seqs.length + ' sequence. Mở tab RAW đọc sẵn, bro xem rồi bấm XUẤT.';
+      row.textContent = a.export ? 'Xuất RAW · ' + modeName + ' · ' + seqs.length + ' sequence — bấm để tự đọc + xuất.'
+                                 : 'RAW · ' + modeName + ' · ' + seqs.length + ' sequence. Mở tab RAW đọc sẵn, bro xem rồi bấm XUẤT.';
       save('is-ask', row.textContent);
       setClawd('idle', 'Chờ bro xác nhận');
-      pickList(box, lines, function (k) { return 'Chuẩn bị RAW (' + k + ')'; }, async function (sel) {
-        setClawd('work', 'Đang đọc timeline…');
+      pickList(box, lines, function (k) { return (a.export ? 'Xuất RAW (' : 'Chuẩn bị RAW (') + k + ')'; }, async function (sel) {
+        setClawd('work', a.export ? 'Đang xuất RAW…' : 'Đang đọc timeline…');
         learnAct(a);
+        if (a.export) {                                // quy trình "RAW": đọc + tự xuất, chờ xong
+          row.className = 'cl-act is-run'; row.textContent = 'Đang xuất RAW ' + sel.length + ' sequence (' + modeName + ')… xem tiến trình ở tab RAW';
+          try {
+            var ex = await window.RawcutAPI.exportSeqs(sel.map(function (l) { return l.seq; }), a.mode);
+            var bad = ex.failed.length || ex.cancelled;
+            row.className = 'cl-act ' + (bad ? 'is-error' : 'is-ok');
+            row.textContent = (ex.cancelled ? 'Đã dừng — ' : '') + 'Xuất RAW ' + ex.done + '/' + ex.count + ' sequence · ' + ex.clips + ' clip' + (ex.failed.length ? ' — lỗi: ' + ex.failed.join('; ') : '');
+            setClawd(bad ? 'fail' : 'done', bad ? 'Có sequence lỗi' : 'Xong', bad ? 'is-error' : 'is-done');
+          } catch (e) { row.className = 'cl-act is-error'; row.textContent = 'RAW lỗi: ' + e.message; setClawd('fail', 'Lỗi', 'is-error'); }
+          save(row.className.replace('cl-act ', ''), row.textContent);
+          return;
+        }
         try {
           var r = await window.RawcutAPI.prepare(sel.map(function (l) { return l.seq; }), a.mode);
           row.className = 'cl-act is-ok';
@@ -428,11 +441,54 @@
     return { cls: 'is-ask', text: 'Dựng bin ' + a.platform };
   }
 
+  // APP / PIN theo đơn: xem trước từng sequence sẽ tạo (đã có → mờ, kèm chỗ đang nằm) → Tạo.
+  function askAppPin(entry, rec, idx, a) {
+    var pin = a.action === 'pin_order', what = pin ? 'PIN' : 'APP';
+    var set = a.set || CLC.vars(seqNameNow())['bộ'];
+    var row = addAct(entry, 'is-run', 'Đang lập danh sách ' + what + (set ? ' bộ ' + set : '') + '…');
+    var box = document.createElement('div');
+    box.className = 'cl-moves';
+    entry.result.appendChild(box);
+    function save(cls, text) { rec.acts[idx] = { cls: cls, text: text }; saveHistory(); }
+    function fail(msg) { box.remove(); row.className = 'cl-act is-error'; row.textContent = msg; save('is-error', msg); setClawd('fail', 'Lỗi', 'is-error'); }
+    (pin ? BINSET.planPin(set, a.idxs, a.order) : BINSET.planApp(set, a.idxs)).then(function (p) {
+      if (!p.ok) return fail(what + ': ' + p.error);
+      var lines = p.rows.map(function (r) {
+        if (r.error) return { name: set + '.' + r.idx, sub: r.error, bad: true };
+        if (r.exists) return { name: r.name, sub: pin ? 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') : 'đã có', bad: true };
+        return { name: r.name, sub: pin ? 'resize 2:3 từ ' + r.src.name + ' → ' + p.bin.split(' / ').pop() : 'bản sao ' + r.src.name + ' → ' + r.bin, r: r };
+      });
+      var n = lines.filter(function (l) { return !l.bad; }).length;
+      row.className = 'cl-act is-ask';
+      row.textContent = n ? what + ' bộ ' + p.set + (pin ? ' · ' + p.order : '') + ': tạo ' + n + ' sequence? Bấm dòng để bỏ chọn.' : what + ' bộ ' + p.set + ': không còn gì để tạo.';
+      save('is-ask', row.textContent);
+      setClawd('idle', 'Chờ bro xác nhận');
+      pickList(box, lines, function (k) { return 'Tạo ' + k + ' sequence'; }, async function (sel) {
+        lines.forEach(function (l) { if (l.r) l.r.skip = sel.indexOf(l) < 0; });
+        setClawd('work', 'Đang tạo ' + what + '…');
+        learnAct(a);
+        row.className = 'cl-act is-run';
+        try {
+          var out = pin ? await BINSET.runPin(p, p.rows, function (t) { row.textContent = t; })
+                        : await BINSET.runApp(p.rows, function (t) { row.textContent = t; });
+          row.className = 'cl-act ' + (out.failed.length ? 'is-error' : 'is-ok');
+          row.textContent = 'Đã tạo ' + out.made + ' sequence ' + what + ' bộ ' + p.set + (pin ? ' vào ' + p.order : '') + (out.failed.length ? ' — lỗi: ' + out.failed.join('; ') : '');
+        } catch (e) { row.className = 'cl-act is-error'; row.textContent = what + ' lỗi: ' + e.message; }
+        save(row.className.replace('cl-act ', ''), row.textContent);
+        var bad = row.classList.contains('is-error');
+        setClawd(bad ? 'fail' : 'done', bad ? 'Có bước lỗi' : 'Xong', bad ? 'is-error' : 'is-done');
+      }, function () { row.className = 'cl-act is-skip'; row.textContent = 'Đã bỏ qua — không tạo ' + what; save('is-skip', row.textContent); setClawd('idle'); });
+    }).catch(function (e) { fail(what + ' lỗi: ' + e.message); });
+    setClawd('think', 'Đang đọc project…');
+    return { cls: 'is-ask', text: what };
+  }
+
   function askConfirm(entry, rec, idx, a) {
     if (a.action === 'move_items' || a.action === 'fix_voice_bins') return askMoves(entry, rec, idx, a);
     if (a.action === 'resize') return askResize(entry, rec, idx, a);
     if (a.action === 'rawcut') return askRaw(entry, rec, idx, a);
     if (a.action === 'bin_set') return askBinSet(entry, rec, idx, a);
+    if (a.action === 'app_set' || a.action === 'pin_order') return askAppPin(entry, rec, idx, a);
     var lb = askLabel(a);
     var row = addAct(entry, 'is-ask', lb.q);
     var btns = document.createElement('div');

@@ -233,7 +233,8 @@ window.CLSTORE = CLSTORE;
   function textPop(e, i, s) {
     var p = el('div', 'cu-pop');
     var inp = kb(el('input', 'cu-in'));
-    inp.placeholder = s.type === 'wait' ? 'vd: đặt video bộ {bộ} vào khung rồi bấm Tiếp tục' : 'vd: soát lại tên voice bộ {bộ}';
+    inp.placeholder = s.type === 'wait' ? 'vd: đặt video bộ {bộ} vào khung rồi bấm Tiếp tục'
+                    : s.type === 'pin_order' ? 'tên đơn, vd Order Oct 05 26 — trống = hôm nay' : 'vd: soát lại tên voice bộ {bộ}';
     inp.value = s.text || '';
     p.appendChild(inp);
     p.appendChild(chip('OK', 'done', function () { e.steps[i] = CLC.normStep(Object.assign({}, s, { text: inp.value })); pop = null; render(); }));

@@ -39,12 +39,19 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
     sang ratio còn lại) và bản đích "<SP> GG dọc|ngang|vuông vid40.N […]" nhân bản từ template hoặc từ
     bộ gần nhất đã có. set = số bộ (bỏ trống = bộ của sequence đang mở); idxs = [0,1,2] chỉ làm vài
     video, bỏ trống = cả bộ. Chỉ tạo khung, không đặt nội dung. Plugin hiện xem trước, bro bấm Tạo.
+- app_set {set?, idxs?}
+    Dựng bản AppLovin: nhân bản sequence FB gốc vid40.N thành "<SP> AppLovin vid40.N […]" vào bin
+    "Sequence / APP / 40x" (học theo bộ trước). set / idxs như bin_set. Plugin xem trước, bro bấm Tạo.
+- pin_order {set?, idxs?, order?}
+    PIN theo đơn: resize 2:3 từ FB gốc, bản mới "<tên gốc> 2x3 PIN" vào bin "Sequence / PIN / Order <ngày>"
+    (order trống = hôm nay, vd "Order Oct 05 26"). Video đã có bản PIN ở đơn cũ thì bỏ qua và báo.
 - rawcut {mode, items?}
     Chuẩn bị tab RAW xuất từng cut của timeline ra file riêng (+ clips.csv, manifest.json):
     mode: source (cắt từ file gốc → <Sản phẩm>/Output/ACT/<vN>/raw/) · render (Premiere render từng
     cut kèm màu/text/effect → .../edited/) · both. vN lấy từ tên sequence (vd "vid39.1" → v39.1).
     items như resize (bỏ trống = đang chọn / đang mở). Plugin mở tab RAW, đọc sẵn timeline; bro xem
-    lại rồi tự bấm XUẤT trong tab RAW — nói rõ là chưa xuất.
+    lại rồi tự bấm XUẤT trong tab RAW — nói rõ là chưa xuất. Thêm "export": true khi bro bảo xuất luôn —
+    plugin vẫn hỏi xác nhận rồi mới tự xuất.
 
 Cách gọi action — thêm đúng một khối:
 \`\`\`actions

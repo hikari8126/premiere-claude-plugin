@@ -1456,6 +1456,31 @@
       await enterBulk(seqs, seqs.map(function (q) { return RCP.guidOf(q); }).join(','), true);
       var nOk = st.bulk ? st.bulk.items.filter(function (it) { return it.status === 'ok'; }).length : 0;
       return { count: seqs.length, ready: nOk };
+    },
+    // Quy trình "RAW" (tab Claude): đọc các sequence (chế độ hàng loạt) rồi TỰ XUẤT, chờ xong.
+    // → {count, ready, done, clips, failed:[text], cancelled}. Lỗi đọc / không có thư mục xuất → ném.
+    exportSeqs: async function (seqs, mode) {
+      if (st.busy || st.running) throw new Error('tab RAW đang chạy lượt khác');
+      if (!seqs || !seqs.length) throw new Error('chưa có sequence nào');
+      if (mode && MODES[mode] && mode !== st.prefs.mode) { st.prefs.mode = mode; savePrefs(); paintModes(); }
+      if (typeof window.tabOpen === 'function') window.tabOpen('rawcut');
+      await enterBulk(seqs, seqs.map(function (q) { return RCP.guidOf(q); }).join(','), true);
+      var items = st.bulk ? st.bulk.items : [];
+      var ready = items.filter(function (it) { return it.status === 'ok'; });
+      if (!ready.length) {
+        throw new Error('không sequence nào xuất được — ' + items.map(function (it) { return it.label + ': ' + (it.error || it.status); }).join('; '));
+      }
+      await onGoBulk();
+      var flat = (st.last && st.last.results) || [];
+      var bad = flat.filter(function (r) { return r.error || r.failed > 0; });
+      return {
+        count: seqs.length, ready: ready.length,
+        done: flat.filter(function (r) { return !r.skipped && !r.error && !r.failed && !r.cancelled; }).length,
+        clips: flat.reduce(function (n, r) { return n + (r.ok || 0); }, 0),
+        failed: bad.map(function (r) { return (r.seqLabel || '?') + ': ' + (r.error || (r.failed + ' clip lỗi')); })
+          .concat(items.filter(function (it) { return it.status !== 'ok'; }).map(function (it) { return it.label + ': ' + (it.error || 'chưa đọc được'); })),
+        cancelled: flat.some(function (r) { return r.cancelled; })
+      };
     }
   };
 })();

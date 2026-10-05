@@ -82,11 +82,27 @@ var CLA = (function () {
       a.idxs = (a.idxs || []).map(Number).filter(function (n) { return n >= 0; });
       return { mode: 'confirm' };
     },
+    // Dựng APP (Applovin): nhân bản FB gốc → "<SP> AppLovin vid40.N" vào "Sequence / APP / 40x".
+    app_set: function (a) {
+      if (a.set != null && a.set !== '' && !/^\d+$/.test(String(a.set))) return { error: 'set phải là số bộ, vd "40"' };
+      if (a.idxs != null && !Array.isArray(a.idxs)) return { error: 'idxs phải là danh sách số' };
+      a.set = a.set != null ? String(a.set) : ''; a.idxs = (a.idxs || []).map(Number).filter(function (n) { return n >= 0; });
+      return { mode: 'confirm' };
+    },
+    // PIN theo đơn: resize 2:3 từ FB gốc vào "Sequence / PIN / Order <ngày>" (order trống = hôm nay).
+    pin_order: function (a) {
+      if (a.set != null && a.set !== '' && !/^\d+$/.test(String(a.set))) return { error: 'set phải là số bộ, vd "40"' };
+      if (a.idxs != null && !Array.isArray(a.idxs)) return { error: 'idxs phải là danh sách số' };
+      a.set = a.set != null ? String(a.set) : ''; a.idxs = (a.idxs || []).map(Number).filter(function (n) { return n >= 0; });
+      a.order = a.order ? String(a.order).slice(0, 60) : '';
+      return { mode: 'confirm' };
+    },
     // Chuẩn bị tab RAW (xuất từng cut). mode: source (raw/) | render (edited/) | both.
     rawcut: function (a) {
       if (['source', 'render', 'both'].indexOf(a.mode) < 0) return { error: 'mode phải là source, render hoặc both' };
       if (a.items != null && !Array.isArray(a.items)) return { error: 'items phải là danh sách' };
       a.items = a.items || [];
+      a.export = !!a.export;                       // true = tự xuất sau khi đọc (quy trình "RAW")
       return { mode: 'confirm' };
     }
   };

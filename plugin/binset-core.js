@@ -131,7 +131,68 @@ var BSC = (function () {
     return { make: make, have: have, missing: missing, bad: bad };
   }
 
-  return { PLATFORMS: PLATFORMS, DEFAULT_TARGETS: DEFAULT_TARGETS, binPath: binPath, fbSources: fbSources,
+  function seqNamed(items, name) {
+    return (items || []).filter(function (it) { return isSeq(it) && norm(it.name) === norm(name); })[0] || null;
+  }
+
+  // ── APP (Applovin): bản sao nguyên sequence FB gốc, tên "<SP> AppLovin vid40.1 […]" ──
+  // Bin học theo bộ gần nhất đã có bản AppLovin ("Sequence / APP / 35x" → "Sequence / APP / 40x");
+  // chưa có → "Sequence / APP / {bộ}x". Trùng tên ở bất kỳ đâu trong project → coi như đã có.
+  function appName(src) { return String(src || '').replace(/(^|\s)(vid\s*\d)/i, '$1AppLovin $2'); }
+  function appBin(items, set) {
+    var best = null, re = /AppLovin\s+vid\s*(\d+)\s*\.\s*\d+/i;
+    (items || []).forEach(function (it) {
+      var m = isSeq(it) && String(it.name).match(re);
+      if (!m || Number(m[1]) >= Number(set) || !it.path) return;
+      if (!best || Number(m[1]) > best.set) best = { set: Number(m[1]), path: it.path };
+    });
+    if (!best) return 'Sequence / APP / ' + set + 'x';
+    return best.path.replace(new RegExp('(^|\\D)' + best.set + '(?=x\\b|\\b)', 'g'), '$1' + set);
+  }
+  function planApp(items, opts) {
+    opts = opts || {};
+    var set = String(opts.set || '').trim();
+    if (!/^\d+$/.test(set)) return { ok: false, error: 'chưa biết bộ nào (mở một sequence vid{bộ}.N trước)' };
+    var src = fbSources(items, set);
+    var idxs = (opts.idxs && opts.idxs.length ? opts.idxs : Object.keys(src)).map(Number).sort(function (a, b) { return a - b; });
+    if (!idxs.length) return { ok: false, error: 'không thấy sequence FB gốc nào của bộ ' + set };
+    var bin = appBin(items, set);
+    return { ok: true, set: set, rows: idxs.map(function (idx) {
+      var s = src[idx];
+      if (!s) return { idx: idx, bin: bin, error: 'không thấy sequence FB gốc vid' + set + '.' + idx };
+      var name = appName(s.name);
+      return { idx: idx, bin: bin, src: s, name: name, exists: !!seqNamed(items, name) };
+    }) };
+  }
+
+  // ── PIN theo đơn: resize 2:3 thẳng từ FB gốc vào bin "Sequence / PIN / Order <ngày>" ──
+  // (luồng tay cũ có bin con Material — luồng tự động bỏ). Tên như tab Resize: "<gốc> 2x3 PIN".
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function orderName(d) {
+    d = d || new Date();
+    var dd = d.getDate(), yy = d.getFullYear() % 100;
+    return 'Order ' + MON[d.getMonth()] + ' ' + (dd < 10 ? '0' : '') + dd + ' ' + (yy < 10 ? '0' : '') + yy;
+  }
+  function pinName(src) { return String(src || '').replace(/\s+\d+x\d+(\s+\S+)?$/i, '') + ' 2x3 PIN'; }
+  function planPin(items, opts) {
+    opts = opts || {};
+    var set = String(opts.set || '').trim();
+    if (!/^\d+$/.test(set)) return { ok: false, error: 'chưa biết bộ nào (mở một sequence vid{bộ}.N trước)' };
+    var src = fbSources(items, set);
+    var idxs = (opts.idxs && opts.idxs.length ? opts.idxs : Object.keys(src)).map(Number).sort(function (a, b) { return a - b; });
+    if (!idxs.length) return { ok: false, error: 'không thấy sequence FB gốc nào của bộ ' + set };
+    var order = String(opts.order || '').trim() || orderName(opts.date);
+    var bin = 'Sequence / PIN / ' + order;
+    return { ok: true, set: set, order: order, bin: bin, rows: idxs.map(function (idx) {
+      var s = src[idx];
+      if (!s) return { idx: idx, error: 'không thấy sequence FB gốc vid' + set + '.' + idx };
+      var name = pinName(s.name), had = seqNamed(items, name);
+      return { idx: idx, src: s, name: name, exists: !!had, where: had ? had.path : '' };
+    }) };
+  }
+
+  return { PLATFORMS: PLATFORMS, planApp: planApp, appName: appName, appBin: appBin,
+           planPin: planPin, pinName: pinName, orderName: orderName, DEFAULT_TARGETS: DEFAULT_TARGETS, binPath: binPath, fbSources: fbSources,
            targetName: targetName, prevTargets: prevTargets, res2Spec: res2Spec, plan: plan, summary: summary };
 })();
 

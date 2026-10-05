@@ -451,8 +451,15 @@
     });
   }
 
-  async function runResize(platform, plan, prefs, onRow) {
+  // opts.destBin (đường dẫn "Sequence / PIN / Order …"): bản mới vào bin này thay vì bin của nguồn.
+  async function runResize(platform, plan, prefs, onRow, opts) {
     var project = await getActiveProject();
+    if (opts && opts.destBin) {
+      var dest = await ppGetOrCreateBin(project, opts.destBin);
+      if (!dest) throw new Error('không tạo được bin ' + opts.destBin);
+      var destId = await binIdOf(dest);
+      plan.forEach(function (p) { if (p.job) { p.job.bin = dest; p.job.binId = destId; } });
+    }
     var results = [];
     for (var i = 0; i < plan.length; i++) {
       var p = plan[i];
@@ -969,11 +976,11 @@
       throw new Error(r.error || 'lỗi không rõ');
     },
     status: function () { return { busy: rszState.busy, step: rzStepNow.step, seconds: rzStepNow.since ? Math.round((Date.now() - rzStepNow.since) / 1000) : 0 }; },
-    run: async function (platform, plan, onRow) {
+    run: async function (platform, plan, onRow, opts) {
       if (rszState.busy) throw new Error('tab Resize đang chạy lượt khác');
       clearPending();
       setBusy(true);
-      try { return await runResize(platform, plan, rszState.prefs, onRow || function () {}); }
+      try { return await runResize(platform, plan, rszState.prefs, onRow || function () {}, opts); }
       finally { setBusy(false); refreshSource(true); }
     }
   };

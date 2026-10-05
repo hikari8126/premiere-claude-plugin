@@ -26,6 +26,19 @@
       localStorage.setItem(SEED_KEY, '1');
     }
   } catch (e) {}
+  // Đợt 2 (2026-10-05): RAW (Both, tự xuất), PIN theo đơn, APP — luồng user mô tả. Thêm một lần, không đè.
+  var SEED2 = 'cl_seed_v2';
+  try {
+    if (!localStorage.getItem(SEED2)) {
+      var d2 = CLSTORE.get(), have = d2.buttons.map(function (b) { return b.name; });
+      [{ name: 'RAW', kind: 'flow', steps: [{ type: 'rawcut_export', mode: 'both', seqs: [{ k: 'set' }] }] },
+       { name: 'PIN', kind: 'flow', steps: [{ type: 'pin_order', seqs: [{ k: 'set' }] }] },
+       { name: 'APP', kind: 'flow', steps: [{ type: 'app_set', seqs: [{ k: 'set' }] }] }
+      ].forEach(function (f) { if (have.indexOf(f.name) < 0) d2.buttons.push(f); });
+      CLSTORE.set(d2);
+      localStorage.setItem(SEED2, '1');
+    }
+  } catch (e) {}
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
