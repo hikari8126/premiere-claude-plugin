@@ -325,6 +325,25 @@ r = rd({ projectPath: touch(path.join(T, 'Desktop', 'p.prproj')), sequenceName: 
 assert.ok(!r.ok && r.needPick && /chọn thư mục xuất/.test(r.why), r.why);
 assert.strictEqual(findSamx(path.join(T, 'Desktop', 'p.prproj'), { cloudStorage: CS }), '');  // không ổ chung → không tìm CloudStorage
 
+// ── project NGOÀI ổ chung nhưng tên sản phẩm có trong đường dẫn / tên sequence (dùng "_") ──
+mk('cs', 'GoogleDrive-someone@example.com', 'Shared drives', 'SAMX_WORKSPACE', 'GlamyCurve', 'Output');
+mk('cs', 'GoogleDrive-someone@example.com', 'Shared drives', 'SAMX_WORKSPACE', 'Curve', 'Output');
+const pLocal = touch(path.join(T, 'Desktop', 'Edit 0510', 'proj_final.prproj'));
+r = resolveDest({ projectPath: pLocal, sequenceName: 'FB9.16(O) GlamyCurve_v8.0_[c.thinh.ducvan][quan.anhngo]', mode: 'render' }, { cloudStorage: CS });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.route, 'matched');
+assert.strictEqual(r.matchedBy, 'name');
+assert.strictEqual(r.product.name, 'GlamyCurve');                 // dài nhất, không lấy "Curve"
+assert.ok(/GlamyCurve\/Output\/ACT\/v8\.0/.test(r.dirs.edited), r.dirs.edited);
+const pLocal2 = touch(path.join(T, 'Desktop', 'GlamyCurve_v8', 'x.prproj'));
+r = resolveDest({ projectPath: pLocal2, sequenceName: 'Seq vid3.1', mode: 'source' }, { cloudStorage: CS });
+assert.strictEqual(r.ok, true, r.why);
+assert.strictEqual(r.product.name, 'GlamyCurve');
+// không tên nào khớp → vẫn hỏi chọn thư mục như cũ
+r = resolveDest({ projectPath: pLocal, sequenceName: 'X v1.0' }, { cloudStorage: CS });
+assert.ok(!r.ok && r.needPick && /chọn thư mục xuất/.test(r.why), r.why);
+assert.deepStrictEqual(require('../rawcut-dest.js').nameProducts(['Cadie 2.0', 'Cadie 3.0'], ['cadie_v1']), []);
+
 // ── thư mục chọn tay ──
 const FREE = mk('free');
 const pDesk = path.join(T, 'Desktop', 'p.prproj');

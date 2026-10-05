@@ -456,6 +456,39 @@ function productRoute(projectPath, productPick, opts, seqName) {
            pick, gone, product: chosen ? path.join(sr.samx, chosen) : '' };
 }
 
+// Project KHÔNG nằm trên ổ chung (copy về máy, Desktop…): vẫn nhận sản phẩm nếu tên một sản phẩm
+// của SAMX_WORKSPACE (Drive for desktop) nằm trong đường dẫn project hoặc tên sequence — so chữ+số
+// nên "_" / khoảng trắng / dấu chấm đều là ranh giới: "FB9.16(O) GlamyCurve_v8.0_[…]" → GlamyCurve.
+// Nhiều sản phẩm khớp → lấy tên dài nhất ("CurvyFlex 2.0" hơn "CurvyFlex"); dài bằng nhau → menu.
+// Không khớp gì → null (giữ câu "chọn thư mục xuất" như trước). productPick vẫn được tôn trọng.
+function nameProducts(names, texts) {
+  const keys = texts.map(alnumKey).filter(Boolean);
+  let best = 0, hits = [];
+  for (const n of names) {
+    const nk = alnumKey(n);
+    if (nk.length < 5 || !keys.some(k => k.indexOf(nk) >= 0)) continue;
+    if (nk.length > best) { best = nk.length; hits = [n]; } else if (nk.length === best) hits.push(n);
+  }
+  return hits;
+}
+function localRoute(projectPath, productPick, opts, seqName) {
+  const pp = String(projectPath || '');
+  if (!pp || projectProduct(pp) || sharedDrivesOf(pp).length) return null;
+  const samx = cloudSamx(opts);
+  if (!samx) return null;
+  const names = samxProducts(samx);
+  const below = pp.split('/').filter(Boolean);
+  below[below.length - 1] = (below[below.length - 1] || '').replace(/\.prproj$/i, '');
+  const hits = nameProducts(names, below.concat([stripHandles(seqName)]));
+  let pick = String(productPick || ''), gone = '';
+  if (pick && names.indexOf(pick) < 0) { gone = pick; pick = ''; }
+  if (!hits.length && !pick && !gone) return null;
+  const auto = hits.length === 1 ? hits[0] : '';
+  const chosen = pick || (gone ? '' : auto);
+  return { samx, names, below, folder: '', matches: [], lead: [], auto, by: auto ? 'name' : '',
+           multi: hits.length > 1 ? hits : [], pick, gone, product: chosen ? path.join(samx, chosen) : '' };
+}
+
 function pickGoneWhy(r) {
   const s = 'Sản phẩm đã chọn cho project này, ' + qn(r.gone) + ', không còn trong SAMX_WORKSPACE '
     + '— hỏi Tech xem có bị đổi tên hay xoá không — nên không xuất gì';
@@ -693,7 +726,7 @@ function resolveDest(o, env) {
   const mode = o.mode === 'source' || o.mode === 'render' ? o.mode : 'both';
   const res = { ok: false, why: '', version: '', samx: '', products: [], route: '', product: null };
   const own = projectProduct(pp);
-  const r = own ? null : productRoute(pp, o.productPick, env, seqName);
+  const r = own ? null : (productRoute(pp, o.productPick, env, seqName) || localRoute(pp, o.productPick, env, seqName));
   if (r) {
     res.samx = r.samx;
     res.products = r.names;
@@ -868,5 +901,5 @@ module.exports = {
   projectProduct, saveToProduct, chosenLayout, chosenFolder, sharedDrivesOf,
   samxBeside, findSamx, samxProducts, productRoute, productCandidates,
   matchedProducts, leadingProducts, folderRecord, folderTaken, legacyFlat,
-  resolveDest, shortPath,
+  resolveDest, shortPath, localRoute, nameProducts,
 };
