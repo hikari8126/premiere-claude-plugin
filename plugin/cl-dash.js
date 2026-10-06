@@ -403,7 +403,37 @@
     try { render(); } catch (e) {}
   });
   // Thẻ quy trình đang chạy: tiến độ, bước, chờ bro (Tiếp tục ngay tại đây), Dừng, Xem chi tiết.
+  // Clawd trên thẻ: vẽ lại riêng hình (không vẽ lại cả bảng) — party khi xong, fail khi lỗi
+  var runPicTimer = null, runPicTick = 0;
+  function runPic(scene) {
+    var pic = el('div', 'cd-runPic');
+    clearInterval(runPicTimer);
+    var draw1 = function () {
+      if (!pic.parentNode && runPicTick > 2) { clearInterval(runPicTimer); return; }
+      var fr = CLAWD.frames(scene); pic.innerHTML = CLAWD.toSvg(fr[runPicTick++ % fr.length], 64);
+    };
+    runPicTick = 0; draw1(); runPicTimer = setInterval(draw1, 250);
+    return pic;
+  }
   function runCard(fs) {
+    if (fs.done) {
+      var ok = fs.ok;
+      var c0 = el('div', 'cd-runCard ' + (ok ? 'is-done' : 'is-fail'));
+      var top = el('div', 'cd-runDoneRow');
+      top.appendChild(runPic(ok ? 'party' : 'fail'));
+      var tx = el('div', 'cd-runDoneTx');
+      tx.appendChild(el('div', 'cd-runT', (ok ? 'Xong · ' : fs.stoppedText ? 'Đã dừng · ' : 'Có bước lỗi · ') + fs.name + (fs.set ? ' · bộ ' + fs.set : '')));
+      tx.appendChild(el('div', 'cd-runStep', ok ? fs.total + '/' + fs.total + ' bước' : (fs.stoppedText || 'Xem chi tiết để biết bước nào lỗi')));
+      top.appendChild(tx);
+      c0.appendChild(top);
+      var bar0 = el('div', 'cd-runBar'), fill0 = el('div', 'cd-runFill');
+      fill0.style.width = ok ? '100%' : '100%'; bar0.appendChild(fill0); c0.appendChild(bar0);
+      var r0 = el('div', 'cl-askBtns');
+      r0.appendChild(btn('Xem chi tiết', '', function () { T.showView('log'); }));
+      r0.appendChild(btn('Đóng', '', function () { T.closeFlowCard(); }));
+      c0.appendChild(r0);
+      return c0;
+    }
     var waiting = !!fs.waiting;
     var c = el('div', 'cd-runCard' + (waiting ? ' is-wait' : '') + (fs.stopping ? ' is-stop' : ''));
     var hd = el('div', 'cd-runHd');
@@ -448,8 +478,14 @@
     dash.appendChild(top);
     if (typeof PPF !== 'undefined') {
       var pf = PPF.current(), sm = PPF.summary(pf);
-      if (sm) dash.appendChild(el('div', 'cd-dim cd-prof', 'Quy ước project: ' + sm));
-      if (pf.aiNote) {
+      if (sm && !lsGet('cd_prof_hidden', false)) dash.appendChild(el('div', 'cd-dim cd-prof', 'Quy ước project: ' + sm));
+      var profHidden = lsGet('cd_prof_hidden', false);
+      if (pf.aiNote && profHidden) {
+        var show = el('div', 'cd-link cd-dimLink cd-prof', 'Tóm tắt project ›');
+        show.setAttribute('role', 'button');
+        show.addEventListener('click', function () { lsSet('cd_prof_hidden', false); render(); });
+        dash.appendChild(show);
+      } else if (pf.aiNote) {
         var long = pf.aiNote.length > 150;
         var nb = el('div', 'cd-dim cd-prof', 'Claude tóm tắt: ' + (long && !noteOpen ? pf.aiNote.slice(0, pf.aiNote.lastIndexOf(' ', 150)) + '… ' : pf.aiNote + ' '));
         if (long) {
@@ -458,6 +494,10 @@
           more.addEventListener('click', function () { noteOpen = !noteOpen; render(); });
           nb.appendChild(more);
         }
+        var hideP = el('span', 'cd-link cd-dimLink', '  · Ẩn');
+        hideP.setAttribute('role', 'button');
+        hideP.addEventListener('click', function () { lsSet('cd_prof_hidden', true); render(); });
+        nb.appendChild(hideP);
         dash.appendChild(nb);
       }
       (pf.warns || []).forEach(function (w) { dash.appendChild(el('div', 'cd-profWarn', '⚠ ' + w)); });

@@ -1339,7 +1339,10 @@
     lastFlowStopped = !!stopped;                   // phiếu chạy nhiều bộ: dừng thì không chạy bộ sau
     var bad = rec.acts.some(function (a) { return a.cls === 'is-error'; });
     window.CL_FLOW_RUNNING = false;
-    setFlow(null);
+    // Thẻ "Đang chạy" → trạng thái kết thúc (xanh + Clawd ăn mừng / đỏ), xong thì tự ẩn sau ~6s; lỗi giữ lại
+    setFlow({ done: true, ok: !bad && !stopped, stoppedText: stopped || '', waiting: '', pick: null, waitBtns: null, i: flowState ? flowState.total : 0 });
+    var endedAt = Date.now(); flowState.endedAt = endedAt;
+    if (!bad && !stopped) setTimeout(function () { if (flowState && flowState.endedAt === endedAt) setFlow(null); }, 6500);
     if (!bad && !stopped) (over.idxs && over.idxs.length ? over.idxs : [0]).forEach(function (n) { window.actLog && window.actLog('claude', 'flow', v['bộ'] ? 'vid' + v['bộ'] + '.' + n : '', { name: b.name }); });
     setClawd(bad ? 'fail' : 'done', bad ? 'Quy trình có bước lỗi' : 'Xong quy trình', bad ? 'is-error' : 'is-done');
     history = CLLOG.pushHistory(history, rec);
@@ -1372,7 +1375,7 @@
     if (v === 'log') { syncEmpty(); scrollEnd(); }
   }
   window.ClaudeTab = {
-    flowState: function () { return flowState; }, stopFlow: stopFlow,
+    flowState: function () { return flowState; }, stopFlow: stopFlow, closeFlowCard: function () { if (flowState && flowState.done) setFlow(null); },
     continueWait: function () { if (flowState && flowState.waitBtns) { try { flowState.waitBtns.children[0].click(); } catch (e) {} } },
     showView: showView, runFlow: runFlow, runButton: runButton, flowStopped: function () { return lastFlowStopped; }, busy: function () { return !!(busy || flow); },
     history: function () { return history; }, seqName: seqNameNow, fill: fill,

@@ -5095,3 +5095,12 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 
 .cd-runList { margin: 2px 0 8px; display: flex; flex-direction: column; }
 .cd-runItem { font-size: 11px; color: var(--text); padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Thẻ quy trình — kết thúc */
+.cd-runCard.is-done { border-color: #4ade80; background: rgba(74,222,128,0.08); }
+.cd-runCard.is-done .cd-runFill { background: #4ade80; }
+.cd-runCard.is-fail { border-color: #f87171; background: rgba(248,113,113,0.08); }
+.cd-runCard.is-fail .cd-runFill { background: #f87171; }
+.cd-runDoneRow { display: flex; align-items: center; }
+.cd-runPic { flex: 0 0 auto; width: 64px; margin-right: 10px; }
+.cd-runDoneTx { flex: 1 1 auto; min-width: 0; }
