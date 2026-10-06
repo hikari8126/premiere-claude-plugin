@@ -37,8 +37,10 @@ test("engine dùng hồ sơ: bin GG + khung Google học được", () => {
   try {
     assert.strictEqual(FLE.platBin(other, "GG", "36", 0), "Google / 36x / 36.0");
     const t = FLE.platTemplates(other, "GG", "36", 0);
-    assert.strictEqual(t.length, 1);
-    assert.strictEqual(t[0].label, "dọc");
+    // khung cứng 3 đích: có dọc, thiếu ngang + vuông → báo lỗi từng loại
+    assert.deepStrictEqual(t.map(x => !!x.item), [true, false, false]);
+    assert.strictEqual(t[0].label, "9:16 (dọc)");
+    assert.match(t[1].err, /16:9/);
     // FB gốc không lẫn khung Google
     const fam = FLE.familyIn(other, { k: "base" }, 35).map(f => f.item.name);
     assert.deepStrictEqual(fam.sort(), ["SP vid35.0 [a] [b]", "SP vid35.1 [a] [b]"]);
@@ -73,6 +75,6 @@ test("engine nhận bin chứa chữ nền tảng trong tên (Ads GGL)", () => {
   PPF.use({ alias: { FB: "Meta", GG: "GGL", PIN: "PIN", APP: "AppLovin" }, bins: {}, warns: [] });
   try {
     assert.strictEqual(FLE.platBin(items, "GG", "36", 0), "Edit / Ads GGL / v2 / 36x");
-    assert.strictEqual(FLE.platTemplates(items, "GG", "36", 0)[0].label, "Vertical");
+    assert.strictEqual(FLE.platTemplates(items, "GG", "36", 0)[0].kind, "9-16");
   } finally { PPF.use(null); }
 });

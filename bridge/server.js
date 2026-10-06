@@ -3704,7 +3704,7 @@ app.post('/flow/fix', async (req, res) => {
   if (!steps.length) return res.json({ ok: false, error: 'quy trình trống' });
   const prompt = `Tôi dựng video quảng cáo trong Adobe Premiere Pro. Plugin chạy "quy trình" = chuỗi khối, mỗi khối chạy cho từng video {bộ}.{số}
 (bộ = số như 36, mỗi bộ có video vid36.0 / 36.1 / 36.2). Quy trình được viết ở project khác, chạy thử ở project này thì lỗi.
-Hãy SỬA các khối BỊ LỖI cho đúng quy ước bin / tên của project này. Khối không lỗi giữ y nguyên. Giữ nguyên ý định (làm việc gì, thứ tự, số khối), chỉ đổi tham số.
+Hãy SỬA các khối BỊ LỖI cho đúng quy ước bin / tên của project này. Khối không lỗi giữ y nguyên. BẮT BUỘC giữ nguyên số khối, thứ tự và loại (type) từng khối — chỉ đổi tham số (tên, bin, nguồn, ratio…). Quy trình GG luôn là: bản sao FB gốc + resize sang ratio còn lại (2 material) + nhân bản 3 khung đích 9:16 / 16:9 / 1:1 từ bộ trước.
 
 ĐỊNH DẠNG KHỐI (JSON):
   platform   {type:'platform', p:'FB'|'GG'|'PIN'|'APP', mode?:'new'|'resize'}   — các khối sau "theo nền tảng" tự học bin/tên/khung

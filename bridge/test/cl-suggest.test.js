@@ -8,6 +8,7 @@ const seq = (path, name) => ({ path, name, isFolder: false, mediaType: "sequence
 const items = [
   seq("Sequence / FB / 35x", "SP vid35.0 [a] [b]"), seq("Sequence / FB / 36x", "SP vid36.0 [a] [b]"),
   seq("Sequence / GG / 35x / 35.0", "35.0"), seq("Sequence / GG / 35x / 35.0", "SP GG dọc vid35.0 [a] [b]"),
+  seq("Sequence / GG / 35x / 35.0", "SP GG ngang vid35.0 [a] [b]"), seq("Sequence / GG / 35x / 35.0", "SP GG vuông vid35.0 [a] [b]"),
 ];
 const good = { name: "GG + RAW", why: "bộ nào cũng làm GG rồi xuất RAW", steps: [
   { type: "platform", p: "GG" }, { type: "bin_make" }, { type: "seq_clone", src: { k: "plat" } },

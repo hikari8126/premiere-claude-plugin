@@ -215,6 +215,74 @@ var FLE = (function () {
     })[0];
     return hit ? hit.path : '';
   }
+  // ── GG: khung CỨNG mỗi video = 2 material + 3 đích (user 2026-10-06) ─────────────
+  //   material 1 = bản sao FB gốc · material 2 = resize material 1 sang ratio còn lại (9:16 ⇄ 4:5)
+  //   đích 9:16 · 16:9 · 1:1 = NHÂN BẢN khung cùng loại của bộ trước. Tên + bin khác nhau theo project:
+  //   "SP GG dọc vid35.0 […]" trong "Sequence / GG / 35x / 35.0" (chuẩn) hay
+  //   "SP vid 22.0 […] 9x16 GG" trong "Timeline / Google / 22x", material ở ".../22x/Draft" (VeraComfort).
+  var GG_KINDS = ['9-16', '16-9', '1-1'];
+  var GG_KIND_TXT = { '9-16': '9:16 (dọc)', '16-9': '16:9 (ngang)', '1-1': '1:1 (vuông)' };
+  var MATERIAL_SEG = /^(draft|drafts|material|materials|nguon|nguồn|src|source|raw|old|resource|tai nguyen|tài nguyên)$/i;
+  function ggKind(name) {
+    var n = String(name || '').toLowerCase();
+    try { n = n.normalize('NFC'); } catch (e) {}
+    if (/(^|\W)(dọc|doc|vertical|9x16|9-16|916)(\W|$)/.test(n)) return '9-16';
+    if (/(^|\W)(ngang|horizontal|landscape|16x9|16-9|169)(\W|$)/.test(n)) return '16-9';
+    if (/(^|\W)(vuông|vuong|square|1x1|1-1|11)(\W|$)/.test(n)) return '1-1';
+    return '';
+  }
+  function ggArea(it) { return inPlat(it.path, 'GG') || new RegExp('(^|\\s)(' + PF.alt('GG') + ')(\\s|$)', 'i').test(String(it.name)); }
+  function isMaterial(it, set, idx) {
+    var nm = String(it.name).trim();
+    if (new RegExp('^' + set + '\\.' + idx + '(?![\\d.])').test(nm)) return true;               // "35.0", "35.0 4x5 GG"
+    if (String(it.path || '').split('/').some(function (s) { return MATERIAL_SEG.test(s.trim()); })) return true;
+    return /(^|\s)4x5(\s|$)/i.test(nm);                                                         // resize 4:5 = material
+  }
+  // 3 đích của bộ gần nhất có (mỗi loại tìm riêng, ưu tiên cùng số video). Thiếu loại → {err}.
+  function ggTargets(items, set, idx) {
+    var sets = prevSets(items, set), out = [];
+    GG_KINDS.forEach(function (kind) {
+      var hit = null;
+      for (var i = 0; i < sets.length && !hit; i++) {
+        var pool = videoSeqs(items, sets[i], idx);
+        var cand = pool.filter(function (it) { return ggArea(it) && !isMaterial(it, sets[i], idx) && ggKind(it.name) === kind; })[0];
+        if (!cand) {                                  // video khác của bộ đó (bộ trước có ít video hơn)
+          (items || []).some(function (it) {
+            var v = isSeq(it) && vidOf(it.name);
+            if (!v || v.set !== sets[i] || !ggArea(it) || isMaterial(it, v.set, v.idx) || ggKind(it.name) !== kind) return false;
+            cand = it; return true;
+          });
+        }
+        if (cand) { var v2 = vidOf(cand.name) || { set: sets[i], idx: idx }; hit = { item: cand, set: v2.set, idx: v2.idx, label: GG_KIND_TXT[kind], kind: kind }; }
+      }
+      out.push(hit || { err: 'bộ trước chưa có khung GG ' + GG_KIND_TXT[kind] + ' để nhân bản', label: GG_KIND_TXT[kind] });
+    });
+    return out;
+  }
+  // Material của bộ trước (bản sao / resize) → bin + tên bản sao cho video đích.
+  function ggMaterial(items, set, idx) {
+    var to = { set: Number(set), idx: Number(idx) }, sets = prevSets(items, set);
+    for (var i = 0; i < sets.length; i++) {
+      for (var k = 0; k < 2; k++) {
+        var j = k ? 0 : Number(idx);
+        var mats = videoSeqs(items, sets[i], j).concat((items || []).filter(function (it) {
+          return isSeq(it) && new RegExp('^' + sets[i] + '\\.' + j + '(?![\\d.])').test(String(it.name).trim());
+        })).filter(function (it) { return ggArea(it) && isMaterial(it, sets[i], j); });
+        if (!mats.length) continue;
+        var from = { set: sets[i], idx: j };
+        var copy = mats.filter(function (it) { return !/\d+x\d+/i.test(it.name); })[0];
+        return { bin: subst(mats[0].path, from, to), copyName: copy ? subst(copy.name, from, to) : '' };
+      }
+    }
+    // Không có material bộ trước: cạnh 3 đích; bin đích có bin con kiểu "Draft" ở bộ trước → vào đó
+    var t = ggTargets(items, set, idx).filter(function (x) { return x.item; })[0];
+    if (!t) return null;
+    var tbin = subst(t.item.path, { set: t.set, idx: t.idx }, to);
+    var sub = (items || []).filter(function (it) {
+      return it.isFolder && MATERIAL_SEG.test(String(it.name).trim()) && samePath(it.path, t.item.path);
+    })[0];
+    return { bin: sub ? tbin + ' / ' + String(sub.name).trim() : tbin, copyName: '' };
+  }
   function prevSets(items, set) {
     var sets = {};
     (items || []).forEach(function (it) { var v = isSeq(it) && vidOf(it.name); if (v && v.set < Number(set)) sets[v.set] = 1; });
@@ -261,6 +329,8 @@ var FLE = (function () {
     var to = { set: Number(set), idx: Number(idx) };
     if (P === 'PIN') return pinBin(items, date, targets);
     if (P === 'GG') {
+      var tg0 = ggTargets(items, set, idx).filter(function (x) { return x.item; })[0];
+      if (tg0) return subst(tg0.item.path, { set: tg0.set, idx: tg0.idx }, to);
       var sets = prevSets(items, set);
       for (var i = 0; i < sets.length; i++) {
         var path = ggBinOf(items, sets[i], idx) || ggBinOf(items, sets[i], 0);
@@ -273,7 +343,14 @@ var FLE = (function () {
     }
     var ref = P === 'APP' ? { k: 'match', text: 'AppLovin' } : { k: 'base' };
     var p = nearestPrev(items, ref, set, idx);
-    if (p) return subst(p.item.path, { set: p.set, idx: p.idx }, to);
+    if (p) {
+      var learned = subst(p.item.path, { set: p.set, idx: p.idx }, to);
+      // Bộ trước để trong bin KHÔNG có số bộ ("Sequence / Applovin", "Sequence / APP / 13.11") mà hồ sơ đã học được
+      // mẫu "{bộ}x" của nền tảng → theo mẫu (LiftCharm / StretchMotions 2026-10-06)
+      var tplB = PF.binTpl(P);
+      if (tplB && /\{bộ\}/.test(tplB) && !new RegExp('(^|\\D)' + set + '(x|\\.|\\b)').test(learned)) return defBin(P, set, idx, tplB);
+      return learned;
+    }
     return defBin(P, set, idx, 'Sequence / ' + PF.alias(P) + ' / {bộ}x');
   }
   // Chưa có bộ trước: mẫu bin học từ project (hồ sơ quy ước), không có thì mặc định.
@@ -288,6 +365,9 @@ var FLE = (function () {
       return a ? [{ item: a.item, set: a.set, idx: a.idx, label: 'AppLovin' }] : [];
     }
     if (P !== 'GG') return [];
+    return ggTargets(items, set, idx);
+  }
+  function platTemplatesOld(items, P, set, idx) {
     var sets = prevSets(items, set);
     for (var i = 0; i < sets.length; i++) {
       var by = {};
@@ -306,16 +386,17 @@ var FLE = (function () {
   function platResize(items, P, set, idx) {
     if (P === 'PIN') return { ratios: ['2-3'], label: 'PIN' };
     if (P === 'GG') {
+      // material 2 = ratio CÒN LẠI (9:16 ⇄ 4:5); nhãn ("GG" / "FB") học từ bản resize bộ trước
       var sp = B.res2Spec(items, 'GG', set, idx);
-      return sp.from ? { ratios: sp.ratios, label: sp.platform } : { ratios: null, label: 'GG' };
+      return { ratios: null, label: sp.from ? sp.platform : 'GG' };
     }
     if (P === 'APP') return { error: 'APP không resize — dùng Nhân bản khung theo nền tảng' };
     return { ratios: null, label: 'FB' };
   }
   // Tên bản sao FB gốc trong bin GG: học từ bản "{bộ}.{số}" của bộ trước (vd "35.1") → "36.1".
   function platCopyName(items, P, set, idx) {
-    if (P === 'GG') return set + '.' + idx;
     var f = familyIn(items, { k: 'base' }, set).filter(function (x) { return x.idx === Number(idx); })[0];
+    if (P === 'GG') { var gm = ggMaterial(items, set, idx); return (gm && gm.copyName) || (f ? f.item.name : set + '.' + idx); }
     if (P === 'APP' && f) return String(f.item.name).replace(/(^|\s)(vid\s*\d)/i, '$1AppLovin $2');
     return f ? f.item.name : '';
   }
@@ -460,7 +541,14 @@ var FLE = (function () {
               var fb = fillTpl(s.bin.text, v);
               if (fb.missing.length) throw new Error('thiếu ' + fb.missing.map(function (k) { return '{' + k + '}'; }).join(', '));
               row.bin = fb.text;
-            } else if (s.bin.k === 'plat') { needP(); row.bin = platBin(items, P, set, idx, ctx.date, ctx.targets); }
+            } else if (s.bin.k === 'plat') {
+              needP();
+              if (tpl && tpl.item && P === 'GG') row.bin = subst(tpl.item.path, { set: tpl.set, idx: tpl.idx }, to);
+              else if (P === 'GG' && s.type === 'seq_clone' && s.src && s.src.k === 'base') {
+                var gmb = ggMaterial(items, set, idx);
+                row.bin = gmb ? gmb.bin : platBin(items, P, set, idx, ctx.date, ctx.targets);
+              } else row.bin = platBin(items, P, set, idx, ctx.date, ctx.targets);
+            }
             else if (s.bin.k === 'prev') {
               var pb = nearestPrev(items, s.bin.ref, set, idx);
               if (!pb) throw new Error('chưa có ' + refTxt(s.bin.ref) + ' ở bộ trước để học bin');
@@ -494,7 +582,8 @@ var FLE = (function () {
             } else row.frame = FRAMES[s.frame];
           }
           if (s.type === 'seq_make' || s.type === 'seq_clone') {
-            row.exists = (items || []).some(function (it) { return isSeq(it) && norm(it.name) === norm(row.name); });
+            var sameAsSrc = row.src && row.src.name && norm(row.src.name) === norm(row.name);
+            row.exists = (items || []).some(function (it) { return isSeq(it) && norm(it.name) === norm(row.name) && (!sameAsSrc || samePath(it.path, row.bin)); });
           }
           if (s.type === 'seq_resize') {
             row.ratio = s.ratio; row.platform = s.platform;

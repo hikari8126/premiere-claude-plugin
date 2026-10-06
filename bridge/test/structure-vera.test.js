@@ -38,3 +38,24 @@ test("hồ sơ + PIN/APP/GG theo cấu trúc project, không ghi cứng 'Sequenc
     assert.deepStrictEqual([sp.from, sp.ratios.sort()], [22, ["1-1", "16-9", "9-16"]]);
   } finally { PPF.use(null); }
 });
+
+test("GG khung cứng trên cấu trúc VeraComfort: material vào Draft, 3 đích 9x16/16x9/1x1 GG vào bin bộ", () => {
+  const it2 = items.concat([{ name: "Draft", path: "Timeline / Google / 22x", isFolder: true, mediaType: "" }]);
+  PPF.use(PPF.scan(it2));
+  try {
+    const p = F.planFlow(it2, [{ type: "platform", p: "GG" }, { type: "bin_make" }, { type: "seq_clone", src: { k: "base" } },
+      { type: "seq_resize", src: { k: "step", n: 3 } }, { type: "seq_clone", src: { k: "plat" } }].map(F.normStep), [{ set: "23", idx: 0 }], new Date(2026, 9, 6));
+    assert.strictEqual(p[1].rows[0].bin, "Timeline / Google / 23x");
+    assert.deepStrictEqual([p[2].rows[0].name, p[2].rows[0].bin, !!p[2].rows[0].exists], [`Veracomfort vid 23.0 ${T}`, "Timeline / Google / 23x / Draft", false]);
+    assert.deepStrictEqual([p[3].rows[0].ratio, p[3].rows[0].bin], ["other", "Timeline / Google / 23x / Draft"]);
+    assert.deepStrictEqual(p[4].rows.map(r => r.name), ["9x16", "16x9", "1x1"].map(r => `Veracomfort vid 23.0 ${T} ${r} GG`));
+    assert.ok(p[4].rows.every(r => r.bin === "Timeline / Google / 23x"));
+  } finally { PPF.use(null); }
+});
+
+test("APP bộ trước nằm bin không số bộ → theo mẫu {bộ}x của hồ sơ", () => {
+  const its = [seq("Sequence / FB / 15x", "LC vid15.0 [a]"), seq("Sequence / Applovin", "LC Applovin vid14.0 [a]"),
+               seq("Sequence / Applovin / 13x", "LC Applovin vid13.0 [a]"), seq("Sequence / Applovin / 12x", "LC Applovin vid12.0 [a]")];
+  PPF.use(PPF.scan(its));
+  try { assert.strictEqual(F.platBin(its, "APP", "15", 0), "Sequence / Applovin / 15x"); } finally { PPF.use(null); }
+});

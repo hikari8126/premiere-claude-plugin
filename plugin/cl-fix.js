@@ -74,6 +74,9 @@ var CLFIX = (function () {
   // → {steps, preview, errors} nếu ÍT lỗi hơn bản gốc, không thì null.
   function accept(items, flow, aiSteps, targets, frames, before) {
     if (!Array.isArray(aiSteps) || !aiSteps.length || aiSteps.length > 20) return null;
+    // Sửa khối = chỉ đổi tham số (tên, bin, nguồn…): giữ nguyên số khối + loại từng khối, vd khung cứng GG
+    // (2 material + 3 đích) không được bớt / thêm bước. Muốn đổi cấu trúc → gợi ý quy trình (cl-suggest).
+    if (aiSteps.length !== flow.steps.length || aiSteps.some(function (s, i) { return !s || s.type !== flow.steps[i].type; })) return null;
     // Khối chạy được ở bản gốc thì giữ y nguyên (Claude chỉ được sửa khối lỗi), khi số khối không đổi.
     var bad = {};
     errorsOf(plan(items, flow.steps, targets, frames), items).forEach(function (e) { bad[e.step - 1] = 1; });

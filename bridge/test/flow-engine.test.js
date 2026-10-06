@@ -104,7 +104,7 @@ const proj = [
 ];
 const plan = (steps, targets, frames) => F.planFlow(proj, steps.map(F.normStep), targets, new Date(2026, 9, 5), frames);
 
-test("GG theo nền tảng: bin, bản sao '{bộ}.{số}', resize học 4x5+1x1 GG, nhân bản đủ 3 khung", () => {
+test("GG theo nền tảng: bin, bản sao '{bộ}.{số}', resize material = ratio còn lại, nhân bản đủ 3 khung", () => {
   const p = plan([
     { type: "platform", p: "GG" }, { type: "bin_make" },
     { type: "seq_clone", src: { k: "base" } },
@@ -113,7 +113,7 @@ test("GG theo nền tảng: bin, bản sao '{bộ}.{số}', resize học 4x5+1x1
   ], [{ set: "36", idx: 1 }]);
   assert.strictEqual(p[1].rows[0].bin, "Sequence / GG / 36x / 36.1");
   assert.deepStrictEqual([p[2].rows[0].name, p[2].rows[0].bin], ["36.1", "Sequence / GG / 36x / 36.1"]);
-  assert.deepStrictEqual([p[3].rows[0].ratios, p[3].rows[0].platform, p[3].rows[0].bin], [["4-5", "1-1"], "GG", "Sequence / GG / 36x / 36.1"]);
+  assert.deepStrictEqual([p[3].rows[0].ratio, p[3].rows[0].platform, p[3].rows[0].bin], ["other", "GG", "Sequence / GG / 36x / 36.1"]);   // quy định 2026-10-06
   assert.deepStrictEqual(p[4].rows.map(r => r.name), ["SonaShape GG Dọc vid36.1 [c.ha] [hoang]", "SonaShape GG Ngang vid36.1 [c.ha] [hoang]", "SonaShape GG Vuông vid36.1 [c.ha] [hoang]"]);
   assert.ok(p[4].rows.every(r => r.bin === "Sequence / GG / 36x / 36.1"));
 });
