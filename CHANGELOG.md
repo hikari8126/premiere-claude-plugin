@@ -7,9 +7,9 @@
 
 
 
-## v5.21.0-beta.1 / server 1.27.0-beta.1 — 2026-10-06 · Autocut tìm source theo cấu trúc SAMX
+## v5.21.0 / bridge 3.25 (server 1.27.0) — 2026-10-06 · Autocut tìm source theo cấu trúc SAMX
 
-> CẦN BRIDGE server 1.27.0 (bridge cũ vẫn chạy, chỉ quét như trước).
+> CẦN BRIDGE APP 3.25 (bridge cũ vẫn chạy, chỉ quét như trước).
 
 ### 🐛 Không bao giờ tìm thấy footage ở `Sources/`
 - Gốc quét = cấp cha của thư mục chứa `.prproj`. Ở SAMX project nằm `<SP>/Asset/project/` → gốc là `<SP>/Asset`, còn footage ở `<SP>/Sources` (ngang hàng) → bỏ sót hẳn.
