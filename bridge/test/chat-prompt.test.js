@@ -25,10 +25,10 @@ test("dặn hỏi trước khi gen tốn credit; nói rõ không chạy lệnh /
   }
 });
 
-test("chế độ: Lệnh ngắn, Hỏi tự do research có nguồn", () => {
-  assert.match(SYSTEM_PROMPT, /chế độ "Lệnh"/);
+test("chế độ: Giao việc ngắn, Hỏi đáp research có nguồn", () => {
+  assert.match(SYSTEM_PROMPT, /chế độ "Giao việc"/);
   assert.match(SYSTEM_PROMPT, /1–2 câu/);
-  assert.match(FREE_PROMPT, /chế độ "Hỏi tự do"/);
+  assert.match(FREE_PROMPT, /chế độ "Hỏi đáp"/);
   assert.match(FREE_PROMPT, /tìm trên web/);
   assert.match(FREE_PROMPT, /\[tên\]\(url\)/);
   assert.ok(promptFor("free").startsWith(FREE_PROMPT));

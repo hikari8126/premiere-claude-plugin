@@ -402,6 +402,40 @@
     } else { if (scanTimer) { clearInterval(scanTimer); scanTimer = null; } autoSuggest(); }
     try { render(); } catch (e) {}
   });
+  // Thẻ quy trình đang chạy: tiến độ, bước, chờ bro (Tiếp tục ngay tại đây), Dừng, Xem chi tiết.
+  function runCard(fs) {
+    var waiting = !!fs.waiting;
+    var c = el('div', 'cd-runCard' + (waiting ? ' is-wait' : '') + (fs.stopping ? ' is-stop' : ''));
+    var hd = el('div', 'cd-runHd');
+    hd.appendChild(el('span', 'cd-runDot'));
+    hd.appendChild(el('span', 'cd-runT', (fs.stopping ? 'Đang dừng · ' : waiting ? 'Đang chờ bro · ' : 'Đang chạy · ') + fs.name + (fs.set ? ' · bộ ' + fs.set : '')));
+    if (qRun) hd.appendChild(el('span', 'cd-dim', 'hàng đợi'));
+    c.appendChild(hd);
+    var bar = el('div', 'cd-runBar'), fill = el('div', 'cd-runFill');
+    fill.style.width = Math.round(100 * Math.max(0, (fs.i || 0) - (waiting ? 0 : 0.5)) / Math.max(1, fs.total)) + '%';
+    bar.appendChild(fill); c.appendChild(bar);
+    c.appendChild(el('div', 'cd-runStep', waiting ? fs.waiting : 'Bước ' + (fs.i || 0) + '/' + fs.total + (fs.label ? ' · ' + fs.label : '')));
+    var row = el('div', 'cl-askBtns');
+    if (waiting && fs.kind === 'wait') row.appendChild(btn('Tiếp tục', 'cl-btn--primary', function () { T.continueWait(); }));
+    if (waiting && fs.kind === 'confirm' && fs.pick) {
+      // Xác nhận NGAY TẠI bảng điều khiển: danh sách việc + Tạo / Bỏ qua (bỏ chọn từng dòng thì vào Xem chi tiết)
+      var ok = fs.pick.lines.filter(function (l) { return !l.bad; }), bad = fs.pick.lines.length - ok.length;
+      var list = el('div', 'cd-runList');
+      ok.slice(0, 5).forEach(function (l) { list.appendChild(el('div', 'cd-runItem', '✓ ' + l.name + (l.sub ? '  ·  ' + l.sub : ''))); });
+      if (ok.length > 5) list.appendChild(el('div', 'cd-dim', '… và ' + (ok.length - 5) + ' việc nữa'));
+      if (bad) list.appendChild(el('div', 'cd-dim', bad + ' dòng đã có / lỗi — bỏ qua'));
+      c.appendChild(list);
+      var n = fs.pick.picked();
+      if (n) row.appendChild(btn(fs.pick.goLabel(n), 'cl-btn--primary', function () { try { fs.pick.btns.children[0].click(); } catch (e) {} }));
+      row.appendChild(btn('Bỏ qua bước', '', function () { try { fs.pick.btns.children[1].click(); } catch (e) {} }));
+    }
+    row.appendChild(btn('Xem chi tiết', '', function () { T.showView('log'); }));
+    if (!fs.stopping) row.appendChild(btn('Dừng', 'cd-stopBtn', function () { T.stopFlow(); }));
+    c.appendChild(row);
+    return c;
+  }
+  window.addEventListener('cl-flow', function () { try { render(); } catch (e) {} });
+
   function render() {
     dash.innerHTML = '';
     if (PTOOLS.scanning && PTOOLS.scanning().busy && !scanHidden) { renderScan(); return; }
@@ -428,6 +462,8 @@
     }
 
     var d = CLSTORE.get(), flows = d.buttons.filter(function (b) { return b.kind === 'flow'; });
+    var fs = T.flowState && T.flowState();
+    if (fs) dash.appendChild(runCard(fs));
     dash.appendChild(el('div', 'cd-lbl', 'Quy trình'));
     var grid = el('div', 'cd-grid');                    // 2 cột (UXP không có CSS grid → flex-wrap 50%)
     dash.appendChild(grid);
@@ -535,13 +571,13 @@
     var h = T.history().slice(-4).reverse();
     var rs = el('div', 'cd-box');
     var rh = el('div', 'cd-boxHd');
-    rh.appendChild(el('span', 'cd-boxT', 'Lệnh gần đây'));
-    var all = el('span', 'cd-link', 'Lịch sử ›');
+    rh.appendChild(el('span', 'cd-boxT', 'Chat gần đây'));
+    var all = el('span', 'cd-link', 'Mở chat ›');
     all.setAttribute('role', 'button');
     all.addEventListener('click', function () { T.showView('log'); });
     rh.appendChild(all);
     rs.appendChild(rh);
-    if (!h.length) rs.appendChild(el('div', 'cd-boxEmpty', 'Chưa có lệnh nào — gõ ở ô dưới, hoặc bấm một quy trình.'));
+    if (!h.length) rs.appendChild(el('div', 'cd-boxEmpty', 'Chưa chat gì — nhắn Claude ở ô dưới, hoặc bấm một quy trình.'));
     h.forEach(function (r) {
       var bad = r.err || (r.acts || []).some(function (a) { return a.cls === 'is-error'; });
       var x = el('div', 'cd-recent');
@@ -575,7 +611,6 @@
   }
 
   async function openSheet(b) {
-    if (T.busy()) return;
     T.showView('sheet');
     var v = CLC.vars(T.seqName());
     var st = { items: null, vids: [], targets: [], platform: '', add: '', addErr: '', search: '', ticks: {}, done: {},
@@ -671,7 +706,23 @@
       hd.appendChild(ttl);
       var ed = el('div', 'cl-btn', '✎ Sửa');
       ed.setAttribute('role', 'button');
-      ed.addEventListener('click', function () { window.ClaudeCustomUI.edit(b); });
+      // Sửa BẢN GỐC (không phải bản Claude chỉnh theo project); lưu xong quay lại phiếu với bản mới,
+      // giữ project / video đã chọn; bản Claude chỉnh theo bản cũ bỏ đi (bị lỗi thì Claude chỉnh lại).
+      ed.addEventListener('click', function () {
+        window.ClaudeCustomUI.edit(b0, null, { onDone: function (saved) {
+          if (saved) {
+            CLFIX.forget(st.here, b0);
+            b0 = CLSTORE.get().buttons.filter(function (x) { return x.id === saved.id; })[0] || saved;
+            b = CLFIX.applied(st.here, b0);
+            st.fix = b.fixedNote ? 'done' : ''; st.fixNote = b.fixedNote || ''; st.fixErr = '';
+            usesSeq = b.steps.some(function (s) { return CLC.isEngine(s.type) || (s.seqs && s.seqs.length && s.seqs[0].k !== 'current'); });
+            navMode = b.steps.some(function (s) { return s.type === 'seq_make' && s.frame === 'set'; });
+            pinMode = b.steps.some(function (s) { return s.type === 'platform' && s.p === 'PIN'; });
+          }
+          T.showView('sheet');
+          draw();
+        } });
+      });
       hd.appendChild(ed);
       sheet.appendChild(hd);
 
@@ -901,6 +952,11 @@
       go.setAttribute('role', 'button');
       go.addEventListener('click', async function () {
         if (!ready) return;
+        var running = T.flowState && T.flowState();
+        if (running) {                                   // đang có quy trình chạy → nói rõ, gợi ý xếp hàng đợi
+          st.queued = 'Đang chạy "' + running.name + '" — đợi xong, Dừng ở Bảng điều khiển, hoặc bấm + Thêm vào hàng đợi.';
+          draw(); return;
+        }
         if (!usesSeq) { T.runFlow(b, { platform: st.platform }); return; }
         if (navMode) {                                                  // lấy đúng số đang có trong ô, không theo lần vẽ trước
           var live = sheet.querySelector('.cd-setIn');

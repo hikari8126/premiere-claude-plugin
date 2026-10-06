@@ -40,6 +40,13 @@ window.CLSTORE = CLSTORE;
   var ioMode = '';          // '' | 'export' | 'import'
   var ioMsg = '';
   var pendingImport = '';
+  var onDone = null;        // mở từ phiếu chạy (✎ Sửa) → Lưu / Huỷ / ‹ quay về phiếu, không về bảng điều khiển
+  function finish(saved) {
+    var cb = onDone; onDone = null;
+    if (!cb) return false;
+    editing = null; close(); cb(saved || null);
+    return true;
+  }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -70,7 +77,7 @@ window.CLSTORE = CLSTORE;
   }
 
   function open() {
-    editing = null; pop = null; ioMode = ''; ioMsg = '';
+    editing = null; pop = null; ioMode = ''; ioMsg = ''; onDone = null;
     tab.classList.add('is-custom');
     page.hidden = false;
     render();
@@ -79,7 +86,7 @@ window.CLSTORE = CLSTORE;
     tab.classList.remove('is-custom');
     page.hidden = true;
   }
-  gear.addEventListener('click', function () { if (page.hidden) open(); else close(); });
+  gear.addEventListener('click', function () { if (page.hidden) open(); else if (!finish(null)) close(); });
 
   // ── Vẽ trang ──────────────────────────────────────────────────────────────
   function render() {
@@ -88,9 +95,9 @@ window.CLSTORE = CLSTORE;
     var d = CLSTORE.get();
 
     var hd = el('div', 'cu-hd');
-    var back = el('div', 'cu-back', '‹ Cài đặt');
+    var back = el('div', 'cu-back', onDone ? '‹ Phiếu chạy' : '‹ Bảng điều khiển');
     back.setAttribute('role', 'button');
-    back.addEventListener('click', close);
+    back.addEventListener('click', function () { if (!finish(null)) close(); });
     hd.appendChild(back);
     hd.appendChild(el('div', 'cu-sp'));
     hd.appendChild(btn('Nhập', ioMode === 'import' ? 'is-on' : '', function () { ioMode = ioMode === 'import' ? '' : 'import'; ioMsg = ''; pendingImport = ''; render(); }));
@@ -196,7 +203,7 @@ window.CLSTORE = CLSTORE;
 
     var err = el('div', 'cu-err');
     var acts = el('div', 'cu-row-btns cu-right');
-    acts.appendChild(btn('Huỷ', '', function () { editing = null; render(); }));
+    acts.appendChild(btn('Huỷ', '', function () { if (!finish(null)) { editing = null; render(); } }));
     acts.appendChild(btn('Lưu', 'cl-btn--primary', function () {
       var nb = CLC.normButton(e);
       if (!String(e.name || '').trim()) { err.textContent = 'Đặt tên nút trước.'; return; }
@@ -210,7 +217,7 @@ window.CLSTORE = CLSTORE;
       dd.buttons.forEach(function (b, i) { if (b.id === nb.id) idx = i; });
       if (idx >= 0) dd.buttons[idx] = nb; else dd.buttons.push(nb);
       CLSTORE.set(dd);
-      editing = null; render();
+      if (!finish(nb)) { editing = null; render(); }
     }));
     box.appendChild(err);
     box.appendChild(acts);
@@ -484,8 +491,10 @@ window.CLSTORE = CLSTORE;
   }
 
   // Mở thẳng trình sửa: b = quy trình có sẵn (Sửa), null = quy trình mới (từ bảng điều khiển).
-  function edit(b, kind) {
+  // opts.onDone(bảnĐãLưu | null): mở từ phiếu chạy → xong thì quay lại phiếu.
+  function edit(b, kind, opts) {
     open();
+    onDone = (opts && opts.onDone) || null;
     pop = null;
     editing = b ? JSON.parse(JSON.stringify(b)) : { id: CLC.uid(), name: '', kind: kind === 'prompt' ? 'prompt' : 'flow', mode: 'command', prompt: '', steps: [], _new: true };
     render();

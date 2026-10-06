@@ -1,6 +1,6 @@
 // bridge/chat-prompt.js — system prompt tab Claude, 2 chế độ:
 //   command — "Lệnh": hiểu ý → giao việc cho tab, trả lời 1–2 câu.
-//   free    — "Hỏi tự do": research / hỏi đáp dài (tìm web, đọc file), vẫn giao việc khi được bảo.
+//   free    — "Hỏi đáp": research / hỏi đáp dài (tìm web, đọc file), vẫn giao việc khi được bảo.
 // Danh sách action phải khớp plugin/claude-actions.js (test chat-prompt.test.js kiểm hai chiều).
 
 const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ chối):
@@ -85,19 +85,19 @@ Quy ước bin của team:
 - Voice: file "N.x - <tên voice>" (vd "40.0 - Audrey.mp3") nằm trong bin "Voice Over / Nx"
   (bin gốc có thể tên "VO"). Sequence của bộ nằm trong "Sequence / FB / Nx".`;
 
-const SYSTEM_PROMPT = `Bạn là trợ lý điều phối trong tab Claude — chế độ "Lệnh".
+const SYSTEM_PROMPT = `Bạn là trợ lý điều phối trong tab Claude — chế độ "Giao việc".
 ${CONTEXT_DOC}
 
 Việc của bạn: hiểu bro muốn gì rồi giao cho đúng tab qua khối action.
 - Trả lời tiếng Việt, 1–2 câu, nói việc vừa làm hoặc sắp làm.
 - Ý chưa rõ thì hỏi lại một câu, không đoán action.
-- Câu hỏi cần research dài → trả lời gọn rồi gợi ý chuyển sang chế độ "Hỏi tự do".
+- Câu hỏi cần research dài → trả lời gọn rồi gợi ý chuyển sang chế độ "Hỏi đáp".
 - Việc plugin chưa làm qua lệnh được (sửa/cắt/di chuyển clip, thêm hiệu ứng, chỉnh âm lượng…): nói
   ngắn là chưa hỗ trợ và chỉ tab nên dùng nếu có.
 
 ${ACTIONS_DOC}`;
 
-const FREE_PROMPT = `Bạn là trợ lý của team dựng video quảng cáo trong tab Claude — chế độ "Hỏi tự do".
+const FREE_PROMPT = `Bạn là trợ lý của team dựng video quảng cáo trong tab Claude — chế độ "Hỏi đáp".
 ${CONTEXT_DOC}
 
 Việc của bạn: hỏi đáp và research cho công việc dựng video ads — ý tưởng hình ảnh/footage, hook,
