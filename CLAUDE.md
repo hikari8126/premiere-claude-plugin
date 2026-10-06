@@ -343,6 +343,7 @@ Plugin tự xử lý keyboard focus — click vào vùng trắng trong plugin r�
 | `/watch/ack` | POST | Báo file đã import xong / thất bại (thất bại 3 lần → dead) |
 | `/watch/config` | GET/POST | Đọc/ghi danh sách watch của project hiện tại |
 | `/watch/scan-now` | POST | Đối chiếu một watch: đẩy file đã có sẵn về hàng đợi để plugin so với project |
+| `/watch/find-sources` | POST | Autocut tìm source thiếu trên đĩa: sản phẩm SAMX → quét `<SP>/Sources` + `Asset` (bỏ Output), không thì cấp cha thư mục .prproj; + thư mục các watch (source-roots.js, watchfolder-find.js) |
 | `/watch/browse` | GET | Liệt kê thư mục con (mặc định mở ở cấp cha của thư mục chứa .prproj) |
 | `/fs/exists` | POST | File đã có chưa (Tạo Sub hỏi trước khi ghi đè .srt) |
 | `/rawcut/status` | GET | Raw-cutter: python3 / ffmpeg / engine `xmlcut.py` có sẵn chưa |

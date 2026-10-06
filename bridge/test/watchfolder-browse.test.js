@@ -63,5 +63,7 @@ console.log('watchfolder-browse: OK');
   assert.strictEqual(guessBin('Random/Stuff', ['Sources', 'Voice Over']), null);
   // 4. Không phân biệt hoa thường / gạch dưới
   assert.strictEqual(guessBin('Voice_Over', ['voice over']).binPath, 'voice over');
+  // 5. SAMX: lớp approve/reject bỏ qua — ghép theo tên người/studio phía trên.
+  assert.strictEqual(guessBin('Sources/legacy/studio/Senyue/approve', ['Approve', 'Footage/Senyue']).binPath, 'Footage/Senyue');
   console.log('watchfolder-browse guessBin: OK');
 }

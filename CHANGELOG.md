@@ -7,6 +7,28 @@
 
 
 
+## v5.21.0-beta.1 / server 1.27.0-beta.1 — 2026-10-06 · Autocut tìm source theo cấu trúc SAMX
+
+> CẦN BRIDGE server 1.27.0 (bridge cũ vẫn chạy, chỉ quét như trước).
+
+### 🐛 Không bao giờ tìm thấy footage ở `Sources/`
+- Gốc quét = cấp cha của thư mục chứa `.prproj`. Ở SAMX project nằm `<SP>/Asset/project/` → gốc là `<SP>/Asset`, còn footage ở `<SP>/Sources` (ngang hàng) → bỏ sót hẳn.
+- `bridge/source-roots.js`: nhận sản phẩm SAMX của project (`projectProduct`, hoặc `productRoute` / `localRoute` của tab RAW cho project ở ổ team / máy local, kèm tên sequence + sản phẩm đã chọn ở tab RAW) → quét mọi thư mục con của `<SP>` trừ `Output/`, `Sources` trước rồi `Asset`; thư mục cạnh project vẫn quét nếu nằm ngoài `<SP>`. Không nhận ra sản phẩm → như cũ.
+- Độ sâu 6 → 10 (`Sources/legacy/studio/Senyue/approve/<lô>/<Outcome>/file` sâu 7 cấp).
+- Một gốc không đọc được (Drive chưa tải) không chặn cả lượt (`skippedRoots`); hết gốc mới báo lỗi.
+
+### 🐛 "Senyue 33" không khớp ở SAMX
+- Lượt 3 (thư mục + số) chỉ so cha trực tiếp — ở SAMX luôn là `approve`. Giờ xét mọi thư mục tổ tiên, lấy thư mục gần nhất chứa tên → `hintDir`; bin con import vào mang tên đó (`binDirName`), không phải "approve", để validate (chỉ nhìn bin cha của clip) nhận ra. `guessBin` bỏ lớp approve/reject khi ghép theo tên.
+
+### ✨ Reject / bản trùng
+- File trong `reject/`, `DISQUALIFIED…` vẫn hiện (⛔), không tick sẵn, thư mục toàn reject xếp cuối.
+- Nhiều file cùng khớp một source (Sources lẫn Asset/Clips, Studio 1 lẫn Studio 2): chỉ tick 1 bản (không reject → Sources trước → nông hơn), bản còn lại ghi "bản trùng" — import cả hai thì bin có 2 clip trùng tên, validate báo ⚠.
+- Dòng tóm tắt / báo không thấy ghi rõ đã quét `SAMX › <SP> (Sources, Asset) + N thư mục watch`.
+
+### 🧪
+- `test/source-roots.test.js` (bố cục SAMX giả). Test "nhường event loop" của watchfolder-find dùng `setImmediate` — `setTimeout(0)` là 1ms, máy nhanh quét xong trước nên chập chờn (hỏng cả trước thay đổi này).
+- Chạy thật AeriSoft: 2.231 file / 348 thư mục ~6s; IvyLift / LunaHug ở ổ Team 01 tự khớp sản phẩm SAMX.
+
 ## v5.20.2 / bridge 3.24 (server 1.26.2) — 2026-10-06 · Quy trình quản lý ở Bảng điều khiển + sửa Claude CLI ENOENT
 
 > CẦN BRIDGE APP 3.24.

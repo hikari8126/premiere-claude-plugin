@@ -77,7 +77,8 @@ function isMedia(rel) {
 // một phần kèm lời giải thích còn hơn để plugin chờ vô hạn.
 async function walkAsync(root, opts) {
   const o = opts || {};
-  const maxDepth = Math.max(1, Number(o.maxDepth) || 6);
+  // 10: Sources của SAMX sâu tới 7 cấp (legacy/studio/Senyue/approve/<lô>/<Outcome>/file).
+  const maxDepth = Math.max(1, Number(o.maxDepth) || 10);
   const maxFiles = Number(o.maxFiles) || 20000;
   const concurrency = Math.max(1, Number(o.concurrency) || 8);
   const deadline = Date.now() + (Number(o.budgetMs) || 45000);
@@ -126,8 +127,8 @@ async function walkAsync(root, opts) {
 // bridge "tìm thấy" mà import xong validate vẫn báo thiếu, hoặc ngược lại bridge
 // báo không thấy trong khi validate sẽ nhận file đó.
 //
-// files: [{ rel, fileName, stem (norm, không đuôi), parent (norm tên thư mục chứa) }]
-// Trả về { pass, hits: [{file, dist, hintFolder}] } của lượt ĐẦU TIÊN có kết quả.
+// files: [{ rel, fileName, stem (norm, không đuôi), dirs: [{n (norm), raw}] thư mục tổ tiên, gần nhất trước }]
+// Trả về { pass, hits: [{file, dist, hintFolder, hintDir}] } của lượt ĐẦU TIÊN có kết quả.
 function matchOne(target, files) {
   const t = norm(target);
   if (!t) return null;
@@ -148,18 +149,24 @@ function matchOne(target, files) {
   // Lượt 3: thư mục + clip. Cutsheet "Higg 33" = clip "33" nằm trong thư mục có
   // tên CHỨA "higg" (Sources/Higg/33.mp4). Đây là quy ước đặt tên phổ biến nhất
   // của team, và chính là thứ bản đầu của find-sources bỏ sót.
+  // Xét MỌI thư mục tổ tiên chứ không chỉ cha trực tiếp: ở SAMX "Senyue 33" là
+  // Sources/legacy/studio/Senyue/approve/33.mp4 — cha trực tiếp luôn là "approve".
+  // hintDir = thư mục GẦN NHẤT khớp → tên bin con để validate nhận ra sau import
+  // (lượt 3 của plugin chỉ nhìn bin cha trực tiếp của clip).
   const toks = t.split(' ').filter(Boolean);
+  const clipOk = (n, clipPart) => n === clipPart
+    || (n.length > clipPart.length && n.slice(-(clipPart.length + 1)) === ' ' + clipPart)
+    || (n.length > clipPart.length && n.indexOf(clipPart) === 0
+        && /[\s._\-(]/.test(n.charAt(clipPart.length)));
   for (let k = 1; k < toks.length; k++) {
     const folderPart = toks.slice(0, k).join(' ');
     const clipPart = toks.slice(k).join(' ');
-    hits = files.filter(f => {
-      if (!f.parent || f.parent.indexOf(folderPart) === -1) return false;
-      const n = f.stem;
-      return n === clipPart
-        || (n.length > clipPart.length && n.slice(-(clipPart.length + 1)) === ' ' + clipPart)
-        || (n.length > clipPart.length && n.indexOf(clipPart) === 0
-            && /[\s._\-(]/.test(n.charAt(clipPart.length)));
-    }).map(f => ({ file: f, dist: 0, hintFolder: folderPart }));
+    hits = [];
+    for (const f of files) {
+      if (!clipOk(f.stem, clipPart)) continue;
+      const d = (f.dirs || []).find(x => x.n.indexOf(folderPart) !== -1);
+      if (d) hits.push({ file: f, dist: 0, hintFolder: folderPart, hintDir: d.raw });
+    }
     if (hits.length) return { pass: 3, hits };
   }
 
@@ -180,36 +187,48 @@ function matchOne(target, files) {
   return null;
 }
 
-// roots     — các thư mục gốc để quét (productRoot + thư mục các watch đang có)
+// Footage bị loại: Sources/…/reject/, Asset/Clips/DISQUALIFIED VIDEO SOURCE/.
+// Vẫn trả về (bro muốn thấy) nhưng plugin không tick sẵn.
+const REJECT_RE = /\b(reject|rejected|disqualified)\b/;
+
+// root      — gốc HIỂN THỊ (rel trong bảng duyệt tính từ đây)
 // names     — tên source Autocut báo thiếu
-// trả về    — { ok, root, roots, scannedFiles, folders: [{folder, rel, matches}], unmatched }
-//             matches: { filePath, fileName, name, exact, pass, dist, hintFolder }
+// opts.roots      — các gốc để quét, theo thứ tự ưu tiên (mặc định [root]);
+//                   source-roots.js dựng ra từ sản phẩm SAMX của project
+// opts.extraRoots — thư mục các watch đang có (có thể nằm ngoài, ổ ngoài/NAS)
+// trả về    — { ok, root, roots, skippedRoots, scannedFiles, folders: [{folder, rel, matches}], unmatched }
+//             matches: { filePath, fileName, name, exact, pass, dist, hintFolder, hintDir, rejected, alt }
 async function findSources(root, names, opts) {
   const o = opts || {};
   const wanted = (names || []).filter(Boolean);
   if (!root) return { ok: false, error: 'thiếu thư mục gốc' };
 
-  // Thư mục watch nằm TRONG root thì đã được quét rồi — bỏ để khỏi đếm trùng.
-  const roots = [root];
-  for (const r of (o.extraRoots || [])) {
+  // Gốc nằm TRONG gốc khác thì đã được quét rồi — bỏ để khỏi đếm trùng.
+  const roots = [];
+  const base = (Array.isArray(o.roots) && o.roots.length ? o.roots : [root]).concat(o.extraRoots || []);
+  for (const r of base) {
     if (!r) continue;
-    const inside = roots.some(x => r === x || r.indexOf(x + path.sep) === 0);
-    if (!inside) roots.push(r);
+    const dup = roots.some(x => r === x || r.indexOf(x + path.sep) === 0);
+    if (!dup) roots.push(r);
   }
 
   const files = [];
-  let truncated = false, timedOut = false, dirs = 0;
+  const skippedRoots = [];
+  let truncated = false, timedOut = false, dirs = 0, firstError = null, okRoots = 0;
   const t0 = Date.now();
   // Quét các gốc song song, chung một hạn thời gian.
   const results = await Promise.all(roots.map(r => walkAsync(r, {
     maxDepth: o.maxDepth, maxFiles: o.maxFiles,
     concurrency: o.concurrency, budgetMs: o.budgetMs,
   }).then(res => ({ r, res }))));
-  for (const { r, res } of results) {
+  results.forEach(({ r, res }, ri) => {
     if (!res.ok) {
-      if (r === root) return { ok: false, error: res.error, root };
-      continue;   // một thư mục watch hỏng (ổ ngoài rút ra) không chặn cả lượt
+      // Một gốc hỏng (Drive chưa tải, ổ ngoài rút ra) không chặn cả lượt.
+      skippedRoots.push({ path: r, error: res.error });
+      if (!firstError) firstError = res.error;
+      return;
     }
+    okRoots++;
     if (res.truncated) truncated = true;
     if (res.timedOut) timedOut = true;
     dirs += res.dirs;
@@ -218,13 +237,18 @@ async function findSources(root, names, opts) {
       const parts = rel.split('/');
       const fileName = parts[parts.length - 1];
       const abs = path.join(r, parts.join(path.sep));
+      // Thư mục tổ tiên, gần nhất trước; file nằm ngay ở gốc thì tổ tiên là tên gốc.
+      const anc = parts.slice(0, -1).reverse();
+      if (!anc.length) anc.push(path.basename(r));
       files.push({
-        abs, root: r, fileName,
+        abs, root: r, rootIdx: ri, fileName, depth: parts.length,
         stem: norm(fileName),
-        parent: parts.length > 1 ? norm(parts[parts.length - 2]) : norm(path.basename(r)),
+        dirs: anc.map(x => ({ n: norm(x), raw: x })),
+        rejected: parts.slice(0, -1).some(x => REJECT_RE.test(norm(x))),
       });
     }
-  }
+  });
+  if (!okRoots) return { ok: false, error: firstError || 'không đọc được thư mục nào', root, roots, skippedRoots };
 
   const byFolder = new Map();
   const hit = new Set();
@@ -232,35 +256,52 @@ async function findSources(root, names, opts) {
     const m = matchOne(name, files);
     if (!m) continue;
     hit.add(name);
+    // Nhiều file cùng khớp một source (cùng clip ở Sources lẫn Asset/Clips, hay
+    // approve lẫn reject): chỉ tick sẵn MỘT bản — import cả hai thì bin có 2 clip
+    // trùng tên và validate lại báo ⚠ trùng. Ưu tiên: không reject → gốc đứng
+    // trước (Sources) → nông hơn.
+    const order = m.hits.slice().sort((a, b) =>
+      (a.file.rejected - b.file.rejected) || (a.file.rootIdx - b.file.rootIdx)
+      || (a.file.depth - b.file.depth) || (a.file.abs < b.file.abs ? -1 : 1));
+    const primary = order[0];
     for (const h of m.hits) {
       const folder = path.dirname(h.file.abs);
-      if (!byFolder.has(folder)) byFolder.set(folder, { root: h.file.root, matches: [] });
+      if (!byFolder.has(folder)) byFolder.set(folder, { root: h.file.root, rootIdx: h.file.rootIdx, matches: [] });
       byFolder.get(folder).matches.push({
         filePath: h.file.abs, fileName: h.file.fileName, name,
         // Lượt 1–3 là khớp theo luật, validate sẽ nhận y như vậy; chỉ lượt 4
         // (gõ sai) mới là "gần đúng" cần người dùng tự tick.
         exact: m.pass !== 4, pass: m.pass, dist: h.dist,
         hintFolder: h.hintFolder || null,
+        hintDir: h.hintDir || null,
+        rejected: !!h.file.rejected,
+        alt: h !== primary,
       });
     }
   }
 
   const folders = Array.from(byFolder.keys()).map(folder => {
     const g = byFolder.get(folder);
+    const p3 = g.matches.find(x => x.pass === 3 && x.hintDir);
     return {
       folder,
       dirName: path.basename(folder),
       rel: path.relative(root, folder) || '.',
-      exactCount: g.matches.filter(x => x.exact).length,
-      // Có clip khớp theo lượt 3 → bin đích phải mang tên thư mục này, nếu không
-      // import xong validate vẫn không nhận ra "Higg 33".
+      exactCount: g.matches.filter(x => x.exact && !x.rejected).length,
+      rootIdx: g.rootIdx,
+      rejected: g.matches.every(x => x.rejected),
+      // Có clip khớp theo lượt 3 → bin đích phải mang tên thư mục khớp (hintDir,
+      // vd "Senyue" chứ không phải "approve"), nếu không import xong validate vẫn
+      // không nhận ra "Senyue 33".
       needsFolderBin: g.matches.some(x => x.pass === 3),
+      binDirName: p3 ? p3.hintDir : path.basename(folder),
       matches: g.matches.sort((a, b) => (a.exact === b.exact ? 0 : (a.exact ? -1 : 1))),
     };
-  }).sort((a, b) => b.exactCount - a.exactCount || b.matches.length - a.matches.length);
+  }).sort((a, b) => (a.rejected - b.rejected) || b.exactCount - a.exactCount
+    || b.matches.length - a.matches.length || a.rootIdx - b.rootIdx);
 
   return {
-    ok: true, root, roots, truncated, timedOut,
+    ok: true, root, roots, skippedRoots, truncated, timedOut,
     scannedFiles: files.length, scannedDirs: dirs,
     elapsedMs: Date.now() - t0,
     folders,

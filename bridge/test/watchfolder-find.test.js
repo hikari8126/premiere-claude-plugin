@@ -82,10 +82,12 @@ assert.strictEqual(r.ok, true);
 assert.strictEqual(typeof r.timedOut, 'boolean');
 
 // 10. Không chặn event loop: một timer vẫn chạy được trong lúc quét.
+// setImmediate chứ không setTimeout(0): timer 0 thật ra là 1ms, máy nhanh quét
+// xong trước mốc đó → test chập chờn dù code không chặn gì.
 let ticked = false;
-const t = setTimeout(() => { ticked = true; }, 0);
+const t = setImmediate(() => { ticked = true; });
 await findSources(root, ['Higg 33']);
-clearTimeout(t);
+clearImmediate(t);
 assert.ok(ticked, 'quét phải nhường event loop (bridge không được treo)');
 
 fs.rmSync(root, { recursive: true, force: true });

@@ -67,9 +67,14 @@ function listDirs(dirPath) {
 //  2. Có bin mà tên lá trùng thư mục CHA ("Sources") → dùng, plugin tự tạo bin
 //     con "Higg" bên trong (source kiểu "Higg 33" cần bin lá mang tên đó).
 // Không chắc thì trả null để model / người dùng quyết.
+const GENERIC_DIR_RE = /^(approve|approved|reject|rejected)$/;
+
 function guessBin(rel, bins) {
   const n = s => String(s || '').normalize('NFC').toLowerCase().replace(/[-_.]+/g, ' ').replace(/\s+/g, ' ').trim();
-  const parts = String(rel || '').split(/[\\/]/).filter(Boolean);
+  // Lớp duyệt của SAMX (…/Senyue/approve) không phải tên nội dung — bỏ để
+  // ghép "Senyue" với bin "Senyue" chứ không phải một bin "approve" nào đó.
+  const parts = String(rel || '').split(/[\\/]/).filter(Boolean)
+    .filter(x => !GENERIC_DIR_RE.test(n(x)));
   if (!parts.length) return null;
   const leafOf = b => n(String(b).split('/').pop());
   const pick = want => {
