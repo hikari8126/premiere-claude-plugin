@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var restartCount    = 0
     let maxAutoRestarts = 5
     var healthTimer: Timer?
+    var healthMiss      = 0       // watchdog: số lần /health trượt liên tiếp
     var startPending    = false   // a start/restart is already scheduled or running
     var logLines        = [String]()
     var logWindow:    NSWindow?
@@ -61,10 +62,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard !intentionalStop, !startPending, bridgeTask == nil,
               restartCount <= maxAutoRestarts else { return }
         DispatchQueue.global(qos: .utility).async {
-            let h = self.shTimeout("curl -s --max-time 2 http://127.0.0.1:\(self.bridgePort)/health 2>/dev/null",
-                                   env: ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"], timeout: 5)
-            guard !h.out.contains("\"status\"") else { return }
+            // Bridge bận (đang đọc Drive, gọi Claude…) có thể chậm vài giây — trước đây 1 lần quá 2s là giết
+            // bridge, làm plugin báo "Bridge không trả lời". Giờ: hạn 5s, trượt 2 lần liên tiếp mới khởi động lại.
+            let h = self.shTimeout("curl -s --max-time 5 http://127.0.0.1:\(self.bridgePort)/health 2>/dev/null",
+                                   env: ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"], timeout: 8)
+            if h.out.contains("\"status\"") { DispatchQueue.main.async { self.healthMiss = 0 }; return }
             DispatchQueue.main.async {
+                self.healthMiss += 1
+                guard self.healthMiss >= 2 else { self.log("Watchdog: /health chậm (lần \(self.healthMiss)) — chờ lượt sau"); return }
+                self.healthMiss = 0
                 guard !self.intentionalStop, self.bridgeTask == nil else { return }
                 self.log("Watchdog: port \(self.bridgePort) không trả lời — khởi động lại Bridge")
                 self.startBridge()

@@ -11,6 +11,31 @@ const { collectVariations } = require('./variations.js');
 const { friendlyElevenError } = require('./eleven-errors.js');  // lỗi ElevenLabs → tiếng Việt (VG8)  // lỗi variation sau không bỏ variation đã gen
 
 const app  = express();
+
+// ── Theo dõi bridge bị kẹt (để tìm vì sao plugin hay báo "Bridge không trả lời") ──
+// Event loop trễ > 1.5s hoặc request > 3s → ghi ~/Library/Logs/claude-bridge-slow.log (giữ ~200KB).
+(function watchSlow() {
+  const LOG = path.join(os.homedir(), 'Library', 'Logs', 'claude-bridge-slow.log');
+  const write = line => {
+    try {
+      try { if (fs.statSync(LOG).size > 200000) fs.renameSync(LOG, LOG + '.1'); } catch (e) {}
+      fs.appendFileSync(LOG, new Date().toISOString() + ' ' + line + '\n');
+    } catch (e) {}
+  };
+  let last = Date.now(), current = '';
+  app.use((req, res, next) => {
+    const t = Date.now(), what = req.method + ' ' + req.path;
+    current = what;
+    res.on('finish', () => { const d = Date.now() - t; if (d > 3000 && !/^\/(chat|tts|transcribe|rawcut\/export|flow|project|superautocut|render\/index)/.test(req.path)) write('chậm ' + d + 'ms ' + what); });
+    next();
+  });
+  setInterval(() => {
+    const lag = Date.now() - last - 500;
+    if (lag > 1500) write('KẸT ' + lag + 'ms (request gần nhất: ' + (current || '?') + ')');
+    last = Date.now();
+  }, 500).unref();
+})();
+
 const PORT = Number(process.env.PORT) || 3030;
 
 app.use(cors({
@@ -200,19 +225,30 @@ const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || claudeModel.CLAUDE_MODEL;
 // Phiên bản Claude CLI (cache 10 phút — user chạy `claude update` thì bridge tự nhận).
 // CLI < 2.1.280 không chạy được Opus 5.5 → cliModelArgs() trả [] để CLI dùng model mặc định.
 let _cliVer = { at: 0, v: '' };
-function cliVersion() {
-  if (Date.now() - _cliVer.at < 600000) return _cliVer.v;
-  let v = '';
-  try {
-    const r = require('child_process').spawnSync('claude', ['--version'], { encoding: 'utf8', timeout: 10000, env: cliEnv() });
-    v = String(r.stdout || '').trim();
-  } catch (e) {}
-  _cliVer = { at: Date.now(), v };
-  if (!claudeModel.cliAtLeast(v, claudeModel.MIN_CLI_FOR_MODEL)) {
-    console.warn('[cli] Claude CLI ' + (v || '?') + ' < ' + claudeModel.MIN_CLI_FOR_MODEL + ' → không dùng được ' + DEFAULT_MODEL + ', CLI tự chọn model. Chạy `claude update`.');
-  }
-  return v;
+// Trước đây spawnSync('claude --version') mỗi 10 phút → chặn cả server (CLI khởi động nguội vài giây) →
+// /health quá hạn → plugin báo "Bridge không trả lời", watchdog của app còn giết bridge. Giờ chạy nền,
+// trả giá trị đã biết (lần đầu chờ tối đa ở chatViaCLI qua cliVersionReady()).
+let _cliVerBusy = null;
+function refreshCliVersion() {
+  if (_cliVerBusy) return _cliVerBusy;
+  _cliVerBusy = new Promise(resolve => {
+    require('child_process').execFile('claude', ['--version'], { encoding: 'utf8', timeout: 15000, env: cliEnv() }, (err, out) => {
+      const v = String(out || '').trim();
+      _cliVer = { at: Date.now(), v: v || _cliVer.v };
+      if (v && !claudeModel.cliAtLeast(v, claudeModel.MIN_CLI_FOR_MODEL)) {
+        console.warn('[cli] Claude CLI ' + v + ' < ' + claudeModel.MIN_CLI_FOR_MODEL + ' → không dùng được ' + DEFAULT_MODEL + ', CLI tự chọn model. Chạy `claude update`.');
+      }
+      _cliVerBusy = null;
+      resolve(_cliVer.v);
+    });
+  });
+  return _cliVerBusy;
 }
+function cliVersion() {
+  if (Date.now() - _cliVer.at >= 600000) refreshCliVersion();
+  return _cliVer.v;
+}
+async function cliVersionReady() { if (!_cliVer.v) await refreshCliVersion(); return _cliVer.v; }
 function cliModelArgs() { return claudeModel.cliModelArgs(cliVersion(), DEFAULT_MODEL); }
 
 // ── Mode A: Direct Anthropic API key ──────────────────────────────────────
@@ -2904,10 +2940,24 @@ async function callLLM(prompt, opts) {
       messages: [{ role: 'user', content: prompt }] }));
     return claudeModel.textOf(resp).trim();
   }
-  const { spawnSync } = require('child_process');
+  // ⚠️ Chạy NỀN (spawn), không spawnSync: bản đồng bộ chặn cả bridge 10–30s mỗi lần hỏi Claude → /health
+  // quá hạn ("Bridge không trả lời" ở plugin) và watchdog của app giết bridge giữa chừng (bug 2026-10-06,
+  // nặng thêm từ 5.19.0 vì quét project / sửa khối / gợi ý quy trình đều gọi callLLM).
   const claudeEnv = cleanEnv();
   claudeEnv.PATH = ((claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + claudeEnv.PATH;
-  const result = spawnSync('claude', ['--print', ...cliModelArgs()], { input: prompt, encoding: 'utf8', timeout: 90000, env: claudeEnv });
+  await cliVersionReady();
+  const result = await new Promise(resolve => {
+    const proc = require('child_process').spawn('claude', ['--print', ...cliModelArgs()], { env: claudeEnv });
+    let stdout = '', stderr = '', done = false;
+    const finish = r => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
+    const timer = setTimeout(() => { try { proc.kill('SIGTERM'); } catch (e) {} finish({ error: new Error('Claude CLI quá 90s không trả lời') }); }, 90000);
+    proc.stdout.on('data', d => { stdout += d; });
+    proc.stderr.on('data', d => { stderr += d; });
+    proc.on('error', e => finish({ error: e }));
+    proc.on('close', code => finish({ status: code, stdout, stderr }));
+    proc.stdin.on('error', () => {});
+    proc.stdin.end(prompt);
+  });
   if (result.error) throw result.error;
   // CLI lỗi (vd "Failed to authenticate: OAuth session expired") in lỗi ra STDOUT
   // rồi exit ≠ 0. Không chặn ở đây thì câu lỗi bị trả về như câu trả lời của
@@ -4325,3 +4375,4 @@ if (require.main === module) {
 }
 
 module.exports = Object.assign(module.exports || {}, { buildMultipartBody, buildNotifyScript, app, watchEngine });
+

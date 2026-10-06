@@ -1000,15 +1000,24 @@ window.cliLoginFlow = cliLoginFlow;
   });
 })();
 
+// Trước đây chỉ kiểm tra lúc mở panel: một lần chậm (bridge vừa khởi động / đang bận) là dòng đỏ
+// "quá 4s" nằm đó mãi dù bridge chạy lại ngay sau. Giờ: trượt thì tự thử lại (3s → 6s → … ≤ 30s),
+// chỉ báo đỏ khi trượt 2 lần liên tiếp; kết nối được thì dừng thử.
+var bridgeMiss = 0, bridgeRetry = null;
+function bridgeRetryLater() {
+  clearTimeout(bridgeRetry);
+  bridgeRetry = setTimeout(checkBridge, Math.min(30000, 3000 * Math.pow(2, Math.max(0, bridgeMiss - 1))));
+}
 function checkBridge() {
-  setStatus('connecting', 'Connecting to bridge...');
+  if (!bridgeMiss) setStatus('connecting', 'Connecting to bridge...');
   var xhr = new XMLHttpRequest();
-  xhr.timeout = 4000;
+  xhr.timeout = 6000;
   xhr.open('GET', BRIDGE_URL + '/health', true);
   xhr.onload = function() {
     if (xhr.status === 200) {
       try {
         bridgeHealth = JSON.parse(xhr.responseText);
+        bridgeMiss = 0; clearTimeout(bridgeRetry);
         window.bridgeHealth = bridgeHealth;   // tab Tạo Sub đọc để cảnh báo bridge cũ
         var bVer = bridgeHealth.version || '?';
 
@@ -1043,8 +1052,12 @@ function checkBridge() {
       setStatus('offline', 'Bridge error: ' + xhr.status);
     }
   };
-  xhr.onerror   = function() { setStatus('offline', BRIDGE_OFFLINE_MSG); };
-  xhr.ontimeout = function() { setStatus('offline', 'Bridge không trả lời (quá 4s) — thử Khởi động lại Bridge trên menu bar'); };
+  xhr.onerror   = function() { bridgeMiss++; setStatus(bridgeMiss < 2 ? 'connecting' : 'offline', bridgeMiss < 2 ? 'Đang kết nối lại Bridge…' : BRIDGE_OFFLINE_MSG); bridgeRetryLater(); };
+  xhr.ontimeout = function() {
+    bridgeMiss++;
+    setStatus(bridgeMiss < 2 ? 'connecting' : 'offline', bridgeMiss < 2 ? 'Bridge đang bận — thử lại…' : 'Bridge không trả lời — đang thử lại; vẫn vậy thì Khởi động lại Bridge trên menu bar');
+    bridgeRetryLater();
+  };
   xhr.send();
 }
 
