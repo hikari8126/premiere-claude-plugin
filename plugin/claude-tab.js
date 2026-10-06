@@ -143,6 +143,44 @@
     logEl.appendChild(root);
     return { root: root, meta: meta, reply: reply, result: result };
   }
+  // ── Copy: UXP không cho bôi đen chữ trong panel → nút Copy trên mỗi khối code/prompt + cuối câu trả lời ──
+  function copyText(t, btn) {
+    var done = function (ok) {
+      if (!btn) return;
+      var was = btn.textContent;
+      btn.textContent = ok ? '✓ Đã copy' : 'Không copy được';
+      setTimeout(function () { btn.textContent = was; }, 1400);
+    };
+    try {
+      var c = navigator.clipboard;
+      var p = c && c.setContent ? c.setContent({ 'text/plain': t }) : (c && c.writeText ? c.writeText(t) : null);
+      if (p && typeof p.then === 'function') p.then(function () { done(true); }, function () { done(false); });
+      else done(!!p || !!c);
+    } catch (e) { done(false); }
+  }
+  function copyBtn(label, getText) {
+    var b = document.createElement('span');
+    b.className = 'cl-copy'; b.setAttribute('role', 'button'); b.textContent = label;
+    b.addEventListener('click', function (e) { e.stopPropagation(); copyText(getText(), b); });
+    return b;
+  }
+  function decorateReply(el, raw) {
+    if (!el) return;
+    Array.prototype.forEach.call(el.querySelectorAll('pre'), function (pre) {
+      if (pre.previousSibling && pre.previousSibling.className === 'cl-copyBar') return;
+      var bar = document.createElement('div');
+      bar.className = 'cl-copyBar';
+      bar.appendChild(copyBtn('Copy', function () { return pre.textContent; }));
+      pre.parentNode.insertBefore(bar, pre);
+    });
+    var plain = String(raw || '').replace(/```actions[\s\S]*?```/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (plain) {
+      var row = document.createElement('div');
+      row.className = 'cl-copyRow';
+      row.appendChild(copyBtn('Copy câu trả lời', function () { return plain; }));
+      el.appendChild(row);
+    }
+  }
   function addAct(entry, cls, text) {
     var row = document.createElement('div');
     row.className = 'cl-act ' + cls;
@@ -157,7 +195,7 @@
       var e = makeEntry(h.cmd, true);
       setMeta(e, h.mode, h.tools);
       if (h.err) { e.reply.className = 'cl-reply is-error'; e.reply.textContent = h.err; }
-      else e.reply.innerHTML = CLLOG.renderReply(h.raw) || '';
+      else { e.reply.innerHTML = CLLOG.renderReply(h.raw) || ''; decorateReply(e.reply, h.raw); }
       (h.acts || []).forEach(function (a) {
         // Việc còn chờ xác nhận lúc đóng panel → coi như đã bỏ qua, không hỏi lại.
         if (a.cls === 'is-ask') addAct(e, 'is-skip', a.text + ' — bỏ qua');
@@ -182,8 +220,8 @@
   }
 
   function askLabel(a) {
-    var what = a.action === 'voicegen_sfx' ? 'SFX' : 'voice';
-    return { q: 'Gen ' + what + ' luôn? Tốn credit ElevenLabs.', yes: 'Gen luôn', no: a.action === 'voicegen_sfx' ? 'Chỉ đẩy prompt' : 'Chỉ đẩy script' };
+    var what = a.action === 'voicegen_sfx' ? 'SFX' : a.action === 'voicegen_music' ? 'nhạc' : 'voice';
+    return { q: 'Gen ' + what + ' luôn? Tốn credit ElevenLabs.', yes: 'Gen luôn', no: a.action === 'voicegen_script' ? 'Chỉ đẩy script' : 'Chỉ đẩy prompt' };
   }
 
   // Thẻ xem trước chuyển item: mỗi dòng "tên / bin cũ → bin mới", bấm dòng để bỏ chọn; dòng
@@ -703,7 +741,7 @@
         if (ev.type === 'text') {
           fullText += ev.content;
           var html = CLLOG.renderReply(fullText);
-          if (html) { entry.reply.className = 'cl-reply'; entry.reply.innerHTML = html; }
+          if (html) { entry.reply.className = 'cl-reply'; entry.reply.innerHTML = html; decorateReply(entry.reply, fullText); }
           scrollEnd();
         } else if (ev.type === 'tool_use') {
           if (/^mcp__premiere__/.test(ev.name)) tools.proj++;   // bridge trả lời từ bản chụp gửi kèm
@@ -1034,8 +1072,9 @@
         if (r.exists) return { name: title, sub: 'đã có file — bỏ qua', bad: true, r: r };
         return { name: title, sub: '→ ' + r.dest + (r.learnedFrom ? '' : ' (mặc định — chưa có bộ nào đã render)'), r: r };
       }
+      if (r.exists && st.type === 'bin_make' && r.note) return { name: title, sub: 'đã có — ' + r.note, bad: true, r: r };
       if (r.exists && st.type !== 'raw_export') return { name: title, sub: 'đã có' + (r.where ? ' ở ' + r.where.split(' / ').pop() : '') + ' — bỏ qua', bad: true, r: r };
-      var sub = st.type === 'bin_make' ? 'bin mới' + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + (r.fps ? ' · ' + r.fps + 'fps' : '') + ' → ' + r.bin
+      var sub = st.type === 'bin_make' ? (r.note || 'bin mới') + (r.also && r.also.length > 1 ? ' · cho ' + r.also.length + ' video' : '') : st.type === 'seq_make' ? (r.like ? 'cài đặt như ' + r.like.name : 'khung ' + r.frame.join('×')) + (r.fps ? ' · ' + r.fps + 'fps' : '') + ' → ' + r.bin
               : st.type === 'seq_move' ? r.src.name + ' → ' + r.bin
               : st.type === 'raw_export' ? (st.mode === 'both' ? 'source + render' : st.mode)
               : 'từ ' + (r.src ? r.src.name : '?') + ' → ' + r.bin;

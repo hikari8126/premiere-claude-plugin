@@ -11,6 +11,9 @@ const ACTIONS_DOC = `Action được phép (ngoài danh sách này plugin từ c
 - voicegen_script {text, voiceId?, autoGenerate?}
     Đẩy script sang Voice Gen. Giữ nguyên câu chữ người dùng đưa (chỉ bỏ ký hiệu thừa).
     Chỉ đặt autoGenerate: true khi họ nói rõ "gen luôn" — plugin sẽ hỏi lại trước khi tốn credit.
+- voicegen_music {text, seconds?, autoGenerate?}
+    Đẩy prompt nhạc nền sang Voice Gen › Nhạc. Prompt tiếng Anh: thể loại, mood, nhạc cụ, BPM, cấu trúc, "no vocals".
+    seconds = độ dài (5–120), lấy theo độ dài video nếu biết. autoGenerate như voicegen_script.
 - voicegen_sfx {text, autoGenerate?}
     Viết prompt SFX tiếng Anh ngắn, cụ thể (chất liệu, hành động, nhịp) từ mô tả của họ.
 - autocut_load {rows: [{script, source, time}]}

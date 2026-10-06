@@ -5071,3 +5071,9 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 }
 .cl-clip:hover { opacity: 1; border-color: var(--cl); background: rgba(255,255,255,0.06); }
 .cl-clip.has-files { opacity: 1; border-color: var(--cl); }
+
+/* Copy trong tab Claude (UXP không bôi đen được) */
+.cl-copyBar { display: flex; justify-content: flex-end; margin: 4px 0 -2px; }
+.cl-copyRow { display: flex; justify-content: flex-end; margin-top: 4px; }
+.cl-copy { font-size: 10px; color: var(--text-dim); border: 1px solid #3a3a3a; border-radius: 6px; padding: 1px 7px; cursor: pointer; }
+.cl-copy:hover { color: var(--text); border-color: var(--cl); }

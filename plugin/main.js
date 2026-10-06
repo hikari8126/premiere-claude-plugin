@@ -706,6 +706,11 @@ async function ppExecuteAction(actionObj) {
       window.VoiceGenPushScript(actionObj.text || '', actionObj.voiceId || null, !!actionObj.autoGenerate);
       return { ok: true, data: { message: actionObj.autoGenerate ? 'Đã đẩy script sang Voice Gen và bắt đầu gen' : 'Đã đẩy script sang Voice Gen' } };
     }
+    if (action === 'voicegen_music') {
+      if (typeof window.VoiceGenPushMusic !== 'function') return { ok: false, error: 'tab Voice Gen chưa sẵn sàng' };
+      window.VoiceGenPushMusic(actionObj.text || '', actionObj.seconds, !!actionObj.autoGenerate);
+      return { ok: true, data: { message: actionObj.autoGenerate ? 'Đã đẩy prompt nhạc sang Voice Gen và bắt đầu gen' : 'Đã đẩy prompt nhạc sang Voice Gen › Nhạc' } };
+    }
     if (action === 'voicegen_sfx') {
       if (typeof window.VoiceGenPushSFX !== 'function') return { ok: false, error: 'tab Voice Gen chưa sẵn sàng' };
       window.VoiceGenPushSFX(actionObj.text || '', !!actionObj.autoGenerate);
@@ -2041,7 +2046,12 @@ async function ppGetOrCreateBin(proj, binName) {
           proj.executeTransaction(function (ca) { ca.addAction(createAction); }, 'Create bin');
         });
         if (r && typeof r.then === 'function') await r;
-        hit = await findChild(parent, want);
+        // Premiere đôi khi chưa cập nhật danh sách con ngay sau transaction → tìm lại vài lần
+        // (trước đây trả null = "không tạo được bin" dù bin đã tạo; chạy lại thì đẻ bin trùng).
+        for (var tries = 0; tries < 5 && !hit; tries++) {
+          hit = await findChild(parent, want);
+          if (!hit) await new Promise(function (ok) { setTimeout(ok, 150 * (tries + 1)); });
+        }
       } catch (e) { console.warn('[ppVO] createBin "' + want + '" failed:', e.message); }
     }
     if (!hit) return null;
@@ -10832,6 +10842,22 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (els.btnGenerate) { try { els.btnGenerate.focus(); } catch(e) {} }
       }, 100);
     }
+  };
+
+  window.VoiceGenPushMusic = function(text, seconds, autoGenerate) {
+    var vgBtn = document.querySelector('.tab-btn[data-tab="voicegen"]');
+    if (vgBtn) vgBtn.click();
+    switchMode('music');
+    var mp = $('vgMusicPrompt');
+    if (mp) { mp.value = text || ''; try { mp.dispatchEvent(new Event('input')); } catch (e) {} }
+    var sec = Math.round(Number(seconds));
+    var ml = $('vgMusicLength');
+    if (ml && sec >= 5) {
+      ml.value = String(Math.min(120, sec));
+      try { ml.dispatchEvent(new Event('input')); ml.dispatchEvent(new Event('change')); } catch (e) {}
+    }
+    if (autoGenerate) setTimeout(function() { generate(); }, 200);
+    else setTimeout(function() { if (els.btnGenerate) { try { els.btnGenerate.focus(); } catch(e) {} } }, 100);
   };
 
   window.VoiceGenPushSFX = function(text, autoGenerate) {

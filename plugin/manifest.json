@@ -21,6 +21,7 @@
   ],
   "requiredPermissions": {
     "localFileSystem": "request",
+    "clipboard": "readAndWrite",
     "network": {
       "domains": [
         "http://localhost:3030",

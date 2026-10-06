@@ -37,6 +37,10 @@ var CLA = (function () {
       if (!a.text || !String(a.text).trim()) return { error: 'thiếu script' };
       return { mode: a.autoGenerate ? 'confirm' : 'auto' };   // gen luôn = tốn credit ElevenLabs
     },
+    voicegen_music: function (a) {
+      if (!a.text || !String(a.text).trim()) return { error: 'thiếu prompt nhạc' };
+      return { mode: a.autoGenerate ? 'confirm' : 'auto' };
+    },
     voicegen_sfx: function (a) {
       if (!a.text || !String(a.text).trim()) return { error: 'thiếu mô tả SFX' };
       return { mode: a.autoGenerate ? 'confirm' : 'auto' };

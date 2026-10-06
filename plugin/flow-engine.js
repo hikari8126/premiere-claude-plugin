@@ -461,6 +461,9 @@ var FLE = (function () {
           // riêng từng khối
           if (s.type === 'bin_make') {
             row.binOnly = row.bin;
+            // Bin học từ bộ trước mà không chứa số bộ ("Sequence / FB", "Bộ 39"…) → ra đúng bin cũ, coi là
+            // "đã có" và không tạo gì — dễ tưởng lỗi. Ghi chú để thẻ xem trước nói rõ.
+            if ((s.bin.k === 'plat' || s.bin.k === 'prev') && !new RegExp('(^|\\D)' + set + '(\\D|$)').test(row.bin)) row.note = 'bin bộ trước không có số bộ → dùng chung bin "' + row.bin + '"';
             row.exists = (items || []).some(function (it) { return it.isFolder && samePath((it.path ? it.path + ' / ' : '') + it.name, row.bin); })
                       || (items || []).some(function (it) { return !it.isFolder && samePath(it.path, row.bin); });
           }
