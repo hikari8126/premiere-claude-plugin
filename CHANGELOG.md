@@ -7,6 +7,15 @@
 
 
 
+## v5.20.0 / bridge 3.22 (server 1.26.0) — 2026-10-06 · Tab Claude: đính ảnh + xếp RAW từ bảng NAV
+
+> CẦN BRIDGE APP 3.22 (/chat đọc ảnh theo đường dẫn).
+
+- **Đính ảnh vào ô lệnh (cl-attach.js):** UXP không kéo thả / dán ảnh được — dán (Cmd+V) ảnh chụp hoặc file ảnh từ Finder ra ĐƯỜNG DẪN file → tách khỏi lời lệnh thành chip (bỏ được), nút kẹp giấy bên phải ô lệnh mở hộp chọn ảnh. Bridge `/chat` đọc file (png/jpg/webp/gif/heic → HEIC đổi JPEG bằng `sips`, ≤8MB, tối đa 5 ảnh).
+- **Action `queue_raw`:** dán ảnh bảng NAV Slack ("Beat cuts to export — N NAVs released", bảng Product code | Released | Content Owner) + nói bộ mấy → Claude đề xuất; plugin map sản phẩm → project đã mở (CLATT.matchProject) → thẻ xác nhận → hàng đợi RAW (`ClaudeDash.queueRaw`, dùng quy trình RAW dựng sẵn).
+- **Banner cập nhật:** "CẦN BRIDGE APP 3.21" bị cắt thành "3" (regex dừng ở dấu chấm), ".mp4" dính chữ — sửa.
+- Nghiên cứu Slack → schedule RAW: docs/research/2026-10-05-slack-schedule-raw.md (tạm dừng — cần Slack app hoặc API SamX; Slack MCP không đọc được bảng).
+
 ## v5.19.0 / bridge 3.21 (server 1.25.0) — 2026-10-05 · Tab Claude AI tự học + khối Render
 
 > CẦN BRIDGE APP 3.21 (endpoint mới cho Claude + Render).
