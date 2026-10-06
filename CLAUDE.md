@@ -9,13 +9,13 @@
 ## Tổng quan
 
 Plugin tích hợp thẳng vào Adobe Premiere Pro:
-- **Tab Claude (Clawd)** — chế độ **Lệnh**: Claude (Opus 5.5) hiểu ý rồi điều phối các tab (mở tab, đẩy script/SFX sang Voice Gen, sắp bảng Autocut, **Resize**, chuẩn bị **RAW**), xem bin/item trong project (MCP premiere) và đề xuất chuyển item / sắp bin voice — mọi thay đổi project đều qua thẻ xem trước + bấm xác nhận; chế độ **Hỏi tự do**: research (tìm web, đọc file trong thư mục sản phẩm). Nhật ký 20 lệnh gần nhất. **⚙ Tuỳ biến** theo từng member: nút lệnh có biến `{bộ}`, quy trình nhiều bước, ghi chú riêng gửi kèm mọi lệnh, xuất/nhập `.json`; **tự học**: gợi ý lưu nút khi lặp lại, Claude đề xuất ghi nhớ, đọc quy ước bin/tên từ project
+- **Tab Claude (Clawd)** — chế độ **Giao việc**: Claude (Opus 5.5) hiểu ý rồi điều phối các tab (mở tab, đẩy script/SFX sang Voice Gen, sắp bảng Autocut, **Resize**, chuẩn bị **RAW**), xem bin/item trong project (MCP premiere) và đề xuất chuyển item / sắp bin voice — mọi thay đổi project đều qua thẻ xem trước + bấm xác nhận; chế độ **Hỏi đáp**: research (tìm web, đọc file trong thư mục sản phẩm). Nhật ký 20 lệnh gần nhất. **⚙ Tuỳ biến** theo từng member: nút lệnh có biến `{bộ}`, quy trình nhiều bước, ghi chú riêng gửi kèm mọi lệnh, xuất/nhập `.json`; **tự học**: gợi ý lưu nút khi lặp lại, Claude đề xuất ghi nhớ, đọc quy ước bin/tên từ project
 - **ElevenLabs Voice Gen** — tạo giọng đọc / SFX / nhạc nền
 - **Autocut** — tự động dựng timeline từ cutsheet script
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
 - **Đổi tên source hàng loạt** (tab Watch) — đổi tên file trên đĩa theo mẫu, relink clip Premiere + `.aep`, có hoàn tác
 
-**Version hiện tại:** 5.20.1 (Bridge app 3.23 · server 1.26.1)  
+**Version hiện tại:** 5.20.2 (Bridge app 3.24 · server 1.26.2)  
 **Yêu cầu hệ điều hành:** macOS (Apple Silicon hoặc Intel)
 
 ---

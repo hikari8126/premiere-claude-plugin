@@ -7,6 +7,19 @@
 
 
 
+## v5.20.2 / bridge 3.24 (server 1.26.2) — 2026-10-06 · Quy trình quản lý ở Bảng điều khiển + sửa Claude CLI ENOENT
+
+> CẦN BRIDGE APP 3.24.
+
+### 🐛 "spawn claude ENOENT"
+- Bridge (launchd, PATH tối giản) gọi `claude` theo tên; `/chat` và một chỗ khác dùng `cleanEnv()` thiếu `~/.npm-global/bin` → máy cài CLI ở đó (hoặc `~/.local/bin`, `~/.claude/local`, nvm…) không chat được. `claude-bin.js`: dò đường dẫn tuyệt đối (các chỗ hay cài + `zsh -lc 'command -v claude'` ở nền), mọi chỗ gọi `claude` dùng chung, PATH kèm thư mục của claude; log `[cli] claude: …` lúc khởi động.
+
+### ✨ Tab Claude — Bảng điều khiển quản lý quy trình
+- Thẻ **Đang chạy**: bước i/n, tiến độ (chỉ tính bước đã xong), Dừng, Xem chi tiết; chờ bro → **Tiếp tục** tại thẻ; bước cần xác nhận → danh sách việc + **Tạo / Bỏ qua bước** tại thẻ; xong → xanh + Clawd ăn mừng, tự ẩn ~6s; lỗi / dừng → đỏ, giữ lại.
+- Bấm Chạy ở phiếu ở lại Bảng điều khiển. Chat không bị chặn khi quy trình chạy (■ chỉ dừng chat); việc cần xác nhận từ chat đợi quy trình xong; chạy chồng → báo rõ.
+- ✎ Sửa ở phiếu chạy mở **bản gốc** (trước mở bản Claude chỉnh theo project → lưu là ghi đè quy trình gốc của team), lưu xong quay lại phiếu với bản mới.
+- Đổi tên: Lệnh / Hỏi tự do → **Giao việc / Hỏi đáp**, Lệnh gần đây → **Chat gần đây**, Lịch sử › → **Mở chat ›**. Tóm tắt project có nút **Ẩn**.
+
 ## v5.20.1 / bridge 3.23 (server 1.26.1) — 2026-10-06 · Bridge không còn "không trả lời" + quy trình theo cấu trúc từng project
 
 > CẦN BRIDGE APP 3.23. Manifest thêm quyền clipboard → cài lại .ccx (auto-update làm việc này).
