@@ -356,9 +356,9 @@
   }
 
   // Một bản: nhân bản → khung → tên → bin → canh clip. Lỗi chỉ hỏng dòng này.
-  async function makeVariant(project, job, tgtRatio, platform, prefs) {
+  async function makeVariant(project, job, tgtRatio, platform, prefs, nameOverride) {
     var tgt = RSZ.RATIOS[tgtRatio];
-    var name = RSZ.buildName(job.name, tgtRatio, platform);
+    var name = nameOverride || RSZ.buildName(job.name, tgtRatio, platform);
     var out = { ratio: tgtRatio, src: job.name };
     var dup = null;
     try {
@@ -469,7 +469,7 @@
         results.push(rd); onRow(rd); continue;
       }
       rzStep(p.name + ' · bắt đầu');
-      var r = await withWatchdog(makeVariant(project, p.job, p.ratio, platform, prefs), p);
+      var r = await withWatchdog(makeVariant(project, p.job, p.ratio, platform, prefs, p.nameOverride), p);
       results.push(r); onRow(r);
       if (r.hung) {                                  // Premiere kẹt → không chạy tiếp các bản sau
         for (var k = i + 1; k < plan.length; k++) {

@@ -59,3 +59,13 @@ test("APP bộ trước nằm bin không số bộ → theo mẫu {bộ}x của 
   PPF.use(PPF.scan(its));
   try { assert.strictEqual(F.platBin(its, "APP", "15", 0), "Sequence / Applovin / 15x"); } finally { PPF.use(null); }
 });
+
+test("PIN nương theo bộ PIN gần nhất: bin đơn → đơn hôm nay, bin bộ → bộ mới, tên học theo bộ trước", () => {
+  const d = new Date(2026, 9, 6);
+  const order = [seq("Sequence / FB / 35x", "SP vid35.0 [a]"), seq("Sequence / PIN / Order Sep 29 26", "SP vid34.0 [a] 2x3 PIN")];
+  assert.strictEqual(F.platBin(order, "PIN", "35", 0, d, [{ set: "35", idx: 0 }]), "Sequence / PIN / Order Oct 06 26");
+  const bySet = [seq("Sequence / FB / 8x", "LC vid8.0 [a]"), seq("Sequence / PIN / 7.x", "LC PIN vid7.0 [a]")];
+  assert.strictEqual(F.platBin(bySet, "PIN", "8", 0, d, [{ set: "8", idx: 0 }]), "Sequence / PIN / 8.x");
+  const p = F.planFlow(bySet, [{ type: "platform", p: "PIN" }, { type: "seq_resize", src: { k: "base" }, bin: { k: "plat" } }].map(F.normStep), [{ set: "8", idx: 0 }], d);
+  assert.deepStrictEqual([p[1].rows[0].name, p[1].rows[0].bin, p[1].rows[0].ratio], ["LC PIN vid8.0 [a]", "Sequence / PIN / 8.x", "2-3"]);
+});

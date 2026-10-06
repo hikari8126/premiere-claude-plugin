@@ -19,8 +19,8 @@ test("renderDest học theo bộ trước, NFC, PIN theo bin hiện tại, bỏ 
   assert.strictEqual(F.renderDest(files, "36.0", 36, 0), null);
 });
 
-test("PIN: một bộ → bin {bộ}x, lẫn bộ → Order <ngày>", () => {
-  const items = [seq("Sequence / PIN / Order Sep 29 26", "SP vid35.0 " + T + " 2x3 PIN")];
+test("PIN: bộ trước ở bin bộ → một bộ vào {bộ}x, lẫn bộ → Order <ngày>", () => {
+  const items = [seq("Sequence / PIN / Order Sep 29 26", "SP vid34.0 " + T + " 2x3 PIN"), seq("Sequence / PIN / 35x", "SP vid35.0 " + T + " 2x3 PIN")];
   const d = new Date(2026, 9, 5);
   assert.strictEqual(F.platBin(items, "PIN", "36", 0, d, [{ set: "36", idx: 0 }, { set: "36", idx: 1 }]), "Sequence / PIN / 36x");
   assert.strictEqual(F.platBin(items, "PIN", "36", 0, d, [{ set: "36", idx: 0 }, { set: "37", idx: 1 }]), "Sequence / PIN / Order Oct 05 26");

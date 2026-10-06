@@ -1146,6 +1146,8 @@
                   var wanted = r.ratio === 'other' ? ['9-16', '4-5'] : r.ratio === 'prev' ? (r.ratios || []) : [r.ratio];
                   var pl = await window.ResizeAPI.plan(r.platform, wanted, [src]);
                   if (!pl.ok) throw new Error(pl.error);
+                  // tên học theo project (PIN "LiftCharm PIN vid7.0"…) → trùng tên kiểu Resize không áp dụng
+                  if (r.nameOverride) pl.plan.forEach(function (x) { x.nameOverride = r.nameOverride; x.name = r.nameOverride; x.exists = false; });
                   var go = pl.plan.filter(function (x) { return !x.skip && !x.exists && !x.dupInPlan; });
                   if (!go.length && pl.plan.some(function (x) { return x.exists || x.dupInPlan; })) { ok.push(r.key); continue; }   // đã có → coi như xong
                   if (!go.length) throw new Error((pl.plan[0] && pl.plan[0].skip) || 'không có ratio nào để resize');

@@ -177,7 +177,7 @@ var FLE = (function () {
     var t = String(text || '');
     t = t.replace(new RegExp('(vid\\s*)' + from.set + '(\\s*\\.\\s*)' + from.idx + '(?!\\d)', 'gi'), '$1' + to.set + '$2' + to.idx);
     t = t.replace(new RegExp('(^|[^\\d.])' + from.set + '\\.' + from.idx + '(?![\\d])', 'g'), '$1' + to.set + '.' + to.idx);
-    t = t.replace(new RegExp('(^|\\D)' + from.set + '(?=x\\b)', 'g'), '$1' + to.set);
+    t = t.replace(new RegExp('(^|\\D)' + from.set + '(?=\\.?x\\b)', 'g'), '$1' + to.set);   // "35x", "2.x" (StretchMotions)
     return t;
   }
 
@@ -307,11 +307,36 @@ var FLE = (function () {
   }
   // PIN (quy định 2026-10-05): mọi video của lượt chạy cùng MỘT bộ → bin "{bộ}x" cạnh các đơn
   // (Sequence / PIN / 36x); lẫn nhiều bộ → bin đơn "Order <ngày>".
+  // Bản PIN của bộ gần nhất (bin chứa chữ PIN/Pinterest, tên có vid{bộ}.{số}) → {item, set, idx} | null
+  function pinPrev(items, set, idx) {
+    var best = null;
+    (items || []).forEach(function (it) {
+      if (!isSeq(it) || !inPlat(it.path, 'PIN')) return;
+      var v = vidOf(it.name);
+      if (!v || v.set >= Number(set)) return;
+      if (/\/\s*(material|materials|draft)\s*$/i.test(String(it.path))) return;   // bản sao gốc để làm material
+      var sc = v.set * 10 + (v.idx === Number(idx) ? 1 : 0);
+      if (!best || sc > best.sc) best = { sc: sc, item: it, set: v.set, idx: v.idx };
+    });
+    return best;
+  }
   function pinBin(items, date, targets) {
     var sets = {};
     (targets || []).forEach(function (t) { sets[String(t.set)] = 1; });
     var ks = Object.keys(sets);
     var order = pinOrderBin(items, date);
+    // Nương theo các bộ PIN gần nhất (user 2026-10-06): bộ trước nằm bin đơn "Order <ngày>" → đơn hôm nay;
+    // nằm bin theo bộ ("Pinterest / 21x") → bin bộ mới. Lẫn nhiều bộ trong một lượt → bin đơn.
+    var t0 = targets && targets[0], pp = t0 ? pinPrev(items, t0.set, t0.idx) : null;
+    if (pp) {
+      var last = String(pp.item.path).split('/').map(function (x) { return x.trim(); }).pop();
+      var parent = String(pp.item.path).replace(/\s*\/\s*[^/]*$/, '');
+      if (/^order\b/i.test(last)) return parent + ' / ' + order.split(' / ').pop();
+      if (ks.length === 1) {
+        var to = { set: Number(ks[0]), idx: Number(t0.idx) }, learned = subst(pp.item.path, { set: pp.set, idx: pp.idx }, to);
+        if (learned !== pp.item.path) return learned;
+      } else return parent + ' / ' + order.split(' / ').pop();
+    }
     var learnedOrder = (items || []).some(function (it) {
       var full = it.isFolder ? (it.path ? it.path + ' / ' : '') + it.name : it.path;
       return /\/\s*order\s+([A-Za-z]{3} \d{2} \d{2}|\d{6})\s*$/i.test(String(full || '')) && inPlat(full, 'PIN');
@@ -601,6 +626,10 @@ var FLE = (function () {
               if (s.platform === 'prev') row.platform = spec.from ? spec.platform : 'FB';
               row.learnedFrom = spec.from || null;
             }
+            if (row.platform === 'PIN' && (s.src.k === 'base')) {
+              var pv0 = pinPrev(items, set, idx);
+              if (pv0) row.nameOverride = subst(pv0.item.name, { set: pv0.set, idx: pv0.idx }, to);
+            }
             var stem = row.src && row.src.name ? String(row.src.name).replace(/\s+\d+x\d+(\s+\S+)?$/i, '') : '';
             var exact = FRAMES[row.ratio] && row.platform !== 'prev' ? stem + ' ' + row.ratio.replace('-', 'x') + ' ' + row.platform : '';
             // Tên chắc chắn (ratio + nhãn cụ thể) → trùng ở BẤT KỲ đâu (như tab Resize, vd PIN ở đơn cũ);
@@ -610,7 +639,10 @@ var FLE = (function () {
               return isSeq(it) && samePath(it.path, row.bin) && new RegExp('^' + esc(stem) + '\\s+\\d+x\\d+(\\s+\\S+)?$', 'i').test(String(it.name).trim());
             });
             if (had) row.where = had.path;
-            row.name = stem ? stem + ' ' + (row.ratio === 'other' ? '…' : (row.ratios && row.ratios.length ? row.ratios.map(function (r) { return r.replace('-', 'x'); }).join('+') : String(row.ratio).replace('-', 'x'))) + ' ' + row.platform : '';
+            if (row.nameOverride) {
+              row.exists = (items || []).some(function (it) { return isSeq(it) && norm(it.name) === norm(row.nameOverride); });
+              row.name = row.nameOverride;
+            } else row.name = stem ? stem + ' ' + (row.ratio === 'other' ? '…' : (row.ratios && row.ratios.length ? row.ratios.map(function (r) { return r.replace('-', 'x'); }).join('+') : String(row.ratio).replace('-', 'x'))) + ' ' + row.platform : '';
           }
           if (s.type === 'seq_move') row.exists = !!row.src && samePath(row.src.bin, row.bin);
           if (s.type === 'render') {

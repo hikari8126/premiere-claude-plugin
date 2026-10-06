@@ -119,10 +119,10 @@ test("GG theo nền tảng: bin, bản sao '{bộ}.{số}', resize material = ra
 });
 
 test("PIN theo nền tảng: Order đúng định dạng đơn mới nhất; APP: bin + khung AppLovin; FB resize không cần bin", () => {
-  // Quy định PIN 2026-10-05: một bộ → bin "{bộ}x"; lẫn nhiều bộ → "Order <ngày>" (định dạng đơn mới nhất)
+  // PIN nương theo bộ PIN gần nhất (2026-10-06): project này các bộ trước nằm bin đơn → đơn hôm nay, kể cả một bộ
   const pinSteps = [{ type: "platform", p: "PIN" }, { type: "bin_make" }, { type: "seq_resize", src: { k: "base" }, bin: { k: "plat" } }];
   const pin1 = plan(pinSteps, [{ set: "36", idx: 0 }]);
-  assert.strictEqual(pin1[1].rows[0].bin, "Sequence / PIN / 36x");
+  assert.strictEqual(pin1[1].rows[0].bin, "Sequence / PIN / Order Oct 05 26");
   const pin = plan(pinSteps, [{ set: "35", idx: 0 }, { set: "36", idx: 0 }]);
   assert.strictEqual(pin[1].rows[0].bin, "Sequence / PIN / Order Oct 05 26");          // "Sep 29 26" mới hơn "070826"
   assert.deepStrictEqual([pin[2].rows[1].ratio, pin[2].rows[1].platform, pin[2].rows[1].bin], ["2-3", "PIN", "Sequence / PIN / Order Oct 05 26"]);
