@@ -7,6 +7,27 @@
 
 
 
+## v5.20.1 / bridge 3.23 (server 1.26.1) — 2026-10-06 · Bridge không còn "không trả lời" + quy trình theo cấu trúc từng project
+
+> CẦN BRIDGE APP 3.23. Manifest thêm quyền clipboard → cài lại .ccx (auto-update làm việc này).
+
+### 🐛 "Bridge không trả lời (quá 4s)" hay xuất hiện
+- **Nguyên nhân chính:** `callLLM` chạy Claude CLI bằng `spawnSync` → cả bridge đứng hình 10–30s mỗi lần hỏi Claude (quét project, sửa khối, gợi ý quy trình, ghép bin Watch…, nặng thêm từ 5.19.0). `cliVersion` cũng `spawnSync('claude --version')`. → chạy nền (`spawn` / `execFile`).
+- Plugin chỉ kiểm bridge lúc mở panel → một lần chậm là đỏ mãi → tự thử lại (3s → … 30s), báo đỏ khi trượt 2 lần liên tiếp.
+- Watchdog app Bridge giết bridge khi `/health` quá 2s một lần → hạn 5s, trượt 2 lần liên tiếp.
+- Ghi `~/Library/Logs/claude-bridge-slow.log` khi event loop kẹt > 1.5s / request > 3s.
+
+### ✨ Quy trình theo cấu trúc từng project (thử trên VeraComfort, SonaShape, ZipLacy, CurvyFlex, LiftCharm, StretchMotions)
+- **GG khung cứng:** mỗi video = bản sao FB gốc + resize ratio còn lại (2 material) + nhân bản 3 đích 9:16 / 16:9 / 1:1 từ bộ trước; nhận đích theo loại (`GG dọc` hay `… 9x16 GG`), bin đích = bin khung bộ trước, material học từ bộ trước hoặc bin con kiểu `Draft`. Claude sửa khối chỉ được đổi tham số (giữ số + loại khối).
+- **PIN:** nương theo bộ PIN gần nhất — đơn `Order <ngày>` hay `{bộ}x`; nhiều bộ trong lượt → đơn; tên học theo bộ trước (`… 2x3 PIN` / `LC PIN vid7.0`); không material.
+- APP nhận tên kiểu `… vid 19.0 [..] Applovin`; bin bộ trước không có số bộ → theo mẫu `{bộ}x` của hồ sơ; `subst` hiểu bin `2.x`.
+- Tạo bin: tìm lại vài lần sau khi tạo; báo khi bin học từ bộ trước không có số bộ.
+
+### ✨ Tab Claude
+- Nút **Copy** cho khối code/prompt + câu trả lời (UXP không bôi đen được; manifest xin `clipboard`).
+- Action `voicegen_music`: Claude đẩy prompt nhạc + độ dài sang Voice Gen › Nhạc.
+- Nút đính ảnh dùng icon kẹp giấy, bên phải cạnh nút Gửi.
+
 ## v5.20.0 / bridge 3.22 (server 1.26.0) — 2026-10-06 · Tab Claude: đính ảnh + xếp RAW từ bảng NAV
 
 > CẦN BRIDGE APP 3.22 (/chat đọc ảnh theo đường dẫn).
