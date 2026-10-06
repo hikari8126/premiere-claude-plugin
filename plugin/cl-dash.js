@@ -412,9 +412,11 @@
     if (qRun) hd.appendChild(el('span', 'cd-dim', 'hàng đợi'));
     c.appendChild(hd);
     var bar = el('div', 'cd-runBar'), fill = el('div', 'cd-runFill');
-    fill.style.width = Math.round(100 * Math.max(0, (fs.i || 0) - (waiting ? 0 : 0.5)) / Math.max(1, fs.total)) + '%';
+    // chỉ tính bước ĐÃ XONG; bước đang chạy cộng nửa, đang chờ bro thì chưa tính (bước 2/3 chờ → 1/3, không phải 2/3)
+    var doneSteps = Math.max(0, (fs.i || 1) - 1) + (waiting ? 0 : 0.5);
+    fill.style.width = Math.max(4, Math.round(100 * doneSteps / Math.max(1, fs.total))) + '%';
     bar.appendChild(fill); c.appendChild(bar);
-    c.appendChild(el('div', 'cd-runStep', waiting ? fs.waiting : 'Bước ' + (fs.i || 0) + '/' + fs.total + (fs.label ? ' · ' + fs.label : '')));
+    c.appendChild(el('div', 'cd-runStep', 'Bước ' + (fs.i || 1) + '/' + fs.total + ' · ' + (waiting ? fs.waiting.replace(/^xác nhận bước \d+ · /, 'chờ xác nhận: ') : (fs.label || 'đang chạy'))));
     var row = el('div', 'cl-askBtns');
     if (waiting && fs.kind === 'wait') row.appendChild(btn('Tiếp tục', 'cl-btn--primary', function () { T.continueWait(); }));
     if (waiting && fs.kind === 'confirm' && fs.pick) {
