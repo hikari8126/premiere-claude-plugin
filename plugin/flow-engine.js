@@ -152,8 +152,10 @@ var FLE = (function () {
       return out;
     }
     var re = new RegExp('(^|\\s)' + esc(ref.text) + '\\s+vid\\s*' + set + '\\s*\\.\\s*(\\d+)(?!\\d)', 'i');
+    // Dạng đuôi: "<SP> vid 19.0 [..][..] Applovin" (VeraComfort) — chữ loại đứng cuối tên
+    var reTail = new RegExp('(^|\\s)vid\\s*' + set + '\\s*\\.\\s*(\\d+)(?!\\d).*\\s' + esc(ref.text) + '\\s*$', 'i');
     return (items || []).filter(isSeq).map(function (it) {
-      var m = String(it.name).match(re);
+      var m = String(it.name).match(re) || String(it.name).trim().match(reTail);
       return m ? { item: it, set: Number(set), idx: Number(m[2]) } : null;
     }).filter(Boolean);
   }
@@ -242,6 +244,16 @@ var FLE = (function () {
     (targets || []).forEach(function (t) { sets[String(t.set)] = 1; });
     var ks = Object.keys(sets);
     var order = pinOrderBin(items, date);
+    var learnedOrder = (items || []).some(function (it) {
+      var full = it.isFolder ? (it.path ? it.path + ' / ' : '') + it.name : it.path;
+      return /\/\s*order\s+([A-Za-z]{3} \d{2} \d{2}|\d{6})\s*$/i.test(String(full || '')) && inPlat(full, 'PIN');
+    });
+    var tpl = PF.binTpl('PIN');
+    if (!learnedOrder && tpl && /\{bộ\}/.test(tpl)) {
+      // project chưa từng có bin đơn → mẫu bin PIN của project; lẫn bộ → "Order <ngày>" cạnh các bin {bộ}x
+      if (ks.length === 1) return tpl.replace(/\{bộ\}/g, ks[0]).replace(/\{số\}/g, '0');
+      return tpl.replace(/[^/]*\{bộ\}[^/]*$/, '').replace(/\s*\/?\s*$/, ' / ') + order.split(' / ').pop();
+    }
     if (ks.length !== 1) return order;
     return order.replace(/[^/]*$/, '').replace(/\s*$/, ' ') + ks[0] + 'x';
   }

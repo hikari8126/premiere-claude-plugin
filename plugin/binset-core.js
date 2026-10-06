@@ -70,7 +70,13 @@ var BSC = (function () {
     (items || []).forEach(function (it) {
       if (!isSeq(it)) return;
       var m = String(it.name).trim().match(re);
-      if (!m || Number(m[1]) >= Number(set) || String(it.path).indexOf('/ ' + platform + ' /') < 0) return;
+      // Dạng đuôi (VeraComfort 2026-10-06): "Veracomfort vid 19.0 [..] 9x16 GG" trong bin "Timeline / Google / 19x"
+      if (!m) {
+        var t = String(it.name).trim().match(new RegExp('vid\\s*(\\d+)\\s*\\.\\s*' + idx + '(?!\\d).*\\s(\\d+)x(\\d+)\\s+(FB|GG|PIN)\\s*$', 'i'));
+        if (t) m = [t[0], t[1], t[2], t[3], t[4]];
+      }
+      var inP = new RegExp('(^|/)[^/]*(^|[\\s_\\-])(' + PF.alt(platform) + ')([\\s_\\-][^/]*)?\\s*(/|$)', 'i').test(String(it.path || ''));
+      if (!m || Number(m[1]) >= Number(set) || !inP) return;
       var s = Number(m[1]);
       if (!best || s > best.set) best = { set: s, platform: m[4].toUpperCase(), ratios: [] };
       if (s === best.set) { var r = m[2] + '-' + m[3]; if (best.ratios.indexOf(r) < 0) best.ratios.push(r); }
