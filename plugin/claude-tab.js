@@ -613,6 +613,7 @@
     if (!attachEl) return;
     attachEl.innerHTML = '';
     attachEl.hidden = !attach.length;
+    var cb = $('clClip'); if (cb) cb.classList.toggle('has-files', attach.length > 0);
     attach.forEach(function (a, i) {
       var c = document.createElement('div');
       c.className = 'cl-attChip' + (a.ok === false ? ' cl-attBad' : '');
