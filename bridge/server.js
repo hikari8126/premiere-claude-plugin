@@ -114,6 +114,8 @@ function cleanEnv() {
 // ── System prompt tab Claude (điều phối các tab qua action) — xem chat-prompt.js ──
 const { promptFor, memberContext } = require('./chat-prompt.js');
 const chatCli = require('./chat-cli.js');
+const claudeBin = require('./claude-bin.js');   // đường dẫn tuyệt đối của `claude` (launchd không có PATH của shell)
+claudeBin.warm(p => console.log('[cli] claude: ' + (p || 'KHÔNG THẤY — cài Claude CLI hoặc chạy `which claude`')));
 const premiereMcp = require('./premiere-mcp.js');
 
 // ── Tool Premiere cho tab Claude ──────────────────────────────────────────────
@@ -232,7 +234,7 @@ let _cliVerBusy = null;
 function refreshCliVersion() {
   if (_cliVerBusy) return _cliVerBusy;
   _cliVerBusy = new Promise(resolve => {
-    require('child_process').execFile('claude', ['--version'], { encoding: 'utf8', timeout: 15000, env: cliEnv() }, (err, out) => {
+    require('child_process').execFile(claudeBin.claudeBin(), ['--version'], { encoding: 'utf8', timeout: 15000, env: cliEnv() }, (err, out) => {
       const v = String(out || '').trim();
       _cliVer = { at: Date.now(), v: v || _cliVer.v };
       if (v && !claudeModel.cliAtLeast(v, claudeModel.MIN_CLI_FOR_MODEL)) {
@@ -397,11 +399,11 @@ function chatViaCLI(req, res, messages, timelineContext, voiceContext, opts) {
         bridgeUrl: 'http://127.0.0.1:' + PORT, chatId: opts.chatId,
       })));
     }
-    const proc = spawn('claude', chatCli.chatArgs({
+    const proc = spawn(claudeBin.claudeBin(), chatCli.chatArgs({
       attachRoot, projectPath: opts && opts.projectPath, modelArgs: cliModelArgs(), mcpConfigPath,
     }), {
       cwd: bridgeDir,
-      env: cleanEnv()
+      env: claudeBin.withPath(cleanEnv())
     });
 
     const startTime = Date.now();
@@ -2858,7 +2860,7 @@ Return ONLY a JSON array, no markdown, no explanation:
       const cliPrompt = `@${tmpImg}\n\n${prompt}`;
       outputText = await new Promise((resolve, reject) => {
         let out = '', err = '';
-        const proc = spawn('claude', ['--print', ...cliModelArgs(), cliPrompt], { env: cleanEnv() });
+        const proc = spawn(claudeBin.claudeBin(), ['--print', ...cliModelArgs(), cliPrompt], { env: claudeBin.withPath(cleanEnv()) });
         proc.stdout.on('data', d => { out += d.toString(); });
         proc.stderr.on('data', d => { err += d.toString(); });
         proc.on('close', code => code === 0 ? resolve(out) : reject(new Error(err || 'claude CLI exit ' + code)));
@@ -2947,7 +2949,7 @@ async function callLLM(prompt, opts) {
   claudeEnv.PATH = ((claudeEnv.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + claudeEnv.PATH;
   await cliVersionReady();
   const result = await new Promise(resolve => {
-    const proc = require('child_process').spawn('claude', ['--print', ...cliModelArgs()], { env: claudeEnv });
+    const proc = require('child_process').spawn(claudeBin.claudeBin(), ['--print', ...cliModelArgs()], { env: claudeBin.withPath(claudeEnv) });
     let stdout = '', stderr = '', done = false;
     const finish = r => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
     const timer = setTimeout(() => { try { proc.kill('SIGTERM'); } catch (e) {} finish({ error: new Error('Claude CLI quá 90s không trả lời') }); }, 90000);
@@ -3125,7 +3127,7 @@ const BRIDGE_VERSION = '1.26.1';  // 1.26.1: callLLM + claude --version chạy n
 // Env cho mọi lần gọi `claude` — cùng PATH với callLLM, vì Bridge app khởi
 // động server từ launchd nên PATH mặc định không có ~/.npm-global/bin.
 function cliEnv() {
-  const e = cleanEnv();
+  const e = claudeBin.withPath(cleanEnv());
   e.PATH = ((e.HOME || process.env.HOME || '') + '/.npm-global/bin') + ':' + e.PATH;
   return e;
 }

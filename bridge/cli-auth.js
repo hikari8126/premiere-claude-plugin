@@ -39,7 +39,7 @@ function parseStatus(out) {
 function status(env, opts) {
   const o = opts || {};
   if (!o.fresh && cache && Date.now() - cache.at < CACHE_MS) return cache;
-  const r = spawnSync('claude', ['auth', 'status'], { encoding: 'utf8', timeout: 15000, env });
+  const r = spawnSync(require('./claude-bin.js').claudeBin(), ['auth', 'status'], { encoding: 'utf8', timeout: 15000, env });
   if (r.error) {
     cache = { loggedIn: null, authMethod: null, at: Date.now(), error: r.error.code || r.error.message };
     return cache;
@@ -53,7 +53,7 @@ function status(env, opts) {
 function cachedStatus(env) {
   if (!refreshing && (!cache || Date.now() - cache.at >= CACHE_MS)) {
     refreshing = true;
-    execFile('claude', ['auth', 'status'], { timeout: 15000, env }, (err, out, errOut) => {
+    execFile(require('./claude-bin.js').claudeBin(), ['auth', 'status'], { timeout: 15000, env }, (err, out, errOut) => {
       refreshing = false;
       if (err && !out) {
         cache = { loggedIn: null, authMethod: null, at: Date.now(), error: err.code || err.message };
