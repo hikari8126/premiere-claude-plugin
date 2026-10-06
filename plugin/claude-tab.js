@@ -717,7 +717,7 @@
     var doneCb, donePromise = new Promise(function (r) { doneCb = r; });
     if (!opts.via) learnCmd(cmd, CLC.vars(seqNameNow()));
 
-    showView('log');
+    if (opts.via !== 'flow') showView('log');           // khối "Hỏi Claude" của quy trình: ở yên bảng điều khiển
     var entry = makeEntry(cmd + (pics.length ? '  📎 ' + pics.map(CLATT.baseName).join(', ') : ''), false), sentMode = opts.mode || mode, tools = { proj: 0, web: 0, page: 0, find: 0, file: 0 };
     setMeta(entry, sentMode, tools);
     entry.reply.className = 'cl-reply is-pending';
@@ -1227,7 +1227,7 @@
     over = over || {};
     autoRun = !!over.auto;
     window.CL_FLOW_RUNNING = Date.now();                 // việc các tab làm trong lúc chạy quy trình không ghi nhật ký riêng
-    showView('log');
+    showView('dash');                                    // theo dõi + xác nhận ở thẻ "Đang chạy" (bảng điều khiển); chi tiết ở chat
     var v = CLC.vars(seqNameNow());
     if (over.set) v['bộ'] = String(over.set);
     if (over.idxs || over.platform) b = { name: b.name, steps: b.steps.map(function (st) {
