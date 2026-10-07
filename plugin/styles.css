@@ -5287,13 +5287,16 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 
 /* Ô script */
 #tab-subtext .vg-script { border-radius: 9px; }
-#tab-subtext .st-manualRow { margin-top: 8px; }
+/* Dải dưới ô script: đếm dòng (trái) · ✨ AI ngắt câu dạng chữ accent, không viền (phải) */
+#tab-subtext .st-manualRow { margin-top: 6px; align-items: center; justify-content: space-between; }
+#tab-subtext .st-lineCount { font-size: 10.5px; color: var(--text-dim); padding-left: 2px; }
 #tab-subtext .st-manualBtn {
-  height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent;
-  color: var(--text-dim); font-size: 10.5px;
-  transition: border-color var(--st-ease), color var(--st-ease);
+  height: 22px; padding: 0 8px; border-radius: 6px; border: none; background: transparent;
+  color: var(--accent-light); font-size: 11px; font-weight: 500;
+  transition: background var(--st-ease), color var(--st-ease);
 }
-#tab-subtext .st-manualBtn:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-subtext .st-manualBtn .p-ic { margin-right: 5px; }
+#tab-subtext .st-manualBtn:hover { background: var(--accent-a12); color: var(--accent-lighter); }
 
 /* Nút: Tạo Sub = chính (accent đặc), Import / Finder = phụ (viền) */
 #tab-subtext .st-btn {

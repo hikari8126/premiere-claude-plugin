@@ -10556,6 +10556,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function stAutoResize() {
     var el = $('stScript'), sizer = $('stScriptSizer');
     if (el && sizer) sizer.textContent = (el.value || '') + '\n';
+    var lc = $('stLineCount');
+    if (lc && el) {
+      var n = (el.value || '').split('\n').filter(function (x) { return x.trim(); }).length;
+      lc.textContent = n ? n + ' dòng' : '';
+    }
   }
 
   async function stScanTracks() {
