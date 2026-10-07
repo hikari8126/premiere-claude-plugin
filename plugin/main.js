@@ -2276,6 +2276,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   var sacVoicePath  = null; // native path of the chosen/generated voice file
   var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
+  var sacValidatePassed = false;
+  var sacVoiceReady     = false;
+  var sacScriptPrepared = false; // normalized script already pushed to Voice Gen (auto on validate)
+  var sacNormToken      = 0;     // bumped to invalidate an in-flight normalize (cancel)
+  var sacNormAbort      = null;  // AbortController for the in-flight normalize fetch
+  var sacValidateToken  = 0;     // bumped to invalidate an in-flight validate
   var sacNoVoiceMode    = false; // set by "Without voice" button
 
   // Show the cut panel (hides voice panel), update label
@@ -4071,7 +4077,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       } else {
         var note = srcResult.premiereAvailable ? '' : ' (dev mode — chưa kiểm tra bin)';
         sacValidatePassed = true;
-        status.textContent = sacVoiceReady
+        status.textContent = sacNoVoiceMode
+          ? ('✅ ' + d.blockCount + ' blocks hợp lệ — bấm This seq / New seq để dựng (không voice).' + note)
+          : sacVoiceReady
           ? ('✅ ' + d.blockCount + ' blocks OK + voice sẵn sàng. Bấm "Run AutoCut".' + note)
           : ('✅ ' + d.blockCount + ' blocks hợp lệ. Thêm voice (⚡ Gen / 📂) để mở Run.' + note);
         sacShowPage('block');
