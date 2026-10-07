@@ -1008,7 +1008,7 @@
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span><span data-ic="file" data-ic-size="12" style="margin-right:6px"></span>Script input</span>
-        <select class="sac-presetSel" id="sacColPreset" title="Thứ tự cột nhập">
+        <select class="sac-presetSel" id="sacColPreset">
           <option value="text,time,src">Script → Time → Source</option>
           <option value="text,src,time">Script → Source → Time</option>
           <option value="time,text,src">Time → Script → Source</option>
@@ -1016,8 +1016,8 @@
           <option value="src,text,time">Source → Script → Time</option>
           <option value="src,time,text">Source → Time → Script</option>
         </select>
-        <div id="sacCsvImport" class="sac-csvBtn" role="button" title="Nạp script từ file CSV">＋ CSV</div>
-        <div id="sacScriptClear" class="sac-scriptClearBtn" role="button" title="Clear toàn bộ script + huỷ tác vụ đang chạy"><span data-ic="trash" data-ic-size="12"></span> Xoá script</div>
+        <div id="sacCsvImport" class="sac-csvBtn" role="button">＋ CSV</div>
+        <div id="sacScriptClear" class="sac-scriptClearBtn" role="button"><span data-ic="trash" data-ic-size="12"></span> Xoá script</div>
       </div>
       <div class="sac-tableWrap" id="sacTableWrap">
         <div class="sac-thead">
@@ -1043,14 +1043,14 @@
           <div id="sacBackScript" class="sac-backBtn" role="button"><span data-ic="arrow_left" data-ic-size="11"></span> Script</div>
           <span class="sac-blockTitle"><span data-ic="scissors" data-ic-size="13" style="margin-right:6px"></span>Blocks</span>
           <span id="sacBlockCount" class="sac-blockMeta"></span>
-          <div id="sacRefreshBlocks" class="sac-refreshBlockBtn" role="button" title="Validate lại sources (sau khi import source mới)"><span data-ic="rotate_right" data-ic-size="12"></span> Refresh Block</div>
+          <div id="sacRefreshBlocks" class="sac-refreshBlockBtn" role="button"><span data-ic="rotate_right" data-ic-size="12"></span> Refresh Block</div>
         </div>
         <div id="sacBlockList" class="sac-blockList"></div>
         <!-- Voice panel — hidden once voice ready or "without voice" clicked -->
         <div class="sac-voicePanel" id="sacVoicePanel">
           <div class="sac-voiceRow">
             <div id="sacVoiceGenBtn" class="sac-voiceBtn sac-voiceGenBtn" role="button"><span data-ic="bolt" data-ic-size="13" data-ic-color="#d8b4fe"></span> Gen voice (Voice Gen) →</div>
-            <div id="sacVoiceBtn" class="sac-voiceBtn" role="button" title="Chọn file voice có sẵn"><span data-ic="folder_open" data-ic-size="14"></span></div>
+            <div id="sacVoiceBtn" class="sac-voiceBtn" role="button"><span data-ic="folder_open" data-ic-size="14"></span></div>
             <span class="sac-vDivider"></span>
             <div id="sacCutNoVoiceBtn" class="sac-cutNoVoiceBtn" role="button"><span data-ic="scissors" data-ic-size="13" data-ic-color="#fbbf24"></span> Without voice</div>
           </div>
@@ -1281,19 +1281,19 @@
     <div class="sac-newseq-box">
       <div class="sac-confirm-head">
         <span class="sac-confirm-title"><span data-ic="scissors" data-ic-size="13" style="margin-right:6px"></span>Cut to New Sequence</span>
-        <div id="sacNewSeqCancelX" class="sac-confirm-x" role="button" title="Huỷ"><span data-ic="xmark" data-ic-size="13"></span></div>
+        <div id="sacNewSeqCancelX" class="sac-confirm-x" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
       </div>
 
       <label class="sac-nsf2-label">Tên sequence</label>
       <div class="sac-nsf2-nameRow">
         <input id="sacNewSeqName" class="sac-nsf2-input" type="text" placeholder="AutoCut" />
-        <div id="sacSeqNameSave" class="sac-nsf2-iconBtn" role="button" title="Lưu tên này thành preset"><span data-ic="floppy_disk" data-ic-size="14"></span></div>
+        <div id="sacSeqNameSave" class="sac-nsf2-iconBtn" role="button"><span data-ic="floppy_disk" data-ic-size="14"></span></div>
       </div>
       <div class="sac-nsf2-presetRow">
         <select id="sacSeqNamePreset" class="sac-nsf2-select">
           <option value="">— Preset tên đã lưu —</option>
         </select>
-        <div id="sacSeqNameDel" class="sac-nsf2-iconBtn" role="button" title="Xoá preset đang chọn"><span data-ic="trash" data-ic-size="14"></span></div>
+        <div id="sacSeqNameDel" class="sac-nsf2-iconBtn" role="button"><span data-ic="trash" data-ic-size="14"></span></div>
       </div>
 
       <label class="sac-nsf2-label">Tỉ lệ khung (Ratio)</label>

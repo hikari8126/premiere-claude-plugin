@@ -3048,7 +3048,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           el.dataset.srcBaseCount = String(ambiguousNames[name]);
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous';
           statusEl.textContent = '⚠';
-          statusEl.title = ambiguousNames[name] + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
           if (msgEl) { msgEl.innerHTML = '⚠ trùng ' + sacEsc(ambiguousNames[name]) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
           sacAddSkipButton(el);
@@ -3167,16 +3166,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (statusEl) {
         if (isAmbiguous) {
           statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.textContent = '⚠';
-          statusEl.title = count + ' clips trùng tên — cần folder hint (📁)';
           if (hintBtn) hintBtn.style.display = '';
           if (uMsg) { uMsg.innerHTML = '⚠ trùng ' + sacEsc(count) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; uMsg.className = 'sac-srcMsg is-warn'; }
           sacAddSkipButton(rEl);
         } else if (item) {
-          statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match'; statusEl.title = '';
+          statusEl.className = 'sac-srcStatus sac-srcOk'; statusEl.textContent = '✓ Match';
           if (hintBtn) hintBtn.style.display = '';  // keep 📁 so a matched source can still be re-bound
           sacSetMatchMsg(uMsg, item); // show …/folder/clip it matched
         } else {
-          statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗'; statusEl.title = '';
+          statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.textContent = '✗';
           if (hintBtn) hintBtn.style.display = '';
           if (uMsg) { uMsg.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; uMsg.className = 'sac-srcMsg is-err'; }
           sacAddSkipButton(rEl);
@@ -3296,7 +3294,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var row = document.createElement('div');
         row.className = 'sac-bind-row' + (selectedFolder === fp ? ' is-active' : '');
         row.style.paddingLeft = (8 + (segs.length - 1) * 16) + 'px';
-        row.title = fp;
         var caret = document.createElement('span');
         caret.className = 'sac-bind-caret';
         caret.textContent = kids ? (expanded[fp] ? '▾' : '▸') : '';
@@ -3356,7 +3353,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var isBound = boundItem && c.item === boundItem;
         var row = document.createElement('div');
         row.className = 'sac-bind-row sac-bind-srcRow' + (isBound ? ' is-bound' : '');
-        row.title = (c.folderPath ? c.folderPath + ' / ' : '') + c.clip;
         var top = document.createElement('div');
         top.className = 'sac-bind-srcTop';
         top.appendChild(sacIconEl(c.mediaType));
@@ -3474,7 +3470,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         sacLabelIcon(btn, 'rotate_left', null, 11, 'Bỏ skip');
         btn.classList.add('is-active');
         srcEl.classList.add('is-skipped');
-        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; statusEl.title = 'Đã bỏ qua — chèn gap'; }
+        if (statusEl) { statusEl.textContent = '⏭'; statusEl.className = 'sac-srcStatus sac-srcSkipped'; }
         if (nameSpan)  { nameSpan.style.opacity = '0.4'; nameSpan.style.textDecoration = 'line-through'; }
         if (msgEl)     { msgEl.textContent = '⏭ ĐÃ BỎ QUA — chèn 1s gap, không cắt source này'; msgEl.className = 'sac-srcMsg is-skip'; }
       } else {
@@ -3487,10 +3483,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var kind = srcEl.dataset.srcBaseKind || 'missing';
         if (kind === 'ambiguous') {
           var cnt = srcEl.dataset.srcBaseCount || '';
-          if (statusEl) { statusEl.textContent = '⚠'; statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; statusEl.title = cnt + ' clip trùng tên — bấm 📁'; }
+          if (statusEl) { statusEl.textContent = '⚠'; statusEl.className = 'sac-srcStatus sac-srcAmbiguous'; }
           if (msgEl)    { msgEl.innerHTML = '⚠ trùng ' + sacEsc(cnt) + ' clip — bấm ' + sacFolderIco() + ' để chọn'; msgEl.className = 'sac-srcMsg is-warn'; }
         } else {
-          if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; statusEl.title = ''; }
+          if (statusEl) { statusEl.textContent = '✗'; statusEl.className = 'sac-srcStatus sac-srcMissing'; }
           if (msgEl)    { msgEl.innerHTML = '✗ không thấy trong bin — ' + sacFolderIco() + ' hoặc Skip'; msgEl.className = 'sac-srcMsg is-err'; }
         }
       }
@@ -4026,8 +4022,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     sacLoadProjectBinds(await sacCurrentProjectKey());
     var blocks = parseBlocks();
     if (blocks.length === 0) {
-      status.textContent = 'Chưa có dữ liệu. Điền ít nhất 1 dòng có cả Script và Source.';
-      status.style.display = 'block';
+      status.style.display = 'none';   // bảng trống → không làm gì, không báo
       return;
     }
 
