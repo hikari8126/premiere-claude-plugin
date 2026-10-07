@@ -10541,9 +10541,15 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var stAbort = null;    // AbortController for the in-flight /subtext fetch (cancel)
   var stBusy  = false;   // true while making SRT → button acts as Cancel
 
+  // Thanh trạng thái cùng kiểu Autocut: emoji đầu câu → chấm màu theo loại.
+  var ST_KIND = { '✅': 'ok', '✓': 'ok', '❌': 'err', '⛔': 'err', '⚠': 'warn', '⏳': 'busy', '⏸': 'warn', '🧹': 'info' };
   function stStatus(msg) {
     var el = $('stStatus'); if (!el) return;
-    el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
+    msg = String(msg || '');
+    var kind = 'info', m = msg.match(/^\s*(✅|✓|❌|⛔|⚠️?|⏳|⏸️?|🧹)\s*/);
+    if (m) { kind = ST_KIND[m[1].charAt(0)] || ST_KIND[m[1]] || 'info'; msg = msg.slice(m[0].length); }
+    el.className = 'st-status is-' + kind;
+    el.textContent = msg; el.style.display = msg ? 'block' : 'none';
   }
 
   // Auto-grow the script box via its sizer (UXP textareas don't scroll).
@@ -11112,7 +11118,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var maxWords = parseInt(($('stMaxWords') || {}).value, 10) || 5;
       var maxChars = parseInt(($('stMaxChars') || {}).value, 10) || 30;
       var maxDur   = parseFloat(($('stMaxDur') || {}).value) || 3;
-      var useAI = !($('stUseAI')) || $('stUseAI').checked;
+      var useAI = true;   // AI ngắt câu luôn bật (bỏ ô tick — ai cũng dùng)
       var aiCfg = (useAI && window.sacOrganizeConfig) ? window.sacOrganizeConfig() : {};
       var stopTick = stTickStart('⏳ Ghép ' + clips.length + ' clip + Whisper canh giờ' + (useAI ? ' + AI ngắt câu' : '') + '… thường 1-2 phút');
       var d;
@@ -11300,7 +11306,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!src.length) { stStatus('⚠ Dán script vào ô trước — AI ngắt câu cần script (không có script thì bấm Tạo Sub, Whisper sẽ nghe chữ).'); return; }
     stStopCountdown();
     stBusy = true;
-    var useAI = !($('stUseAI')) || $('stUseAI').checked;
+    var useAI = true;   // AI ngắt câu luôn bật (bỏ ô tick — ai cũng dùng)
     var aiCfg = (useAI && window.sacOrganizeConfig) ? window.sacOrganizeConfig() : {};
     stStatus('⏳ AI đang ngắt câu ' + src.length + ' dòng script...');
     try {
@@ -11329,8 +11335,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   ['stMaxWords', 'stMaxChars', 'stMaxDur'].forEach(function (id) {
     var el = $(id); if (el) el.addEventListener('change', function () { if (stOrganized) stResetOrganize(); });
   });
-  var stUseAIEl = $('stUseAI');
-  if (stUseAIEl) stUseAIEl.addEventListener('change', function () { if (stOrganized) stResetOrganize(); });
   var stAutoSaveEl = $('stSrtAutoSave');
   if (stAutoSaveEl) {
     stAutoSaveEl.checked = stSrtAutoSaveOn();
