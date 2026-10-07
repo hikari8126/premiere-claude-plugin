@@ -1013,18 +1013,12 @@
   <!-- ═══ SUPER AUTO CUT ═══ -->
   <div class="sac-app">
 
-    <!-- Method bar -->
-    <div class="sac-methodBar">
-      <div class="sac-methodBtn is-active" role="button" data-method="manual"><span data-ic="file" data-ic-size="13"></span> Manual</div>
-      <div class="sac-methodBtn" role="button" data-method="auto"><span data-ic="bolt" data-ic-size="13"></span> Auto</div>
-    </div>
 
     <!-- ── MANUAL PANEL ── -->
     <div class="sac-panel" id="sacPanelManual">
 
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
-        <span class="sac-blockChevron" id="sacScriptChevron">▾</span>
         <span><span data-ic="file" data-ic-size="12" style="margin-right:6px"></span>Script input</span>
         <select class="sac-presetSel" id="sacColPreset" title="Thứ tự cột nhập">
           <option value="text,time,src">Script → Time → Source</option>
@@ -1044,17 +1038,20 @@
           <div class="sac-th sac-col-src">Source (bin)</div>
           <div class="sac-th sac-col-act"></div>
         </div>
-        <div id="sacBody" class="sac-tbody"></div>
+        <div class="sac-tbodyScroll">
+          <div id="sacBody" class="sac-tbody"></div>
+          <div id="sacAddRow" class="sac-addRowBtn" role="button"><span data-ic="plus" data-ic-size="11"></span> Thêm dòng</div>
+        </div>
       </div>
       <div class="sac-tableFooter" id="sacTableFooter">
-        <div id="sacAddRow" class="sac-addBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Row</div>
-        <div id="sacClearBoard" class="sac-clearBoardBtn" role="button"><span data-ic="trash" data-ic-size="13"></span></div>
+        <div id="sacGoBlocks" class="sac-goBlocksBtn" role="button" style="display:none">Blocks ›</div>
         <div id="sacPreviewBtn" class="sac-previewBtn" role="button"><span data-ic="check" data-ic-size="12"></span> Validate</div>
       </div>
 
       <!-- Block preview (inside manual panel so flex space is shared) -->
       <div id="sacBlockSection" class="sac-blockSection" style="display:none">
         <div class="sac-blockHeader">
+          <div id="sacBackScript" class="sac-backBtn" role="button"><span data-ic="arrow_left" data-ic-size="11"></span> Script</div>
           <span class="sac-blockTitle"><span data-ic="scissors" data-ic-size="13" style="margin-right:6px"></span>Blocks</span>
           <span id="sacBlockCount" class="sac-blockMeta"></span>
           <div id="sacRefreshBlocks" class="sac-refreshBlockBtn" role="button" title="Validate lại sources (sau khi import source mới)"><span data-ic="rotate_right" data-ic-size="12"></span> Refresh Block</div>
@@ -1143,145 +1140,7 @@
       <div id="sacImgStatus" class="sac-statusMsg"></div>
     </div>
 
-    <!-- ── AUTO PANEL ── -->
-    <div class="sac-panel sac-autoPage" id="sacPanelAuto" style="display:none">
-      <div class="sac-autoHeader">
-        <span class="sac-autoTitle">Auto — bộ 3 video</span>
-        <!-- Gộp 2 nút vào 1 nhóm: header 3 con + space-between làm UXP đẩy nút
-             ⚙ ra giữa (browser thì không, vì title giãn được). 2 con thì chắc ăn. -->
-        <div class="sac-autoHeaderBtns">
-          <div id="sacAutoResetBtn" class="sac-autoClose" role="button" data-tip="Xoá sạch cả bộ — script, blocks, voice/ratio, số bộ"><span data-ic="trash" data-ic-size="13"></span></div>
-          <div id="sacAutoSettingsBtn" class="sac-autoClose" role="button"><span data-ic="gear" data-ic-size="13"></span></div>
-          <div id="sacAutoClose" class="sac-autoClose" role="button"><span data-ic="xmark" data-ic-size="13"></span></div>
-        </div>
-      </div>
-
-      <div class="sac-autoScroll">
-        <div class="sac-autoTabRow">
-          <div class="sac-autoSetInline">
-            <label class="sac-nsf2-label" for="sacAutoSet">Bộ</label>
-            <input id="sacAutoSet" class="sac-autoSetInput" type="text" />
-          </div>
-          <span class="sac-autoTabsLabel">Video</span>
-          <div class="sac-autoTabs">
-            <div class="sac-autoTab is-active" data-job="0" role="button">.0</div>
-            <div class="sac-autoTab" data-job="1" role="button">.1</div>
-            <div class="sac-autoTab" data-job="2" role="button">.2</div>
-          </div>
-        </div>
-
-        <!-- Cấu hình RIÊNG của video đang chọn — nằm ngay dưới hàng chọn video
-             để thấy rõ nó thuộc video nào. -->
-        <div class="sac-autoVidCfg">
-          <div class="sac-autoVidCfgCol">
-            <label class="sac-nsf2-label">Voice</label>
-            <div id="sacAutoVoiceSlot" class="sac-autoVoiceSlot"></div>
-          </div>
-          <div class="sac-autoVidCfgCol">
-            <label class="sac-nsf2-label">Ratio</label>
-            <select id="sacAutoRatio" class="sac-nsf2-select">
-              <option value="1080x1920" selected>1080×1920 — 9:16</option>
-              <option value="1080x1350">1080×1350 — 4:5</option>
-              <option value="1080x1080">1080×1080 — 1:1</option>
-              <option value="1920x1080">1920×1080 — 16:9</option>
-              <option value="match">Match source clips</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="sac-autoCfg">
-          <label class="sac-cutNoVoiceToggle"><input type="checkbox" id="sacAutoSkipAudition" /> Bỏ qua nghe thử</label>
-        </div>
-
-        <!-- BÊ NGUYÊN panel Manual vào đây lúc chạy (autoBorrowManual).
-             Trước đây mượn từng mảnh (bảng / blocks / voice panel) — lần nào cũng
-             thiếu một thứ và sinh lỗi mới. Mượn cả panel thì Parse AI, bảng,
-             Validate, Blocks, voice panel, cut panel chạy y như ở tab Manual. -->
-        <div id="sacAutoManualSlot" class="sac-autoManualSlot"></div>
-      </div>
-
-      <div id="sacAutoStatus" class="sac-autoStatus"></div>
-
-      <div id="sacAutoRun" class="sac-autoRun" role="button"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
-      <!-- A10: quay lại trang Auto Sub sau khi đã bấm "Về cut" -->
-      <div id="sacAutoOpenSub" class="sac-autoSubBack sac-autoOpenSub" role="button" style="display:none"><span data-ic="closed_captioning" data-ic-size="12"></span> Mở lại trang Sub của bộ vừa dựng</div>
-    </div>
-
-    <!-- ── AUTO SUB PANEL ── -->
-    <!-- Thay trang success cho luồng Auto. MƯỢN node .st-app từ tab TẠO SUB
-         (autoBorrowSub) đúng cơ chế autoBorrowManual — không nhân bản. -->
-    <div class="sac-panel sac-autoPage" id="sacPanelAutoSub" style="display:none">
-      <div class="sac-autoHeader">
-        <span class="sac-autoTitle" id="sacAutoSubTitle">Auto Sub</span>
-        <div class="sac-autoHeaderBtns">
-          <div id="sacAutoSubBack" class="sac-autoSubBack" role="button"><span data-ic="arrow_left" data-ic-size="12"></span> Về cut</div>
-        </div>
-      </div>
-
-      <div class="sac-autoTabRow">
-        <span class="sac-autoTabsLabel">Video</span>
-        <div class="sac-autoTabs">
-          <div class="sac-autoSubTab is-active" data-job="0" role="button">.0</div>
-          <div class="sac-autoSubTab" data-job="1" role="button">.1</div>
-          <div class="sac-autoSubTab" data-job="2" role="button">.2</div>
-        </div>
-      </div>
-
-      <div id="sacAutoSubSlot" class="sac-autoSubSlot"></div>
-
-      <!-- Status RIÊNG: #sacAutoStatus nằm trong #sacPanelAuto, mà panel đó bị ẩn
-           khi trang Sub mở → autoStatus() ghi vào chỗ không ai thấy. -->
-      <div id="sacAutoSubStatus" class="sac-autoStatus"></div>
-    </div>
-
   </div><!-- /sac-app -->
-
-  <!-- Auto settings overlay — per-project config, opened by the gear button.
-       Sibling of .sac-app (like #sacNewSeqModal) so it positions against
-       #tab-autocut (position:relative), not squeezed inside the flex panel. -->
-  <div id="sacAutoSettings" class="sac-newseq-modal" hidden>
-    <div class="sac-newseq-box">
-      <label class="sac-nsf2-label">Sản phẩm</label>
-      <input id="sacAutoProduct" class="sac-nsf2-input" type="text" />
-
-      <label class="sac-nsf2-label">CO</label>
-      <input id="sacAutoCO" class="sac-nsf2-input" type="text" />
-
-      <label class="sac-nsf2-label">Editor</label>
-      <input id="sacAutoEditor" class="sac-nsf2-input" type="text" />
-
-      <label class="sac-nsf2-label">Bin sequence template</label>
-      <input id="sacAutoSeqBin" class="sac-nsf2-input" type="text" />
-
-      <div id="sacAutoSettingsClose" class="sac-autoRun" role="button" style="margin-top:12px">Xong</div>
-    </div>
-  </div>
-
-  <!-- Xác nhận xoá sạch. Thao tác này không hoàn tác được và xoá cả localStorage,
-       nên phải có bước chặn — không dùng nút bấm-một-phát. -->
-  <div id="sacAutoResetConfirm" class="sac-newseq-modal" hidden>
-    <div class="sac-newseq-box">
-      <div class="sac-autoConfirmHead">Xoá sạch cả bộ?</div>
-      <div class="sac-autoConfirmBody" id="sacAutoResetBody"></div>
-      <div class="sac-autoConfirmActions">
-        <div id="sacAutoResetCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
-        <div id="sacAutoResetGo" class="sac-autoResetGo" role="button" style="flex:1 1 0"><span data-ic="trash" data-ic-size="13"></span> Xoá sạch</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Xác nhận trước khi chạy bộ 3 video. Tên là deliverable giao cho CO —
-       đây là điểm dừng bắt buộc duy nhất chắc chắn người dùng có đọc. -->
-  <div id="sacAutoConfirm" class="sac-newseq-modal" hidden>
-    <div class="sac-newseq-box">
-      <div class="sac-autoConfirmHead" id="sacAutoConfirmHead"></div>
-      <div class="sac-autoConfirmBody" id="sacAutoConfirmBody"></div>
-      <div class="sac-autoConfirmActions">
-        <div id="sacAutoConfirmCancel" class="sac-autoConfirmCancel" role="button">Huỷ</div>
-        <div id="sacAutoConfirmGo" class="sac-autoRun" role="button" style="flex:1 1 0"><span data-ic="bolt" data-ic-size="13"></span> Chạy cả bộ</div>
-      </div>
-    </div>
-  </div>
 
   <!-- legacy hidden shell kept for reference only -->
   <div class="ac-app" style="display:none">

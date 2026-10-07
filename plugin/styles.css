@@ -2755,26 +2755,6 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 }
 
 /* ── Method bar ── */
-.sac-methodBar {
-  flex: 0 0 auto;
-  display: flex; gap: 6px;
-  padding: 8px 10px 0;
-}
-.sac-methodBtn {
-  flex: 1 1 0;
-  height: 28px; padding: 0 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px;
-  background: transparent;
-  color: rgba(255,255,255,0.5);
-  font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
-  cursor: pointer; outline: none;
-}
-.sac-methodBtn.is-active {
-  border-color: var(--accent);
-  background: var(--accent-a15);
-  color: var(--accent-lighter);
-}
 
 /* ── Panel ── */
 .sac-panel {
@@ -4051,134 +4031,6 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 }
 .vcx-range { width: 100%; }
 
-/* ── AUTO PAGE ── */
-/* .sac-autoPage is applied together with .sac-panel, which already provides
-   the flex/min-height/overflow shape shared by all method panels — this
-   class only adds the gap between the header/scroll/run rows. */
-.sac-autoPage { gap: 8px; }
-.sac-autoHeader { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sac-autoTitle { font-weight: 600; font-size: 13px; color: var(--accent-lighter); flex: 1 1 0; min-width: 0; }
-.sac-autoHeaderBtns { flex: 0 0 auto; display: flex; gap: 2px; align-items: center; }
-.sac-autoClose { padding: 2px 6px; cursor: pointer; flex: 0 0 auto; }
-/* Plain block container — mirrors .sac-newseq-box. NO flex-column wrapper
-   around label/field pairs: that pattern overlaps labels and fields in UXP
-   even though it renders fine in a regular browser. */
-.sac-autoCfg { flex: 0 0 auto; }
-/* Nhóm cấu hình của RIÊNG video đang chọn: vạch tím bên trái để phân biệt với
-   các thiết lập dùng chung cho cả bộ. */
-.sac-autoVidCfg { flex: 0 0 auto; display: flex; flex-direction: row; align-items: flex-start; gap: 8px; border-left: 2px solid var(--accent); padding-left: 8px; }
-/* Mỗi cột là block container thường (KHÔNG flex-column) chứa label rồi field
-   theo luồng block bình thường — tránh lỗi label/field đè nhau trong UXP đã
-   ghi chú ở trên. .sac-autoVidCfg chỉ làm hàng ngang cho 2 cột này. */
-.sac-autoVidCfgCol { flex: 1 1 0; min-width: 0; }
-.sac-autoVidCfgCol .sac-nsf2-select,
-.sac-autoVidCfgCol .sac-autoVoiceSlot { width: 100%; box-sizing: border-box; }
-/* UXP render <select> native với metric riêng (cao hơn, có margin ngầm) nên ô
-   Ratio bị tụt thấp hơn ô Voice. Ép cùng chiều cao + bỏ margin để 2 cột thẳng đầu. */
-.sac-autoVidCfgCol .sac-nsf2-select,
-.sac-autoVidCfgCol .vg-voiceDropTrigger { height: 30px; margin: 0; box-sizing: border-box; }
-.sac-autoVidCfgCol .sac-nsf2-label { margin: 0 0 4px; }
-.sac-autoVoiceSlot { min-width: 0; }
-.sac-autoVoiceSlot .vg-voiceDrop { width: 100%; }
-.sac-autoVoiceSlot .vg-voiceDropTrigger { width: 100%; box-sizing: border-box; }
-/* Vùng cuộn BẮT BUỘC: .sac-panel có overflow:hidden, nếu để mọi thứ làm con
-   trực tiếp thì panel bị kéo thấp sẽ CẮT nội dung và đẩy nút "Chạy cả bộ" ra
-   ngoài khung (đã kiểm chứng ở panel 420px). Header + nút Run ghim ngoài vùng này. */
-.sac-autoScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-/* Hàng "Bộ" + "Video .0/.1/.2" — Bộ chiếm chỗ vừa đủ bên trái, tabs co dãn
-   chiếm phần còn lại; min-width:0 để không đẩy tràn ở panel ~300px. */
-.sac-autoTabRow { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.sac-autoSetInline { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
-.sac-autoSetInline .sac-nsf2-label { margin: 0; white-space: nowrap; }
-.sac-autoSetInput {
-  width: 58px; padding: 6px 4px; text-align: center; font-size: 13px;
-  border-radius: 4px; border: 1px solid var(--border);
-  background: var(--surface2); color: var(--text);
-}
-.sac-autoSetInput:focus { outline: none; border-color: var(--accent); }
-.sac-autoTabsLabel { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); }
-.sac-autoTabs { flex: 1 1 0; min-width: 0; display: flex; gap: 4px; }
-/* Tab to hơn hẳn — vùng chạm rộng, chữ lớn, trạng thái active không thể nhầm. */
-.sac-autoTab {
-  flex: 1 1 0; min-width: 0; text-align: center;
-  padding: 8px 6px; border-radius: 6px; background: var(--surface2); color: var(--text-dim);
-  font-size: 15px; font-weight: 700; cursor: pointer;
-  border: 1px solid transparent;
-}
-.sac-autoTab.is-active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent-light); }
-/* Slot the real Manual table is borrowed into — must grow to fill the
-   remaining vertical space or the table collapses to zero height. */
-.sac-autoManualSlot { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; }
-/* Panel Manual được mượn vào slot: bỏ padding riêng của nó để không thụt hai lần. */
-.sac-autoManualSlot .sac-panel { padding: 0; }
-/* A9: nút riêng của Manual (dựng 1 video, Without voice, Run anyway, 2 nút Clear)
-   phá trạng thái trang Auto → ẩn khi panel đang được mượn. !important vì code Manual
-   bật/tắt các nút này bằng style inline. */
-.sac-autoManualSlot #sacCutPanel,
-.sac-autoManualSlot #sacCutNoVoiceBtn,
-.sac-autoManualSlot #sacRunAnywayBtn,
-.sac-autoManualSlot #sacScriptClear,
-.sac-autoManualSlot #sacClearBoard { display: none !important; }
-.sac-autoTableFooter { flex: 0 0 auto; display: flex; gap: 6px; }
-.sac-autoBlockSlot { flex: 0 0 auto; display: flex; flex-direction: column; }
-.sac-autoStatus { flex: 0 0 auto; font-size: 11px; color: var(--text-dim); min-height: 16px; white-space: pre-wrap; }
-.sac-autoRun {
-  flex: 0 0 auto; padding: 6px; text-align: center; border-radius: 4px;
-  background: var(--accent); color: var(--accent-fg); font-size: 12px; cursor: pointer;
-}
-.sac-autoRun:hover { background: var(--accent-dark); }
-/* Modal confirm — dùng khuôn .sac-newseq-modal, đã có rule [hidden] ở đó. */
-.sac-autoConfirmHead { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px; word-break: break-word; }
-/* pre-WRAP chứ không pre-line: mặc định white-space gộp \n → 9 dòng dồn thành 1
-   đoạn; còn pre-line thì giữ \n nhưng GỘP khoảng trắng đầu dòng, mất thụt lề nhóm
-   3 dòng theo video (đã thấy trên harness). pre-wrap giữ cả hai và vẫn xuống dòng. */
-.sac-autoConfirmBody {
-  font-size: 11px; color: var(--text-dim); line-height: 1.6;
-  white-space: pre-wrap; word-break: break-word;
-  max-height: 320px; overflow-y: auto; margin-bottom: 12px;
-}
-.sac-autoConfirmActions { display: flex; gap: 8px; align-items: center; }
-.sac-autoConfirmCancel {
-  flex: 0 0 auto; padding: 6px 14px; text-align: center; border-radius: 4px;
-  background: var(--surface2); color: var(--text-dim); font-size: 12px; cursor: pointer;
-  border: 1px solid var(--border);
-}
-.sac-autoConfirmCancel:hover { background: var(--border); color: var(--text); }
-/* Trang Auto Sub — tab .0/.1/.2 dùng chung dáng với .sac-autoTab. */
-.sac-autoSubTab {
-  flex: 1 1 0; min-width: 0; text-align: center;
-  padding: 8px 6px; border-radius: 6px; background: var(--surface2); color: var(--text-dim);
-  font-size: 15px; font-weight: 700; cursor: pointer;
-  border: 1px solid transparent;
-}
-.sac-autoSubTab.is-active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent-light); }
-.sac-autoSubBack {
-  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
-  background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border);
-}
-.sac-autoSubBack:hover { background: var(--border); color: var(--text); }
-/* Slot phải giãn hết chỗ còn lại, nếu không .st-app co về 0. Cùng lý do đã ghi
-   ở .sac-autoManualSlot. */
-.sac-autoSubSlot { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-/* Nút xoá sạch — đỏ để phân biệt hẳn với nút primary màu accent. */
-.sac-autoResetGo {
-  padding: 6px; text-align: center; border-radius: 4px; font-size: 12px; cursor: pointer;
-  background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.5);
-}
-.sac-autoResetGo:hover { background: rgba(239,68,68,0.3); color: #fff; }
-/* Tab của video pipeline ĐANG xử lý — khác hẳn tab bạn đang đứng (.is-active),
-   để không nhìn nhầm là Blocks hiển thị sai video. */
-.sac-autoTab.is-running {
-  background: var(--accent); color: var(--accent-fg); border-color: var(--accent-light);
-}
-/* Khoá khi đang chạy: bấm vào bị chặn nên phải cho thấy là không bấm được. */
-.sac-autoTab.is-locked { opacity: 0.5; cursor: default; }
-/* Video lỗi ở lượt vừa chạy (A7) */
-.sac-autoTab.is-err { border-color: rgba(239,68,68,0.8); color: #fca5a5; }
-.sac-autoTab.is-err.is-active { color: var(--accent-fg); }
-.sac-autoOpenSub { flex: 0 0 auto; margin-top: 6px; text-align: center; }
-.sac-autoTab.is-locked.is-running { opacity: 1; }
-/* ── /AUTO PAGE ── */
 
 /* ── Tab Watch Folder ───────────────────────────────────────────────────── */
 /* UXP: không position:fixed, không z-index, không display:grid.
@@ -5131,20 +4983,6 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 }
 #tab-autocut .sac-app { background: var(--bg); color: var(--text); }
 
-/* Nút gạt Manual | Auto — kiểu .cl-mode */
-#tab-autocut .sac-methodBar {
-  margin: 10px 12px 0; padding: 2px; border-radius: 9px; background: #141414; display: flex;
-}
-#tab-autocut .sac-methodBtn {
-  height: 26px; border: none; border-radius: 7px; background: transparent;
-  color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0;
-  display: flex; align-items: center; justify-content: center;
-  transition: background var(--ac-ease), color var(--ac-ease);
-}
-#tab-autocut .sac-methodBtn + .sac-methodBtn { margin-left: 2px; }
-#tab-autocut .sac-methodBtn:hover { color: var(--text); }
-#tab-autocut .sac-methodBtn.is-active { background: var(--surface2); color: var(--text); }
-#tab-autocut .sac-methodBtn .p-ic { margin-right: 6px; }
 
 #tab-autocut .sac-panel { padding: 10px 12px 0; }
 
@@ -5206,20 +5044,15 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 
 /* Nút chính — accent đặc, cao 32, bo 8 */
 #tab-autocut .sac-previewBtn,
-#tab-autocut .sac-autoRun,
 #tab-autocut .sac-successPrimaryBtn {
   height: 32px; border: none; border-radius: 8px; background: var(--accent); color: var(--accent-fg);
   font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   transition: background var(--ac-ease), opacity var(--ac-ease);
 }
-#tab-autocut .sac-previewBtn:hover,
-#tab-autocut .sac-autoRun:hover,
-#tab-autocut .sac-successPrimaryBtn:hover { background: var(--accent-dark); }
+#tab-autocut .sac-previewBtn:hover { background: var(--accent-dark); }
 #tab-autocut .sac-previewBtn.is-disabled { opacity: 0.4; pointer-events: none; }
-#tab-autocut .sac-previewBtn .p-ic,
-#tab-autocut .sac-autoRun .p-ic,
-#tab-autocut .sac-successPrimaryBtn .p-ic { margin-right: 6px; }
+#tab-autocut .sac-previewBtn .p-ic { margin-right: 6px; }
 
 /* Khối Blocks — thẻ nổi trên nền, như dock tab Claude */
 #tab-autocut .sac-blockSection {
@@ -5327,30 +5160,14 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-autocut .sac-successSecondaryBtn .p-ic,
 #tab-autocut .sac-successPrimaryBtn .p-ic { margin-right: 6px; }
 
-/* Trang Auto */
-#tab-autocut .sac-autoTitle { color: var(--text); font-size: 12.5px; }
-#tab-autocut .sac-autoClose { border-radius: 6px; color: var(--text-dim); transition: color var(--ac-ease), background var(--ac-ease); }
-#tab-autocut .sac-autoClose:hover { color: var(--text); background: var(--surface2); }
-#tab-autocut .sac-autoTab,
-#tab-autocut .sac-autoSubTab { border-radius: 7px; border-color: var(--border); color: var(--text-dim); transition: all var(--ac-ease); }
-#tab-autocut .sac-autoTab.is-active,
-#tab-autocut .sac-autoSubTab.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-#tab-autocut .sac-autoSetInput,
-#tab-autocut .sac-nsf2-input,
-#tab-autocut .sac-nsf2-select { background: var(--ac-field); border-color: var(--border); border-radius: 8px; color: var(--text); }
-#tab-autocut .sac-autoSetInput:focus,
-#tab-autocut .sac-nsf2-input:focus,
-#tab-autocut .sac-nsf2-select:focus { border-color: var(--accent); }
-#tab-autocut .sac-autoConfirmCancel,
-#tab-autocut .sac-autoSubBack { border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); }
-#tab-autocut .sac-autoConfirmCancel:hover,
-#tab-autocut .sac-autoSubBack:hover { border-color: var(--accent); color: var(--text); background: transparent; }
-#tab-autocut .sac-autoResetGo { border-radius: 8px; border: 1px solid var(--error); background: rgba(239,68,68,0.12); color: #fca5a5; }
-
 /* Popup (new seq / confirm / bind) — cùng khung */
 #tab-autocut .sac-newseq-box,
 #tab-autocut .sac-confirm-box,
 #tab-autocut .sac-bind-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+#tab-autocut .sac-nsf2-input,
+#tab-autocut .sac-nsf2-select { background: var(--ac-field); border-color: var(--border); border-radius: 8px; color: var(--text); }
+#tab-autocut .sac-nsf2-input:focus,
+#tab-autocut .sac-nsf2-select:focus { border-color: var(--accent); }
 #tab-autocut .sac-confirm-title,
 #tab-autocut .sac-bind-title { color: var(--text); font-weight: 600; }
 #tab-autocut .sac-confirm-x,
@@ -5358,3 +5175,44 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-autocut .sac-nsf2-iconBtn { border-radius: 6px; border-color: var(--border); color: var(--text-dim); }
 #tab-autocut .sac-bind-filter { background: var(--ac-field); border-radius: 8px; }
 #tab-autocut .sac-csvBtn { margin-right: 0; }
+
+/* ── v5.22: 2 trang Script ⇄ Blocks, nút dòng rõ ràng ── */
+#tab-autocut .sac-sectionToggle { cursor: default; padding-top: 2px; }
+#tab-autocut .sac-tableWrap { flex: 1 1 0; min-height: 0; }
+#tab-autocut .sac-tbodyScroll { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+#tab-autocut .sac-tbody { flex: 0 0 auto; overflow: visible; }
+#tab-autocut .sac-col-act { flex: 0 0 56px; display: flex; align-items: center; justify-content: center; }
+#tab-autocut .sac-rowAct {
+  position: relative; flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px;
+  border: 1px solid var(--border); color: var(--text-dim); background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--ac-ease), color var(--ac-ease), background var(--ac-ease);
+}
+#tab-autocut .sac-rowAct + .sac-rowAct { margin-left: 4px; }
+#tab-autocut .sac-insBtn:hover { border-color: var(--accent); color: var(--accent-lighter); background: var(--accent-a15); }
+#tab-autocut .sac-delBtn:hover { border-color: var(--error); color: #fca5a5; background: rgba(239,68,68,0.12); }
+#tab-autocut .sac-rowAct:hover::after {
+  content: attr(data-tip); position: absolute; right: calc(100% + 6px); top: 50%; margin-top: -10px;
+  background: #141414; color: var(--text); border: 1px solid var(--border); border-radius: 5px;
+  padding: 2px 7px; font-size: 10px; line-height: 1.4; white-space: nowrap; pointer-events: none;
+}
+#tab-autocut .sac-addRowBtn {
+  margin: 6px; height: 28px; border-radius: 6px; border: 1px dashed var(--border);
+  color: var(--text-dim); font-size: 11px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--ac-ease), color var(--ac-ease), background var(--ac-ease);
+}
+#tab-autocut .sac-addRowBtn:hover { border-color: var(--accent); color: var(--text); background: var(--accent-a06); }
+#tab-autocut .sac-addRowBtn .p-ic { margin-right: 5px; }
+#tab-autocut .sac-backBtn,
+#tab-autocut .sac-goBlocksBtn {
+  flex: 0 0 auto; height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 10.5px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--ac-ease), color var(--ac-ease);
+}
+#tab-autocut .sac-goBlocksBtn { height: 32px; border-radius: 8px; padding: 0 12px; font-size: 11px; }
+#tab-autocut .sac-backBtn:hover,
+#tab-autocut .sac-goBlocksBtn:hover { border-color: var(--accent); color: var(--text); }
+#tab-autocut .sac-backBtn .p-ic { margin-right: 5px; }
+#tab-autocut .sac-blockSection { margin: 0; padding: 0; background: transparent; border-top: none; }
+#tab-autocut .sac-blockMeta { margin-right: auto; }
