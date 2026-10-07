@@ -378,18 +378,6 @@
         </div>
 
         <div class="setting-row">
-          <label>Chuẩn hoá &amp; gen voice khi Validate</label>
-          <select id="sacGenVoiceMode">
-            <option value="ask">Hỏi mỗi lần (popup)</option>
-            <option value="auto">Tự gen voice — không hỏi</option>
-            <option value="never">Chỉ validate — không gen voice</option>
-          </select>
-          <div class="setting-hint-inline">
-            Điều khiển popup "Chuẩn hoá &amp; gen voice?" khi bấm Validate ở tab Autocut. Lưu ngay khi đổi.
-          </div>
-        </div>
-
-        <div class="setting-row">
           <label>Vị trí clip trên sequence</label>
           <select id="sacPlacement">
             <option value="end" selected>Cuối timeline (nối tiếp clip có sẵn)</option>
@@ -1045,7 +1033,8 @@
       </div>
       <div class="sac-tableFooter" id="sacTableFooter">
         <div id="sacGoBlocks" class="sac-goBlocksBtn" role="button" style="display:none">Blocks ›</div>
-        <div id="sacPreviewBtn" class="sac-previewBtn" role="button"><span data-ic="check" data-ic-size="12"></span> Validate</div>
+        <div id="sacValidateNoVoice" class="sac-validateNoVoiceBtn" role="button" data-ico="scissors" data-lbl="Without voice"><span data-ic="scissors" data-ic-size="12"></span> Without voice</div>
+        <div id="sacValidateVoice" class="sac-previewBtn" role="button" data-ico="microphone" data-lbl="With voice"><span data-ic="microphone" data-ic-size="12"></span> With voice</div>
       </div>
 
       <!-- Block preview (inside manual panel so flex space is shared) -->
@@ -1321,21 +1310,6 @@
       <div class="sac-confirm-actions">
         <button id="sacNewSeqCancel" class="btn-secondary">Cancel</button>
         <div id="sacNewSeqRun" class="btn-primary" role="button"><span data-ic="scissors" data-ic-size="13" data-ic-color="#ffffff"></span> Autocut</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Validate → "gen voice?" confirm popup -->
-  <div id="sacGenConfirm" class="sac-confirm-modal" hidden>
-    <div class="sac-confirm-box">
-      <div class="sac-confirm-head">
-        <span class="sac-confirm-title">Chuẩn hoá &amp; gen voice?</span>
-        <div id="sacGenConfirmCancel" class="sac-confirm-x" role="button" title="Huỷ"><span data-ic="xmark" data-ic-size="13"></span></div>
-      </div>
-      <div class="sac-confirm-msg">Bấm "Có" để chuẩn hoá script + đẩy sang Voice Gen luôn. Bấm "Không" nếu bạn còn muốn sửa script.<br><span style="opacity:0.6;font-size:11px;">Muốn tắt/bật popup này: Settings → "Autocut — Chuẩn hoá &amp; gen voice khi Validate".</span></div>
-      <div class="sac-confirm-actions">
-        <button id="sacGenConfirmNo" class="btn-secondary">Không, chỉ validate</button>
-        <button id="sacGenConfirmYes" class="btn-primary">Có, gen voice</button>
       </div>
     </div>
   </div>

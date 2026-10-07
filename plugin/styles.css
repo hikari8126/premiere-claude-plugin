@@ -5216,3 +5216,13 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-autocut .sac-backBtn .p-ic { margin-right: 5px; }
 #tab-autocut .sac-blockSection { margin: 0; padding: 0; background: transparent; border-top: none; }
 #tab-autocut .sac-blockMeta { margin-right: auto; }
+/* Validate tách 2 nút: Without voice (phụ) · With voice (chính, giãn hết chỗ còn lại) */
+#tab-autocut .sac-validateNoVoiceBtn {
+  flex: 1 1 0; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 11.5px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  transition: border-color var(--ac-ease), color var(--ac-ease);
+}
+#tab-autocut .sac-validateNoVoiceBtn:hover { border-color: var(--accent); color: var(--text); }
+#tab-autocut .sac-validateNoVoiceBtn .p-ic { margin-right: 6px; }
+#tab-autocut .sac-validateNoVoiceBtn.is-disabled { opacity: 0.4; pointer-events: none; }

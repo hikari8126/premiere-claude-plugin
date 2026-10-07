@@ -1272,17 +1272,6 @@ var modelSelect = document.getElementById('model-select');
 var apiKeyInput = document.getElementById('api-key-input');
 var apiKeyStatus = document.getElementById('apikey-status');
 
-// Autocut "gen voice on Validate" behaviour picker — persists to its own key so it
-// survives reloads/new cuts (independent of the main Save button).
-(function () {
-  var sel = document.getElementById('sacGenVoiceMode');
-  if (!sel) return;
-  var v = localStorage.getItem('sac_genvoice_mode');
-  sel.value = (v === 'auto' || v === 'never') ? v : 'ask';
-  sel.addEventListener('change', function () {
-    localStorage.setItem('sac_genvoice_mode', sel.value);
-  });
-})();
 // Autocut assembly options (Settings → Autocut). Each persists to its own key so it
 // survives reloads/new cuts. Read live at run time in sacRunAutoCut.
 function sacPlacementMode()  { return localStorage.getItem('sac_placement') === 'start' ? 'start' : 'end'; }
@@ -2287,23 +2276,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   var sacVoicePath  = null; // native path of the chosen/generated voice file
   var sacVoiceBusy  = false; // prevent concurrent voice ops (gen + pick racing)
-
-  var sacValidatePassed = false;
-  var sacVoiceReady     = false;
-  var sacScriptPrepared = false; // normalized script already pushed to Voice Gen (auto on validate)
-  var sacNormToken      = 0;     // bumped to invalidate an in-flight normalize (cancel)
-  var sacNormAbort      = null;  // AbortController for the in-flight normalize fetch
-  var sacValidateToken  = 0;     // bumped to invalidate an in-flight validate
-  // Persistent Autocut behaviour for the "gen voice?" step on Validate. Stored in
-  // localStorage (survives reloads / new cuts) instead of a session flag that used
-  // to be reset every cut — that reset was why "don't ask again" never stuck.
-  //   'ask'   → show the popup each Validate
-  //   'auto'  → always normalize + gen voice, no popup
-  //   'never' → validate only, never gen voice, no popup
-  function sacGetGenVoiceMode() {
-    var v = localStorage.getItem('sac_genvoice_mode');
-    return (v === 'auto' || v === 'never') ? v : 'ask';
-  }
   var sacNoVoiceMode    = false; // set by "Without voice" button
 
   // Show the cut panel (hides voice panel), update label
@@ -3832,36 +3804,6 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     }
   }
 
-  // Show the "gen voice?" confirm popup → resolves true (gen) / false (validate only)
-  // / 'cancel' (abort validate). Hides .sac-app while open so UXP native inputs don't
-  // punch through the popup. Honors the "don't ask again" skip preference.
-  function sacAskGenVoice() {
-    return new Promise(function(resolve) {
-      // Persistent setting decides the behaviour (Settings → Autocut gen voice).
-      var mode = sacGetGenVoiceMode();
-      if (mode === 'auto')  { resolve(true);  return; } // always gen, no popup
-      if (mode === 'never') { resolve(false); return; } // validate only, no popup
-      var modal  = $('sacGenConfirm');
-      var yes    = $('sacGenConfirmYes');
-      var no     = $('sacGenConfirmNo');
-      var cancel = $('sacGenConfirmCancel');
-      if (!modal || !yes || !no) { resolve(true); return; } // fail-open
-      var app = document.querySelector('#tab-autocut .sac-app');
-      function done(val) {
-        modal.hidden = true;
-        if (app) app.style.display = '';
-        if (window.releaseKeyboard) window.releaseKeyboard();
-        yes.onclick = null; no.onclick = null; if (cancel) cancel.onclick = null;
-        resolve(val);
-      }
-      yes.onclick = function() { done(true); };
-      no.onclick  = function() { done(false); };
-      if (cancel) cancel.onclick = function() { done('cancel'); };
-      if (app) app.style.display = 'none'; // hide native textboxes behind the popup
-      modal.hidden = false;
-      if (window.claimKeyboard) window.claimKeyboard();
-    });
-  }
 
   // Gen-voice button: if the script was already prepared (auto on validate), just
   // bring the user to the Voice Gen tab; otherwise normalize + push + switch.
@@ -4063,11 +4005,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
 
   // Validate = render blocks + check sources in bin + check structure (1 click).
-  $('sacPreviewBtn').addEventListener('click', function() { sacValidateAll(); });
+  // 2 nút Validate: With voice = validate + chuẩn hoá & gen voice (như "Có" ở popup cũ);
+  // Without voice = validate ở chế độ không voice → trang Blocks hiện nút Cut ngay.
+  $('sacValidateVoice').addEventListener('click', function() {
+    sacNoVoiceMode = false;
+    sacValidateAll({ wantVoice: true, btn: $('sacValidateVoice') });
+  });
+  $('sacValidateNoVoice').addEventListener('click', function() {
+    sacNoVoiceMode = true;
+    sacValidateAll({ btn: $('sacValidateNoVoice') });
+  });
 
   async function sacValidateAll(opts) {
     opts = opts || {};
-    var btn = $('sacPreviewBtn');
+    var btn = opts.btn || (sacNoVoiceMode ? $('sacValidateNoVoice') : $('sacValidateVoice'));
+    var btnIco = btn.dataset.ico, btnLbl = btn.dataset.lbl;
     var status = $('sacStatus');
     // Pull this project's remembered binds BEFORE parsing, so saved overrides apply
     // to the freshly parsed sources (no need to re-bind across tasks).
@@ -4079,14 +4031,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return;
     }
 
-    // Ask FIRST — before touching any UI — so Cancel leaves everything as-is.
-    // Skipped for 🔄 re-validate and "Without voice" mode.
-    var wantVoice = false;
-    if (!opts.skipVoiceAsk && !sacNoVoiceMode) {
-      var ans = await sacAskGenVoice();
-      if (ans === 'cancel') return;     // abort validate, nothing changed
-      wantVoice = (ans === true);
-    }
+    var wantVoice = !!opts.wantVoice && !sacNoVoiceMode;
 
     renderBlocks(blocks); // shows block cards with ⌛ on each source
     sacMarkScriptPrepared(false); // fresh validate → script may have changed
@@ -4143,7 +4088,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       sacUpdateRunVisibility();
     } finally {
       btn.disabled = false;
-      piSetBtn(btn, 'check', 'Validate', null, 12);
+      piSetBtn(btn, btnIco, btnLbl, null, 12);
     }
   }
 
@@ -4202,7 +4147,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var sacRefreshBtn = $('sacRefreshBlocks');
   if (sacRefreshBtn) sacRefreshBtn.addEventListener('click', function() {
     if (parseBlocks().length === 0) return;
-    sacValidateAll({ skipVoiceAsk: true }); // re-check sources only — don't re-ask voice
+    sacValidateAll(); // re-check sources only — không gen voice lại
   });
 
   // Tab Watch import xong → kiểm lại source (không hỏi voice), để thẻ "Thiếu N
