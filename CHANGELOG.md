@@ -7,6 +7,26 @@
 
 
 
+## v5.22.0 / bridge 3.26 (server 1.27.1) — 2026-10-07 · RAW Cut khác fps + UI Autocut / Tạo Sub / Voice Gen
+
+> CẦN BRIDGE APP 3.26 để nhận bản sửa RAW Cut.
+
+### RAW Timeline Render
+- File Premiere render đúng thời lượng nhưng ở 24/23.976 fps bị so trực tiếp với số frame timeline 30 fps, rồi báo `render_mismatch`. Engine giờ quy đổi độ dài timeline sang số frame ở fps render thực tế trước khi kiểm tra.
+- Giữ nguyên frame native khi không ép fps; khi ép fps, tính số frame đầu ra từ thời lượng timeline. Giới hạn audio theo thời lượng video đầu ra để không cắt mất frame do làm tròn.
+- Không dùng số frame ước lượng từ duration của container làm số frame đo được. File mất render hoặc thực sự quá ngắn/dài vẫn bị từ chối; kiểm tra lệch một frame của render cùng fps vẫn giữ nguyên.
+- Báo cáo phân biệt fps native khác timeline với việc ffmpeg thực sự resample; không ghi `frame_exact=true` khi native render đã khác fps timeline.
+
+### UI đã đưa vào release (19 commit sau v5.21.0)
+- Autocut: hai trang Script ⇄ Blocks; chip chuyển script sang Tạo Sub theo GUID sequence; Validate With voice / Without voice; sửa lỗi validate kẹt do thiếu khai báo trạng thái. Chọn thứ tự cột trong Settings, thanh trạng thái gọn và cách mép dưới 12px, bỏ tooltip title bị lệch trong UXP.
+- Tạo Sub: control dùng token màu và kiểu nút chung, chọn track dạng thẻ, trạng thái có chấm màu; AI ngắt câu luôn bật và hiển thị số dòng script.
+- Voice Gen: Gen 1 / Gen 2, slider tự vẽ, control/textarea/icon đồng bộ; sửa margin textarea; Nhạc reference gọn và không đè khi panel hẹp; cột phải tối đa 260px và không quá nửa panel.
+- Voice Gen tự học bin import cho Giọng / SFX / Nhạc theo project; vẫn có chọn bin tay và quay về tự động.
+
+### Kiểm tra
+- `bridge/test/rawcut-render-fps.test.js`: 17 lượt xuất thật qua engine + ffmpeg, gồm ví dụ 57 frame timeline → 45 frame native, ép fps, 23.976/29.97, audio, MKV có audio dài hơn picture, thiếu render và range sai.
+- Toàn bộ 65 file test Bridge qua trước release; kiểm tra syntax JavaScript và nội dung bộ cài trước upload.
+
 ## v5.21.0 / bridge 3.25 (server 1.27.0) — 2026-10-06 · Autocut tìm source theo cấu trúc SAMX
 
 > CẦN BRIDGE APP 3.25 (bridge cũ vẫn chạy, chỉ quét như trước).
