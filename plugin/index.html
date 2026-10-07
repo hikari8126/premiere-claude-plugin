@@ -378,6 +378,19 @@
         </div>
 
         <div class="setting-row">
+          <label>Thứ tự cột khi dán script</label>
+          <select id="sacColPreset">
+              <option value="text,time,src">Script → Time → Source</option>
+              <option value="text,src,time">Script → Source → Time</option>
+              <option value="time,text,src">Time → Script → Source</option>
+              <option value="time,src,text">Time → Source → Script</option>
+              <option value="src,text,time">Source → Script → Time</option>
+              <option value="src,time,text">Source → Time → Script</option>
+          </select>
+          <div class="setting-hint-inline">Thứ tự cột của bảng script ở tab Autocut — khớp với cách bạn copy từ Sheet.</div>
+        </div>
+
+        <div class="setting-row">
           <label>Vị trí clip trên sequence</label>
           <select id="sacPlacement">
             <option value="end" selected>Cuối timeline (nối tiếp clip có sẵn)</option>
@@ -1008,16 +1021,9 @@
       <!-- Spreadsheet (collapsible) -->
       <div class="sac-sectionToggle" id="sacScriptToggle">
         <span><span data-ic="file" data-ic-size="12" style="margin-right:6px"></span>Script input</span>
-        <select class="sac-presetSel" id="sacColPreset">
-          <option value="text,time,src">Script → Time → Source</option>
-          <option value="text,src,time">Script → Source → Time</option>
-          <option value="time,text,src">Time → Script → Source</option>
-          <option value="time,src,text">Time → Source → Script</option>
-          <option value="src,text,time">Source → Script → Time</option>
-          <option value="src,time,text">Source → Time → Script</option>
-        </select>
         <div id="sacCsvImport" class="sac-csvBtn" role="button">＋ CSV</div>
         <div id="sacScriptClear" class="sac-scriptClearBtn" role="button"><span data-ic="trash" data-ic-size="12"></span> Xoá script</div>
+        <div id="sacGoBlocks" class="sac-goBlocksBtn" role="button" style="display:none">Blocks ›</div>
       </div>
       <div class="sac-tableWrap" id="sacTableWrap">
         <div class="sac-thead">
@@ -1032,7 +1038,6 @@
         </div>
       </div>
       <div class="sac-tableFooter" id="sacTableFooter">
-        <div id="sacGoBlocks" class="sac-goBlocksBtn" role="button" style="display:none">Blocks ›</div>
         <div id="sacValidateNoVoice" class="sac-validateNoVoiceBtn" role="button" data-ico="scissors" data-lbl="Without voice"><span data-ic="scissors" data-ic-size="12"></span> Without voice</div>
         <div id="sacValidateVoice" class="sac-previewBtn" role="button" data-ico="microphone" data-lbl="With voice"><span data-ic="microphone" data-ic-size="12"></span> With voice</div>
       </div>
