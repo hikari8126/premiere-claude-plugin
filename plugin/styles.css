@@ -5230,7 +5230,7 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-autocut .sac-validateNoVoiceBtn.is-disabled { opacity: 0.4; pointer-events: none; }
 /* Thanh trạng thái — chấm màu theo loại + chữ căn trái, nền thẻ; thay "✅ …" căn giữa */
 #tab-autocut .sac-statusMsg {
-  position: relative; margin: 8px 0 0; padding: 7px 10px 7px 24px; border-radius: 8px;
+  position: relative; margin: 8px 0 12px; padding: 7px 10px 7px 24px; border-radius: 8px;
   background: var(--surface); border: 1px solid var(--border);
   font-size: 11px; line-height: 1.45; color: #c9c9c9; text-align: left; word-break: break-word;
 }
