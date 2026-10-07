@@ -5329,3 +5329,109 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-subtext .st-status.is-warn { border-color: rgba(245,158,11,0.4); }
 #tab-subtext .st-status.is-warn::before { background: #f59e0b; }
 #tab-subtext .st-status.is-busy::before { background: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VOICE GEN — QC theo chuẩn tab Claude / Autocut / Tạo Sub (v5.22)
+   Nút 3 cấp: chính (accent đặc) · phụ (viền --border) · nguy hiểm (--error).
+   Bỏ chữ IN HOA, bỏ màu icon riêng từng mode. Override trong #tab-voicegen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#tab-voicegen { --vg-ease: 0.15s ease; }
+
+/* Icon trên nút nền accent: tô bằng --accent-fg (màu icon vốn nướng cứng trong SVG) */
+.vg-genButton .p-ic path, .vc-bigPrimary .p-ic path, .vg-playBtn .p-ic path, .vc-stepNo path,
+.sac-previewBtn .p-ic path, .st-btn-primary .p-ic path { fill: var(--accent-fg); }
+.sac-cutBtn .p-ic path { fill: #0b1f12; }
+
+/* Thanh trạng thái kết nối */
+#tab-voicegen .vg-statusBar { padding: 7px 12px; background: var(--bg); border-bottom: 1px solid #2c2c2c; }
+#tab-voicegen .vg-iconBtn {
+  margin-left: auto; width: 24px; height: 24px; border-radius: 6px; color: var(--text-dim); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background var(--vg-ease);
+}
+#tab-voicegen .vg-iconBtn:hover { background: var(--surface2); }
+
+/* Thanh chọn chế độ — gạch chân accent, icon cùng màu chữ, không glow */
+#tab-voicegen .vg-modeBtn { font-size: 11.5px; font-weight: 500; letter-spacing: 0; padding: 9px 4px; transition: color var(--vg-ease), border-color var(--vg-ease); }
+#tab-voicegen .vg-modeBtn:not(:last-child)::after { background: var(--border); }
+#tab-voicegen .vg-modeBtn.is-active { color: var(--text); font-weight: 600; text-shadow: none; border-bottom-width: 2px; }
+
+/* Nút chính */
+#tab-voicegen .vg-genButton {
+  height: 32px; border-radius: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0;
+  transition: background var(--vg-ease), opacity var(--vg-ease);
+}
+#tab-voicegen .vg-genButton .p-ic { margin-right: 6px; }
+#tab-voicegen .vg-genButton.is-disabled { opacity: 0.5; pointer-events: none; }
+/* Gen 1 · Gen 2 — 2 nút bằng nhau, cách 6px */
+#tab-voicegen .vg-genBar { padding: 10px 10px 12px; background: #1e1e1e; }
+#tab-voicegen .vg-genBtnOne { margin-right: 6px; }
+#tab-voicegen .vg-genBar .vg-genButton { flex: 1 1 0; }
+#tab-voicegen .vg-footRow { padding: 10px 10px 0; background: #1e1e1e; border-top: 1px solid #2c2c2c; }
+#tab-voicegen .vg-footRow[hidden] + .vg-genBar,
+#tab-voicegen .vg-genBar { border-top: 1px solid #2c2c2c; }
+#tab-voicegen .vg-footRow + .vg-genBar { border-top: none; }
+
+/* Nút phụ: Organize · Chi tiết nhạc · Chọn reference · Thêm người đọc · Import/Timeline/Autocut */
+#tab-voicegen .vg-organizeBtn,
+#tab-voicegen .vg-addSpeakerBtn,
+#tab-voicegen .vg-actionButton,
+#tab-voicegen .vc-bigBtn:not(.vc-bigPrimary):not(.vc-bigGo) {
+  height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: 11px; font-weight: 500; letter-spacing: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  transition: border-color var(--vg-ease), color var(--vg-ease), background var(--vg-ease);
+}
+#tab-voicegen .vg-organizeBtn:hover,
+#tab-voicegen .vg-addSpeakerBtn:hover,
+#tab-voicegen .vg-actionButton:hover,
+#tab-voicegen .vc-bigBtn:not(.vc-bigPrimary):not(.vc-bigGo):hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-voicegen .vg-organizeBtn .p-ic,
+#tab-voicegen .vg-addSpeakerBtn .p-ic,
+#tab-voicegen .vg-actionButton .p-ic { margin-right: 5px; }
+#tab-voicegen .vg-organizeBtn.is-cancel { border-color: var(--error); color: #fca5a5; background: rgba(239,68,68,0.12); }
+#tab-voicegen .vg-actionButton { height: 28px; font-size: 10.5px; padding: 0 6px; }
+#tab-voicegen .vg-organizeModel { border-radius: 6px; }
+
+/* Nút lớn trong Tạo giọng: Lấy audio / Chọn file = chính, Clone = xanh (bước kết thúc) */
+#tab-voicegen .vc-bigBtn { height: 32px; border-radius: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0; }
+#tab-voicegen .vc-bigBtn .p-ic { margin-right: 6px; }
+#tab-voicegen .vc-bigGo .p-ic path { fill: #0b1f12; }
+#tab-voicegen .vc-bigGo { color: #0b1f12; }
+
+/* Thẻ chọn cách tạo giọng + bước */
+#tab-voicegen .vc-choiceCard { border-radius: 9px; border-color: var(--border); background: var(--surface); transition: border-color var(--vg-ease), background var(--vg-ease); }
+#tab-voicegen .vc-ccTitle { color: var(--text); font-weight: 600; }
+#tab-voicegen .vc-ccSub { color: var(--text-dim); }
+#tab-voicegen .vc-stepNo { background: var(--accent); color: var(--accent-fg); }
+#tab-voicegen .vc-seg span { border-radius: 6px; border-color: var(--border); color: var(--text-dim); transition: all var(--vg-ease); }
+#tab-voicegen .vc-seg input:checked + span { color: var(--text); }
+#tab-voicegen .vg-vcSlide { margin: 4px 0 12px; }
+#tab-voicegen .vg-vcSlide .st-slideLbl { flex-basis: 56px; color: var(--text-dim); }
+
+/* Cột phải — mỗi khối một nhóm, tiêu đề nhỏ cùng kiểu */
+#tab-voicegen .vg-right { background: var(--bg); border-left: 1px solid #2c2c2c; }
+#tab-voicegen .vg-sg { padding: 10px 12px; border-bottom: 1px solid #262626; }
+#tab-voicegen .vg-sl { font-size: 10.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-dim); margin-bottom: 6px; }
+#tab-voicegen .vg-sm { color: #5a5a5a; }
+#tab-voicegen .vg-voiceDropTrigger { border-radius: 8px; border-color: var(--border); background: var(--surface); }
+#tab-voicegen .vg-results { margin: 10px 12px 0; }
+#tab-voicegen .vg-variation { border-radius: 9px; background: var(--surface); }
+#tab-voicegen .vg-varLabel { color: var(--text); font-weight: 600; letter-spacing: 0; text-transform: none; }
+#tab-voicegen .vg-histNavBtn { border-radius: 6px; border-color: var(--border); }
+
+/* Nhạc reference — bỏ tông hồng riêng, theo accent */
+#tab-voicegen .vg-musicRef { border-radius: 9px; border-color: var(--border); background: var(--surface); }
+#tab-voicegen .vg-musicRefTitle { color: var(--text); text-transform: none; letter-spacing: 0; }
+#tab-voicegen .vg-musicRefLbl, #tab-voicegen .vg-musicRefHint { color: var(--text-dim); }
+#tab-voicegen .vg-musicRefMode, #tab-voicegen .vg-musicRefStr { border-color: var(--border); color: var(--text-dim); }
+#tab-voicegen .vg-musicRefMode:hover, #tab-voicegen .vg-musicRefStr:hover { color: var(--text); }
+#tab-voicegen .vg-musicRefMode.is-active, #tab-voicegen .vg-musicRefStr.is-active { background: var(--accent-a18); border-color: var(--accent); color: var(--text); }
+#tab-voicegen .vg-musicRefClear:hover { background: rgba(239,68,68,0.12); }
+
+/* Trạng thái nhỏ (Import / Đổi giọng) — chấm màu như Autocut */
+#tab-voicegen .vg-inlineStatus { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-top: 6px; min-height: 0; }
+#tab-voicegen .vg-inlineStatus:empty { display: none; }
+#tab-voicegen .vg-inlineStatus.is-ok   { color: var(--success); }
+#tab-voicegen .vg-inlineStatus.is-err  { color: #fca5a5; }
+#tab-voicegen .vg-inlineStatus.is-warn { color: #f59e0b; }
+#tab-voicegen .vc-status { border-radius: 8px; }

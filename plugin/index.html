@@ -466,8 +466,8 @@
     <!-- Status bar -->
     <div class="vg-statusBar" id="vgStatusBar">
       <span class="vg-statusDot" id="vgStatusDot"></span>
-      <span id="vgStatusText">Connecting...</span>
-      <div id="vgRefreshVoices" class="ac-iconBtn" role="button"><span data-ic="rotate_right" data-ic-size="15"></span></div>
+      <span id="vgStatusText">Đang kết nối…</span>
+      <div id="vgRefreshVoices" class="vg-iconBtn" role="button"><span data-ic="rotate_right" data-ic-size="15"></span></div>
     </div>
 
     <!-- Voice Gen settings moved into the unified Settings modal (⚙ → Voice Gen tab).
@@ -475,10 +475,10 @@
 
     <!-- Mode selector -->
     <div class="vg-modeBar">
-      <div class="vg-modeBtn is-active" role="button" data-mode="tts"><span data-ic="microphone" data-ic-size="14" data-ic-color="#a855f7"></span> Voice</div>
-      <div class="vg-modeBtn" role="button" data-mode="sfx"><span data-ic="wave_square" data-ic-size="14" data-ic-color="#22d3ee"></span> SFX</div>
-      <div class="vg-modeBtn" role="button" data-mode="music"><span data-ic="audio" data-ic-size="14" data-ic-color="#ec4899"></span> Music</div>
-      <div class="vg-modeBtn" role="button" data-mode="create"><span data-ic="palette" data-ic-size="14" data-ic-color="#f59e0b"></span> Create</div>
+      <div class="vg-modeBtn is-active" role="button" data-mode="tts"><span data-ic="microphone" data-ic-size="14"></span> Giọng</div>
+      <div class="vg-modeBtn" role="button" data-mode="sfx"><span data-ic="wave_square" data-ic-size="14"></span> SFX</div>
+      <div class="vg-modeBtn" role="button" data-mode="music"><span data-ic="audio" data-ic-size="14"></span> Nhạc</div>
+      <div class="vg-modeBtn" role="button" data-mode="create"><span data-ic="palette" data-ic-size="14"></span> Tạo giọng</div>
     </div>
 
     <!-- Body: left editor + right settings -->
@@ -491,13 +491,13 @@
         <!-- TTS editor -->
         <div class="vg-modeContent" data-mode="tts">
           <div class="vg-speakerBar" id="vgSpeakerBar">
-            <div id="vgAddSpeaker" class="vg-addSpeakerBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Add speaker</div>
+            <div id="vgAddSpeaker" class="vg-addSpeakerBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Thêm người đọc</div>
           </div>
           <div class="vg-editorWrap">
             <div class="vg-scriptGrow">
               <div class="vg-scriptSizer" aria-hidden="true"></div>
               <textarea id="vgScript" class="vg-script" spellcheck="false"
-                placeholder="Type your text with audio tags like [laughs] to turn into expressive speech..."></textarea>
+                placeholder="Nhập script — thêm tag cảm xúc như [laughs] để giọng đọc có biểu cảm…"></textarea>
             </div>
           </div>
         </div>
@@ -508,7 +508,7 @@
             <div class="vg-scriptGrow">
               <div class="vg-scriptSizer" aria-hidden="true"></div>
               <textarea id="vgSfxText" class="vg-script" spellcheck="false"
-                placeholder="Describe the sound effect...&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
+                placeholder="Mô tả âm thanh (tiếng Anh cho chuẩn)…&#10;thunder rumbling and rain on a tin roof&#10;glass shattering on concrete"></textarea>
             </div>
           </div>
           <div class="st-slideRow">
@@ -519,7 +519,7 @@
             <input type="number" id="vgSfxDuration" class="st-num" min="0.5" max="22" step="0.5" value="3" />
           </div>
           <div class="st-slideRow">
-            <span class="st-slideLbl">Prompt</span>
+            <span class="st-slideLbl">Bám prompt</span>
             <div class="st-cslider" id="vgSfxInfluenceC" data-min="0" data-max="1" data-step="0.05">
               <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
             </div>
@@ -532,7 +532,7 @@
           <!-- ── Nhạc reference (Music v2) — đặt trên ô prompt ── -->
           <div class="vg-musicRef">
             <div class="vg-musicRefHead">
-              <span data-ic="audio" data-ic-size="12" data-ic-color="#ec4899"></span>
+              <span data-ic="audio" data-ic-size="12"></span>
               <span class="vg-musicRefTitle">Nhạc reference</span>
             </div>
             <div id="vgMusicRefPickRow" class="vg-musicRefPick">
@@ -563,7 +563,7 @@
             <div class="vg-scriptGrow">
               <div class="vg-scriptSizer" aria-hidden="true"></div>
               <textarea id="vgMusicPrompt" class="vg-script" spellcheck="false"
-                placeholder="Describe the music...&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
+                placeholder="Mô tả đoạn nhạc (tiếng Anh cho chuẩn)…&#10;upbeat electronic background, 120 BPM&#10;cinematic orchestral, dramatic tension"></textarea>
             </div>
           </div>
           <div class="st-slideRow">
@@ -582,23 +582,23 @@
             <!-- Method picker — two choice cards (replaces the old dropdown) -->
             <div class="vc-methodCards">
               <div id="vcCloneCard" class="vc-choiceCard" role="button">
-                <span class="vc-ccIcon" data-ic="microphone_lines" data-ic-size="18" data-ic-color="#a855f7"></span>
+                <span class="vc-ccIcon" data-ic="microphone_lines" data-ic-size="18"></span>
                 <div class="vc-ccText">
-                  <div class="vc-ccTitle">Clone Voice</div>
-                  <div class="vc-ccSub">Copy an existing voice from your audio</div>
+                  <div class="vc-ccTitle">Clone giọng</div>
+                  <div class="vc-ccSub">Sao chép một giọng có sẵn từ audio của bạn</div>
                 </div>
               </div>
               <div id="vcDesignCard" class="vc-choiceCard" role="button">
-                <span class="vc-ccIcon" data-ic="palette" data-ic-size="18" data-ic-color="#f59e0b"></span>
+                <span class="vc-ccIcon" data-ic="palette" data-ic-size="18"></span>
                 <div class="vc-ccText">
-                  <div class="vc-ccTitle">Design Voice</div>
-                  <div class="vc-ccSub">Generate a new voice from a description</div>
+                  <div class="vc-ccTitle">Thiết kế giọng</div>
+                  <div class="vc-ccSub">Tạo giọng mới theo mô tả</div>
                 </div>
               </div>
               <div id="vcChangeCard" class="vc-choiceCard" role="button">
-                <span class="vc-ccIcon" data-ic="shuffle" data-ic-size="18" data-ic-color="#22d3ee"></span>
+                <span class="vc-ccIcon" data-ic="shuffle" data-ic-size="18"></span>
                 <div class="vc-ccText">
-                  <div class="vc-ccTitle">Voice Changer</div>
+                  <div class="vc-ccTitle">Đổi giọng</div>
                   <div class="vc-ccSub">Đổi giọng đoạn audio sang giọng khác</div>
                 </div>
               </div>
@@ -609,48 +609,48 @@
 
               <!-- Step 1 — choose source + extract -->
               <div class="vc-step">
-                <div class="vc-stepHd"><span class="vc-stepNo">1</span> Choose audio source</div>
+                <div class="vc-stepHd"><span class="vc-stepNo">1</span> Chọn nguồn audio</div>
                 <div class="vc-segTabs">
-                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>From Timeline</span></label>
-                  <label class="vc-seg"><input type="radio" name="vcSource" value="file" /><span>From File</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="sequence" checked /><span>Từ timeline</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcSource" value="file" /><span>Từ file</span></label>
                 </div>
                 <div id="vcFromSequenceSection">
                   <div class="vc-trackSel">
                     <div id="vcTrackSelBtn" class="vg-nameToolBtn" role="button">Track: A1 <span class="vg-caret">▾</span></div>
                     <div id="vcTrackSelPanel" class="vg-namePanel" hidden></div>
                   </div>
-                  <div id="vcGetClip" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Extract audio from Timeline A1</div>
-                  <div class="vc-clipInfo" id="vcClipInfo">Grabs every clip on audio track A1 and joins them into one voice sample.</div>
+                  <div id="vcGetClip" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13"></span> Lấy audio từ track A1</div>
+                  <div class="vc-clipInfo" id="vcClipInfo">Gộp mọi clip trên track A1 thành một mẫu giọng.</div>
                 </div>
                 <div id="vcFromFileSection" hidden>
-                  <div id="vcBrowseFile" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13" data-ic-color="#ffffff"></span> Browse audio file</div>
-                  <div class="vc-clipInfo" id="vcFileInfo">Pick an MP3/WAV/M4A file of the voice to clone.</div>
+                  <div id="vcBrowseFile" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Chọn file audio</div>
+                  <div class="vc-clipInfo" id="vcFileInfo">Chọn file MP3/WAV/M4A của giọng cần clone.</div>
                 </div>
               </div>
 
               <!-- Step 2 — audio ready → clone (revealed after extract/browse) -->
               <div id="vcCloneStep2" class="vc-step" hidden>
-                <div class="vc-stepHd"><span class="vc-stepNo">2</span> Clone this voice</div>
-                <div id="vcCloneBtn" class="vc-bigBtn vc-bigGo" role="button"><span data-ic="microphone_lines" data-ic-size="14" data-ic-color="#ffffff"></span> Clone this voice</div>
+                <div class="vc-stepHd"><span class="vc-stepNo">2</span> Clone giọng này</div>
+                <div id="vcCloneBtn" class="vc-bigBtn vc-bigGo" role="button"><span data-ic="microphone_lines" data-ic-size="14"></span> Clone giọng này</div>
               </div>
 
               <!-- Step 3 — details (revealed after clicking "Clone this voice") -->
               <div id="vcCloneStep3" class="vc-step" hidden>
-                <div class="vc-stepHd"><span class="vc-stepNo">3</span> Voice details</div>
+                <div class="vc-stepHd"><span class="vc-stepNo">3</span> Thông tin giọng</div>
                 <div class="vc-field">
-                  <label class="vc-label">Voice Name</label>
+                  <label class="vc-label">Tên giọng</label>
                   <input type="text" id="vcCloneName" class="vg-settingInput" placeholder="My Cloned Voice" />
                 </div>
                 <div class="vc-field">
-                  <label class="vc-label">Description <span class="vg-sm">optional</span></label>
-                  <textarea id="vcCloneDesc" class="vg-settingInput" rows="2" style="resize:none;" placeholder="Describe the voice characteristics..."></textarea>
+                  <label class="vc-label">Mô tả <span class="vg-sm">tuỳ chọn</span></label>
+                  <textarea id="vcCloneDesc" class="vg-settingInput" rows="2" style="resize:none;" placeholder="Đặc điểm giọng…"></textarea>
                 </div>
                 <label class="vg-checkRow">
                   <input type="checkbox" id="vcDenoise" />
-                  <span>Remove background noise</span>
+                  <span>Khử tiếng ồn nền</span>
                 </label>
-                <div id="vcCloneSubmit" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="check" data-ic-size="14" data-ic-color="#ffffff"></span> CREATE VOICE</div>
-                <div class="vc-clipInfo" style="text-align:center;margin-top:6px;">When done, the voice appears in the Gen Voice list automatically.</div>
+                <div id="vcCloneSubmit" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="check" data-ic-size="14"></span> Tạo giọng</div>
+                <div class="vc-clipInfo" style="text-align:center;margin-top:6px;">Xong là giọng tự xuất hiện trong danh sách giọng.</div>
               </div>
 
               <div id="vcCloneStatus" class="vc-status" hidden></div>
@@ -660,14 +660,14 @@
             <div id="vcDesignSection" hidden>
               <div class="vc-row2">
                 <div class="vc-field">
-                  <label class="vc-label">Gender</label>
+                  <label class="vc-label">Giới tính</label>
                   <select id="vcGender" class="vg-select">
                     <option value="female">Female</option>
                     <option value="male">Male</option>
                   </select>
                 </div>
                 <div class="vc-field">
-                  <label class="vc-label">Age</label>
+                  <label class="vc-label">Độ tuổi</label>
                   <select id="vcAge" class="vg-select">
                     <option value="young">Young</option>
                     <option value="middle_aged">Middle aged</option>
@@ -676,7 +676,7 @@
                 </div>
               </div>
               <div class="vc-field">
-                <label class="vc-label">Accent</label>
+                <label class="vc-label">Giọng vùng</label>
                 <select id="vcAccent" class="vg-select">
                   <option value="american">American</option>
                   <option value="british">British</option>
@@ -685,16 +685,19 @@
                   <option value="indian">Indian</option>
                 </select>
               </div>
+              <div class="st-slideRow vg-vcSlide">
+                  <span class="st-slideLbl">Độ đậm</span>
+                  <div class="st-cslider" id="vcAccentStrengthC" data-min="0.3" data-max="2.0" data-step="0.1">
+                    <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                  </div>
+                  <input type="number" id="vcAccentStrength" class="st-num" min="0.3" max="2.0" step="0.1" value="1.0" />
+                </div>
               <div class="vc-field">
-                <label class="vc-label">Accent Strength <span id="vcAccentVal" class="vg-sm">1.0</span></label>
-                <input type="range" id="vcAccentStrength" class="vc-slider" min="0.3" max="2.0" step="0.1" value="1.0" />
-              </div>
-              <div class="vc-field">
-                <label class="vc-label">Preview Text</label>
+                <label class="vc-label">Câu nghe thử</label>
                 <textarea id="vcPreviewText" class="vg-settingInput" rows="3" style="resize:none;"
-                  placeholder="Text to preview the voice...">Hello! I am a newly designed voice. How do I sound to you?</textarea>
+                  placeholder="Câu để nghe thử giọng…">Hello! I am a newly designed voice. How do I sound to you?</textarea>
               </div>
-              <div id="vcDesignPreview" class="vg-genButton" role="button" style="margin-top:6px;width:100%;"><span data-ic="play" data-ic-size="13" data-ic-color="#ffffff"></span> PREVIEW VOICE</div>
+              <div id="vcDesignPreview" class="vg-genButton" role="button" style="margin-top:6px;width:100%;"><span data-ic="play" data-ic-size="13"></span> Nghe thử</div>
               <!-- inline audio player for design preview -->
               <div id="vcPreviewPlayer" class="vc-previewPlayer" hidden>
                 <div class="vg-playBtn" role="button" id="vcPreviewPlay"><span data-ic="play" data-ic-size="12"></span></div>
@@ -706,14 +709,14 @@
               <!-- Save section — revealed after preview -->
               <div id="vcDesignSaveSection" class="vc-saveSection" hidden>
                 <div class="vc-field">
-                  <label class="vc-label">Save as Voice Name</label>
+                  <label class="vc-label">Lưu với tên</label>
                   <input type="text" id="vcDesignName" class="vg-settingInput" placeholder="My Designed Voice" />
                 </div>
                 <div class="vc-field">
-                  <label class="vc-label">Description <span class="vg-sm">optional</span></label>
-                  <input type="text" id="vcDesignDesc" class="vg-settingInput" placeholder="Short description..." />
+                  <label class="vc-label">Mô tả <span class="vg-sm">tuỳ chọn</span></label>
+                  <input type="text" id="vcDesignDesc" class="vg-settingInput" placeholder="Mô tả ngắn…" />
                 </div>
-                <div id="vcDesignSave" class="ac-primaryButton" role="button" style="width:100%;"><span data-ic="check" data-ic-size="13" data-ic-color="#ffffff"></span> SAVE VOICE</div>
+                <div id="vcDesignSave" class="vg-genButton" role="button" style="width:100%;"><span data-ic="check" data-ic-size="13"></span> Lưu giọng</div>
               </div>
               <div id="vcDesignStatus" class="vc-status" hidden></div>
             </div>
@@ -724,17 +727,17 @@
                 <div class="vc-stepHd"><span class="vc-stepNo">1</span> Nguồn audio</div>
                 <div class="vc-segTabs">
                   <label class="vc-seg"><input type="radio" name="vcxSource" id="vcxSrcSeq" value="sequence" checked /><span>Clip đang chọn</span></label>
-                  <label class="vc-seg"><input type="radio" name="vcxSource" id="vcxSrcFile" value="file" /><span>From File</span></label>
+                  <label class="vc-seg"><input type="radio" name="vcxSource" id="vcxSrcFile" value="file" /><span>Từ file</span></label>
                 </div>
                 <div id="vcxFromSeq">
-                  <div id="vcxGetSel" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13" data-ic-color="#ffffff"></span> Lấy clip đang chọn</div>
+                  <div id="vcxGetSel" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="download" data-ic-size="13"></span> Lấy clip đang chọn</div>
                   <div class="vc-clipInfo" id="vcxSelInfo">Chọn 1 hay nhiều clip audio trên timeline — plugin gộp lại thành 1 file.</div>
                 </div>
                 <div id="vcxFromFile" hidden>
-                  <div id="vcxBrowse" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13" data-ic-color="#ffffff"></span> Chọn file audio</div>
+                  <div id="vcxBrowse" class="vc-bigBtn vc-bigPrimary" role="button"><span data-ic="folder_open" data-ic-size="13"></span> Chọn file audio</div>
                   <div class="vc-clipInfo" id="vcxFileInfo">Chọn file MP3/WAV/M4A cần đổi giọng.</div>
                 </div>
-                <div id="vcxPreviewMerged" class="vc-bigBtn" role="button" hidden style="margin-top:8px;"><span data-ic="play" data-ic-size="13" data-ic-color="#22d3ee"></span> Nghe thử bản gộp (trước khi đổi giọng)</div>
+                <div id="vcxPreviewMerged" class="vc-bigBtn" role="button" hidden style="margin-top:8px;"><span data-ic="play" data-ic-size="13"></span> Nghe thử bản gộp (trước khi đổi giọng)</div>
               </div>
 
               <div class="vc-step">
@@ -742,7 +745,7 @@
                 <div id="vcxVoiceHost" class="vcx-voiceHost">
                   <div id="vcxVoiceLabel" class="vcx-voiceLabel" role="button">Chọn giọng… <span class="vg-caret">▾</span></div>
                   <div id="vcxVoicePanel" class="vcx-voicePanel" hidden>
-                    <input type="text" id="vcxVoiceSearch" class="vg-dropSearchInput" placeholder="Search voices…" />
+                    <input type="text" id="vcxVoiceSearch" class="vg-dropSearchInput" placeholder="Tìm giọng…" />
                     <div id="vcxVoiceList" class="vg-dropList"></div>
                   </div>
                 </div>
@@ -757,17 +760,26 @@
                     <option value="eleven_english_sts_v2">English STS v2</option>
                   </select>
                 </div>
-                <div class="vc-field">
-                  <label class="vc-label">Stability <span class="vg-sm" id="vcxStabilityVal">0.50</span></label>
-                  <input type="range" id="vcxStability" min="0" max="1" step="0.05" value="0.5" class="vcx-range" />
+                <div class="st-slideRow vg-vcSlide">
+                  <span class="st-slideLbl">Ổn định</span>
+                  <div class="st-cslider" id="vcxStabilityC" data-min="0" data-max="1" data-step="0.05">
+                    <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                  </div>
+                  <input type="number" id="vcxStability" class="st-num" min="0" max="1" step="0.05" value="0.5" />
                 </div>
-                <div class="vc-field">
-                  <label class="vc-label">Similarity <span class="vg-sm" id="vcxSimilarityVal">0.75</span></label>
-                  <input type="range" id="vcxSimilarity" min="0" max="1" step="0.05" value="0.75" class="vcx-range" />
+                <div class="st-slideRow vg-vcSlide">
+                  <span class="st-slideLbl">Giống</span>
+                  <div class="st-cslider" id="vcxSimilarityC" data-min="0" data-max="1" data-step="0.05">
+                    <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                  </div>
+                  <input type="number" id="vcxSimilarity" class="st-num" min="0" max="1" step="0.05" value="0.75" />
                 </div>
-                <div class="vc-field">
-                  <label class="vc-label">Style <span class="vg-sm" id="vcxStyleVal">0.00</span></label>
-                  <input type="range" id="vcxStyle" min="0" max="1" step="0.05" value="0" class="vcx-range" />
+                <div class="st-slideRow vg-vcSlide">
+                  <span class="st-slideLbl">Style</span>
+                  <div class="st-cslider" id="vcxStyleC" data-min="0" data-max="1" data-step="0.05">
+                    <div class="st-cline"></div><div class="st-cfill"></div><div class="st-cthumb"></div>
+                  </div>
+                  <input type="number" id="vcxStyle" class="st-num" min="0" max="1" step="0.05" value="0" />
                 </div>
                 <label class="vg-checkRow">
                   <input type="checkbox" id="vcxDenoise" />
@@ -775,8 +787,8 @@
                 </label>
               </div>
 
-              <div id="vcxConvert" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="shuffle" data-ic-size="14" data-ic-color="#ffffff"></span> ĐỔI GIỌNG</div>
-              <div class="ac-manualStatus" id="vcxStatus" style="margin-top:6px;"></div>
+              <div id="vcxConvert" class="vg-genButton" role="button" style="margin-top:10px;width:100%;"><span data-ic="shuffle" data-ic-size="14"></span> Đổi giọng</div>
+              <div class="vg-inlineStatus" id="vcxStatus" style="margin-top:6px;"></div>
             </div>
 
           </div><!-- /vc-scroll -->
@@ -791,18 +803,14 @@
              UXP: <label> forces its own colour onto child <span>, and only an
              inline style overrides it — hence style="color:..." below. -->
         <div class="vg-footRow" id="vgFootRow">
-          <label class="vg-varToggle" id="vgVarToggleWrap">
-            <input type="checkbox" id="vg2Variations" class="vg-ftChk" />
-            <span class="vg-ftLabel" style="color:#e8e8e8">2 variations</span>
-          </label>
           <!-- Organize is Voice-only; the mode switcher hides it via .vg-modeContent -->
           <div class="vg-modeContent vg-ftGroup vg-ftPush" data-mode="tts">
-            <select id="vgOrganizeModel" class="vg-organizeModel" title="Model dùng cho Organize">
+            <select id="vgOrganizeModel" class="vg-organizeModel">
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
               <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
               <option value="claude-opus-5-5">Claude Opus 5.5 (backup)</option>
             </select>
-            <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button" title="Chuẩn hoá script + thêm tag cảm xúc"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
+            <div id="vgOrganizeBtn" class="vg-organizeBtn" role="button"><span data-ic="wand_magic_sparkles" data-ic-size="13"></span> Organize</div>
           </div>
           <!-- Music-only; same row as the variations toggle. hidden by default —
                only switchMode('music') reveals it (default mode is tts). -->
@@ -812,15 +820,13 @@
         </div>
         <!-- Row 2: Generate spans the full width. -->
         <div class="vg-genBar">
-          <div id="vgGenerate" class="vg-genButton" role="button"><span class="vg-ftIcon" data-ic="bolt" data-ic-size="14" data-ic-color="#ffffff"></span> GENERATE VOICE</div>
+          <div id="vgGenerate" class="vg-genButton vg-genBtnOne" role="button"><span data-ic="bolt" data-ic-size="13"></span> Gen 1</div>
+          <div id="vgGenerate2" class="vg-genButton" role="button"><span data-ic="bolt" data-ic-size="13"></span> Gen 2</div>
         </div>
       </div><!-- /vg-left -->
 
       <!-- ── RIGHT: Settings panel ── -->
       <div class="vg-right">
-        <div class="vg-rightHeader">
-          <span class="vg-rightTab is-active">Voice &amp; Output</span>
-        </div>
         <div class="vg-rightScroll">
 
         <!-- API Key Profiles + Output Format moved to the ⚙ settings panel (top) -->
@@ -828,7 +834,7 @@
         <!-- Quick switch: cycles through ElevenLabs key profiles that have a key.
              Sits outside .vg-modeContent — the key applies to every mode. -->
         <div class="vg-sg vg-profileSection">
-          <div class="vg-sl">Profile</div>
+          <div class="vg-sl">Tài khoản</div>
           <div class="vg-profileChip is-disabled" id="vgProfileChip" role="button">
             <span data-ic="rotate_right" data-ic-size="11"></span>
             <span id="vgProfileChipName">—</span>
@@ -855,7 +861,7 @@
         <div class="vg-modeContent" data-mode="tts">
 
           <div class="vg-sg">
-            <div class="vg-sl">Voice <span class="vg-sm" id="vgVoiceSource">defaults</span></div>
+            <div class="vg-sl">Giọng <span class="vg-sm" id="vgVoiceSource">defaults</span></div>
             <!-- Hidden backing select — JS reads/writes .value here -->
             <select id="vgVoiceSelect" style="display:none">
               <option value="9BWtsMINqrJLrRacOk9x">Aria · female · American</option>
@@ -893,7 +899,7 @@
               </div>
               <div class="vg-voiceDropPanel" id="vgVoiceDropPanel" hidden></div>
             </div>
-            <input id="vgCustomVoiceId" type="text" class="vg-settingInput" placeholder="Paste voice_id" hidden style="margin-top:4px;" />
+            <input id="vgCustomVoiceId" type="text" class="vg-settingInput" placeholder="Dán voice_id" hidden style="margin-top:4px;" />
           </div>
 
         </div><!-- /tts modeContent: voice picker (Model/Lang/folder moved to ⚙ Settings) -->
@@ -910,7 +916,7 @@
           <div id="vgSingleVars">
             <div class="vg-variation" id="vgVar1">
               <div class="vg-varHeader">
-                <span class="vg-varLabel">Variation 1</span>
+                <span class="vg-varLabel">Bản 1</span>
                 <span class="vg-varSize" id="vgVar1Size"></span>
               </div>
               <div class="vg-player">
@@ -921,14 +927,14 @@
                 <span class="vg-time" id="vgVar1Time">0:00 / 0:00</span>
               </div>
               <div class="vg-resultActions">
-                <button id="vgVar1Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <div id="vgVar1Timeline" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
-                <div id="vgVar1ToAutocut" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
+                <div id="vgVar1Import" class="vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Import</div>
+                <div id="vgVar1Timeline" class="vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
+                <div id="vgVar1ToAutocut" class="vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
               </div>
             </div>
             <div class="vg-variation" id="vgVar2" style="display:none;">
               <div class="vg-varHeader">
-                <span class="vg-varLabel">Variation 2</span>
+                <span class="vg-varLabel">Bản 2</span>
                 <span class="vg-varSize" id="vgVar2Size"></span>
               </div>
               <div class="vg-player">
@@ -939,12 +945,12 @@
                 <span class="vg-time" id="vgVar2Time">0:00 / 0:00</span>
               </div>
               <div class="vg-resultActions">
-                <button id="vgVar2Import" class="ac-secondaryButton vg-actionButton">Import</button>
-                <div id="vgVar2Timeline" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
-                <div id="vgVar2ToAutocut" class="ac-secondaryButton vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
+                <div id="vgVar2Import" class="vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Import</div>
+                <div id="vgVar2Timeline" class="vg-actionButton" role="button"><span data-ic="download" data-ic-size="12"></span> Timeline</div>
+                <div id="vgVar2ToAutocut" class="vg-actionButton" role="button"><span data-ic="arrow_right" data-ic-size="12"></span> Autocut</div>
               </div>
             </div>
-            <div id="vgImportStatus" class="ac-manualStatus"></div>
+            <div id="vgImportStatus" class="vg-inlineStatus"></div>
           </div>
           <div id="vgMultiVars" style="display:none;"></div>
         </div>
@@ -979,13 +985,13 @@
        UXP getFileForSaving can't open at a chosen folder, so we use this instead. -->
   <div id="vgSaveModal" class="vg-save-modal" hidden>
     <div class="vg-save-box">
-      <div class="vg-save-title">&#128190; Lưu audio</div>
+      <div class="vg-save-title">Lưu audio</div>
       <div id="vgSaveSeqNote" class="vg-save-seqNote" hidden></div>
       <label class="vg-save-label">Tên file</label>
       <input id="vgSaveName" type="text" class="vg-save-input" />
       <label class="vg-save-label">Thư mục lưu</label>
       <div class="vg-save-folderRow">
-        <div id="vgSaveFolder" class="vg-save-folder is-empty">(chưa chọn — bấm 📂)</div>
+        <div id="vgSaveFolder" class="vg-save-folder is-empty">(chưa chọn thư mục)</div>
         <input id="vgSaveFolderInput" type="text" class="vg-save-folder vg-save-folderInput" spellcheck="false" hidden />
         <div id="vgSaveFolderBmToggle" class="vg-folderBtn vg-folderBtn--icon" role="button"><span data-ic="floppy_disk" data-ic-size="13"></span></div>
         <div id="vgSaveFolderNewBtn" class="vg-folderBtn vg-folderBtn--icon" role="button"><span data-ic="plus" data-ic-size="13"></span></div>

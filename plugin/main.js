@@ -5679,8 +5679,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     btnBrowseFolder: $('vgBrowseFolder'),
     btnResetFolder:  $('vgResetFolder'),
     filename:     $('vgFilename'),
-    twoVariations: $('vg2Variations'),
     btnGenerate:  $('vgGenerate'),
+    btnGenerate2: $('vgGenerate2'),
     resultSection: $('vgResultSection'),
     var1:         $('vgVar1'),
     var1Size:     $('vgVar1Size'),
@@ -5717,6 +5717,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var lbl = document.getElementById('vcxVoiceLabel');
     if (lbl && vcxVoiceLabel) lbl.textContent = vcxVoiceLabel + ' ▾';
     vcxSyncSliderLabels();
+    // slider tự vẽ: giá trị nạp từ localStorage → vẽ lại vị trí con trượt
+    ['vcxStability','vcxSimilarity','vcxStyle'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) try { el.dispatchEvent(new Event('change')); } catch (e) {}
+    });
   }
   function vcxSaveSettings() {
     var num = function(id, d) { var el = document.getElementById(id); return el ? Number(el.value) : d; };
@@ -6554,14 +6559,29 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return (s || '').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
   }
 
+  // 2 nút Gen 1 / Gen 2 (thay ô tick "2 variations"). busyNum = nút đang chạy → hiện tiến độ,
+  // nút kia khoá. vgGenIdle() trả cả 2 về nhãn của mode hiện tại.
+  var VG_GEN_IC = { tts: 'bolt', sfx: 'wave_square', music: 'audio' };
+  function vgGenIdle() {
+    var ic = VG_GEN_IC[currentMode] || 'bolt';
+    [els.btnGenerate, els.btnGenerate2].forEach(function (b, i) {
+      if (!b) return; b.disabled = false; piSetBtn(b, ic, 'Gen ' + (i + 1), null, 13);
+    });
+  }
+  function vgGenBusy(numVar, label) {
+    var busy = numVar === 2 ? els.btnGenerate2 : els.btnGenerate;
+    [els.btnGenerate, els.btnGenerate2].forEach(function (b) { if (b) b.disabled = true; });
+    if (busy) piSetBtn(busy, 'rotate_right', label, null, 13);
+  }
+
   async function generateMultiSpeaker(numVar, userFilename, outputFmt) {
     saveCurrentSpeakerText();
     var active = VG_SPEAKERS.filter(function(sp) {
       return (VG_SPEAKER_TEXTS[sp.id] || '').trim();
     });
-    if (active.length === 0) return setStatus('All speakers have empty text', false);
+    if (active.length === 0) return setStatus('Các người đọc đều chưa có script', false);
 
-    els.btnGenerate.disabled = true;
+    vgGenBusy(numVar, 'Đang gen…');
     var resultCards = [];
     var ts = genTimestamp();
     var userSuffix = safeFileStr(userFilename);
@@ -6571,7 +6591,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var sp = active[i];
         var spVoice = safeFileStr(sp.voiceName.split(' ')[0]) || 'voice';
         var spName = spVoice + (userSuffix ? '_' + userSuffix : '') + '_' + ts + (active.length > 1 ? '-' + (i + 1) : '');
-        piSetBtn(els.btnGenerate, 'rotate_right', sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')...', '#ffffff', 14);
+        vgGenBusy(numVar, sp.voiceName + ' (' + (i + 1) + '/' + active.length + ')…');
         setStatus('Generating ' + sp.voiceName + '...', false);
         var resp;
         try {
@@ -6607,12 +6627,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         { mode: 'tts', outputs: flat, multi: true });
       vgHistNavReset();
       if (failMsg) setStatus('✗ ' + failMsg + ' — đã giữ ' + resultCards.length + '/' + active.length + ' speaker gen xong (có trong Gần đây)', false);
-      else setStatus('✓ Generated ' + active.length + ' speakers', true);
+      else setStatus('✓ Đã gen ' + active.length + ' người đọc', true);
     } catch(e) {
       setStatus('✗ ' + bridgeErrText(e), false);
     } finally {
-      els.btnGenerate.disabled = false;
-      piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
+      vgGenIdle();
     }
   }
 
@@ -6623,12 +6642,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return (sel && sel.value) ? sel.value : undefined;
   }
 
-  async function generate() {
+  async function generate(numVar) {
     if (!ELEVENLABS_KEY) {
-      setStatus('Set ElevenLabs API key in Settings first', false);
+      setStatus('Chưa có ElevenLabs API key — điền trong Settings', false);
       return;
     }
-    var numVar = els.twoVariations.checked ? 2 : 1;
+    numVar = numVar === 2 ? 2 : 1;   // gọi không tham số (lệnh từ tab Claude) = 1 bản
     var outputFmt = ($('vgOutputFormat') && $('vgOutputFormat').value) || 'mp3_44100_128';
 
     // ── Default filename = voice name as prefix (user can override) ────────
@@ -6643,9 +6662,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
       var voiceId = vgCurrentVoiceId || els.voiceSelect.value || '';
       if (voiceId === '__custom__') voiceId = safeVal(els.customVoiceId);
-      if (!voiceId) return setStatus('Pick a voice', false);
+      if (!voiceId) return setStatus('Chưa chọn giọng', false);
       var text = safeVal(els.script);
-      if (!text) return setStatus('Script is empty', false);
+      if (!text) return setStatus('Script đang trống', false);
       // Voice name = prefix. Resolve via vgVoiceName(voiceId) (looks up VG_VOICES_DATA by
       // id) — NOT via selectedIndex: UXP doesn't update selectedIndex when .value is set
       // programmatically by the custom dropdown, so the old code always read Rachel/blank.
@@ -6664,7 +6683,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       label = 'voice';
     } else if (currentMode === 'sfx') {
       var sfxText = safeVal($('vgSfxText'));
-      if (!sfxText) return setStatus('Sound description is empty', false);
+      if (!sfxText) return setStatus('Chưa mô tả âm thanh', false);
       var userSuffix = safeFileStr(userFilename);
       var customName = 'sfx' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/sfx/generate';
@@ -6680,7 +6699,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } else if (currentMode === 'music') {
       var prompt = safeVal($('vgMusicPrompt'));
       var _mref = window.__vgMusicRef || { path: '' };
-      if (!prompt && !_mref.path) return setStatus('Music prompt is empty', false);
+      if (!prompt && !_mref.path) return setStatus('Chưa mô tả đoạn nhạc', false);
       var userSuffix = safeFileStr(userFilename);
       var customName = 'music' + (userSuffix ? '_' + userSuffix : '') + '_' + genTimestamp();
       endpoint = '/music/generate';
@@ -6700,8 +6719,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       label = 'music';
     }
 
-    els.btnGenerate.disabled = true;
-    piSetBtn(els.btnGenerate, 'rotate_right', 'Generating ' + numVar + ' ' + label + '...', '#ffffff', 14);
+    vgGenBusy(numVar, 'Đang gen ' + numVar + ' ' + label + '…');
     setStatus('Calling ElevenLabs...', false);
 
     try {
@@ -6712,12 +6730,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       renderVariations();
       els.resultSection.hidden = false;
       els.importStatus.textContent = '';
-      els.importStatus.className = 'ac-manualStatus';
+      els.importStatus.className = 'vg-inlineStatus';
       if (resp.errors && resp.errors.length) {
-        setStatus('⚠ Variation ' + resp.errors[0].variation + ' lỗi: ' + resp.errors[0].error
+        setStatus('⚠ Bản ' + resp.errors[0].variation + ' lỗi: ' + resp.errors[0].error
           + ' — đã giữ ' + lastVariations.length + ' bản gen xong', false);
       } else {
-        setStatus('✓ Generated ' + lastVariations.length + ' ' + label + ' · click play to preview', true);
+        setStatus('✓ Đã gen ' + lastVariations.length + ' bản ' + label + ' — bấm ▶ để nghe', true);
       }
       // Chỉ TTS single-speaker: SFX/Music không có voice, còn multi-speaker đã
       // return sớm ở trên (generateMultiSpeaker) nên không bao giờ tới đây.
@@ -6729,8 +6747,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     } catch(e) {
       setStatus('✗ ' + bridgeErrText(e), false);
     } finally {
-      els.btnGenerate.disabled = false;
-      piSetBtn(els.btnGenerate, 'bolt', 'GENERATE VOICE', '#ffffff', 14);
+      vgGenIdle();
     }
   }
 
@@ -6748,8 +6765,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var vgRight = document.querySelector('.vg-right');
     var footRow = document.getElementById('vgFootRow');
     if (genBar)  genBar.style.display  = isCreate ? 'none' : '';
-    // Row 1 carries the variations toggle, which all three gen modes use.
-    if (footRow) footRow.style.display = isCreate ? 'none' : '';
+    // Hàng trên nút Gen: Organize (Giọng) / Chi tiết đoạn nhạc (Nhạc) — SFX không có gì.
+    if (footRow) footRow.style.display = (mode === 'tts' || mode === 'music') ? '' : 'none';
     if (vgRight) vgRight.style.display = isCreate ? 'none' : '';
     vgRenderBinNames();   // Settings hiển thị bin của mode đang mở
     vgRenderHistory();    // section nằm ngoài .vg-modeContent nên phải tự ẩn khi rời TTS
@@ -6759,13 +6776,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (lastVariations.length && lastVariationsMode === mode) { renderVariations(); els.resultSection.hidden = false; }
       else els.resultSection.hidden = true;
     }
-    var genLabels = {
-      tts:   { ic: 'bolt',        label: 'GENERATE VOICE' },
-      sfx:   { ic: 'wave_square', label: 'GENERATE SFX' },
-      music: { ic: 'audio',       label: 'GENERATE MUSIC' },
-    };
-    var gl = genLabels[mode] || genLabels.tts;
-    piSetBtn(els.btnGenerate, gl.ic, gl.label, '#ffffff', 14);
+    vgGenIdle();
   }
 
   function renderVariations() {
@@ -6915,21 +6926,21 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         sizeEl.textContent = (idx === 0 ? 'Var 1: ' : 'Var 2: ') + sizeTxt;
 
         var importB = document.createElement('div');
-        importB.className = 'ac-secondaryButton vg-actionButton';
+        importB.className = 'vg-actionButton';
         importB.setAttribute('role', 'button');
         importB.textContent = 'Import';
         importB.addEventListener('click', function() { importVariation(v); });
 
         // Import + drop on the timeline at the playhead (first free audio track)
         var toTimelineB = document.createElement('div');
-        toTimelineB.className = 'ac-secondaryButton vg-actionButton';
+        toTimelineB.className = 'vg-actionButton';
         toTimelineB.setAttribute('role', 'button');
         piSetBtn(toTimelineB, 'download', 'Timeline', null, 12);
         toTimelineB.addEventListener('click', function() { importToTimeline(v); });
 
         // Move to Autocut — feed this generated voice into the Autocut pipeline
         var toAutocutB = document.createElement('div');
-        toAutocutB.className = 'ac-secondaryButton vg-actionButton';
+        toAutocutB.className = 'vg-actionButton';
         toAutocutB.setAttribute('role', 'button');
         piSetBtn(toAutocutB, 'arrow_right', 'Autocut', null, 12);
         toAutocutB.addEventListener('click', function() { moveToAutocut(v); });
@@ -6948,7 +6959,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
 
     var statusEl = document.createElement('div');
-    statusEl.className = 'ac-manualStatus';
+    statusEl.className = 'vg-inlineStatus';
     multiVars.appendChild(statusEl);
     els.importStatus = statusEl;
   }
@@ -7105,19 +7116,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   async function importVariation(variation) {
     if (!variation) return;
-    els.importStatus.className = 'ac-manualStatus';
+    els.importStatus.className = 'vg-inlineStatus';
 
     var saved;
     try {
-      els.importStatus.textContent = 'Saving file...';
+      els.importStatus.textContent = 'Đang lưu file…';
       saved = await vgEnsureSaved(variation, variation.filename || 'voice.mp3');
     } catch (e) {
-      els.importStatus.className = 'ac-manualStatus is-err';
+      els.importStatus.className = 'vg-inlineStatus is-err';
       els.importStatus.textContent = '✗ Save failed: ' + e.message;
       return;
     }
     if (!saved) {
-      els.importStatus.className = 'ac-manualStatus is-err';
+      els.importStatus.className = 'vg-inlineStatus is-err';
       els.importStatus.textContent = '✗ Cancelled';
       return;
     }
@@ -7146,7 +7157,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         throw new Error('No importFiles API on project');
       }
       var importedName = saveName || variation.filename;
-      els.importStatus.className = 'ac-manualStatus is-ok';
+      els.importStatus.className = 'vg-inlineStatus is-ok';
       els.importStatus.textContent = '✓ Imported "' + importedName + '" → Project Panel';
       try { var alSeq = await getActiveSequence(); window.actLog && window.actLog('voicegen', 'voice_import', alSeq && alSeq.name, { bin: saved.bin }); } catch (eAl) {}
       // Move to target bin: luôn khi voice lưu THEO SEQUENCE (bin bộ "Voice Over / 36x" — user đã chọn
@@ -7164,20 +7175,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           if (mv && mv.ok) {
             els.importStatus.textContent = '✓ Imported "' + importedName + '" → bin "' + targetBin + '"';
           } else {
-            els.importStatus.className = 'ac-manualStatus is-warn';
+            els.importStatus.className = 'vg-inlineStatus is-warn';
             els.importStatus.textContent = '⚠ Đã import "' + importedName +
               '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' +
               ((mv && mv.error) || 'lỗi không rõ');
           }
         } catch(evb) {
           console.warn('[ppVO] importVariation moveBin:', evb.message);
-          els.importStatus.className = 'ac-manualStatus is-warn';
+          els.importStatus.className = 'vg-inlineStatus is-warn';
           els.importStatus.textContent = '⚠ Đã import "' + importedName +
             '" nhưng KHÔNG chuyển được vào bin "' + targetBin + '": ' + evb.message;
         }
       }
     } catch(e) {
-      els.importStatus.className = 'ac-manualStatus is-err';
+      els.importStatus.className = 'vg-inlineStatus is-err';
       els.importStatus.textContent = '✗ Import: ' + e.message;
     }
   }
@@ -7187,7 +7198,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   async function importToTimeline(variation) {
     if (!variation || !variation.audioPath) return;
     if (!els.importStatus) els.importStatus = $('vgImportStatus');
-    var setMsg = function(cls, txt) { if (els.importStatus) { els.importStatus.className = 'ac-manualStatus' + (cls ? ' ' + cls : ''); els.importStatus.textContent = txt; } };
+    var setMsg = function(cls, txt) { if (els.importStatus) { els.importStatus.className = 'vg-inlineStatus' + (cls ? ' ' + cls : ''); els.importStatus.textContent = txt; } };
     try {
       if (!ppro || !ppro.SequenceEditor) throw new Error('Premiere 25.x API (SequenceEditor) không khả dụng');
       // 1. Save (same modal as Import; reuses saved path on repeat) — temp files get
@@ -8106,7 +8117,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     saveCurrentSpeakerText();
     renderSpeakerBar();
   });
-  els.btnGenerate.addEventListener('click', generate);
+  els.btnGenerate.addEventListener('click', function () { generate(1); });
+  if (els.btnGenerate2) els.btnGenerate2.addEventListener('click', function () { generate(2); });
   if (els.btnBrowseFolder) els.btnBrowseFolder.addEventListener('click', pickOutputFolder);
   if (els.btnResetFolder) els.btnResetFolder.addEventListener('click', resetOutputFolder);
 
@@ -8404,7 +8416,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
   async function vcxConvert() {
     var status = document.getElementById('vcxStatus');
-    var setS = function(cls, txt) { if (status) { status.className = 'ac-manualStatus' + (cls ? ' ' + cls : ''); status.textContent = txt; } };
+    var setS = function(cls, txt) { if (status) { status.className = 'vg-inlineStatus' + (cls ? ' ' + cls : ''); status.textContent = txt; } };
     if (!vcxInputPath) { setS('is-err', '✗ Chưa có audio nguồn'); return; }
     if (!vcxVoiceId)   { setS('is-err', '✗ Chưa chọn giọng đích'); return; }
     if (!ELEVENLABS_KEY) { setS('is-err', '✗ Chưa có ElevenLabs API key (Settings)'); return; }
@@ -8714,7 +8726,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (vcGetClip) {
         vcGetClip.setAttribute('aria-disabled', hasAny ? 'false' : 'true');
         vcGetClip.classList.toggle('is-disabled', !hasAny);
-        vcGetClip.innerHTML = window.pluginIconSVG('download', 13, '#ffffff') + ' ' + (hasAny && sel ? ('Extract audio from ' + sel.label) : 'Không có clip audio');
+        vcGetClip.innerHTML = window.pluginIconSVG('download', 13) + ' ' + (hasAny && sel ? ('Lấy audio từ ' + sel.label) : 'Không có clip audio');
       }
       if (vcClipInfo) vcClipInfo.textContent = (hasAny && sel)
         ? ('Grabs every clip on audio track ' + sel.label + ' and joins them into one voice sample.')
@@ -8750,7 +8762,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (vcFromFileSection) vcFromFileSection.hidden = fromSeq;
         vcSelectedFilePath = '';
         if (fromSeq) { try { vcRefreshTrackList(); } catch (e) {} }
-        if (vcFileInfo) vcFileInfo.textContent = 'Pick an MP3/WAV/M4A file of the voice to clone.';
+        if (vcFileInfo) vcFileInfo.textContent = 'Chọn file MP3/WAV/M4A của giọng cần clone.';
         vcRefreshCloneSteps(); // switching source collapses Steps 2 & 3
       });
     });
@@ -8899,7 +8911,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!ELEVENLABS_KEY)     return showVcStatus(vcCloneStatus, 'No ElevenLabs API key set', false);
 
         vcCloneSubmit.disabled = true;
-        piSetBtn(vcCloneSubmit, 'rotate_right', 'Cloning…', '#ffffff', 14);
+        piSetBtn(vcCloneSubmit, 'rotate_right', 'Đang clone…', null, 14);
         showVcStatus(vcCloneStatus, 'Uploading audio to ElevenLabs…', null);
         try {
           var resp = await postJsonVG('/voice/clone', {
@@ -8917,7 +8929,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           showVcStatus(vcCloneStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcCloneSubmit.disabled = false;
-          piSetBtn(vcCloneSubmit, 'check', 'CREATE VOICE', '#ffffff', 14);
+          piSetBtn(vcCloneSubmit, 'check', 'Tạo giọng', null, 14);
         }
       });
     }
@@ -8937,7 +8949,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
 
         vcDesignPreview.disabled = true;
-        piSetBtn(vcDesignPreview, 'rotate_right', 'Generating…', '#ffffff', 13);
+        piSetBtn(vcDesignPreview, 'rotate_right', 'Đang tạo…', null, 13);
         showVcStatus(vcDesignStatus, 'Generating voice preview…', null);
         if (vcPreviewPlayer) vcPreviewPlayer.hidden = true;
         if (vcDesignSaveSec) vcDesignSaveSec.hidden = true;
@@ -8971,7 +8983,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           showVcStatus(vcDesignStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcDesignPreview.disabled = false;
-          piSetBtn(vcDesignPreview, 'play', 'PREVIEW VOICE', '#ffffff', 13);
+          piSetBtn(vcDesignPreview, 'play', 'Nghe thử', null, 13);
         }
       });
     }
@@ -9040,7 +9052,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!ELEVENLABS_KEY) return showVcStatus(vcDesignStatus, 'No ElevenLabs API key set', false);
 
         vcDesignSave.disabled = true;
-        piSetBtn(vcDesignSave, 'rotate_right', 'Saving…', '#ffffff', 13);
+        piSetBtn(vcDesignSave, 'rotate_right', 'Đang lưu…', null, 13);
         showVcStatus(vcDesignStatus, 'Saving voice to your library…', null);
         try {
           var resp = await postJsonVG('/voice/design/save', {
@@ -9058,7 +9070,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           showVcStatus(vcDesignStatus, '✗ ' + bridgeErrText(e), false);
         } finally {
           vcDesignSave.disabled = false;
-          piSetBtn(vcDesignSave, 'check', 'SAVE VOICE', '#ffffff', 13);
+          piSetBtn(vcDesignSave, 'check', 'Lưu giọng', null, 13);
         }
       });
     }
@@ -9636,7 +9648,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (isNaN(v)) return;
       v = Math.round(v / step) * step;
       v = Math.max(min, Math.min(max, parseFloat(v.toFixed(decimals))));
-      if (!fromInput) n.value = v;
+      if (!fromInput) {
+        n.value = v;
+        // báo cho code đang nghe 'input' trên ô số (vd lưu thiết lập Đổi giọng)
+        try { n.dispatchEvent(new Event('input')); } catch (e) {}
+      }
       render(v);
     }
     function valFromX(cx) { var r = s.getBoundingClientRect(); var pct = r.width ? (cx - r.left) / r.width : 0; return min + Math.max(0, Math.min(1, pct)) * (max - min); }
@@ -9652,6 +9668,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   vgMakeCSlider('vgSfxInfluenceC', 'vgSfxInfluence');
   vgMakeCSlider('vgV4StabilityC', 'vgV4Stability');
   vgMakeCSlider('vgV4SimilarityC', 'vgV4Similarity');
+  vgMakeCSlider('vcAccentStrengthC', 'vcAccentStrength');
+  vgMakeCSlider('vcxStabilityC',  'vcxStability');
+  vgMakeCSlider('vcxSimilarityC', 'vcxSimilarity');
+  vgMakeCSlider('vcxStyleC',      'vcxStyle');
   // Model TTS: nhớ lựa chọn; thanh Stability/Similarity + gợi ý retrain chỉ hiện với v4.
   (function () {
     var sel = $('vgModelSelect'), box = $('vgV4Settings');
@@ -9994,7 +10014,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         ok.setAttribute('role', 'button');
         ok.className = 'btn-primary vg-binChildOk';
         piMakeButton(ok);
-        piSetBtn(ok, 'check', null, '#ffffff', 12);
+        piSetBtn(ok, 'check', null, null, 12);
         ok.addEventListener('click', function () { vgBinCreateChild(f.full, inp.value); });
         nrow.appendChild(ok);
 
