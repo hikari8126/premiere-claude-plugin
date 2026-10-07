@@ -5483,3 +5483,34 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 }
 #tab-voicegen .vg-organizeBtn { margin-left: 0; }
 #tab-voicegen .vg-organizeBtn.is-disabled { opacity: 0.45; pointer-events: none; }
+
+/* ── Voice Gen: icon theo token (màu vốn nướng cứng trong SVG, UXP nhận CSS fill) ──
+   Mặc định --text-dim; thanh chế độ đang chọn + nút "tự động" chọn tay = accent;
+   nút nền accent = --accent-fg (khai báo lại ở đây cho thắng specificity của #tab-voicegen svg path). */
+#tab-voicegen svg path { fill: var(--text-dim); }
+#tab-voicegen .vg-modeBtn.is-active svg path { fill: var(--accent); }
+#tab-voicegen .vg-modeBtn:hover svg path,
+#tab-voicegen .vg-organizeBtn:hover svg path,
+#tab-voicegen .vg-addSpeakerBtn:hover svg path,
+#tab-voicegen .vg-actionButton:hover svg path,
+#tab-voicegen .vg-binPick:hover svg path { fill: var(--text); }
+#tab-voicegen .vg-genButton svg path,
+#tab-voicegen .vc-bigPrimary svg path,
+#tab-voicegen .vg-playBtn svg path,
+#tab-voicegen .vc-stepNo svg path { fill: var(--accent-fg); }
+#tab-voicegen .vc-bigGo svg path { fill: #0b1f12; }
+#tab-voicegen .vg-statusDot { background: var(--error); }
+#tab-voicegen .vg-statusDot.is-ok { background: var(--success); }
+
+/* Chip người đọc đang chọn: viền accent (bỏ màu riêng từng người đọc — lệch theme) */
+#tab-voicegen .vg-speakerTab.is-active { border-color: var(--accent); }
+
+/* Chip Tài khoản + ô chọn giọng: cùng nền --surface, viền --border, bo 6 */
+#tab-voicegen .vg-profileChip,
+#tab-voicegen .vg-voiceDropTrigger {
+  height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 11.5px; box-sizing: border-box;
+}
+#tab-voicegen .vg-profileChip:hover,
+#tab-voicegen .vg-voiceDropTrigger:hover { border-color: var(--accent); }
+#tab-voicegen .vg-sm { color: var(--text-dim); opacity: 0.6; }
