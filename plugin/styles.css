@@ -5535,3 +5535,5 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-musicRefPick { flex: 0 0 auto; min-width: auto; justify-content: flex-start; margin-left: 6px; }
 #tab-voicegen .vg-musicRefPick .vg-organizeBtn { flex: 0 0 auto; }
 #tab-voicegen .vg-musicRefHead > span[data-ic] { flex: 0 0 auto; }
+/* Cột phải tối đa 260px nhưng không quá 1/2 panel → vùng làm việc bên trái luôn ≥ 1/2. */
+#tab-voicegen .vg-right { flex: 0 1 260px; width: 260px; max-width: 50%; }
