@@ -2314,6 +2314,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     $('sacVoicePanel').style.display = 'flex';
   }
 
+  // Thanh trạng thái Autocut: tách emoji đầu câu thành loại (chấm màu bằng CSS),
+  // chữ còn lại hiển thị gọn — thay cho kiểu "✅ ..." căn giữa trước đây.
+  var SAC_STATUS_KIND = { '✅': 'ok', '✓': 'ok', '❌': 'err', '✗': 'err', '⚠': 'warn', '⏳': 'busy', '🗑': 'info' };
+  function sacSetStatus(el, msg) {
+    if (!el) return;
+    msg = String(msg == null ? '' : msg);
+    var kind = 'info';
+    var m = msg.match(/^\s*(✅|✓|❌|✗|⚠️?|⏳|🗑)\s*/);
+    if (m) { kind = SAC_STATUS_KIND[m[1].charAt(0)] || SAC_STATUS_KIND[m[1]] || 'info'; msg = msg.slice(m[0].length); }
+    el.className = 'sac-statusMsg is-' + kind;
+    el.textContent = msg;
+  }
+
   function sacUpdateRunVisibility() {
     if (sacValidatePassed && (sacVoiceReady || sacNoVoiceMode)) {
       sacShowCutPanel();
@@ -2531,7 +2544,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         e.preventDefault();
         setTimeout(function() {   // chạy SAU paste gốc của UXP (xem chú thích dưới)
           var st = $('sacStatus');
-          var say = function(m) { if (st) { st.textContent = m; st.style.display = 'block'; } };
+          var say = function(m) { if (st) { sacSetStatus(st, m); st.style.display = 'block'; } };
           if (csvRes.error) { inp.value = ''; say('⚠ ' + csvRes.error); return; }
           if (!csvRes.rows.length) { inp.value = ''; say('⚠ CSV không có dòng dữ liệu nào.'); return; }
           if (typeof window.AutocutPushRows === 'function') window.AutocutPushRows(csvRes.rows);
@@ -3206,7 +3219,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!modal || !foldersEl || !sourcesEl) return;
 
     if (!sacBinItems.length) {
-      $('sacStatus').textContent = '⚠ Bấm Validate trước để load danh sách bin.';
+      sacSetStatus($('sacStatus'), '⚠ Bấm Validate trước để load danh sách bin.');
       $('sacStatus').style.display = 'block';
       return;
     }
@@ -3533,7 +3546,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       sacValidatePassed = true;
       var st = $('sacStatus');
       if (st) {
-        st.textContent = '✅ Tất cả sources đã resolved (validate ✓ hoặc skip ⏭).';
+        sacSetStatus(st, '✅ Tất cả sources đã resolved (validate ✓ hoặc skip ⏭).');
         st.style.display = 'block';
       }
     } else {
@@ -3548,7 +3561,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   function sacShowFolderHints(srcName, inputEl) {
     var statusEl = $('sacStatus');
     if (!srcName) {
-      statusEl.textContent = '⚠ Nhập tên source trước khi chọn folder hint.';
+      sacSetStatus(statusEl, '⚠ Nhập tên source trước khi chọn folder hint.');
       statusEl.style.display = 'block'; return;
     }
     if (!sacBinItems.length) {
@@ -3569,7 +3582,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     });
 
     if (!matches.length) {
-      statusEl.textContent = '⚠ "' + srcName + '" không tìm thấy trong bin. Kiểm tra lại tên.';
+      sacSetStatus(statusEl, '⚠ "' + srcName + '" không tìm thấy trong bin. Kiểm tra lại tên.');
       statusEl.style.display = 'block'; return;
     }
 
@@ -4043,7 +4056,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
     btn.disabled = true;
     piSetBtn(btn, 'rotate_right', 'Validating...', null, 12);
-    status.textContent = '⏳ Đang kiểm tra source + cấu trúc...';
+    sacSetStatus(status, '⏳ Đang kiểm tra source + cấu trúc...');
     status.style.display = 'block';
     var myVTok = ++sacValidateToken; // a Clear (or newer validate) invalidates this run
 
@@ -4063,30 +4076,31 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       sacSetMissingNames(srcResult.missing || []);
       if (!d.ok) {
-        status.textContent = '❌ ' + (d.errors ? d.errors.join(' | ') : d.error);
+        sacSetStatus(status, '❌ ' + (d.errors ? d.errors.join(' | ') : d.error));
         sacValidatePassed = false;
       } else if (srcResult.missing.length > 0) {
-        status.textContent = '⚠ Cấu trúc OK nhưng thiếu source trong bin: '
-          + srcResult.missing.join(', ') + ' (xem Console).';
+        sacSetStatus(status, '⚠ Cấu trúc OK nhưng thiếu source trong bin: '
+          + srcResult.missing.join(', ') + ' (xem Console).');
         sacValidatePassed = false;
       } else if (srcResult.ambiguous && srcResult.ambiguous.length > 0) {
         // Ambiguous sources: structure OK + all found, but some names match multiple clips
-        status.innerHTML = '⚠ Source trùng tên — cần folder hint (bấm ' + sacFolderIco() + '): '
+        status.className = 'sac-statusMsg is-warn';
+        status.innerHTML = 'Source trùng tên — cần folder hint (bấm ' + sacFolderIco() + '): '
           + sacEsc(srcResult.ambiguous.join(', '));
         sacValidatePassed = false;
       } else {
         var note = srcResult.premiereAvailable ? '' : ' (dev mode — chưa kiểm tra bin)';
         sacValidatePassed = true;
-        status.textContent = sacNoVoiceMode
+        sacSetStatus(status, sacNoVoiceMode
           ? ('✅ ' + d.blockCount + ' blocks hợp lệ — bấm This seq / New seq để dựng (không voice).' + note)
           : sacVoiceReady
           ? ('✅ ' + d.blockCount + ' blocks OK + voice sẵn sàng. Bấm "Run AutoCut".' + note)
-          : ('✅ ' + d.blockCount + ' blocks hợp lệ. Thêm voice (⚡ Gen / 📂) để mở Run.' + note);
+          : ('✅ ' + d.blockCount + ' blocks hợp lệ. Thêm voice (⚡ Gen / 📂) để mở Run.' + note));
         sacShowPage('block');
       }
       sacUpdateRunVisibility();
     } catch(e) {
-      status.textContent = '❌ ' + bridgeErrText(e);
+      sacSetStatus(status, '❌ ' + bridgeErrText(e));
       sacValidatePassed = false;
       sacUpdateRunVisibility();
     } finally {
@@ -4603,10 +4617,10 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       sacFindClose();
       var st = $('sacStatus');
       if (st) {
-        st.textContent = '✅ Đã import ' + res.ok + ' file'
+        sacSetStatus(st, '✅ Đã import ' + res.ok + ' file'
           + (res.fail ? ', lỗi ' + res.fail : '')
           + (newWatches.length ? ' · tạo ' + newWatches.length + ' watch' : '')
-          + ' — đang validate lại…';
+          + ' — đang validate lại…');
         st.style.display = 'block';
       }
       // Import xong phải validate lại, nếu không gate Run vẫn đóng.
@@ -5214,7 +5228,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var status = $('sacStatus');
     if (sacRunBusy) {
       status.style.display = 'block';
-      status.textContent = '⏳ Đang dựng… chờ lượt hiện tại xong.';
+      sacSetStatus(status, '⏳ Đang dựng… chờ lượt hiện tại xong.');
       return { ok: false, error: 'đang dựng lượt khác', placed: 0, failed: 0, voiceOk: false };
     }
     // Kết quả cho bên gọi (trang Auto) — trước đây nuốt lỗi nên timeline hỏng /
@@ -5222,7 +5236,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var sacRes = { ok: false, error: null, placed: 0, failed: 0, voiceOk: true };
     sacSetRunBusy(true);
     status.style.display = 'block';
-    status.textContent = '⏳ Đang khởi động assembly...';
+    sacSetStatus(status, '⏳ Đang khởi động assembly...');
 
     try {
       await sacLogClear();
@@ -5242,7 +5256,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var vBase = 0, aBase = 0;
 
       if (seqMode === 'new') {
-        status.textContent = '⏳ Tạo sequence mới...';
+        sacSetStatus(status, '⏳ Tạo sequence mới...');
         // Read settings from the popup.
         var nameInp  = $('sacNewSeqName');
         var ratioSel = $('sacNewSeqRatio');
@@ -5304,7 +5318,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         } catch (eOpen) { console.warn('[SAC] open/activate sequence:', eOpen && eOpen.message); }
         // Settle generously after activation before the editor + assembly run — a
         // freshly-created sequence that's touched too soon is a common crash cause.
-        status.textContent = '⏳ Chờ sequence sẵn sàng...';
+        sacSetStatus(status, '⏳ Chờ sequence sẵn sàng...');
         await new Promise(function(r) { setTimeout(r, 900); });
         cursor = 0;
         console.log('[SAC] New sequence (empty):', seqName, '| ratio:', ratio);
@@ -5318,7 +5332,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
           aBase = await sacLowestEmptyTrack(seq, false);
           console.log('[SAC] Đầu timeline → track trống thấp nhất: vBase=' + vBase + ' aBase=' + aBase);
         } else {
-          status.textContent = '⏳ Tìm vị trí cuối timeline...';
+          sacSetStatus(status, '⏳ Tìm vị trí cuối timeline...');
           cursor = await sacGetSequenceEnd(seq);
         }
       }
@@ -5345,7 +5359,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (!sacNoVoiceMode) {
         var voicePath = sacVoicePath || window.sacVoicePath;
         if (voicePath) {
-          status.textContent = '⏳ Import voice...';
+          sacSetStatus(status, '⏳ Import voice...');
           try {
             voiceItem = await sacFindOrImportFile(voicePath);
             console.log('[SAC] Voice:', voiceItem ? 'ok' : 'not found in bin');
@@ -5357,7 +5371,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // Pre-fetch real durations for full-clip sources (no timecode) so each is placed
       // at its ACTUAL length — not all clamped to one default window — and the cursor
       // advances correctly (no overlap, no bleed). Falls back to 5s if path/ffprobe fail.
-      status.textContent = '⏳ Đọc độ dài clip...';
+      sacSetStatus(status, '⏳ Đọc độ dài clip...');
       var sacFullDur = {};
       for (var pbi = 0; pbi < blocks.length; pbi++) {
         var pbsrcs = blocks[pbi].sources || [];
@@ -5391,7 +5405,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var block      = blocks[i];
         var blockStart = cursor;
         var srcTotal   = 0;
-        status.textContent = '⏳ Block ' + (i + 1) + '/' + blocks.length + '...';
+        sacSetStatus(status, '⏳ Block ' + (i + 1) + '/' + blocks.length + '...');
 
         // Place each source clip on the video base track; its audio lands on the strip
         // track (deleted after assembly) when "bỏ audio source" is on, else on aBase+1.
@@ -5484,7 +5498,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       // Drop source audio: delete everything we parked on the dedicated strip track.
       if (stripAudio && aStripIdx >= 0) {
-        status.textContent = '⏳ Xoá audio của source...';
+        sacSetStatus(status, '⏳ Xoá audio của source...');
         await sacRemoveAudioTrackClips(project, seqEditor, seq, aStripIdx);
       }
 
@@ -5510,7 +5524,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       window.actLog && window.actLog('autocut', 'autocut', seq && seq.name, { mode: seqMode, clips: placed });
 
     } catch(e) {
-      status.textContent = '❌ ' + bridgeErrText(e);
+      sacSetStatus(status, '❌ ' + bridgeErrText(e));
       console.error('[SAC] sacRunAutoCut error:', e);
       sacRes.error = e.message;
     } finally {
@@ -5586,7 +5600,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var vi = $('sacVoiceInfo'); if (vi) vi.textContent = 'Chưa có voice';
     var vp = $('sacVoicePlayer'); if (vp) vp.style.display = 'none';
     sacShowPage('script');
-    var st = $('sacStatus'); if (st) { st.textContent = '🗑 Đã clear script + huỷ tác vụ đang chạy.'; st.style.display = 'block'; }
+    var st = $('sacStatus'); if (st) { sacSetStatus(st, '🗑 Đã clear script + huỷ tác vụ đang chạy.'); st.style.display = 'block'; }
     if (typeof sacUpdateRunVisibility === 'function') sacUpdateRunVisibility();
   }
 
@@ -5608,7 +5622,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   async function sacDoImportCsv() {
     var st = $('sacStatus');
-    function say(msg) { if (st) { st.textContent = msg; st.style.display = 'block'; } }
+    function say(msg) { if (st) { sacSetStatus(st, msg); st.style.display = 'block'; } }
     try {
       var uxp = require('uxp');
       var file = await uxp.storage.localFileSystem.getFileForOpening({ types: ['csv'] });
