@@ -1943,6 +1943,10 @@ class Cut:
     # what ffmpeg will actually read goes through encode_input().
     render_path: str = ""
     render_frames: int = 0
+    # The same timeline duration expressed at the render's measured rate. Timeline
+    # positions and duration_frames stay in sequence frames for naming and metadata.
+    render_expected_frames: int = 0
+    render_rate_changed: bool = False
     render_width: Optional[int] = None
     render_height: Optional[int] = None
     render_fps: float = 0.0
@@ -5043,11 +5047,20 @@ def build_command(cut: Cut, out_path: Path, args, seq_fps: float) -> list[str]:
         #
         # Restated in OUTPUT frames exactly as the source branch does at the -frames:v
         # below, because -frames:v counts frames AFTER the fps filter has resampled. The
-        # input rate is the RENDER's, not the camera's: Premiere writes the render at the
-        # sequence rate whatever the source was.
-        _in_fps = cut.render_fps or seq_fps or 0.0
-        _pin = (max(1, int(round(cut.duration_frames * float(args.fps) / _in_fps)))
-                if _res and _in_fps > 0 else max(1, cut.duration_frames))
+        # input rate is the RENDER's, not the camera's. A native export can use a
+        # different rate to the sequence; convert from timeline SECONDS, not its frame
+        # count divided by the render rate.
+        _secs = (cut.duration_frames / seq_fps if seq_fps > 0
+                 else cut.duration_seconds)
+        _expected = expected_render_frames(cut)
+        _pin = (max(1, int(round(_secs * float(args.fps))))
+                if _res and _secs > 0 else _expected)
+        if (not _res and cut.render_rate_changed and cut.render_frames
+                and not cut.render_frames_derived):
+            # At another native rate, +/- 1 frame can be endpoint quantization rather
+            # than lost timeline frames. The duration guard already checked the range;
+            # preserve its native frames instead of demanding a nonexistent frame.
+            _pin = max(1, cut.render_frames - max(0, cut.render_head_trim))
         if _res:
             # Laid on by frame index — see frame_map_filters() for why `fps=X` alone doubled
             # the head of every render at --fps 30 on a 29.97 sequence. n is the frames this
@@ -5056,8 +5069,8 @@ def build_command(cut: Cut, out_path: Path, args, seq_fps: float) -> list[str]:
             # frame inside RENDER_FRAME_SLACK still fills every slot, which is the documented
             # policy the round=up filter used to meet by an accident of its rounding (see the
             # 59/60 render checks in tests/check_delivery.py).
-            _have = cut.duration_frames
-            if cut.render_frames:
+            _have = _expected
+            if cut.render_frames and not cut.render_frames_derived:
                 _have = min(_have, cut.render_frames - max(0, cut.render_head_trim))
             _vf += frame_map_filters(max(1, _have), _pin, float(args.fps))
         cmd += ["-frames:v", str(_pin)]
@@ -5079,7 +5092,10 @@ def build_command(cut: Cut, out_path: Path, args, seq_fps: float) -> list[str]:
             # its last picture frame, and -shortest would then clip the VIDEO and fail the
             # frame-count check. -t bounds the sound; -frames:v still pins the picture.
             _rfps = cut.render_fps or seq_fps or 30.0
-            _dur = max(1, cut.duration_frames) / _rfps
+            # -t also limits VIDEO. Use the pinned output's duration so an accepted
+            # native endpoint rounding cannot lose its last frame when audio is kept.
+            _out_fps = float(args.fps) if _res else _rfps
+            _dur = _pin / _out_fps
             # ⚠️ AND THE SOUND LOSES THE SAME FRAME THE PICTURE DID. _trim above is a VIDEO
             # filter, so on a head-repaired clip the picture started at render frame 1 while
             # the sound still started at render frame 0: the audio led the picture by one
@@ -6463,6 +6479,15 @@ RENDER_EXTS = (".mp4", ".mov", ".m4v", ".mxf", ".mkv")
 RENDER_FRAME_SLACK = 2
 
 
+def expected_render_frames(cut: Cut) -> int:
+    """Count the requested range in render frames, never source/sequence frames."""
+    return max(1, cut.render_expected_frames or cut.duration_frames)
+
+
+def render_frame_delta(cut: Cut) -> int:
+    return cut.render_frames - expected_render_frames(cut)
+
+
 # How far a cut may reach past the end of its own media before the run refuses it, in frames
 # of the SOURCE's own rate. See apply_probe for why two: one for Premiere rounding a file's
 # length up to a whole frame, one for the cut boundary landing either side of that.
@@ -6528,11 +6553,12 @@ def render_name(cut: Cut) -> str:
             f"{int(cut.timeline_in_frames)}-{int(cut.timeline_out_frames)}")
 
 
-def attach_renders(cuts: list[Cut], render_dir: Path) -> tuple[int, list[Cut]]:
+def attach_renders(cuts: list[Cut], render_dir: Path,
+                   seq_fps: float = 0.0) -> tuple[int, list[Cut]]:
     """Point each cut at its pre-rendered timeline range, and probe what arrived.
 
-    A render is Premiere's own output: the clip as it LOOKED, at the sequence's size and
-    rate, with everything on it baked in. So its dimensions, rate, codec and length are
+    A render is Premiere's own output: the clip as it LOOKED, with everything on it
+    baked in. Its preset can change the rate, so dimensions, rate, codec and length are
     the encoder's input and none of them can be inferred from the source clip — they are
     probed and recorded, one file at a time.
 
@@ -6603,6 +6629,13 @@ def attach_renders(cuts: list[Cut], render_dir: Path) -> tuple[int, list[Cut]]:
                     c.render_frames_derived = True
                 except ValueError:
                     pass
+        rate = seq_fps or (c.duration_frames / c.duration_seconds
+                           if c.duration_seconds > 0 else 0.0)
+        c.render_rate_changed = bool(rate > 0 and c.render_fps > 0
+                                     and abs(c.render_fps - rate) > FPS_EPS)
+        c.render_expected_frames = (
+            max(1, int(round(c.duration_frames * c.render_fps / rate)))
+            if c.render_rate_changed else c.duration_frames)
     return matched, missing
 
 
@@ -6733,6 +6766,7 @@ def _neighbour_on_disk(cut: Cut, side: str, render_dir: Optional[Path],
     path, want = hits[0]
     data = probe(str(path))
     frames = 0
+    rate = 0.0
     for st in data.get("streams", []):
         if st.get("codec_type") != "video":
             continue
@@ -6740,11 +6774,18 @@ def _neighbour_on_disk(cut: Cut, side: str, render_dir: Optional[Path],
             frames = int(st.get("nb_frames") or 0)
         except (TypeError, ValueError):
             frames = 0
+        try:
+            n, d = st.get("r_frame_rate", "0/1").split("/")
+            rate = float(n) / float(d)
+        except (ValueError, ZeroDivisionError):
+            pass
         break
     # nb_frames only — never the duration x rate guess. A ruler whose own length was
     # estimated cannot measure a one-frame error, and the neighbour's render has to be
     # EXACT to be a ruler at all.
-    if frames <= 0 or frames != want:
+    if (frames <= 0 or frames != want
+            or (rate > 0 and cut.render_fps > 0
+                and abs(rate - cut.render_fps) > FPS_EPS)):
         return None
     return _FolderNeighbour(str(path), frames)
 
@@ -6802,8 +6843,11 @@ def resolve_render_overshoot(cuts: list[Cut], render_dir: Optional[Path] = None,
     """
     todo = [c for c in cuts
             if c.render_path and c.render_frames and c.duration_frames
+            # Cross-rate endpoint rounding is not evidence of a surplus timeline
+            # frame. Keep the pixel-based repair for exports at the sequence rate.
+            and not c.render_rate_changed
             and not c.render_frames_derived
-            and c.render_frames - c.duration_frames == 1]
+            and render_frame_delta(c) == 1]
     if not todo:
         return
     # Grouped exactly as split_transition_overlaps and overlapping_cut_frames group, so
@@ -6831,7 +6875,8 @@ def resolve_render_overshoot(cuts: list[Cut], render_dir: Optional[Path] = None,
         # because using a ruler known to be the wrong length to measure a one-frame error
         # is unsound on its face, not because a red check demanded it.
         hits = [h for h in hits if h.render_path and h.render_frames
-                and h.render_frames == h.duration_frames]
+                and not h.render_rate_changed
+                and render_frame_delta(h) == 0]
         return hits[0] if len(hits) == 1 else None
 
     def _side(edge: Optional[bytes], inner: Optional[bytes],
@@ -9366,11 +9411,16 @@ def _run_cut(cut: Cut, outdir: Path, args, seq_fps: float = 25.0) -> Cut:
                      "or still downloading. Re-render this range in Premiere")
         return cut
     if cut.render_path and cut.render_frames and cut.duration_frames:
-        off = cut.render_frames - cut.duration_frames
+        off = render_frame_delta(cut)
         if abs(off) > RENDER_FRAME_SLACK:
             cut.status = "render_mismatch"
+            want = expected_render_frames(cut)
             cut.error = (f"the render holds {cut.render_frames} frames but this cut is "
-                         f"{cut.duration_frames} ({off:+d}) — not the range it should "
+                         f"{want} ({off:+d})"
+                         + (f" at {cut.render_fps:g} fps for a "
+                            f"{cut.duration_seconds:g}s timeline range"
+                            if cut.render_rate_changed else "")
+                         + " — not the range it should "
                          f"be, so it was not encoded")
             return cut
         # ⚠️ INSIDE THE SLACK AND STILL REFUSED, ON PURPOSE. A render one frame longer than
@@ -9826,6 +9876,8 @@ def describe(cut: Cut) -> dict:
         # The ramp and the reverse are IN the pixels here, so the notes below that warn
         # about them would be describing work Premiere has already done correctly.
         notes.append("from render")
+        if cut.render_rate_changed:
+            notes.append(f"render {cut.render_fps:g} fps; duration checked at native rate")
     if cut.transition_split:
         notes.append(f"{cut.transition_split}f to a dissolve"
                      + (f" ({cut.transition_split_end})" if cut.transition_split_end else ""))
@@ -9835,15 +9887,15 @@ def describe(cut: Cut) -> dict:
     # actually ships wrong pixels is ONE frame on an ordinary cut, which is the exact
     # shape both conditions excluded. See resolve_render_overshoot().
     if cut.render_frames and cut.duration_frames:
-        d = cut.render_frames - cut.duration_frames
+        d = render_frame_delta(cut)
         if d and cut.render_frames_derived:
             # The container never said how long it is; the figure being compared here is
             # one the engine worked out from the file's duration, which on a Matroska
             # carrying AAC runs past the picture. Saying "render +1 frame(s) vs the
             # timeline" about that is reporting the estimate's error as the render's.
-            notes.append(f"render length estimated ({d:+d}f vs the timeline)")
+            notes.append(f"render length estimated ({d:+d}f vs the expected render)")
         elif d:
-            notes.append(f"render {d:+d} frame(s) vs the timeline")
+            notes.append(f"render {d:+d} frame(s) vs the expected render")
     if cut.reversed:
         notes.append("reversed")
     if cut.speed_varies:
@@ -9950,7 +10002,9 @@ def describe_encode(args, cuts=None) -> str:
         bits.append(f"scaled to {pct:g}% of source resolution")
     if getattr(args, "fps", None):
         rate = f"{float(args.fps):g} fps"
-        n = None if cuts is None else sum(1 for c in cuts if not c.frame_exact)
+        n = None if cuts is None else sum(
+            1 for c in cuts if records_a_rate(c)
+            and forced_rate_resamples(c, args, getattr(args, "sequence_fps", 0.0)))
         if n is None:
             bits.append(f"RESAMPLED to {rate} — not frame exact")
         elif n == 0:
@@ -11491,7 +11545,7 @@ def main():
                    if c.track_type == "audio"
                    or (c.track_type == "video" and (not want or int(c.track_index) == want))]
         dropped = before - len(tl.cuts)
-        matched, missing = attach_renders(tl.cuts, Path(args.render_dir))
+        matched, missing = attach_renders(tl.cuts, Path(args.render_dir), tl.sequence_fps)
         args.render_matched = matched
         args.render_missing = len(missing)
         print(f"\n  --render-dir: {matched} of {len(tl.cuts)} cut(s) have a render"
@@ -11548,6 +11602,7 @@ def main():
     # disagree about what a number means. timeline_index already carries the skip; the
     # renumbering branch re-applies the same rule rather than counting rows.
     _seq = 0
+    args.sequence_fps = tl.sequence_fps
     for c in tl.cuts:
         if _keep_numbers:
             c.index = c.timeline_index
@@ -11564,7 +11619,8 @@ def main():
         # rate") makes Premiere declare a rate that is deliberately not the file's, and
         # VFR media differs routinely. Recomputed after the probe; see below.
         c.frame_exact = (not records_a_rate(c)
-                         or not forced_rate_resamples(c, args, tl.sequence_fps))
+                         or (not c.render_rate_changed
+                             and not forced_rate_resamples(c, args, tl.sequence_fps)))
 
     # ⚠️ THE COST OF --transitions ignore, ON THE RECORD AS A NUMBER. Measured on the final
     # cut list, after every filter, so it describes the folder that is about to be written
@@ -11691,14 +11747,19 @@ def main():
         # frame_exact=false" whatever the rates were, which now contradicts the manifest
         # it is describing — and on a matched rate the warning was pure alarm about an
         # export that changes nothing.
-        _resampled = [c for c in tl.cuts if not c.frame_exact]
+        _resampled = [c for c in tl.cuts if records_a_rate(c)
+                      and forced_rate_resamples(c, args, tl.sequence_fps)]
         if _resampled:
             print(f"\n  !! OUTPUT RESAMPLED to {float(args.fps):g} fps: {len(_resampled)} "
                   f"of {len(tl.cuts)} cut(s) drop or duplicate frames and are recorded "
                   f"frame_exact=false.")
         else:
             print(f"\n  ++ --fps {float(args.fps):g} matches every cut, so nothing is "
-                  f"resampled and the cuts stay frame exact.")
+                  "resampled in this encode."
+                  + (" The native render rate differs from the timeline; these cuts "
+                     "are not timeline frame exact."
+                     if any(c.render_rate_changed for c in tl.cuts)
+                     else " The cuts stay frame exact."))
     for n in merge_notes:
         print(f"  ++ {n}")
 
@@ -11781,7 +11842,8 @@ def main():
         # the encode emitted `-r 30` and duplicated 12 of 60 frames.
         for c in tl.cuts:
             c.frame_exact = (not records_a_rate(c)
-                             or not forced_rate_resamples(c, args, tl.sequence_fps))
+                             or (not c.render_rate_changed
+                                 and not forced_rate_resamples(c, args, tl.sequence_fps)))
         # OPT-IN. Encoding a second of every clip is the accurate way to size an export and
         # it is the slow way: on the fixture a scan goes 0.21s -> 0.99s, and on media behind
         # Google Drive it is far worse. The default is estimate_bps(), which reads metadata,
@@ -11886,12 +11948,13 @@ def main():
     # all. Found by review. A guess is reported as a guess, below, and decides nothing.
     _shifted = [c for c in tl.cuts
                 if c.render_path and c.render_frames and c.duration_frames
+                and not c.render_rate_changed
                 and not c.render_frames_derived
-                and c.render_frames != c.duration_frames]
+                and render_frame_delta(c) != 0]
     _guessed = [c for c in tl.cuts
                 if c.render_path and c.render_frames and c.duration_frames
                 and c.render_frames_derived
-                and c.render_frames != c.duration_frames]
+                and render_frame_delta(c) != 0]
     for c in _shifted:
         # The pixels are the timeline's, but the FILE is not the length the timeline says,
         # and until the surplus frame is PLACED this cut cannot claim to be frame exact.
@@ -11912,7 +11975,7 @@ def main():
         # a tail overshoot already — so what is left is the disagreements that ship
         # unresolved.
         if (c.render_overshoot not in ("head", "tail")
-                and abs(c.render_frames - c.duration_frames) <= RENDER_FRAME_SLACK
+                and abs(render_frame_delta(c)) <= RENDER_FRAME_SLACK
                 and c.render_overshoot != "unclear"):
             c.frame_exact = False
     # ⚠️ THREE OUTCOMES, THREE SENTENCES, because the first draft gave all of them one and
@@ -11932,16 +11995,16 @@ def main():
     # time today one warning has been made to speak for outcomes that differ.
     _stuck = [c for c in _shifted if c.render_overshoot == "unclear"]
     _short = [c for c in _shifted
-              if c not in _stuck and c.render_frames < c.duration_frames
-              and abs(c.render_frames - c.duration_frames) <= RENDER_FRAME_SLACK]
+              if c not in _stuck and render_frame_delta(c) < 0
+              and abs(render_frame_delta(c)) <= RENDER_FRAME_SLACK]
     _ship = [c for c in _shifted
              if c not in _fixed and c not in _checked and c not in _stuck
              and c not in _short
-             and abs(c.render_frames - c.duration_frames) <= RENDER_FRAME_SLACK]
+             and abs(render_frame_delta(c)) <= RENDER_FRAME_SLACK]
 
     def _named(rows):
         return (", ".join(f"{c.clip_name} [{render_name(c)}] "
-                          f"({c.render_frames - c.duration_frames:+d}f)"
+                          f"({render_frame_delta(c):+d}f)"
                           for c in rows[:6])
                 + (", …" if len(rows) > 6 else ""))
 
@@ -11982,8 +12045,10 @@ def main():
     # sentence at all, while a +1 tail overshoot that needed no action produced a paragraph.
     # run_cut does refuse them individually, by name, with both numbers; this is the line
     # that says how many, in the same place as the others.
-    _gross = [c for c in _shifted
-              if abs(c.render_frames - c.duration_frames) > RENDER_FRAME_SLACK]
+    _gross = [c for c in tl.cuts
+              if c.render_path and c.render_frames and c.duration_frames
+              and not c.render_frames_derived
+              and abs(render_frame_delta(c)) > RENDER_FRAME_SLACK]
     if _gross:
         tl.warnings.append(
             f"{len(_gross)} render(s) are nowhere near the length of the cut they belong "
