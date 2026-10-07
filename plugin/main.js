@@ -6916,6 +6916,12 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       }
       sacRes.ok = true;
       sacRes.placed = placed;
+      // Chip script cho tab Tạo Sub — khớp theo GUID sequence vừa dựng.
+      try {
+        var chipLines = [];
+        parsedBlocks.forEach(function(b) { (b.texts || []).forEach(function(t) { t = String(t || '').trim(); if (t) chipLines.push(t); }); });
+        if (chipLines.length && window.SubtextSaveChip) await window.SubtextSaveChip(seq, chipLines);
+      } catch (eChip) { console.warn('[SAC] save sub chip failed', eChip && eChip.message); }
       if (!autoRunning) window.actLog && window.actLog('autocut', 'autocut', seq && seq.name, { mode: seqMode, clips: placed });
 
     } catch(e) {
@@ -11962,6 +11968,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         return;
       }
       if (seqEl) seqEl.textContent = '· ' + (seq.name || 'sequence');
+      try { await stChipsSync(seq); } catch (eC) {}
       var cnt = seq.getAudioTrackCount ? seq.getAudioTrackCount() : 0;
       if (cnt && typeof cnt.then === 'function') cnt = await cnt;
       cnt = cnt || 0;
@@ -12247,6 +12254,91 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     try { stAutoResize(); } catch (e) {}
     try { vgReflowSoon(ta); } catch (e) {}
   }
+  // ── Chip script từ Autocut ──────────────────────────────────────────────
+  // Autocut xong → lưu script thành chip theo (project, GUID sequence). Mở tab
+  // này trên đúng sequence đó → tự đổ script nếu ô đang trống / đang là chip khác.
+  // Khớp CHỈ theo GUID (tên sequence hay trùng giữa các bộ); không có GUID mới dùng tên.
+  var ST_CHIP_KEY = 'stScriptChips', ST_CHIP_MAX = 10;
+  var stChipSeqKey = '', stChipProj = '';
+  function stChipStore() { try { return JSON.parse(localStorage.getItem(ST_CHIP_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function stChipSave(all) { try { localStorage.setItem(ST_CHIP_KEY, JSON.stringify(all)); } catch (e) {} }
+  async function stChipProjKey() {
+    try {
+      var p = await getActiveProject();
+      var nm = p && p.name; if (nm && typeof nm.then === 'function') nm = await nm;
+      return String(nm || (p && p.guid) || '');
+    } catch (e) { return ''; }
+  }
+  async function stChipSeqId(seq) {
+    if (!seq) return '';
+    var g = seq.guid; if (g && typeof g.then === 'function') g = await g;
+    if (g && typeof g === 'object' && g.toString) g = g.toString();
+    if (g) return 'g:' + g;
+    var n = seq.name; if (n && typeof n.then === 'function') n = await n;
+    return n ? 'n:' + n : '';
+  }
+  function stChipList() { return (stChipStore()[stChipProj] || []); }
+  function stChipText(c) { return (c.lines || []).join('\n'); }
+  function stChipRender() {
+    var wrap = $('stChips'); if (!wrap) return;
+    var list = stChipList();
+    wrap.innerHTML = '';
+    wrap.style.display = list.length ? 'flex' : 'none';
+    var cur = (($('stScript') || {}).value || '').trim();
+    list.forEach(function (c) {
+      var chip = document.createElement('div');
+      chip.className = 'st-chip' + (c.key === stChipSeqKey ? ' is-match' : '') + (cur && cur === stChipText(c).trim() ? ' is-on' : '');
+      chip.setAttribute('role', 'button');
+      var lbl = document.createElement('span'); lbl.className = 'st-chipName';
+      lbl.textContent = c.name + ' · ' + (c.lines || []).length + ' dòng';
+      var x = document.createElement('span'); x.className = 'st-chipX'; x.textContent = '×';
+      chip.appendChild(lbl); chip.appendChild(x);
+      x.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var all = stChipStore();
+        all[stChipProj] = (all[stChipProj] || []).filter(function (o) { return o.key !== c.key; });
+        stChipSave(all); stChipRender();
+      });
+      chip.addEventListener('click', function () {
+        var now = (($('stScript') || {}).value || '').trim();
+        var txt = stChipText(c).trim();
+        if (now === txt) return;
+        // Ô đang có chữ khác (không phải chip nào) → bấm lần 2 mới ghi đè.
+        var fromChip = stChipList().some(function (o) { return stChipText(o).trim() === now; });
+        if (now && !fromChip && !chip.classList.contains('is-armed')) {
+          chip.classList.add('is-armed'); lbl.textContent = 'Bấm lần nữa để ghi đè script';
+          setTimeout(function () { stChipRender(); }, 2500);
+          return;
+        }
+        window.SubtextSetScript(c.lines);
+        stChipRender();
+      });
+      wrap.appendChild(chip);
+    });
+  }
+  async function stChipsSync(seq) {
+    stChipProj = await stChipProjKey();
+    stChipSeqKey = await stChipSeqId(seq);
+    var match = stChipList().filter(function (c) { return c.key === stChipSeqKey; })[0];
+    if (match) {
+      var now = (($('stScript') || {}).value || '').trim();
+      var fromChip = stChipList().some(function (o) { return stChipText(o).trim() === now; });
+      if (!now || (fromChip && now !== stChipText(match).trim())) window.SubtextSetScript(match.lines);
+    }
+    stChipRender();
+  }
+  window.SubtextSaveChip = async function (seq, lines) {
+    var proj = await stChipProjKey(), key = await stChipSeqId(seq);
+    if (!key) return;
+    var nm = seq.name; if (nm && typeof nm.then === 'function') nm = await nm;
+    var all = stChipStore();
+    var list = (all[proj] || []).filter(function (c) { return c.key !== key; });
+    list.unshift({ key: key, name: String(nm || 'sequence'), lines: lines, t: Date.now() });
+    all[proj] = list.slice(0, ST_CHIP_MAX);
+    stChipSave(all);
+    if (proj === stChipProj) stChipRender();
+  };
+
   // Cho trang Auto Sub đổ script vào. Ranh giới IIFE: trang Auto không thấy
   // stSetScript trực tiếp, phải đi qua window.* (handoff §3.3).
   // Điền script KHÔNG kích hoạt chạy: stStartCountdown() chỉ được gọi từ MỘT chỗ,
@@ -12750,6 +12842,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var stScriptEl = $('stScript');
   if (stScriptEl) {
     stScriptEl.addEventListener('input', stAutoResize); stAutoResize();
+    stScriptEl.addEventListener('change', function () { stChipRender(); });
     // Same UXP spill-over-top fix as the Voice Gen textareas.
     stScriptEl.addEventListener('focus', function () { vgReflowSoon(stScriptEl); });
     stScriptEl.addEventListener('input', function () { vgReflowSoon(stScriptEl); });

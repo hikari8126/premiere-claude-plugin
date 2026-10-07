@@ -3449,6 +3449,17 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 .st-manualRow { display: flex; justify-content: flex-end; margin-top: 6px; }
 .st-manualBtn { display: flex; align-items: center; font-size: 10.5px; color: rgba(255,255,255,0.55); padding: 3px 8px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; }
 .st-manualBtn:hover { color: #fff; border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.12); }
+/* Chip script từ Autocut — cùng dáng .cl-chip tab Claude */
+.st-chips { display: flex; flex-wrap: wrap; margin: 2px 0 6px; }
+.st-chip { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 11px; padding: 2px 4px 2px 9px; margin: 0 5px 5px 0;
+  font-size: 11px; color: var(--text-dim); cursor: pointer; white-space: nowrap; transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease; }
+.st-chip:hover { border-color: var(--accent); color: var(--text); }
+.st-chip.is-match { border-color: var(--accent-a50); color: var(--text); }
+.st-chip.is-on { background: var(--accent-a18); border-color: var(--accent); color: var(--text); }
+.st-chip.is-armed { border-color: var(--error); color: #fca5a5; }
+.st-chipName { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.st-chipX { margin-left: 4px; padding: 0 4px; border-radius: 6px; color: var(--text-dim); }
+.st-chipX:hover { color: var(--error); background: rgba(239,68,68,0.12); }
 .st-label { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 11px; }
 /* 2 columns (UXP ignores flex `gap` → use width calc + space-between) */
 .st-trackList { display: flex; flex-wrap: wrap; justify-content: space-between; }
@@ -5104,3 +5115,246 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 .cd-runDoneRow { display: flex; align-items: center; }
 .cd-runPic { flex: 0 0 auto; width: 64px; margin-right: 10px; }
 .cd-runDoneTx { flex: 1 1 auto; min-width: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTOCUT — làm lại theo chuẩn tab Claude (v5.22)
+   Toàn bộ màu đi qua token (:root) — không rgba/hex lẻ. Nút chia 3 cấp:
+   chính (accent đặc) · phụ (viền --border) · nguy hiểm (--error khi armed).
+   Bo góc: nút 8px, thẻ 9px, chip 11px. UXP bỏ qua flex `gap` → khoảng cách bằng margin.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#tab-autocut {
+  --ac-ok: var(--success);
+  --ac-warn: #f59e0b;
+  --ac-dock: #1e1e1e;
+  --ac-field: rgba(0,0,0,0.35);
+  --ac-ease: 0.15s ease;
+}
+#tab-autocut .sac-app { background: var(--bg); color: var(--text); }
+
+/* Nút gạt Manual | Auto — kiểu .cl-mode */
+#tab-autocut .sac-methodBar {
+  margin: 10px 12px 0; padding: 2px; border-radius: 9px; background: #141414; display: flex;
+}
+#tab-autocut .sac-methodBtn {
+  height: 26px; border: none; border-radius: 7px; background: transparent;
+  color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--ac-ease), color var(--ac-ease);
+}
+#tab-autocut .sac-methodBtn + .sac-methodBtn { margin-left: 2px; }
+#tab-autocut .sac-methodBtn:hover { color: var(--text); }
+#tab-autocut .sac-methodBtn.is-active { background: var(--surface2); color: var(--text); }
+#tab-autocut .sac-methodBtn .p-ic { margin-right: 6px; }
+
+#tab-autocut .sac-panel { padding: 10px 12px 0; }
+
+/* Tiêu đề khối "Script input" */
+#tab-autocut .sac-sectionToggle {
+  padding: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--text);
+}
+#tab-autocut .sac-sectionToggle > * + * { margin-left: 6px; }
+#tab-autocut .sac-sectionToggle > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+#tab-autocut .sac-blockChevron { color: var(--text-dim); }
+
+/* Nút nhỏ trên tiêu đề (preset cột · CSV · xoá) — kiểu .cl-btn */
+#tab-autocut .sac-presetSel,
+#tab-autocut .sac-csvBtn,
+#tab-autocut .sac-scriptClearBtn {
+  height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 10.5px; font-weight: 500;
+  display: flex; align-items: center; white-space: nowrap; cursor: pointer;
+  transition: border-color var(--ac-ease), color var(--ac-ease), background var(--ac-ease);
+}
+#tab-autocut .sac-presetSel { background: var(--surface); }
+#tab-autocut .sac-presetSel:hover,
+#tab-autocut .sac-csvBtn:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-autocut .sac-scriptClearBtn:hover { border-color: var(--error); color: #fca5a5; background: transparent; }
+#tab-autocut .sac-scriptClearBtn .p-ic { margin-right: 5px; }
+#tab-autocut .sac-csvBtn.is-armed,
+#tab-autocut .sac-scriptClearBtn.is-armed,
+#tab-autocut .sac-clearBoardBtn.is-armed,
+#tab-autocut .sac-cutBackBtn.is-armed { border-color: var(--error); color: #fca5a5; background: rgba(239,68,68,0.12); }
+
+/* Bảng script */
+#tab-autocut .sac-tableWrap { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+#tab-autocut .sac-thead { background: var(--surface2); border-bottom: 1px solid var(--border); }
+#tab-autocut .sac-th { padding: 6px 8px; font-size: 9.5px; color: var(--text-dim); }
+#tab-autocut .sac-row { border-bottom: 1px solid var(--surface2); }
+#tab-autocut .sac-cell { border-right: 1px solid var(--surface2); }
+#tab-autocut .sac-input { padding: 6px 8px; color: var(--text); font-size: 11.5px; }
+#tab-autocut .sac-input::placeholder { color: #5a5a5a; }
+#tab-autocut .sac-input:focus { background: var(--accent-a08); }
+#tab-autocut .sac-rowBtn { color: #5a5a5a; transition: color var(--ac-ease), background var(--ac-ease); }
+#tab-autocut .sac-delBtn:hover { color: #fca5a5; background: rgba(239,68,68,0.15); }
+#tab-autocut .sac-insBtn:hover { color: var(--accent-lighter); background: var(--accent-a20); }
+
+/* Dock dưới bảng — kiểu .cl-dock: [+ Row] [🗑] [Validate ———] */
+#tab-autocut .sac-tableFooter { padding: 10px 0; }
+#tab-autocut .sac-tableFooter > * + * { margin-left: 6px; }
+#tab-autocut .sac-addBtn,
+#tab-autocut .sac-clearBoardBtn {
+  height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: 11px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--ac-ease), color var(--ac-ease), background var(--ac-ease);
+}
+#tab-autocut .sac-addBtn { padding: 0 12px; border-style: solid; }
+#tab-autocut .sac-addBtn .p-ic { margin-right: 5px; }
+#tab-autocut .sac-clearBoardBtn { width: 32px; }
+#tab-autocut .sac-addBtn:hover { border-color: var(--accent); color: var(--text); }
+#tab-autocut .sac-clearBoardBtn:hover { border-color: var(--error); color: #fca5a5; background: transparent; }
+
+/* Nút chính — accent đặc, cao 32, bo 8 */
+#tab-autocut .sac-previewBtn,
+#tab-autocut .sac-autoRun,
+#tab-autocut .sac-successPrimaryBtn {
+  height: 32px; border: none; border-radius: 8px; background: var(--accent); color: var(--accent-fg);
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background var(--ac-ease), opacity var(--ac-ease);
+}
+#tab-autocut .sac-previewBtn:hover,
+#tab-autocut .sac-autoRun:hover,
+#tab-autocut .sac-successPrimaryBtn:hover { background: var(--accent-dark); }
+#tab-autocut .sac-previewBtn.is-disabled { opacity: 0.4; pointer-events: none; }
+#tab-autocut .sac-previewBtn .p-ic,
+#tab-autocut .sac-autoRun .p-ic,
+#tab-autocut .sac-successPrimaryBtn .p-ic { margin-right: 6px; }
+
+/* Khối Blocks — thẻ nổi trên nền, như dock tab Claude */
+#tab-autocut .sac-blockSection {
+  margin: 0 -12px; padding: 10px 12px 0; background: var(--ac-dock); border-top: 1px solid #2c2c2c;
+}
+#tab-autocut .sac-blockHeader > * + * { margin-left: 8px; }
+#tab-autocut .sac-blockTitle { font-size: 11.5px; font-weight: 600; letter-spacing: 0; color: var(--text); }
+#tab-autocut .sac-blockMeta { color: var(--text-dim); background: var(--surface2); }
+#tab-autocut .sac-refreshBlockBtn {
+  height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 10.5px; font-weight: 500;
+  display: flex; align-items: center; transition: border-color var(--ac-ease), color var(--ac-ease);
+}
+#tab-autocut .sac-refreshBlockBtn:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-autocut .sac-refreshBlockBtn .p-ic { margin-right: 5px; }
+#tab-autocut .sac-blockList > * + * { margin-top: 6px; }
+#tab-autocut .sac-blockCard { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+#tab-autocut .sac-blockCardHeader { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; }
+#tab-autocut .sac-blockText { color: #c9c9c9; }
+#tab-autocut .sac-blockDivider { background: var(--surface2); }
+#tab-autocut .sac-blockSrc { color: var(--text-dim); }
+#tab-autocut .sac-blockTimeBadge { background: var(--surface2); color: var(--text-dim); }
+#tab-autocut .sac-srcOk, #tab-autocut .sac-voiceOk { color: var(--ac-ok); }
+#tab-autocut .sac-srcMissing, #tab-autocut .sac-voiceMissing, #tab-autocut .sac-srcMsg.is-err { color: var(--error); }
+#tab-autocut .sac-voiceWeak, #tab-autocut .sac-srcMsg.is-warn, #tab-autocut .sac-srcAmbiguous { color: var(--ac-warn); }
+#tab-autocut .sac-blockHintBtn,
+#tab-autocut .sac-blockUnbindBtn { border-radius: 6px; border-color: var(--border); background: transparent; opacity: 1; color: var(--text-dim); }
+#tab-autocut .sac-blockHintBtn:hover { border-color: var(--accent); background: var(--accent-a15); }
+#tab-autocut .sac-blockUnbindBtn:hover { border-color: var(--ac-warn); color: var(--ac-warn); background: transparent; }
+#tab-autocut .sac-skipBtn { border-radius: 6px; border-color: var(--border); color: var(--text-dim); opacity: 1; }
+#tab-autocut .sac-skipBtn:hover { border-color: var(--error); color: #fca5a5; background: transparent; }
+#tab-autocut .sac-hintChip,
+#tab-autocut .sac-folderHintBtn { border-radius: 11px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); }
+#tab-autocut .sac-hintChip:hover,
+#tab-autocut .sac-folderHintBtn:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+
+/* Voice — nút phụ cùng cỡ, chỉ nút Gen voice dùng tông accent */
+#tab-autocut .sac-voicePanel { padding: 8px 0 0; }
+#tab-autocut .sac-voicePanel > * + * { margin-top: 6px; }
+#tab-autocut .sac-voiceRow > * { margin-right: 6px; }
+#tab-autocut .sac-voiceRow > *:last-child { margin-right: 0; }
+#tab-autocut .sac-voiceBtn,
+#tab-autocut .sac-cutNoVoiceBtn {
+  height: 32px; border-radius: 8px; font-size: 11px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color var(--ac-ease), color var(--ac-ease), background var(--ac-ease);
+}
+#tab-autocut .sac-voiceGenBtn { border: 1px solid var(--accent-a40); background: var(--accent-a12); color: var(--accent-lighter); }
+#tab-autocut .sac-voiceGenBtn:hover { background: var(--accent-a22); border-color: var(--accent); }
+#tab-autocut .sac-voiceGenBtn.is-ready { border-color: var(--ac-ok); background: rgba(34,197,94,0.15); color: var(--ac-ok); }
+#tab-autocut .sac-voiceBtn:not(.sac-voiceGenBtn),
+#tab-autocut .sac-cutNoVoiceBtn { border: 1px solid var(--border); background: transparent; color: var(--text-dim); }
+#tab-autocut .sac-voiceBtn:not(.sac-voiceGenBtn) { width: 32px; }
+#tab-autocut .sac-voiceBtn:not(.sac-voiceGenBtn):hover,
+#tab-autocut .sac-cutNoVoiceBtn:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-autocut .sac-vDivider { background: var(--border); }
+#tab-autocut .sac-voicePlayer { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+#tab-autocut .sac-voicePlayer > * + * { margin-left: 8px; }
+#tab-autocut .sac-voiceProgWrap { background: var(--surface2); }
+#tab-autocut .sac-voiceTime, #tab-autocut .sac-voiceInfo { color: var(--text-dim); }
+#tab-autocut .sac-runAnywayBtn { border-radius: 8px; border-color: var(--ac-warn); background: transparent; color: var(--ac-warn); }
+#tab-autocut .sac-runAnywayBtn:hover { background: rgba(245,158,11,0.12); }
+
+/* Cut — 2 nút xanh tách rời thay cho thanh bo 20px */
+#tab-autocut .sac-cutPanel { padding: 8px 0 6px; }
+#tab-autocut .sac-cutPanel > * + * { margin-top: 6px; }
+#tab-autocut .sac-cutLabel { color: var(--ac-ok); font-size: 11px; }
+#tab-autocut .sac-cutBackBtn {
+  height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-dim); font-size: 10.5px;
+}
+#tab-autocut .sac-cutBackBtn:hover { border-color: var(--error); color: #fca5a5; background: transparent; }
+#tab-autocut .sac-cutNoVoiceToggle { color: var(--text-dim); font-size: 11px; }
+#tab-autocut .sac-cutRow { height: 34px; border: none; border-radius: 0; overflow: visible; }
+#tab-autocut .sac-cutDivider { width: 6px; background: transparent; }
+#tab-autocut .sac-cutBtn {
+  border-radius: 8px; background: var(--ac-ok); color: #0b1f12; font-size: 11.5px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; transition: background var(--ac-ease);
+}
+#tab-autocut .sac-cutBtn:hover { background: #16a34a; }
+#tab-autocut .sac-cutBtn .p-ic { margin-right: 6px; }
+
+/* Trạng thái + thẻ thiếu source */
+#tab-autocut .sac-statusMsg { color: var(--text-dim); font-size: 11px; }
+#tab-autocut .sac-findCard { border-radius: 9px; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+#tab-autocut .sac-findCardIcon { color: var(--ac-warn); }
+#tab-autocut .sac-findCardBtn {
+  height: 30px; border-radius: 8px; border: 1px solid var(--accent-a40); background: var(--accent-a12); color: var(--accent-lighter);
+  display: flex; align-items: center; justify-content: center; transition: background var(--ac-ease);
+}
+#tab-autocut .sac-findCardBtn:hover { background: var(--accent-a22); color: var(--text); }
+
+/* Màn hoàn thành — giống thẻ "xong" tab Claude: xanh, gọn */
+#tab-autocut .sac-successCheck { background: rgba(34,197,94,0.14); border: 1px solid var(--ac-ok); color: var(--ac-ok); width: 48px; height: 48px; font-size: 22px; }
+#tab-autocut .sac-successTitle { color: var(--text); font-size: 14px; font-weight: 600; }
+#tab-autocut .sac-successStats { color: var(--text-dim); font-size: 11px; }
+#tab-autocut .sac-successDivider { background: var(--border); }
+#tab-autocut .sac-successActions > * + * { margin-top: 6px; }
+#tab-autocut .sac-successPrimaryBtn { background: var(--ac-ok); color: #0b1f12; }
+#tab-autocut .sac-successPrimaryBtn:hover { background: #16a34a; }
+#tab-autocut .sac-successSecondaryBtn {
+  height: 30px; border-radius: 8px; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px;
+  display: flex; align-items: center; justify-content: center; transition: border-color var(--ac-ease), color var(--ac-ease);
+}
+#tab-autocut .sac-successSecondaryBtn:hover { border-color: var(--accent); color: var(--text); }
+#tab-autocut .sac-successSecondaryBtn .p-ic,
+#tab-autocut .sac-successPrimaryBtn .p-ic { margin-right: 6px; }
+
+/* Trang Auto */
+#tab-autocut .sac-autoTitle { color: var(--text); font-size: 12.5px; }
+#tab-autocut .sac-autoClose { border-radius: 6px; color: var(--text-dim); transition: color var(--ac-ease), background var(--ac-ease); }
+#tab-autocut .sac-autoClose:hover { color: var(--text); background: var(--surface2); }
+#tab-autocut .sac-autoTab,
+#tab-autocut .sac-autoSubTab { border-radius: 7px; border-color: var(--border); color: var(--text-dim); transition: all var(--ac-ease); }
+#tab-autocut .sac-autoTab.is-active,
+#tab-autocut .sac-autoSubTab.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+#tab-autocut .sac-autoSetInput,
+#tab-autocut .sac-nsf2-input,
+#tab-autocut .sac-nsf2-select { background: var(--ac-field); border-color: var(--border); border-radius: 8px; color: var(--text); }
+#tab-autocut .sac-autoSetInput:focus,
+#tab-autocut .sac-nsf2-input:focus,
+#tab-autocut .sac-nsf2-select:focus { border-color: var(--accent); }
+#tab-autocut .sac-autoConfirmCancel,
+#tab-autocut .sac-autoSubBack { border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); }
+#tab-autocut .sac-autoConfirmCancel:hover,
+#tab-autocut .sac-autoSubBack:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#tab-autocut .sac-autoResetGo { border-radius: 8px; border: 1px solid var(--error); background: rgba(239,68,68,0.12); color: #fca5a5; }
+
+/* Popup (new seq / confirm / bind) — cùng khung */
+#tab-autocut .sac-newseq-box,
+#tab-autocut .sac-confirm-box,
+#tab-autocut .sac-bind-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+#tab-autocut .sac-confirm-title,
+#tab-autocut .sac-bind-title { color: var(--text); font-weight: 600; }
+#tab-autocut .sac-confirm-x,
+#tab-autocut .sac-bind-close,
+#tab-autocut .sac-nsf2-iconBtn { border-radius: 6px; border-color: var(--border); color: var(--text-dim); }
+#tab-autocut .sac-bind-filter { background: var(--ac-field); border-radius: 8px; }
+#tab-autocut .sac-csvBtn { margin-right: 0; }
