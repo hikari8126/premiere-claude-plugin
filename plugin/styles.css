@@ -5452,3 +5452,34 @@ div.cd-frameAdd[role="button"] { align-self: center; }
   display: flex; align-items: center; justify-content: center; transition: border-color var(--vg-ease);
 }
 #tab-voicegen .vg-binPick:hover { border-color: var(--accent); }
+
+/* ── Voice Gen: đồng bộ control nhỏ — cao 26, bo 6, viền --border; ô nhập bo 8 ── */
+#tab-voicegen .vg-speakerBar { margin-bottom: 8px; }
+#tab-voicegen .vg-speakerBar > * { margin: 0 6px 6px 0; }               /* UXP bỏ qua gap */
+#tab-voicegen .vg-speakerTab {
+  height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 11px; font-weight: 500; box-sizing: border-box;
+  transition: border-color var(--vg-ease), color var(--vg-ease), background var(--vg-ease);
+}
+#tab-voicegen .vg-speakerTab:hover { border-color: var(--accent); color: var(--text); }
+#tab-voicegen .vg-speakerTab.is-active {
+  border-color: var(--sp-color, var(--accent)); background: var(--surface2); color: var(--text); font-weight: 600;
+}
+#tab-voicegen .vg-speakerRemove { margin-left: 4px; border-radius: 4px; }
+#tab-voicegen .vg-addSpeakerBtn { box-sizing: border-box; }
+
+/* Ô script: font chữ thường, dòng thoáng (sizer phải cùng font/padding để tự giãn đúng) */
+#tab-voicegen .vg-scriptSizer, #tab-voicegen .vg-script,
+#tab-subtext .vg-scriptSizer, #tab-subtext .vg-script {
+  font-family: inherit; font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: 8px;
+}
+#tab-voicegen .vg-script, #tab-subtext .vg-script { background: rgba(0,0,0,0.35); border-color: var(--border); }
+#tab-voicegen .vg-script:focus, #tab-subtext .vg-script:focus { border-color: var(--accent); background: rgba(0,0,0,0.45); }
+
+/* Ô chọn model (Organize) cùng cỡ nút bên cạnh */
+#tab-voicegen .vg-organizeModel {
+  height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 11px; box-sizing: border-box; margin: 0 6px 0 0;
+}
+#tab-voicegen .vg-organizeBtn { margin-left: 0; }
+#tab-voicegen .vg-organizeBtn.is-disabled { opacity: 0.45; pointer-events: none; }
