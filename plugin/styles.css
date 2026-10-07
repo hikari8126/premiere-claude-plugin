@@ -5530,3 +5530,8 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-musicRefClear[hidden] { display: none; }
 #tab-voicegen .vg-musicRefClear { order: -1; margin: 0 6px 0 0; width: 26px; height: 26px; }
 #tab-voicegen .vg-musicRefCfg { margin-top: 10px; }
+/* Panel hẹp: nút giữ nguyên, tiêu đề co lại và cắt "…" (UXP flex-wrap đẩy nút xuống dòng cả khi đủ chỗ) */
+#tab-voicegen .vg-musicRefTitle { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#tab-voicegen .vg-musicRefPick { flex: 0 0 auto; min-width: auto; justify-content: flex-start; margin-left: 6px; }
+#tab-voicegen .vg-musicRefPick .vg-organizeBtn { flex: 0 0 auto; }
+#tab-voicegen .vg-musicRefHead > span[data-ic] { flex: 0 0 auto; }
