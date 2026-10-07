@@ -5514,3 +5514,6 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-profileChip:hover,
 #tab-voicegen .vg-voiceDropTrigger:hover { border-color: var(--accent); }
 #tab-voicegen .vg-sm { color: var(--text-dim); opacity: 0.6; }
+/* UXP cho textarea sẵn margin 6px → ô script lệch khỏi khung giãn (sizer) 6px phải/dưới, đè mép.
+   Cùng lỗi #message-input tab Claude đã sửa. Áp cho mọi ô .vg-script (Voice Gen + Tạo Sub). */
+.vg-script, .vgm-free { margin: 0; }
