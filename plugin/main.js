@@ -2723,17 +2723,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (sacValidatePassed) { sacValidatePassed = false; sacUpdateRunVisibility(); }
     });
 
-    // Folder hint button — suggests parent folders from the last bin scan
-    var hintBtn = document.createElement('div');
-    hintBtn.className = 'sac-rowBtn sac-hintBtn';
-    hintBtn.setAttribute('role', 'button');
-    hintBtn.title = 'Thêm folder hint';
-    piSetBtn(hintBtn, 'folder', null, null, 12);
-    hintBtn.addEventListener('click', function() { sacShowFolderHints(inpSrc.value.trim(), inpSrc); });
-
     var cText = makeCell('sac-col-text'); cText.appendChild(inpText);
     var cTime = makeCell('sac-col-time'); cTime.appendChild(inpTime);
-    var cSrc  = makeCell('sac-col-src');  cSrc.appendChild(inpSrc); cSrc.appendChild(hintBtn);
+    var cSrc  = makeCell('sac-col-src');  cSrc.appendChild(inpSrc);
     var cAct  = makeCell('sac-col-act');
     cAct.appendChild(insBtn);
     cAct.appendChild(delBtn);
