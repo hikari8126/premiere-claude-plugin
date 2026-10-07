@@ -959,16 +959,10 @@
              UXP: <label> forces its colour onto the child <span>; only an inline
              style overrides it. -->
         <div class="vg-sg">
-          <label class="vg-checkbox-row vg-moveVoRow">
-            <input type="checkbox" id="vgMoveToVOBin" checked>
-            <span class="vg-ftLabel" style="color:#e8e8e8">Chuyển vào bin sau khi import</span>
-          </label>
-          <div class="setting-hint-inline">Bin nhớ riêng theo từng project. Bin chưa có sẽ được tạo. Gõ {bộ} để theo sequence đang mở, vd Voice Over / {bộ}x.</div>
-
-          <!-- Một dòng duy nhất — hiển thị bin của mode đang mở. -->
+          <div class="vg-sl">Vào bin</div>
           <div class="vg-binRow">
-            <span class="vg-binMode" id="vgBinMode">Voice</span>
             <span class="vg-binName" id="vgBinName">Voice Over</span>
+            <span class="vg-binAuto" id="vgBinAuto" role="button">tự động</span>
             <div class="vg-binPick" id="vgBinPick" role="button"><span data-ic="folder_open" data-ic-size="12"></span></div>
           </div>
           <div class="vg-binWarn" id="vgBinWarn" style="display:none"></div>
@@ -1947,6 +1941,7 @@
 <script src="elv-sort.js"></script>
 <script src="color-wheel.js"></script>
 <script src="vg-seq.js"></script>
+<script src="vg-bin-learn.js"></script>
 <script src="st-script.js"></script>
 <script src="ver-compare.js"></script>
 <script src="clawd-pixel.js"></script>

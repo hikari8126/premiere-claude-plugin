@@ -5435,3 +5435,20 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-inlineStatus.is-err  { color: #fca5a5; }
 #tab-voicegen .vg-inlineStatus.is-warn { color: #f59e0b; }
 #tab-voicegen .vc-status { border-radius: 8px; }
+/* Dòng "Vào bin": tên bin thật · nhãn tự động (chọn tay thì thành "↺ tự động" bấm để quay lại) · 📂 */
+#tab-voicegen .vg-binRow { margin-top: 0; }
+#tab-voicegen .vg-binName {
+  background: transparent; border: none; padding: 0; margin-right: 8px; font-size: 11.5px; color: var(--text);
+  text-overflow: ellipsis;
+}
+#tab-voicegen .vg-binAuto {
+  flex: 0 0 auto; margin-right: 6px; font-size: 10px; color: var(--text-dim); padding: 1px 6px; border-radius: 8px;
+  background: var(--surface2); cursor: default;
+}
+#tab-voicegen .vg-binAuto.is-manual { cursor: pointer; color: var(--accent-light); background: var(--accent-a12); }
+#tab-voicegen .vg-binAuto.is-manual:hover { background: var(--accent-a22); }
+#tab-voicegen .vg-binPick {
+  width: 24px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid var(--border); background: transparent;
+  display: flex; align-items: center; justify-content: center; transition: border-color var(--vg-ease);
+}
+#tab-voicegen .vg-binPick:hover { border-color: var(--accent); }

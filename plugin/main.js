@@ -2112,10 +2112,8 @@ async function ppMoveToBin(item, proj, binName) {
 
 // Single source of truth for the "move to bin" toggle. Every import path must gate
 // the bin move through this so the checkbox is always honored.
-function ppShouldMoveToVOBin() {
-  var cb = document.getElementById('vgMoveToVOBin');
-  return !!(cb && cb.checked);
-}
+// Luôn chuyển vào bin sau import — bin do Voice Gen tự học theo project (vg-bin-learn.js).
+function ppShouldMoveToVOBin() { return true; }
 // Move only when the toggle is on. Không truyền binName → lấy theo mode Voice Gen
 // đang chọn. Caller nào biết chắc loại media (vd Autocut luôn import voice) thì
 // phải truyền tên bin tường minh, nếu không voice sẽ rơi vào bin BGM khi user
@@ -5750,7 +5748,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   var VG_BINS_LS       = 'vg_bins_v1'; // { projKey: { tts, sfx, music } }
   var VG_BIN_DEFAULTS  = { tts: 'Voice Over', sfx: 'SFX', music: 'BGM' };
   var vgBinProjKey     = '';
-  var vgBins           = Object.assign({}, VG_BIN_DEFAULTS);
+  var vgBins           = {};   // CHỈ bin user chọn tay (ghi đè tự động), theo project
+  var vgAutoBins       = null; // kết quả VGBIN.learn() gần nhất
+  var vgAutoAt         = 0;    // thời điểm học — cache 2 phút, project to quét lâu
 
   function vgLoadBinStore() {
     try { return JSON.parse(localStorage.getItem(VG_BINS_LS) || '{}') || {}; }
@@ -5767,14 +5767,27 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return String(nm || (p && p.guid) || '');
     } catch (e) { return ''; }
   }
-  var VG_MODE_LABEL = { tts: 'Voice', sfx: 'SFX', music: 'BGM' };
-  // Một dòng duy nhất trong Settings, phản ánh mode đang mở.
-  function vgRenderBinNames() {
+  // Học bin từ project đang mở (cache 2 phút). force = bỏ cache (vd vừa import xong).
+  async function vgLearnBins(force) {
+    if (!force && vgAutoBins && Date.now() - vgAutoAt < 120000) return vgAutoBins;
+    try {
+      var proj = await getActiveProject();
+      var root = proj && proj.getRootItem ? proj.getRootItem() : null;
+      if (root && typeof root.then === 'function') root = await root;
+      var items = root ? await sacCollectBinItems(root) : [];
+      vgAutoBins = VGBIN.learn(items, await vgActiveSet());
+      vgAutoAt = Date.now();
+    } catch (e) { vgAutoBins = VGBIN.learn([], ''); }
+    return vgAutoBins;
+  }
+  // Một dòng "Vào bin" ở cột phải: bin thật sẽ import vào + nhãn tự động / ↺ khi chọn tay.
+  async function vgRenderBinNames() {
     var m = (currentMode === 'create') ? 'tts' : currentMode;
-    var lbl = document.getElementById('vgBinMode');
-    var nm  = document.getElementById('vgBinName');
-    if (lbl) lbl.textContent = VG_MODE_LABEL[m] || 'Voice';
-    if (nm)  nm.textContent  = vgBins[m] || VG_BIN_DEFAULTS[m];
+    var nm = document.getElementById('vgBinName');
+    var tag = document.getElementById('vgBinAuto');
+    var manual = !!vgBins[m];
+    if (tag) { tag.textContent = manual ? '↺ tự động' : 'tự động'; tag.classList.toggle('is-manual', manual); }
+    if (nm) nm.textContent = await window.vgResolveBin();
     vgPaintBinWarn(m);
   }
   // Số bộ của sequence đang mở ("… vid36.1 …" → "36"), '' nếu không theo quy ước.
@@ -5808,7 +5821,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   }
   // Bin đích thật lúc import: thay {bộ} theo sequence đang mở.
   window.vgResolveBin = async function () {
-    var b = window.vgTargetBinName();
+    var m = (currentMode === 'create') ? 'tts' : currentMode;
+    var b = vgBins[m] || (await vgLearnBins())[m] || VG_BIN_DEFAULTS[m] || 'Voice Over';
     return (typeof VGSEQ !== 'undefined') ? VGSEQ.applySetVar(b, await vgActiveSet()) : b;
   };
   // Đọc bin đã lưu của project đang mở. Gọi lúc khởi động và mỗi lần mở Settings,
@@ -5816,7 +5830,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   async function vgLoadBinsForProject() {
     vgBinProjKey = await vgCurrentProjectKey();
     var saved = vgLoadBinStore()[vgBinProjKey] || {};
-    vgBins = Object.assign({}, VG_BIN_DEFAULTS, saved);
+    vgBins = Object.assign({}, saved);
+    vgAutoBins = null;   // project khác → học lại
     vgRenderBinNames();
     // Tên file gợi ý cũng nhớ theo project — dùng chung projKey nên nạp cùng chỗ.
     vgNameParts = Object.assign({}, vgLoadNamePartStore()[vgBinProjKey] || {});
@@ -5831,12 +5846,19 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     vgSaveBinStore(store);
     vgRenderBinNames();
   }
+  // Bỏ bin chọn tay → quay về tự động.
+  function vgClearBin(mode) {
+    delete vgBins[mode];
+    var store = vgLoadBinStore();
+    if (store[vgBinProjKey]) { delete store[vgBinProjKey][mode]; vgSaveBinStore(store); }
+    vgRenderBinNames();
+  }
   window.vgTargetBinName = function () {
     // Mode 'create' (tạo voice) dùng chung bin với 'tts' — thiếu map này thì
     // vgBins['create'] là undefined và bin user chọn bị bỏ qua, luôn rơi về
     // 'Voice Over'.
     var m = (currentMode === 'create') ? 'tts' : currentMode;
-    return vgBins[m] || VG_BIN_DEFAULTS[m] || 'Voice Over';
+    return vgBins[m] || (vgAutoBins && vgAutoBins[m]) || VG_BIN_DEFAULTS[m] || 'Voice Over';
   };
 
   // ── Phần tên do user đặt, nhớ theo project ────────────────────────────────
@@ -9848,6 +9870,9 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       // mặc định. Nạp lại ngay lần đầu đọc được project.
       if (pid && !vgBinProjKey) vgLoadBinsForProject();
       if (pid) _vgProjectId = pid;
+      // Đang mở tab Voice Gen → dòng "Vào bin" theo sequence đang mở (bộ đổi là bin đổi).
+      var vgTab = document.getElementById('tab-voicegen');
+      if (pid && vgTab && vgTab.classList.contains('active')) vgRenderBinNames();
     } catch(e) {}
   }, 5000);
 
@@ -10066,7 +10091,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     opts = opts || {};
     vgBinMode = mode;
     vgBinOnPick = opts.onPick || null;
-    vgBinChosen = opts.current || vgBins[mode] || VG_BIN_DEFAULTS[mode];
+    vgBinChosen = opts.current || vgBins[mode] || (vgAutoBins && vgAutoBins[mode]) || VG_BIN_DEFAULTS[mode];
     vgBinExpanded = {};
     vgBinNewParent = null;
     var modal = document.getElementById('vgBinModal');
@@ -10169,6 +10194,11 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     var pick = document.getElementById('vgBinPick');
     if (pick) pick.addEventListener('click', function () {
       vgBinOpen(currentMode === 'create' ? 'tts' : currentMode);
+    });
+    var autoTag = document.getElementById('vgBinAuto');
+    if (autoTag) autoTag.addEventListener('click', function () {
+      var m = currentMode === 'create' ? 'tts' : currentMode;
+      if (vgBins[m]) vgClearBin(m);
     });
     var close = document.getElementById('vgBinClose');
     if (close) close.addEventListener('click', vgBinClose);
