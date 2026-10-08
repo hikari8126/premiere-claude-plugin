@@ -5630,3 +5630,52 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 }
 #vgBinModal .vg-binChildOk svg path { fill: var(--accent-fg); }
 #vgBinModal .vg-binItemPath { padding: 6px 2px; color: var(--text-dim); font-size: 11px; }
+
+/* ── Popup bind source (Autocut) — chỉ giao diện: token màu, ô lọc 1 viền,
+      cột Folder hẹp hơn, mỗi clip 1 dòng (tên trái · đường dẫn mờ phải) ── */
+#sacBindModal .sac-bind-box { padding: 12px; border-color: var(--border); border-radius: 10px; }
+#sacBindModal .sac-bind-title { color: var(--text); font-weight: 600; font-size: 12.5px; }
+#sacBindModal .sac-bind-close { width: 26px; height: 26px; padding: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+#sacBindModal .sac-bind-close svg path { fill: var(--text-dim); }
+#sacBindModal .sac-bind-filter {
+  margin: 0 0 8px; height: 28px; padding: 0 9px; box-sizing: border-box; border-radius: 6px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--border); color: var(--text); font-size: 11.5px;
+}
+#sacBindModal .sac-bind-filter:focus { border-color: var(--accent); }
+/* 2 cột: Folder 38% · Source phần còn lại */
+#sacBindModal .sac-bind-cols > .sac-bind-col:first-child { flex: 0 0 38%; margin-right: 8px; }
+#sacBindModal .sac-bind-col { border-radius: 8px; border-color: var(--border); background: var(--bg); }
+#sacBindModal .sac-bind-colHead {
+  height: 28px; padding: 0 8px; box-sizing: border-box; font-size: 11px; font-weight: 600;
+  color: var(--text-dim); background: var(--surface); border-bottom: 1px solid var(--border);
+}
+#sacBindModal .sac-bind-allChk { font-size: 10.5px; color: var(--text-dim); }
+#sacBindModal .sac-bind-typeChips { padding: 6px 8px; background: transparent; border-bottom: 1px solid #242424; }
+#sacBindModal .sac-bind-chip {
+  height: 22px; padding: 0 9px; border-radius: 6px; font-size: 10.5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); margin: 0 5px 0 0;
+}
+#sacBindModal .sac-bind-chip.is-active { border-color: var(--accent); background: var(--accent-a15); color: var(--text); }
+/* hàng: thấp, chữ token */
+#sacBindModal .sac-bind-row {
+  display: flex; align-items: center; min-height: 26px; padding-top: 3px; padding-bottom: 3px; padding-right: 8px;
+  box-sizing: border-box; font-size: 11.5px; color: #c9c9c9; border-bottom: 1px solid #242424;
+}
+#sacBindModal .sac-bind-row:hover { background: var(--surface2); color: var(--text); }
+#sacBindModal .sac-bind-row.is-active { background: var(--accent-a15); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+#sacBindModal .sac-bind-caret { width: 14px; margin-right: 2px; font-size: 10px; color: var(--text-dim); flex: 0 0 auto; }
+#sacBindModal .sac-bind-fLbl { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#sacBindModal .sac-ic { margin-right: 6px; }
+#sacBindModal .sac-ic svg path { fill: var(--text-dim); }
+#sacBindModal .sac-bind-row.is-active .sac-ic svg path { fill: var(--accent); }
+/* clip 1 dòng: [icon tên ……… đường dẫn] */
+#sacBindModal .sac-bind-srcRow { padding-left: 8px; }
+#sacBindModal .sac-bind-srcTop { flex: 0 1 auto; min-width: 0; font-size: 11.5px; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sacBindModal .sac-bind-srcPath {
+  flex: 1 1 auto; min-width: 0; margin: 0 0 0 10px; text-align: right; font-size: 10.5px; color: #6a6a6a;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#sacBindModal .sac-bind-srcRow.is-bound { background: rgba(34,197,94,0.10); border-left: none; box-shadow: inset 2px 0 0 var(--success); }
+#sacBindModal .sac-bind-srcRow.is-bound .sac-bind-srcTop { color: var(--success); font-weight: 600; }
+#sacBindModal .sac-bind-srcRow.is-bound .sac-ic svg path { fill: var(--success); }
+#sacBindModal .sac-bind-none { color: var(--text-dim); font-size: 11px; }

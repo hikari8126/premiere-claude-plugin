@@ -3310,7 +3310,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         var kids = fHasChildren(fp);
         var row = document.createElement('div');
         row.className = 'sac-bind-row' + (selectedFolder === fp ? ' is-active' : '');
-        row.style.paddingLeft = (8 + (segs.length - 1) * 16) + 'px';
+        row.style.paddingLeft = (6 + (segs.length - 1) * 12) + 'px';
         var caret = document.createElement('span');
         caret.className = 'sac-bind-caret';
         caret.textContent = kids ? (expanded[fp] ? '▾' : '▸') : '';
