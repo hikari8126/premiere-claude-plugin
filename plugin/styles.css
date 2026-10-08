@@ -5679,3 +5679,14 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #sacBindModal .sac-bind-srcRow.is-bound .sac-bind-srcTop { color: var(--success); font-weight: 600; }
 #sacBindModal .sac-bind-srcRow.is-bound .sac-ic svg path { fill: var(--success); }
 #sacBindModal .sac-bind-none { color: var(--text-dim); font-size: 11px; }
+
+/* Tab RAW — chế độ xuất Source / Timeline / Both: khối ĐẶC lớn bo nhẹ (khác chip viền raw/ · edited/ bên dưới) */
+#rcModes .rsz-seg {
+  height: 38px; padding: 0 6px; box-sizing: border-box; border-radius: 8px; border: none;
+  background: var(--surface2); color: var(--text-dim); font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#rcModes .rsz-seg:hover { background: #383838; color: var(--text); }
+#rcModes .rsz-seg.active { background: var(--accent); color: var(--accent-fg); }
+#rcModes .rsz-seg.active:hover { background: var(--accent-dark); }
