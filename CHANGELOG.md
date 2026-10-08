@@ -7,6 +7,18 @@
 
 
 
+## v5.22.1 / bridge 3.26 (server 1.27.1) — 2026-10-08 · Sửa chọn bin Voice Gen + đánh bóng UI
+
+> KHÔNG cần cập nhật Bridge (vẫn 3.26).
+
+- **Voice Gen — nút 📂 chọn bin không mở được (lỗi từ 5.22.0):** khi làm "tự chọn bin" đã xoá nhầm `VG_MODE_LABEL`; `vgBinOpen()` ném ReferenceError trong hàm async nên lỗi bị nuốt, bấm không có gì xảy ra. Khôi phục biến + soát lại mọi khai báo bị mất.
+- **Popup chọn bin:** duyệt TỪNG CẤP — thanh đường dẫn `Project › Voice Over`, bin dạng thẻ (thẻ có bin con hiện số con ›), thẻ "+ Bin mới" tạo ngay ở cấp đang xem, mở vào thẳng cấp chứa bin đang chọn. Ô nhập bỏ margin mặc định của UXP (hết viền đôi).
+- **Autocut — popup bind source:** mỗi clip 1 dòng (tên · đường dẫn mờ), cột Folder hẹp lại, màu/icon theo token. Chỉ giao diện.
+- **RAW:** Source / Timeline / Both thành khối đặc lớn (cao 38, bo 8) — tách biệt với chip raw/ · edited/.
+- **Un-nest:** chế độ dạng thẻ bấm cả thẻ, nhóm Chế độ / Tuỳ chọn / Loại trừ, chữ checkbox hết xám (UXP `<label>` ép màu → style inline), nút chạy chuẩn nút chính.
+- **Voice Gen:** nút "↺ tự động" thành `div[role=button]`.
+- Phím tắt Un-nest (⌃⌥⌘1/2/3) báo không chạy — đã soát chuỗi Bridge app → `/unnest/trigger` → plugin poll, chưa tìm ra; cần thử tay.
+
 ## v5.22.0 / bridge 3.26 (server 1.27.1) — 2026-10-07 · RAW Cut khác fps + UI Autocut / Tạo Sub / Voice Gen
 
 > CẦN BRIDGE APP 3.26 để nhận bản sửa RAW Cut.
