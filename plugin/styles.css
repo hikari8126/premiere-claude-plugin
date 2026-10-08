@@ -5690,3 +5690,56 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #rcModes .rsz-seg:hover { background: #383838; color: var(--text); }
 #rcModes .rsz-seg.active { background: var(--accent); color: var(--accent-fg); }
 #rcModes .rsz-seg.active:hover { background: var(--accent-dark); }
+
+/* ═══ UN-NEST — làm lại theo chuẩn các tab khác (token, nút 3 cấp, chế độ dạng thẻ) ═══ */
+#tab-unnest .un-tabScroll { padding: 14px 12px 14px; }
+#tab-unnest .un-settingsHint {
+  font-size: 11px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; margin-bottom: 14px;
+}
+#tab-unnest .un-settingsHint b { color: var(--text); font-weight: 600; }
+#tab-unnest .un-groupLbl { font-size: 11px; font-weight: 600; color: var(--text-dim); margin: 0 0 6px; }
+#tab-unnest .un-groupHint { font-weight: 400; color: #5a5a5a; }
+/* Chế độ: mỗi dòng một thẻ, cả thẻ bấm được; đang chọn = viền accent + nền nhạt */
+#tab-unnest .un-modeRow {
+  min-height: 34px; padding: 0 6px 0 10px; margin: 0 0 6px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+#tab-unnest .un-modeRow:hover { border-color: var(--accent-a50); }
+#tab-unnest .un-modeRow.is-on { border-color: var(--accent); background: var(--accent-a10); }
+#tab-unnest .un-modeRow .un-radio { gap: 0; }
+#tab-unnest .un-modeRow .un-radio input { margin-right: 10px; }
+/* chip phím tắt: nền tối, chữ mono mờ; đang nghe phím = vàng */
+#tab-unnest .un-hkLabel {
+  width: 70px; height: 24px; border-radius: 6px; background: rgba(0,0,0,0.35); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 11px; font-weight: 600;
+}
+#tab-unnest .un-hkLabel:hover { background: rgba(0,0,0,0.5); border-color: var(--accent); color: var(--text); }
+#tab-unnest .un-modeRow.is-on .un-hkLabel { color: var(--text); }
+#tab-unnest .un-hkLabel.is-listening { color: #fbbf24; border-color: #f59e0b; background: rgba(245,158,11,0.12); }
+/* tuỳ chọn */
+#tab-unnest .un-groupLbl + .un-check { margin-top: 0; }
+#tab-unnest .un-check { margin: 4px 0 0; height: 26px; gap: 0; }
+#tab-unnest .un-check input { margin-right: 10px; }
+#tab-unnest .un-check + .un-groupLbl, #tab-unnest .un-modeRow + .un-groupLbl { margin-top: 14px; }
+/* loại trừ: 2 nút phụ chia đôi */
+#tab-unnest .un-excludeWrap { margin-top: 14px; }
+#tab-unnest .un-excludeTools { margin-top: 0; }
+#tab-unnest .un-excludeTools .vg-nameToolBtn {
+  flex: 1 1 0; height: 30px; border-radius: 6px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: 11px; display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+#tab-unnest .un-excludeTools .vg-nameToolBtn:hover { border-color: var(--accent); color: var(--text); }
+#tab-unnest .un-excludeTools .vg-nameToolBtn .p-ic { margin-right: 5px; }
+#tab-unnest svg path { fill: var(--text-dim); }
+/* nút chạy: nút chính chuẩn — cao 34, bo 8, không IN HOA */
+#tab-unnest .un-runBtn {
+  height: 34px; margin-top: 16px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--accent-fg);
+  transition: background 0.15s ease;
+}
+#tab-unnest .un-runBtn:hover { filter: none; background: var(--accent-dark); }
+#tab-unnest .un-runBtn .p-ic { margin-right: 7px; }
+#tab-unnest .un-runBtn svg path { fill: var(--accent-fg); }
+#tab-unnest .un-log { border-radius: 8px; margin-top: 10px; }

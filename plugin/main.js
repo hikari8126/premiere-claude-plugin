@@ -12915,6 +12915,25 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     w.addEventListener('mouseleave', hideTip);
   });
   loadHotkeys(); // populate labels + premiere-shortcut conflicts (defaults if unreachable)
+  // Thẻ chế độ: bấm cả thẻ = chọn radio; thẻ đang chọn sáng viền (UXP không có :has()).
+  function unPaintModes() {
+    document.querySelectorAll('#tab-unnest .un-modeRow').forEach(function (row) {
+      var r = row.querySelector('input[type="radio"]');
+      row.classList.toggle('is-on', !!(r && r.checked));
+    });
+  }
+  document.querySelectorAll('#tab-unnest .un-modeRow').forEach(function (row) {
+    var r = row.querySelector('input[type="radio"]');
+    row.addEventListener('click', function (e) {
+      for (var n = e.target; n && n !== row; n = n.parentNode) {          // chip phím tắt có việc riêng
+        if (n.classList && n.classList.contains('un-hkLabel')) return;
+      }
+      if (r && !r.checked) { r.checked = true; try { r.dispatchEvent(new Event('change', { bubbles: true })); } catch (er) {} }
+      unPaintModes();
+    });
+    if (r) r.addEventListener('change', unPaintModes);
+  });
+  unPaintModes();
   unnestInitExclude();
   var unTabBtn = document.querySelector('.tab-btn[data-tab="unnest"]');
   if (unTabBtn) unTabBtn.addEventListener('click', function () { loadHotkeys(); unnestInitExclude(); });

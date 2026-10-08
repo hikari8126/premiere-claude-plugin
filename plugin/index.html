@@ -1469,31 +1469,33 @@
           Chọn <b>nested sequence</b> → bấm nút (hoặc phím tắt). Bung lên <b>track trên cùng</b>, giữ nguyên effect.
         </div>
 
-        <div class="un-modeRow">
-          <label class="un-radio"><input type="radio" name="unMode" value="video" /><span>Visual Element</span></label>
+        <div class="un-groupLbl">Chế độ bung <span class="un-groupHint">· bấm đúp chip để đổi phím tắt</span></div>
+        <div class="un-modeRow" role="button">
+          <label class="un-radio"><input type="radio" name="unMode" value="video" /><span style="color:#e8e8e8">Visual Element</span></label>
           <span class="un-hkLabel" data-mode="video"><span class="un-hkWarn" data-mode="video" hidden>❗</span><span class="un-hkText" id="unHkVideo">⌃⌥⌘1</span><span class="un-hkX" data-mode="video">✕</span></span>
         </div>
-        <div class="un-modeRow">
-          <label class="un-radio"><input type="radio" name="unMode" value="av" checked /><span>Visual Element and Audio</span></label>
+        <div class="un-modeRow" role="button">
+          <label class="un-radio"><input type="radio" name="unMode" value="av" checked /><span style="color:#e8e8e8">Visual Element and Audio</span></label>
           <span class="un-hkLabel" data-mode="av"><span class="un-hkWarn" data-mode="av" hidden>❗</span><span class="un-hkText" id="unHkAv">⌃⌥⌘2</span><span class="un-hkX" data-mode="av">✕</span></span>
         </div>
-        <div class="un-modeRow">
-          <label class="un-radio"><input type="radio" name="unMode" value="avt" /><span>All</span></label>
+        <div class="un-modeRow" role="button">
+          <label class="un-radio"><input type="radio" name="unMode" value="avt" /><span style="color:#e8e8e8">All</span></label>
           <span class="un-hkLabel" data-mode="avt"><span class="un-hkWarn" data-mode="avt" hidden>❗</span><span class="un-hkText" id="unHkAvt">⌃⌥⌘3</span><span class="un-hkX" data-mode="avt">✕</span></span>
         </div>
 
+        <div class="un-groupLbl">Tuỳ chọn</div>
         <label class="un-check">
           <input type="checkbox" id="unDisableOrig" checked />
-          <span>Tắt sequence gốc sau khi bung</span>
+          <span style="color:#c9c9c9">Tắt sequence gốc sau khi bung</span>
         </label>
 
         <label class="un-check">
           <input type="checkbox" id="unKeepTransitions" checked />
-          <span>Giữ transition video (dựng lại qua XML)</span>
+          <span style="color:#c9c9c9">Giữ transition video (dựng lại qua XML)</span>
         </label>
 
         <div class="un-excludeWrap">
-          <label class="vg-save-label" style="margin-top:2px;">Loại trừ khi bung</label>
+          <div class="un-groupLbl">Loại trừ khi bung</div>
           <div class="un-excludeTools">
             <div id="unExcludeAddBtn" class="vg-nameToolBtn" role="button"><span data-ic="plus" data-ic-size="12"></span> Thêm item loại trừ <span class="vg-caret">▾</span></div>
             <div id="unExcludeListBtn" class="vg-nameToolBtn" role="button"><span data-ic="layer_group" data-ic-size="12"></span> Đã loại trừ (<span id="unExcludeCount">0</span>) <span class="vg-caret">▾</span></div>
@@ -1508,7 +1510,7 @@
           <div id="unExcludeListPanel" class="vg-namePanel" hidden></div>
         </div>
 
-        <div id="unRun" class="un-runBtn" role="button" aria-disabled="false" style="margin-top:10px;"><span data-ic="layer_group" data-ic-size="14" data-ic-color="#ffffff"></span> UN-NEST CLIP ĐÃ CHỌN</div>
+        <div id="unRun" class="un-runBtn" role="button" aria-disabled="false"><span data-ic="layer_group" data-ic-size="14"></span> Un-nest clip đã chọn</div>
         <div id="unLog" class="un-log" aria-live="polite" hidden></div>
     </div>
   </div>
