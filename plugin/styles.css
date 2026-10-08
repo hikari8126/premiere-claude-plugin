@@ -5591,3 +5591,42 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 }
 #vgBinModal .vg-binSaveBtn .p-ic { margin-right: 5px; }
 #vgBinModal .vg-binSaveBtn svg path { fill: var(--accent-fg); }
+
+/* ── Popup chọn bin: duyệt từng cấp + thẻ ── */
+#vgBinModal .vg-binCrumbs { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 8px; }
+#vgBinModal .vg-binCrumb {
+  height: 22px; padding: 0 7px; border-radius: 5px; font-size: 11px; color: var(--text-dim); cursor: pointer;
+  display: flex; align-items: center; transition: background 0.15s ease, color 0.15s ease;
+}
+#vgBinModal .vg-binCrumb:hover { background: var(--surface2); color: var(--text); }
+#vgBinModal .vg-binCrumb.is-here { color: var(--text); font-weight: 600; }
+#vgBinModal .vg-binCrumbSep { margin: 0 1px; font-size: 11px; color: #5a5a5a; }
+#vgBinModal .sac-bind-list { padding: 8px 2px 2px 8px; }
+#vgBinModal .vg-binGrid { display: flex; flex-wrap: wrap; align-items: flex-start; }
+#vgBinModal .vg-binCard {
+  flex: 0 0 auto; min-width: 52px; max-width: 100%; height: 30px; padding: 0 10px; margin: 0 6px 6px 0;
+  box-sizing: border-box; border-radius: 7px; border: 1px solid var(--border); background: var(--surface);
+  color: #c9c9c9; font-size: 11.5px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+#vgBinModal .vg-binCard:hover { border-color: var(--accent-a50); color: var(--text); }
+#vgBinModal .vg-binCard.has-kids { justify-content: space-between; }
+#vgBinModal .vg-binCardName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#vgBinModal .vg-binCardKids { flex: 0 0 auto; margin-left: 8px; font-size: 10px; color: var(--text-dim); }
+#vgBinModal .vg-binCard.is-inPath { border-color: var(--accent-a40); }
+#vgBinModal .vg-binCard.is-active { border-color: var(--accent); background: var(--accent-a18); color: var(--text); font-weight: 600; }
+#vgBinModal .vg-binCardNew { border-style: dashed; color: var(--text-dim); background: transparent; }
+#vgBinModal .vg-binCardNew .p-ic { margin-right: 4px; }
+#vgBinModal .vg-binCardNew svg path { fill: var(--text-dim); }
+#vgBinModal .vg-binCardNew.is-editing { border-style: solid; border-color: var(--accent); padding: 0 3px 0 4px; min-width: 200px; }
+#vgBinModal .vg-binChildInput {
+  flex: 1 1 auto; min-width: 0; height: 22px; margin: 0; padding: 0 6px; border: none; background: transparent;
+  color: var(--text); font-size: 11.5px; outline: none;
+}
+#vgBinModal .vg-binChildOk {
+  flex: 0 0 auto; width: 22px; height: 22px; margin-left: 4px; border-radius: 5px; background: var(--accent);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+#vgBinModal .vg-binChildOk svg path { fill: var(--accent-fg); }
+#vgBinModal .vg-binItemPath { padding: 6px 2px; color: var(--text-dim); font-size: 11px; }

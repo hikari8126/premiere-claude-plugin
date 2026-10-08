@@ -9880,6 +9880,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
   // ── Bin picker modal ──────────────────────────────────────────────────────
   var vgBinMode = 'tts';   // which row opened the modal
   var vgBinFolders = [];   // [{ name, path }]
+  var vgBinCwd = '';       // cấp đang xem trong popup chọn bin ('' = gốc project)
   var vgBinChosen = '';
 
   function vgBinStatus(msg, cls) {
@@ -9942,6 +9943,32 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     return true;
   }
 
+  // Duyệt TỪNG CẤP: thanh đường dẫn (Project › Voice Over) + bin của cấp đang xem dạng thẻ.
+  // Thẻ có bin con: "›" + số con, bấm = chọn + vào trong. Thẻ lá: bấm = chọn.
+  // Đang lọc → thẻ phẳng mọi cấp, nhãn là đường dẫn đầy đủ.
+  function vgBinRenderCrumbs() {
+    var host = document.getElementById('vgBinCrumbs');
+    if (!host) return;
+    host.innerHTML = '';
+    var segs = vgBinCwd ? vgBinCwd.split(' / ') : [];
+    var parts = [{ label: 'Project', full: '' }];
+    segs.forEach(function (sg, k) { parts.push({ label: sg, full: segs.slice(0, k + 1).join(' / ') }); });
+    parts.forEach(function (p, k) {
+      if (k) { var sep = document.createElement('span'); sep.className = 'vg-binCrumbSep'; sep.textContent = '›'; host.appendChild(sep); }
+      var c = document.createElement('div');
+      c.setAttribute('role', 'button');
+      c.className = 'vg-binCrumb' + (k === parts.length - 1 ? ' is-here' : '');
+      c.textContent = p.label;
+      c.addEventListener('click', function () {
+        vgBinCwd = p.full;
+        if (p.full) vgBinChosen = p.full;   // quay về cấp nào = chọn bin đó (gốc Project thì giữ lựa chọn)
+        vgBinNewParent = null;
+        vgBinRenderList();
+      });
+      host.appendChild(c);
+    });
+  }
+
   function vgBinRenderList() {
     var host = document.getElementById('vgBinList');
     var filt = document.getElementById('vgBinFilter');
@@ -9950,105 +9977,97 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     host.innerHTML = '';
     var cp = document.getElementById('vgBinChosenPath');
     if (cp) cp.textContent = vgBinChosen ? 'Đang chọn: ' + vgBinChosen : 'Chưa chọn bin';
+    var crumbs = document.getElementById('vgBinCrumbs');
+    if (crumbs) crumbs.style.display = q ? 'none' : '';
+    if (!q) vgBinRenderCrumbs();
 
     var rows = q
       ? vgBinFolders.filter(function (f) { return f.full.toLowerCase().indexOf(q) >= 0; })
-      : vgBinFolders.filter(vgBinVisible);
+      : vgBinFolders.filter(function (f) { return (f.path || '') === vgBinCwd; });
 
-    if (!rows.length) {
-      var empty = document.createElement('div');
-      empty.className = 'vg-binItemPath';
-      empty.textContent = vgBinFolders.length
-        ? 'Không có bin khớp bộ lọc.'
-        : 'Project chưa có bin nào — gõ tên bin mới bên dưới.';
-      host.appendChild(empty);
-      return;
-    }
+    var grid = document.createElement('div');
+    grid.className = 'vg-binGrid';
+    host.appendChild(grid);
 
     rows.forEach(function (f) {
-      var segs  = f.full.split(' / ');
-      var depth = q ? 0 : segs.length - 1;   // lọc → danh sách phẳng
-      var kids  = vgBinHasChildren(f.full);
-
-      var row = document.createElement('div');
-      row.className = 'sac-bind-row' + (f.full === vgBinChosen ? ' is-active' : '');
-      row.style.paddingLeft = (6 + depth * 12) + 'px';
-
-      var caret = document.createElement('span');
-      caret.className = 'sac-bind-caret';
-      caret.textContent = (kids && !q) ? (vgBinExpanded[f.full] ? '▾' : '▸') : '';
-      if (kids && !q) {
-        caret.addEventListener('click', function (e) {
-          e.stopPropagation();
-          vgBinExpanded[f.full] = !vgBinExpanded[f.full];
-          vgBinRenderList();
-        });
+      var nKids = vgBinFolders.filter(function (x) { return x.path === f.full; }).length;
+      var inPath = vgBinChosen && vgBinChosen.indexOf(f.full + ' / ') === 0;
+      var card = document.createElement('div');
+      card.setAttribute('role', 'button');
+      card.className = 'vg-binCard' + (nKids ? ' has-kids' : '')
+        + (f.full === vgBinChosen ? ' is-active' : '') + (inPath ? ' is-inPath' : '');
+      var nm = document.createElement('span');
+      nm.className = 'vg-binCardName';
+      nm.textContent = q ? f.full : f.name;
+      card.appendChild(nm);
+      if (nKids && !q) {
+        var k = document.createElement('span');
+        k.className = 'vg-binCardKids';
+        k.textContent = nKids + ' ›';
+        card.appendChild(k);
       }
-      row.appendChild(caret);
-
-      var lbl = document.createElement('span');
-      lbl.textContent = q ? f.full : f.name;
-      row.appendChild(lbl);
-
-      // "+" chỉ hiện trên bin đang chọn — tạo bin con NGAY TRONG bin đó, khỏi phải
-      // gõ cả đường dẫn ' / ' vào ô cuối modal.
-      if (!q && f.full === vgBinChosen) {
-        var addBtn = document.createElement('div');
-        addBtn.setAttribute('role', 'button');
-        addBtn.className = 'vg-binAddChild';
-        piMakeButton(addBtn);
-        piSetBtn(addBtn, 'plus', 'bin con', null, 10);
-        addBtn.setAttribute('data-tip', 'Tạo bin mới bên trong bin này');
-        addBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          vgBinExpanded[f.full] = true;
-          vgBinNewParent = (vgBinNewParent === f.full) ? null : f.full;
-          vgBinRenderList();
-          if (vgBinNewParent) setTimeout(function () {
-            var inp = host.querySelector('.vg-binChildInput');
-            if (inp) { try { inp.focus(); } catch (er) {} }
-          }, 0);
-        });
-        row.appendChild(addBtn);
-      }
-
-      row.addEventListener('click', function () {
-        vgBinChosen = f.full;   // giữ full path để hiển thị; tên bin lấy leaf khi lưu
+      card.addEventListener('click', function () {
+        vgBinChosen = f.full;   // giữ full path; tên bin lấy leaf khi lưu
         vgBinNewParent = null;
         var ni = document.getElementById('vgBinNew');
         if (ni) ni.value = '';
+        if (nKids && !q) vgBinCwd = f.full;
+        else if (q) { vgBinCwd = f.path || ''; if (filt) filt.value = ''; }
         vgBinRenderList();
       });
-      host.appendChild(row);
-
-      // Ô nhập tên bin con — chèn ngay dưới bin cha, thụt vào 1 cấp.
-      if (!q && vgBinNewParent === f.full) {
-        var nrow = document.createElement('div');
-        nrow.className = 'vg-binChildRow';
-        nrow.style.paddingLeft = (8 + (depth + 1) * 16) + 'px';
-
-        var inp = document.createElement('input');
-        inp.type = 'text';
-        inp.className = 'sac-nsf2-input vg-binChildInput';
-        inp.placeholder = 'Tên bin con trong "' + f.name + '"...';
-        inp.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
-        inp.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter') { e.preventDefault(); vgBinCreateChild(f.full, inp.value); }
-          else if (e.key === 'Escape') { vgBinNewParent = null; vgBinRenderList(); }
-        });
-        nrow.appendChild(inp);
-
-        var ok = document.createElement('div');
-        ok.setAttribute('role', 'button');
-        ok.className = 'btn-primary vg-binChildOk';
-        piMakeButton(ok);
-        piSetBtn(ok, 'check', null, null, 12);
-        ok.addEventListener('click', function () { vgBinCreateChild(f.full, inp.value); });
-        nrow.appendChild(ok);
-
-        host.appendChild(nrow);
-      }
+      grid.appendChild(card);
     });
+
+    if (q) {
+      if (!rows.length) {
+        var none = document.createElement('div');
+        none.className = 'vg-binItemPath';
+        none.textContent = 'Không có bin khớp bộ lọc.';
+        host.appendChild(none);
+      }
+      return;
+    }
+
+    // Thẻ cuối: tạo bin mới NGAY Ở CẤP ĐANG XEM.
+    var here = vgBinCwd;
+    var key = here || '__root__';
+    if (vgBinNewParent === key) {
+      var nrow = document.createElement('div');
+      nrow.className = 'vg-binCard vg-binCardNew is-editing';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'vg-binChildInput';
+      inp.placeholder = 'Tên bin mới' + (here ? ' trong "' + here.split(' / ').pop() + '"' : '') + '…';
+      inp.addEventListener('focus', function () { if (window.claimKeyboard) window.claimKeyboard(); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); vgBinCreateChild(here, inp.value); }
+        else if (e.key === 'Escape') { vgBinNewParent = null; vgBinRenderList(); }
+      });
+      nrow.appendChild(inp);
+      var ok = document.createElement('div');
+      ok.setAttribute('role', 'button');
+      ok.className = 'vg-binChildOk';
+      piMakeButton(ok);
+      piSetBtn(ok, 'check', null, null, 12);
+      ok.addEventListener('click', function () { vgBinCreateChild(here, inp.value); });
+      nrow.appendChild(ok);
+      grid.appendChild(nrow);
+      setTimeout(function () { try { inp.focus(); } catch (e) {} }, 0);
+    } else {
+      var add = document.createElement('div');
+      add.setAttribute('role', 'button');
+      add.className = 'vg-binCard vg-binCardNew';
+      piMakeButton(add);
+      piSetBtn(add, 'plus', 'Bin mới', null, 10);
+      add.addEventListener('click', function () { vgBinNewParent = key; vgBinRenderList(); });
+      grid.appendChild(add);
+    }
+    if (!rows.length && !vgBinFolders.length) {
+      var empty = document.createElement('div');
+      empty.className = 'vg-binItemPath';
+      empty.textContent = 'Project chưa có bin nào — tạo bin mới ở trên.';
+      host.appendChild(empty);
+    }
   }
 
   // Tạo bin con thật trong project (ppGetOrCreateBin tự tạo mọi cấp còn thiếu),
@@ -10128,11 +10147,20 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       var segs = String(vgBinChosen).split(' / ').filter(Boolean);
       for (var i = 1; i < segs.length; i++) vgBinExpanded[segs.slice(0, i).join(' / ')] = true;
     }
+    // Mở ở cấp chứa bin đang chọn; bin chưa có thật (vd 40x tạo lúc import) → cấp cha gần nhất có thật.
+    vgBinCwd = '';
+    if (vgBinChosen) {
+      var cs = String(vgBinChosen).split(' / ').filter(Boolean);
+      for (var d = cs.length - 1; d >= 1; d--) {
+        var par = cs.slice(0, d).join(' / ');
+        if (vgBinFolders.some(function (f) { return f.full === par; })) { vgBinCwd = par; break; }
+      }
+    }
     vgBinRenderList();
     // Cuộn tới hàng đang chọn (nếu có) sau khi render.
     setTimeout(function () {
       var host = document.getElementById('vgBinList');
-      var act = host && host.querySelector('.sac-bind-row.is-active');
+      var act = host && host.querySelector('.vg-binCard.is-active');
       if (act && act.scrollIntoView) { try { act.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
     }, 0);
     vgBinAutoStart();   // từ đây modal tự bám theo cây bin trong Premiere
