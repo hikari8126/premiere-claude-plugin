@@ -5537,3 +5537,57 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-musicRefHead > span[data-ic] { flex: 0 0 auto; }
 /* Cột phải tối đa 260px nhưng không quá 1/2 panel → vùng làm việc bên trái luôn ≥ 1/2. */
 #tab-voicegen .vg-right { flex: 0 1 260px; width: 260px; max-width: 50%; }
+
+/* ── Popup chọn bin (Voice Gen) — gọn: hàng thấp, thụt 12px/cấp, ô nhập 1 viền, dòng "Đang chọn" ── */
+#vgBinModal .sac-bind-box { padding: 12px; border-color: var(--border); border-radius: 10px; }
+#vgBinModal .sac-bind-head { margin-bottom: 2px; }
+#vgBinModal .sac-bind-title { color: var(--text); font-weight: 600; font-size: 12.5px; }
+#vgBinModal .sac-bind-close {
+  width: 26px; height: 26px; padding: 0; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+}
+#vgBinModal .sac-bind-close svg path { fill: var(--text-dim); }
+#vgBinModal .vg-binChosen {
+  font-size: 11px; color: var(--text-dim); margin-bottom: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* input: UXP cho sẵn margin → viền đôi lệch; 1 viền, cao 28 */
+#vgBinModal .sac-bind-filter,
+#vgBinModal .vg-binNewInput {
+  margin: 0; height: 28px; padding: 0 9px; box-sizing: border-box; border-radius: 6px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--border); color: var(--text); font-size: 11.5px;
+}
+#vgBinModal .sac-bind-filter { margin-bottom: 8px; }
+#vgBinModal .sac-bind-filter:focus,
+#vgBinModal .vg-binNewInput:focus { border-color: var(--accent); }
+/* danh sách: khung bo 8, hàng 24px, caret 14px */
+#vgBinModal .sac-bind-list { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+#vgBinModal .sac-bind-row {
+  display: flex; align-items: center; min-height: 24px; padding-top: 3px; padding-bottom: 3px; padding-right: 8px;
+  font-size: 11.5px; color: #c9c9c9; border-bottom: 1px solid #242424; box-sizing: border-box;
+}
+#vgBinModal .sac-bind-row:hover { background: var(--surface2); color: var(--text); }
+#vgBinModal .sac-bind-row.is-active { background: var(--accent-a15); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+#vgBinModal .sac-bind-caret { width: 14px; margin-right: 2px; font-size: 11px; color: var(--text-dim); flex: 0 0 auto; }
+#vgBinModal .vg-binAddChild {
+  margin-left: auto; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 10px;
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  display: flex; align-items: center;
+}
+#vgBinModal .vg-binAddChild:hover { border-color: var(--accent); color: var(--text); background: transparent; }
+#vgBinModal .vg-binAddChild svg path { fill: var(--text-dim); }
+#vgBinModal .vg-binChildRow { padding: 4px 8px; background: var(--surface); }
+#vgBinModal .vg-binChildInput { margin: 0; height: 24px; }
+/* chân: [ô bin mới ————] [↻] [✓ Chọn] cùng cao 28 */
+#vgBinModal .vg-binFoot { padding-top: 10px; }
+#vgBinModal .vg-binRescanBtn {
+  width: 28px; height: 28px; padding: 0; border-radius: 6px; border: 1px solid var(--border); background: transparent;
+  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+#vgBinModal .vg-binRescanBtn:hover { border-color: var(--accent); }
+#vgBinModal .vg-binRescanBtn svg path { fill: var(--text-dim); }
+#vgBinModal .vg-binSaveBtn {
+  height: 28px; padding: 0 14px; border-radius: 6px; flex: 0 0 auto;
+  background: var(--accent); color: var(--accent-fg); display: flex; align-items: center; font-size: 11.5px; font-weight: 600;
+}
+#vgBinModal .vg-binSaveBtn .p-ic { margin-right: 5px; }
+#vgBinModal .vg-binSaveBtn svg path { fill: var(--accent-fg); }

@@ -9948,6 +9948,8 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
     if (!host) return;
     var q = (filt && filt.value || '').trim().toLowerCase();
     host.innerHTML = '';
+    var cp = document.getElementById('vgBinChosenPath');
+    if (cp) cp.textContent = vgBinChosen ? 'Đang chọn: ' + vgBinChosen : 'Chưa chọn bin';
 
     var rows = q
       ? vgBinFolders.filter(function (f) { return f.full.toLowerCase().indexOf(q) >= 0; })
@@ -9970,7 +9972,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       var row = document.createElement('div');
       row.className = 'sac-bind-row' + (f.full === vgBinChosen ? ' is-active' : '');
-      row.style.paddingLeft = (8 + depth * 16) + 'px';
+      row.style.paddingLeft = (6 + depth * 12) + 'px';
 
       var caret = document.createElement('span');
       caret.className = 'sac-bind-caret';
