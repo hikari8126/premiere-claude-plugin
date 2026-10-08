@@ -5767,6 +5767,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       return String(nm || (p && p.guid) || '');
     } catch (e) { return ''; }
   }
+  var VG_MODE_LABEL = { tts: 'Giọng', sfx: 'SFX', music: 'Nhạc' };
   // Học bin từ project đang mở (cache 2 phút). force = bỏ cache (vd vừa import xong).
   async function vgLearnBins(force) {
     if (!force && vgAutoBins && Date.now() - vgAutoAt < 120000) return vgAutoBins;
