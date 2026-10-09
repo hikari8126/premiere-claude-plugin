@@ -1604,6 +1604,10 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 });
 
+// Fix UI chồng/tràn khi kéo hẹp: xử lý bằng CSS — nội dung có min-width cố định, kéo hẹp
+// hơn thì <body> cuộn ngang / cắt (giống tab Project của Premiere). Xem styles.css
+// (body overflow-x, .version-bar/.tab-bar/.tab-panel min-width, #tab-voicegen .vg-right).
+
 // ── Phân trang tab ───────────────────────────────────────────────────────
 // Trang 1 = 4 tab edit (Voice Gen / Autocut / Tạo Sub / Un-nest), trang 2 = còn lại.
 // Một nút bên phải lật qua lại (› ở trang 1, ‹ ở trang 2), mở tab dùng gần nhất
