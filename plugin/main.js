@@ -125,6 +125,48 @@ function piMakeButton(el) {
   return el;
 }
 window.piMakeButton = piMakeButton;
+
+// Tooltip bằng JS — UXP không render ::after{content:attr(data-tip)} ổn định trên
+// một số nút (vd nút icon list "Gần đây"), nên dùng 1 div nổi dùng chung thay vì
+// pseudo-element. Không position:fixed / z-index (UXP cấm): dùng absolute + append
+// cuối <body> để nằm trên cùng. Đọc data-tip lúc hover nên trạng thái đổi động
+// (vd "Ghi đè?") vẫn đúng.
+var piTipEl = null;
+function piTipShow(el) {
+  var tip = el && el.getAttribute ? el.getAttribute('data-tip') : '';
+  if (!tip) return;
+  if (!piTipEl) {
+    piTipEl = document.createElement('div');
+    piTipEl.className = 'pi-tip';
+    document.body.appendChild(piTipEl);
+  }
+  piTipEl.textContent = tip;
+  piTipEl.style.display = 'block';
+  // Đo sau khi có nội dung để lấy kích thước thật.
+  var r = el.getBoundingClientRect();
+  var tw = piTipEl.offsetWidth, th = piTipEl.offsetHeight;
+  var vw = document.documentElement.clientWidth || 0;
+  var left = r.right + 7;                 // mặc định: bên phải nút
+  if (left + tw > vw - 4) left = r.left - 7 - tw; // tràn phải → lật sang trái
+  if (left < 4) left = 4;
+  var top = r.top + (r.height - th) / 2;  // căn giữa theo chiều dọc
+  if (top < 4) top = 4;
+  piTipEl.style.left = left + 'px';
+  piTipEl.style.top = top + 'px';
+}
+function piTipHide() { if (piTipEl) piTipEl.style.display = 'none'; }
+// Gắn tooltip cho một phần tử có (hoặc sẽ có) data-tip.
+function piAttachTip(el) {
+  if (!el || el.__piTip) return el;
+  el.__piTip = true;
+  el.addEventListener('mouseenter', function () { piTipShow(el); });
+  el.addEventListener('mouseleave', piTipHide);
+  el.addEventListener('click', piTipHide);
+  return el;
+}
+window.piAttachTip = piAttachTip;
+window.piTipHide = piTipHide;
+
 // Set a button's content to an inline icon (optionally followed by a text label).
 // Use for dynamically-created or state-toggling buttons (play/pause/stop) so they
 // stay flat-icon instead of falling back to emoji glyphs.
@@ -7596,6 +7638,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         b.setAttribute('role', 'button');
         if (tip) b.setAttribute('data-tip', tip);
         piMakeButton(b);
+        piAttachTip(b);
         if (iconName) b.innerHTML = pluginIconSVG(iconName, 13, 'currentColor');
         actions.appendChild(b);
         return b;

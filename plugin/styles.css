@@ -814,6 +814,16 @@ div[role="button"] {
 div[role="button"].is-disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 div[role="button"] > .p-ic { margin-right: 5px; }
 div[role="button"] > .p-ic:only-child { margin-right: 0; }
+/* Tooltip nổi dùng chung (piAttachTip trong main.js) — append cuối <body>, định vị
+   tuyệt đối. UXP cấm position:fixed/z-index nên dựa vào thứ tự DOM (append cuối =
+   nằm trên cùng). */
+.pi-tip {
+  position: absolute; display: none; pointer-events: none;
+  background: #15131f; color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
+  padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;
+  white-space: nowrap; max-width: 220px;
+}
 .tab-btn .p-ic { margin-right: 4px; vertical-align: 0; }
 .sac-bind-fLbl { display: inline-flex; align-items: center; }
 /* Source media-type filter chips */
@@ -4204,17 +4214,8 @@ div[role="button"].vg-histBtn:hover {
   border-color: var(--accent); background: var(--accent-a15);
   color: var(--accent); opacity: 1;
 }
-/* Tooltip khi hover — theo đúng mẫu đã chạy được (.sac-blockHintBtn): neo giữa
-   theo chiều dọc + calc ngang. Hiện bên PHẢI nút (các nút dồn trái, còn chỗ bên
-   phải; bên trái thì lọt ra ngoài mép panel → bị cắt). */
-div[role="button"].vg-histBtn[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute; left: calc(100% + 7px); top: 50%; margin-top: -11px;
-  background: #15131f; color: #e2e8f0;
-  border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
-  padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;
-  white-space: nowrap; pointer-events: none;
-}
+/* Tooltip của nút "Gần đây" dùng JS (piAttachTip) — UXP không render
+   ::after{content:attr(data-tip)} ổn định trên các nút này. Xem .pi-tip. */
 div[role="button"].vg-histBtn.is-disabled { opacity: 0.35; }
 div[role="button"].vg-histBtn.is-err { border-color: var(--error); color: #fca5a5; }
 /* Bước 2 của xác nhận "Nạp script": nút sáng lên thành "Ghi đè?" trong 4 giây. */
