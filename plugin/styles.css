@@ -51,7 +51,7 @@ body {
 /* ── Version Bar ───────────────────────────────────── */
 .version-bar {
   flex: 0 0 auto;
-  min-width: 420px;   /* khoá bề ngang tối thiểu — hẹp hơn thì body cuộn ngang (giống tab Project) */
+  min-width: 450px;   /* khoá bề ngang tối thiểu — hẹp hơn thì body cuộn ngang (giống tab Project) */
   display: flex; align-items: center; gap: 6px;
   padding: 3px 10px;
   background: rgba(0,0,0,0.25);
@@ -106,7 +106,7 @@ body {
 .tab-bar {
   display: flex;
   flex-shrink: 0;
-  min-width: 420px;   /* cùng mức khoá với version-bar/tab-panel để cắt/cuộn đồng bộ */
+  min-width: 450px;   /* cùng mức khoá với version-bar/tab-panel để cắt/cuộn đồng bộ */
   gap: 0;
   padding: 8px 8px 0;
   background: linear-gradient(180deg, #1f1f1f 0%, var(--surface) 100%);
@@ -210,7 +210,7 @@ body {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  min-width: 420px;   /* khoá bề ngang tối thiểu — hẹp hơn thì <body> cuộn ngang/cắt (giống tab Project) */
+  min-width: 450px;   /* khoá bề ngang tối thiểu — hẹp hơn thì <body> cuộn ngang/cắt (giống tab Project) */
   overflow: hidden;
   position: relative; /* positioning context for absolute children */
 }
@@ -5557,7 +5557,7 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 /* Cột phải tối đa 260px nhưng không quá 1/2 panel → vùng làm việc bên trái luôn ≥ 1/2. */
 /* Cột phải CỐ ĐỊNH 260 (bỏ max-width:50% — UXP không re-resolve % khi resize → kẹt/đè).
    Panel có min-width 440 (= trái ≥180 + phải 260); hẹp hơn thì body cuộn ngang/cắt. */
-#tab-voicegen .vg-right { flex: 0 0 220px; width: 220px; }
+#tab-voicegen .vg-right { flex: 0 0 250px; width: 250px; }
 
 /* ── Popup chọn bin (Voice Gen) — gọn: hàng thấp, thụt 12px/cấp, ô nhập 1 viền, dòng "Đang chọn" ── */
 #vgBinModal .sac-bind-box { padding: 12px; border-color: var(--border); border-radius: 10px; }
