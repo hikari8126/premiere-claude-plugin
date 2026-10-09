@@ -4193,14 +4193,25 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 /* Kèm [role="button"] để thắng luật chung div[role="button"]{...} — class đơn
    (0-1-0) thua attribute selector (0-1-1). */
 div[role="button"].vg-histBtn {
-  flex: 0 0 auto; height: 20px; padding: 0 7px;
+  position: relative;   /* mốc cho tooltip ::after */
+  flex: 0 0 auto; width: 26px; height: 22px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border); border-radius: 4px;
   background: rgba(255,255,255,0.05); color: var(--text);
-  font-size: 10px; font-weight: 600; white-space: nowrap; opacity: 0.85;
+  white-space: nowrap; opacity: 0.85;
 }
 div[role="button"].vg-histBtn:hover {
   border-color: var(--accent); background: var(--accent-a15);
   color: var(--accent); opacity: 1;
+}
+/* Tooltip khi hover — hiện bên TRÁI nút (cột phải hẹp, tránh tràn mép phải). */
+div[role="button"].vg-histBtn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; right: calc(100% + 6px); top: 50%; margin-top: -11px;
+  background: #15131f; color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
+  padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;
+  white-space: nowrap; pointer-events: none;
 }
 div[role="button"].vg-histBtn.is-disabled { opacity: 0.35; }
 div[role="button"].vg-histBtn.is-err { border-color: var(--error); color: #fca5a5; }

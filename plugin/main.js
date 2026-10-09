@@ -7589,12 +7589,14 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       actions.className = 'vg-histActions';
       item.appendChild(actions);
 
-      function mkHistBtn(label, cls) {
+      // Nút gọn: chỉ icon + tooltip khi hover (data-tip, vì UXP không dùng title="").
+      function mkHistBtn(iconName, tip, cls) {
         var b = document.createElement('div');
-        b.className = 'vg-histBtn ' + (cls || '');
+        b.className = 'vg-histBtn vg-histIcon ' + (cls || '');
         b.setAttribute('role', 'button');
+        if (tip) b.setAttribute('data-tip', tip);
         piMakeButton(b);
-        b.textContent = label;
+        if (iconName) b.innerHTML = pluginIconSVG(iconName, 13);
         actions.appendChild(b);
         return b;
       }
@@ -7613,37 +7615,37 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
 
       // ▶ nghe ngay trong sidebar. vgPlayPath tự huỷ lượt phát trước nên không
       // cần thêm gì để tránh phát chồng với player ở khu kết quả.
-      var playBtn = out0 ? mkHistBtn('▶', 'vg-histPlay') : null;
+      var playBtn = out0 ? mkHistBtn('play', 'Nghe / Dừng', 'vg-histPlay') : null;
       if (playBtn) playBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         vgPlayPath(out0.audioPath, null,
-          function () { playBtn.textContent = '▶'; },
+          function () { playBtn.innerHTML = pluginIconSVG('play', 13); },
           function (err) {
             // File tạm có thể đã bị dọn. Không kiểm tra trước mỗi lần vẽ danh
             // sách (một lệnh đọc đĩa cho từng mục là quá đắt) — báo khi bấm.
-            playBtn.textContent = '▶';
+            playBtn.innerHTML = pluginIconSVG('play', 13);
             playBtn.classList.add('is-err');
             setStatus('✗ Không phát được (file có thể đã bị xoá): '
               + (err && err.message ? err.message : out0.filename), false);
           });
-        playBtn.textContent = '❚❚';
+        playBtn.innerHTML = pluginIconSVG('pause', 13);
       });
 
       if (out0) {
-        var importBtn = mkHistBtn('Import');
+        var importBtn = mkHistBtn('download', 'Import vào project');
         importBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           importVariation(out0);
         });
 
-        var openBtn = mkHistBtn('Mở lại');
+        var openBtn = mkHistBtn('rotate_left', 'Mở lại bản gen này');
         openBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           vgHistOpen(h);
         });
       }
 
-      var reload = mkHistBtn('Nạp script');
+      var reload = mkHistBtn('file', 'Nạp script vào ô soạn');
 
       // Click dòng = đổi voice. Giống hệt vgDropSelect nên mọi listener 'change'
       // hiện có đều chạy. Script đang gõ không bị đụng tới.
@@ -7664,7 +7666,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         histArmed = false;
         if (histArmTimer) { clearTimeout(histArmTimer); histArmTimer = null; }
         reload.classList.remove('is-armed');
-        reload.textContent = 'Nạp script';
+        reload.setAttribute('data-tip', 'Nạp script vào ô soạn');
       }
       reload.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -7674,7 +7676,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         if (!histArmed && cur.trim() && cur.trim() !== next.trim()) {
           histArmed = true;
           reload.classList.add('is-armed');
-          reload.textContent = 'Ghi đè?';
+          reload.setAttribute('data-tip', 'Ghi đè script đang soạn? Bấm lại');
           histArmTimer = setTimeout(histDisarm, 4000);
           return;
         }
