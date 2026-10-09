@@ -42,12 +42,16 @@ body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Kéo hẹp hơn mức tối thiểu (xem min-width .version-bar/.tab-bar/.tab-panel) thì cuộn
+     ngang / cắt giống tab Project của Premiere, thay vì bóp méo nội dung. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* ── Version Bar ───────────────────────────────────── */
 .version-bar {
   flex: 0 0 auto;
+  min-width: 450px;   /* khoá bề ngang tối thiểu — hẹp hơn thì body cuộn ngang (giống tab Project) */
   display: flex; align-items: center; gap: 6px;
   padding: 3px 10px;
   background: rgba(0,0,0,0.25);
@@ -102,6 +106,7 @@ body {
 .tab-bar {
   display: flex;
   flex-shrink: 0;
+  min-width: 450px;   /* cùng mức khoá với version-bar/tab-panel để cắt/cuộn đồng bộ */
   gap: 0;
   padding: 8px 8px 0;
   background: linear-gradient(180deg, #1f1f1f 0%, var(--surface) 100%);
@@ -205,6 +210,7 @@ body {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  min-width: 450px;   /* khoá bề ngang tối thiểu — hẹp hơn thì <body> cuộn ngang/cắt (giống tab Project) */
   overflow: hidden;
   position: relative; /* positioning context for absolute children */
 }
@@ -808,6 +814,16 @@ div[role="button"] {
 div[role="button"].is-disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 div[role="button"] > .p-ic { margin-right: 5px; }
 div[role="button"] > .p-ic:only-child { margin-right: 0; }
+/* Tooltip nổi dùng chung (piAttachTip trong main.js) — append cuối <body>, định vị
+   tuyệt đối. UXP cấm position:fixed/z-index nên dựa vào thứ tự DOM (append cuối =
+   nằm trên cùng). */
+.pi-tip {
+  position: absolute; display: none; pointer-events: none;
+  background: #15131f; color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
+  padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;
+  white-space: nowrap; max-width: 220px;
+}
 .tab-btn .p-ic { margin-right: 4px; vertical-align: 0; }
 .sac-bind-fLbl { display: inline-flex; align-items: center; }
 /* Source media-type filter chips */
@@ -2038,7 +2054,7 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 /* ── Left: editor + generate + results ── */
 .vg-left {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 200px;   /* editor không co nhỏ hơn 200 (cân với cột phải 220); hẹp hơn → body cắt/cuộn */
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -4187,15 +4203,19 @@ div[role="button"].vg-profileChip > .p-ic { margin-right: 6px; flex: 0 0 auto; }
 /* Kèm [role="button"] để thắng luật chung div[role="button"]{...} — class đơn
    (0-1-0) thua attribute selector (0-1-1). */
 div[role="button"].vg-histBtn {
-  flex: 0 0 auto; height: 20px; padding: 0 7px;
+  position: relative;   /* mốc cho tooltip ::after */
+  flex: 0 0 auto; width: 26px; height: 22px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border); border-radius: 4px;
   background: rgba(255,255,255,0.05); color: var(--text);
-  font-size: 10px; font-weight: 600; white-space: nowrap; opacity: 0.85;
+  white-space: nowrap; opacity: 0.85;
 }
 div[role="button"].vg-histBtn:hover {
   border-color: var(--accent); background: var(--accent-a15);
   color: var(--accent); opacity: 1;
 }
+/* Tooltip của nút "Gần đây" dùng JS (piAttachTip) — UXP không render
+   ::after{content:attr(data-tip)} ổn định trên các nút này. Xem .pi-tip. */
 div[role="button"].vg-histBtn.is-disabled { opacity: 0.35; }
 div[role="button"].vg-histBtn.is-err { border-color: var(--error); color: #fca5a5; }
 /* Bước 2 của xác nhận "Nạp script": nút sáng lên thành "Ghi đè?" trong 4 giây. */
@@ -5536,7 +5556,9 @@ div.cd-frameAdd[role="button"] { align-self: center; }
 #tab-voicegen .vg-musicRefPick .vg-organizeBtn { flex: 0 0 auto; }
 #tab-voicegen .vg-musicRefHead > span[data-ic] { flex: 0 0 auto; }
 /* Cột phải tối đa 260px nhưng không quá 1/2 panel → vùng làm việc bên trái luôn ≥ 1/2. */
-#tab-voicegen .vg-right { flex: 0 1 260px; width: 260px; max-width: 50%; }
+/* Cột phải CỐ ĐỊNH 260 (bỏ max-width:50% — UXP không re-resolve % khi resize → kẹt/đè).
+   Panel có min-width 440 (= trái ≥180 + phải 260); hẹp hơn thì body cuộn ngang/cắt. */
+#tab-voicegen .vg-right { flex: 0 0 250px; width: 250px; }
 
 /* ── Popup chọn bin (Voice Gen) — gọn: hàng thấp, thụt 12px/cấp, ô nhập 1 viền, dòng "Đang chọn" ── */
 #vgBinModal .sac-bind-box { padding: 12px; border-color: var(--border); border-radius: 10px; }

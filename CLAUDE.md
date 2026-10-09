@@ -15,7 +15,7 @@ Plugin tích hợp thẳng vào Adobe Premiere Pro:
 - **Raw Cut** — cắt từng cut của timeline ra file riêng (raw/ từ file gốc, edited/ do Premiere render) + clips.csv/manifest.json
 - **Đổi tên source hàng loạt** (tab Watch) — đổi tên file trên đĩa theo mẫu, relink clip Premiere + `.aep`, có hoàn tác
 
-**Version hiện tại:** 5.22.1 (Bridge app 3.26 · server 1.27.1)
+**Version hiện tại:** 5.22.2 (Bridge app 3.26 · server 1.27.1)
 **Yêu cầu hệ điều hành:** macOS (Apple Silicon hoặc Intel)
 
 ---
