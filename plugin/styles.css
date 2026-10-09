@@ -4204,10 +4204,12 @@ div[role="button"].vg-histBtn:hover {
   border-color: var(--accent); background: var(--accent-a15);
   color: var(--accent); opacity: 1;
 }
-/* Tooltip khi hover — hiện bên TRÁI nút (cột phải hẹp, tránh tràn mép phải). */
+/* Tooltip khi hover — hiện PHÍA TRÊN nút, neo mép trái. Các nút này nằm sát mép
+   trái panel nên tooltip bên trái sẽ lọt ra ngoài và bị cắt; đặt lên trên thì
+   luôn nằm trong vùng item (cột text phía trên). */
 div[role="button"].vg-histBtn[data-tip]:hover::after {
   content: attr(data-tip);
-  position: absolute; right: calc(100% + 6px); top: 50%; margin-top: -11px;
+  position: absolute; left: 0; bottom: calc(100% + 5px);
   background: #15131f; color: #e2e8f0;
   border: 1px solid rgba(255,255,255,0.16); border-radius: 5px;
   padding: 3px 8px; font-size: 9.5px; line-height: 1.4; font-weight: 500;

@@ -7596,7 +7596,7 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
         b.setAttribute('role', 'button');
         if (tip) b.setAttribute('data-tip', tip);
         piMakeButton(b);
-        if (iconName) b.innerHTML = pluginIconSVG(iconName, 13);
+        if (iconName) b.innerHTML = pluginIconSVG(iconName, 13, 'currentColor');
         actions.appendChild(b);
         return b;
       }
@@ -7619,16 +7619,16 @@ async function ppMoveToVOBinIfEnabled(item, proj, binName) {
       if (playBtn) playBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         vgPlayPath(out0.audioPath, null,
-          function () { playBtn.innerHTML = pluginIconSVG('play', 13); },
+          function () { playBtn.innerHTML = pluginIconSVG('play', 13, 'currentColor'); },
           function (err) {
             // File tạm có thể đã bị dọn. Không kiểm tra trước mỗi lần vẽ danh
             // sách (một lệnh đọc đĩa cho từng mục là quá đắt) — báo khi bấm.
-            playBtn.innerHTML = pluginIconSVG('play', 13);
+            playBtn.innerHTML = pluginIconSVG('play', 13, 'currentColor');
             playBtn.classList.add('is-err');
             setStatus('✗ Không phát được (file có thể đã bị xoá): '
               + (err && err.message ? err.message : out0.filename), false);
           });
-        playBtn.innerHTML = pluginIconSVG('pause', 13);
+        playBtn.innerHTML = pluginIconSVG('pause', 13, 'currentColor');
       });
 
       if (out0) {
