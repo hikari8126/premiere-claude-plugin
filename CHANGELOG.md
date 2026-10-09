@@ -7,6 +7,15 @@
 
 
 
+## v5.22.2 / bridge 3.26 (server 1.27.1) — 2026-10-09 · Voice Gen: kéo giãn panel + nút list "Gần đây" thành icon
+
+> KHÔNG cần cập nhật Bridge (vẫn 3.26).
+
+- **Lỗi UI khi kéo hẹp panel (các tab đè lên nhau):** `.vg-right` dùng `width + max-width:%` mà UXP không re-resolve khi đổi bề ngang container → chồng layout. Khoá bề ngang tối thiểu panel (`version-bar` / `tab-bar` / `tab-panel` `min-width: 450px`) + `body { overflow-x: auto }` → hẹp hơn thì cắt/cuộn ngang giống tab Project thay vì vỡ layout. Bỏ hẳn JS nudge/fix cũ.
+- **Cân lại 2 cột Voice Gen:** cột phải cố định `250px` (trước 260 rồi 220 — 220 làm 3 nút Import/Timeline/Autocut đè nhau), cột trái `min-width: 200px`. Bỏ `max-width:%`.
+- **List "Gần đây" — các nút thành icon gọn + tooltip:** play/Import/Mở lại/Nạp script đổi từ chữ sang icon vuông 26×22 (đỡ chật trong cột hẹp). Icon render `fill=currentColor` → sáng theo accent khi hover / khi armed "Ghi đè?".
+- **Tooltip bằng JS (`piAttachTip`), không dùng `::after`:** UXP không render `::after{content:attr(data-tip)}` ổn định trên các nút này (dù mẫu Autocut chạy được). Thay bằng 1 div nổi `.pi-tip` dùng chung, append cuối `<body>`, định vị theo `getBoundingClientRect` (hiện bên phải nút, tự lật trái khi tràn mép). Không `position:fixed`/`z-index` (UXP cấm).
+
 ## v5.22.1 / bridge 3.26 (server 1.27.1) — 2026-10-08 · Sửa chọn bin Voice Gen + đánh bóng UI
 
 > KHÔNG cần cập nhật Bridge (vẫn 3.26).
